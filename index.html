@@ -878,6 +878,7 @@
         let githubBranch = '';
         let githubToken = '';
         const MAX_EXCEL_TEXT_LENGTH = 32767;
+        const KHAOSAT_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRjBdN5epr38kL2jLituPUC4wJO_Ohr_AsFpzaZh6Azxxs_gkzGT5s3JiZ1uFkNQFP5epR2U_wYT6wT/pub?output=csv';
 
         // Nút showMoreBtn — giữ tương thích, không làm gì trong UI mới
         function toggleShowMore() {}
@@ -1718,6 +1719,40 @@
             } catch(e) { console.error('updateGitHubExcel error:', e); displayError('Lỗi GitHub: '+(e.message||e)); }
         }
 
+        function parseCSVText(text) {
+            const rows = [];
+            for (const line of text.split(/\r?\n/)) {
+                if (!line.trim()) continue;
+                const row = [];
+                let inQuote = false, cell = '';
+                for (let i = 0; i < line.length; i++) {
+                    const ch = line[i];
+                    if (ch === '"') { inQuote = !inQuote; }
+                    else if (ch === ',' && !inQuote) { row.push(cell); cell = ''; }
+                    else { cell += ch; }
+                }
+                row.push(cell);
+                rows.push(row);
+            }
+            return rows;
+        }
+
+        async function loadFromCSV() {
+            try {
+                displayError('Đang tải dữ liệu từ Google Sheets...');
+                const res = await fetch(KHAOSAT_CSV_URL);
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                const rows = parseCSVText(await res.text());
+                if (rows.length < 2) throw new Error('Dữ liệu rỗng');
+                loadedData = rows;
+                addMarkersToMap(rows.slice(1));
+                displayError('');
+            } catch (e) {
+                displayError('Không tải được Google Sheets, dùng file cục bộ.');
+                loadDefaultFile();
+            }
+        }
+
         function loadDefaultFile() {
             fetch('data/khaosat.xlsx')
                 .then(r=>{ if(!r.ok) throw new Error('File không tồn tại'); return r.blob(); })
@@ -1965,7 +2000,7 @@
         // ─── Khởi tạo ───
         window.onload = function() {
             map = initializeMap();
-            loadDefaultFile();
+            loadFromCSV();
 
             window.addEventListener('offline', ()=>document.body.classList.add('offline'));
             window.addEventListener('online',  ()=>document.body.classList.remove('offline'));
