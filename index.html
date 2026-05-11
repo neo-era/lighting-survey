@@ -879,6 +879,7 @@
         let githubToken = '';
         const MAX_EXCEL_TEXT_LENGTH = 32767;
         const KHAOSAT_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRjBdN5epr38kL2jLituPUC4wJO_Ohr_AsFpzaZh6Azxxs_gkzGT5s3JiZ1uFkNQFP5epR2U_wYT6wT/pub?output=csv';
+        const KHAOSAT_GAS_URL = 'https://script.google.com/macros/s/AKfycbxPFn7lnJZYdjUg5WlVq1P1JGI5O3rvcry_IVE3bhF5foDmbgT6KwBU4xFxHNwKruHRvQ/exec';
 
         // Nút showMoreBtn — giữ tương thích, không làm gì trong UI mới
         function toggleShowMore() {}
@@ -1342,6 +1343,41 @@
             reader.readAsDataURL(file);
         }
 
+        async function syncRowToGAS(row) {
+            if (!KHAOSAT_GAS_URL) return;
+            try {
+                let imagePath = row[11] || '';
+                if (imagePath && imagePath.startsWith('data:')) {
+                    const ext = getImageExtensionFromDataUrl(imagePath);
+                    const upRes = await fetch(KHAOSAT_GAS_URL, {
+                        method: 'POST',
+                        body: JSON.stringify({ action: 'upload_image', imageBase64: getBase64FromDataUrl(imagePath), soTru: row[1] || '', ext })
+                    });
+                    const upData = await upRes.json();
+                    if (upData.status === 'ok') { imagePath = upData.path; row[11] = imagePath; }
+                }
+                const res = await fetch(KHAOSAT_GAS_URL, {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        action: 'full_update',
+                        id: String(row[0] || ''), tenTru: row[1] || '',
+                        lat: row[2], lon: row[3],
+                        ghiChu: row[4] || '', nguoiKS: row[5] || '', loai: row[6],
+                        tuDieuKhien: row[7] || '', loaiTru: row[8] || '',
+                        loaiCan: row[9] || '', loaiDen: row[10] || '',
+                        hinhAnh: imagePath, capNhat: row[12] || '',
+                        markerGoc: row[13] || '', khoangCach: row[14] || ''
+                    })
+                });
+                const data = await res.json();
+                if (data.status !== 'ok') throw new Error(data.message || 'lỗi không rõ');
+                displayError('Đã lưu lên Google Sheets.');
+            } catch (e) {
+                console.error('syncRowToGAS:', e);
+                displayError('Lỗi lưu Google Sheets: ' + (e.message || e));
+            }
+        }
+
         function saveMarkerPopup() {
             try {
                 if (!markerPopupLocation || !Array.isArray(markerPopupLocation) || markerPopupLocation.length !== 2) {
@@ -1385,7 +1421,8 @@
                 hideMarkerPopup();
                 pendingNewMarker = true; addMarkerMode = true; pendingMarkerLocation = null;
                 updateAddMarkerButton();
-                displayError('Đã thêm marker mới. Nhấn Lưu để lưu xuống Excel.');
+                syncRowToGAS(newRow);
+                displayError('Đã thêm marker — đang lưu lên Google Sheets...');
             } catch (error) {
                 console.error('saveMarkerPopup error:', error);
                 displayError('Lỗi khi lưu marker: ' + (error.message || error));
@@ -1676,7 +1713,7 @@
             try {
                 if (!newMarkerRows || newMarkerRows.length===0) { displayError('Không có marker mới để cập nhật lên GitHub.'); return; }
                 if (!githubOwner||!githubRepo||!githubBranch||!githubToken) {
-                    githubOwner='neo-era'; githubRepo='cskvtt'; githubBranch='sub1';
+                    githubOwner='neo-era'; githubRepo='lighting-survey'; githubBranch='main';
                     githubToken = prompt('Nhập GitHub token (repo scope):');
                     if (!githubToken) return;
                 }

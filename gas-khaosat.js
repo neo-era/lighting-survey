@@ -120,7 +120,7 @@ function handleImageUpload(imageBase64, soTru, ext) {
   const fileName  = safeName + '-' + ts + '.' + (ext || 'jpg');
   const filePath  = 'images/' + fileName; // ← lưu vào thư mục images/ gốc
 
-  const apiUrl = 'https://api.github.com/repos/neo-era/cskvtt/contents/'
+  const apiUrl = 'https://api.github.com/repos/neo-era/lighting-survey/contents/'
     + filePath.split('/').map(encodeURIComponent).join('/');
 
   const res = UrlFetchApp.fetch(apiUrl, {
@@ -133,7 +133,7 @@ function handleImageUpload(imageBase64, soTru, ext) {
     payload: JSON.stringify({
       message: 'Upload ảnh khảo sát: ' + fileName,
       content: imageBase64,
-      branch: 'sub1'
+      branch: 'main'
     }),
     muteHttpExceptions: true
   });
@@ -142,7 +142,8 @@ function handleImageUpload(imageBase64, soTru, ext) {
   if (code !== 200 && code !== 201) {
     return jsonResponse({ status: 'error', message: 'GitHub API lỗi ' + code + ': ' + res.getContentText().slice(0, 300) });
   }
-  return jsonResponse({ status: 'ok', path: 'images/' + fileName });
+  const absoluteUrl = 'https://raw.githubusercontent.com/neo-era/lighting-survey/main/images/' + fileName;
+  return jsonResponse({ status: 'ok', path: absoluteUrl });
 }
 
 // ── MAIN HANDLER ───────────────────────────────────────────────────────────
