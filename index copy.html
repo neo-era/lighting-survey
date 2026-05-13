@@ -500,58 +500,6 @@
             #error { bottom: auto; top: calc(var(--safe-top) + 74px); }
             #searchResultsWrapper { left: 68px; right: 12px; }
         }
-
-        /* ══ LEAFLET POPUP CARD ══ */
-        .leaflet-popup-content-wrapper {
-            border-radius: 16px !important;
-            box-shadow: 0 8px 32px rgba(0,0,0,.18) !important;
-            padding: 0 !important; overflow: hidden;
-            border: 1px solid var(--border);
-            min-width: 260px; max-width: 320px;
-        }
-        .leaflet-popup-content { margin: 0 !important; width: auto !important; }
-        .leaflet-popup-tip-container { margin-top: -1px; }
-        .pc { font-family: var(--font); color: var(--text); background: var(--surface); }
-        .pc-header {
-            padding: 14px 14px 12px; display: flex; gap: 10px; align-items: flex-start;
-            border-left: 4px solid var(--primary);
-            background: linear-gradient(135deg, #f0f9ff, var(--surface));
-        }
-        .pc-avatar-ph {
-            width: 42px; height: 42px; border-radius: 10px;
-            background: var(--primary-light);
-            display: flex; align-items: center; justify-content: center;
-            font-size: 20px; flex-shrink: 0;
-        }
-        .pc-name { font-size: 15px; font-weight: 700; color: var(--text); line-height: 1.3; word-break: break-word; }
-        .pc-sub { font-size: 10px; color: var(--text-muted); margin-top: 3px; font-family: monospace; }
-        .pc-body { padding: 10px 14px 8px; }
-        .pc-row { display: flex; align-items: flex-start; gap: 8px; padding: 5px 0; border-bottom: 1px solid #f1f5f9; font-size: 12px; }
-        .pc-row:last-child { border-bottom: none; }
-        .pc-row .pi { font-size: 13px; flex-shrink: 0; width: 18px; text-align: center; color: var(--text-muted); }
-        .pc-row .pk { color: var(--text-muted); font-weight: 600; white-space: nowrap; min-width: 60px; }
-        .pc-row .pv { color: var(--text); line-height: 1.4; flex: 1; }
-        .pc-dist-list {
-            display: block; width: 100%; margin-top: 4px; font-size: 11px;
-            border: 1px solid var(--border); border-radius: 6px;
-            background: var(--surface-2); padding: 2px; max-height: 90px;
-        }
-        .pc-photo { margin: 0 14px 8px; }
-        .pc-photo img { width: 100%; border-radius: 10px; max-height: 140px; object-fit: cover; }
-        .pc-actions {
-            display: flex; gap: 6px; padding: 10px 14px 14px;
-            border-top: 1px solid var(--border); background: var(--surface-2);
-        }
-        .pc-btn {
-            flex: 1; padding: 9px 4px; border-radius: 8px;
-            border: 1.5px solid var(--border);
-            font-size: 12px; font-weight: 600; cursor: pointer;
-            font-family: var(--font); background: var(--surface); color: var(--text);
-            text-align: center; transition: background .15s;
-        }
-        .pc-btn:active { background: #f1f5f9; }
-        .pc-btn.primary { background: var(--primary); color: #fff; border-color: var(--primary); }
-        .pc-btn.primary:active { background: var(--primary-dark); }
     </style>
 </head>
 <body>
@@ -929,7 +877,6 @@
         let githubRepo = '';
         let githubBranch = '';
         let githubToken = '';
-        let _currentPopupRow = null;
         const MAX_EXCEL_TEXT_LENGTH = 32767;
         const KHAOSAT_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRjBdN5epr38kL2jLituPUC4wJO_Ohr_AsFpzaZh6Azxxs_gkzGT5s3JiZ1uFkNQFP5epR2U_wYT6wT/pub?output=csv';
         const KHAOSAT_GAS_URL = 'https://script.google.com/macros/s/AKfycbxPFn7lnJZYdjUg5WlVq1P1JGI5O3rvcry_IVE3bhF5foDmbgT6KwBU4xFxHNwKruHRvQ/exec';
@@ -995,24 +942,13 @@
             const name = row[1] || row[0] || '';
             const lat = parseCoord(row[2]), lon = parseCoord(row[3]);
             const note = row[4] || '';
-            const ward = row[5] || '';
-            const tudieukhien = row[7] || '', loaitru = row[8] || '', loaiden = row[10] || '';
+            const tudieukhien = row[7], loaitru = row[8], loaiden = row[10];
             const imageValue = row[11] || '', updatedAt = row[12] || '';
-
             const sameNameMarkers = getSameNameMarkers(name);
             const isAlreadyIncluded = sameNameMarkers.some(item => item.lat === lat && item.lon === lon && normalizeText(item.name||'') === normalizeText(name||''));
             if (!isAlreadyIncluded) sameNameMarkers.push({ lat, lon, name });
             const sameNameCount = sameNameMarkers.length;
-
-            const pcRows = [];
-            if (note) pcRows.push(`<div class="pc-row"><span class="pi">📝</span><span class="pk">Ghi chú:</span><span class="pv">${note}</span></div>`);
-            if (ward) pcRows.push(`<div class="pc-row"><span class="pi">📍</span><span class="pk">Phường/Xã:</span><span class="pv">${ward}</span></div>`);
-            if (tudieukhien) pcRows.push(`<div class="pc-row"><span class="pi">🗄</span><span class="pk">Tủ:</span><span class="pv">${tudieukhien}</span></div>`);
-            if (loaitru) pcRows.push(`<div class="pc-row"><span class="pi">🔌</span><span class="pk">Trụ:</span><span class="pv">${loaitru}</span></div>`);
-            if (loaiden) pcRows.push(`<div class="pc-row"><span class="pi">💡</span><span class="pk">Đèn:</span><span class="pv">${loaiden}</span></div>`);
-            if (sameNameCount > 1) pcRows.push(`<div class="pc-row"><span class="pi">📊</span><span class="pk">Cùng tên:</span><span class="pv">${sameNameCount} trụ</span></div>`);
-            if (updatedAt) pcRows.push(`<div class="pc-row"><span class="pi">🕐</span><span class="pk">Cập nhật:</span><span class="pv">${updatedAt}</span></div>`);
-
+            const sameNameHtml = sameNameCount > 1 ? `<div style="margin-top:8px;font-size:13px"><strong>Tổng số trụ cùng tên:</strong> ${sameNameCount}</div>` : '';
             let distancesHtml = '';
             if (sameNameCount > 1) {
                 const filtered = sameNameMarkers.filter(m => !Array.isArray(m) || !m[13]);
@@ -1022,29 +958,18 @@
                     const prev = filtered[i-1], cur = filtered[i];
                     const dist = getDistanceMeters(prev.lat||parseCoord(prev[2]), prev.lon||parseCoord(prev[3]), cur.lat||parseCoord(cur[2]), cur.lon||parseCoord(cur[3]));
                     totalDistance += dist;
-                    segments.push(`<option>${(prev.name||prev[1]||'?')} → ${(cur.name||cur[1]||'?')}: ${Math.round(dist)} m</option>`);
+                    segments.push(`<option style="font-size:12px">${(prev.name||prev[1]||'?')} → ${(cur.name||cur[1]||'?')}: ${Math.round(dist)} m</option>`);
                 }
-                distancesHtml = `<div class="pc-row"><span class="pi">📏</span><span class="pk">Khoảng cách:</span><span class="pv">${Math.round(totalDistance)} m<select size="4" class="pc-dist-list">${segments.join('')}</select></span></div>`;
+                distancesHtml = `<div style="margin-top:8px;font-size:13px">
+                    <strong>Tổng khoảng cách:</strong> ${Math.round(totalDistance)} m
+                    <select size="5" style="display:block;width:100%;margin-top:4px;font-size:12px;border:1px solid #ccc;border-radius:4px;padding:2px;background:#f9fafb;max-height:120px">
+                        ${segments.join('')}
+                    </select>
+                </div>`;
             }
-
-            const imageHtml = imageValue ? `<div class="pc-photo"><img src="${imageValue}" alt="Ảnh trụ" loading="lazy" onerror="this.parentNode.style.display='none'"></div>` : '';
-            const coordStr = Number.isFinite(lat) && Number.isFinite(lon) ? `${lat.toFixed(6)}, ${lon.toFixed(6)}` : '—';
-
-            return `<div class="pc">
-              <div class="pc-header">
-                <div class="pc-avatar-ph">💡</div>
-                <div style="min-width:0">
-                  <div class="pc-name">${name || 'Không có tên'}</div>
-                  <div class="pc-sub">📡 ${coordStr}</div>
-                </div>
-              </div>
-              ${imageHtml}
-              <div class="pc-body">${pcRows.join('')}${distancesHtml}</div>
-              <div class="pc-actions">
-                <button class="pc-btn primary" onclick="routeToMarkerLatLon(${lat},${lon})">🧭 Đi đến</button>
-                <button class="pc-btn" onclick="openEditMarker()">✏️ Sửa</button>
-              </div>
-            </div>`;
+            const imageHtml = imageValue ? `<div style="margin-top:8px;text-align:center"><img src="${imageValue}" alt="Ảnh trụ" style="max-width:100%;max-height:140px;border-radius:8px;border:1px solid #ccc" loading="lazy"></div>` : '';
+            const timestampHtml = updatedAt ? `<div style="margin-top:8px;font-size:13px"><strong>Cập nhật:</strong> ${updatedAt}</div>` : '';
+            return `<div><strong>${name || 'Không có tên'}</strong><br>Lat: ${lat.toFixed(6)}<br>Lon: ${lon.toFixed(6)}<br>Ghi chú: ${note||'—'}<br>Trụ: ${loaitru||'—'}<br>Tủ: ${tudieukhien||'—'}<br>Đèn: ${loaiden||'—'}${sameNameHtml}${distancesHtml}${timestampHtml}${imageHtml}</div>`;
         }
 
         function updateMarkerCoordinatesInData(markerName, newLat, newLon) {
@@ -1066,7 +991,7 @@
             const marker = L.marker([lat, lon], { icon, draggable: true });
 
             marker.bindPopup(createMarkerPopupContent(row));
-            marker.on('popupopen', function() { _currentPopupRow = row; marker.setPopupContent(createMarkerPopupContent(row)); });
+            marker.on('popupopen', function() { marker.setPopupContent(createMarkerPopupContent(row)); });
             marker.on('dragend', function(e) {
                 const ll = e.target.getLatLng();
                 const newLat = ll.lat, newLon = ll.lng;
@@ -2050,50 +1975,6 @@
                 err=>displayError('Không thể lấy vị trí: '+err.message),
                 { enableHighAccuracy:true, timeout:10000, maximumAge:0 }
             );
-        }
-
-        function routeToMarkerLatLon(lat, lon) {
-            if (!Number.isFinite(lat) || !Number.isFinite(lon)) { displayError('Tọa độ không hợp lệ.'); return; }
-            map.closePopup();
-            const dest = [lat, lon];
-            function doRoute() {
-                fetchMotorbikeRoute(currentLocation, dest).then(route => drawRoute(route)).catch(e => displayError(e.message));
-            }
-            if (currentLocation) { doRoute(); return; }
-            if (!navigator.geolocation) {
-                window.open(`https://www.google.com/maps/dir/?api=1&destination=${lat},${lon}&travelmode=driving`, '_blank');
-                return;
-            }
-            navigator.geolocation.getCurrentPosition(
-                pos => { updateCurrentLocationMarker(pos.coords.latitude, pos.coords.longitude); doRoute(); },
-                () => { window.open(`https://www.google.com/maps/dir/?api=1&destination=${lat},${lon}&travelmode=driving`, '_blank'); },
-                { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-            );
-        }
-
-        function openEditMarker() {
-            if (!_currentPopupRow) return;
-            const row = _currentPopupRow;
-            const lat = parseCoord(row[2]), lon = parseCoord(row[3]);
-            map.closePopup();
-            showMarkerPopupAt(lat, lon);
-            setTimeout(() => {
-                const nameEl = document.getElementById('markerNameInput');
-                if (nameEl) nameEl.value = row[1] || row[0] || '';
-                const noteEl = document.getElementById('markerNoteInput');
-                if (noteEl) noteEl.value = row[4] || '';
-                const cabinetEl = document.getElementById('markerCabinetInput');
-                if (cabinetEl) cabinetEl.value = row[7] || '';
-                const poleEl = document.getElementById('markerPoleTypeInput');
-                if (poleEl) poleEl.value = row[8] || '';
-                const lampEl = document.getElementById('markerLampTypeInput');
-                if (lampEl) lampEl.value = row[10] || '';
-                const wardEl = document.getElementById('markerWardInput');
-                if (wardEl) wardEl.value = row[5] || '';
-                const coordsEl = document.getElementById('markerCoordsText');
-                if (coordsEl && Number.isFinite(lat) && Number.isFinite(lon))
-                    coordsEl.textContent = `Tọa độ: ${lat.toFixed(6)}, ${lon.toFixed(6)}`;
-            }, 80);
         }
 
         function clearRoute() {
