@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hướng dẫn sử dụng — Lighting Survey</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --primary: #2563eb;
+      --primary-light: #dbeafe;
+      --success: #10b981;
+      --warning: #f59e0b;
+      --danger: #ef4444;
+      --text: #111827;
+      --text-muted: #6b7280;
+      --border: #e5e7eb;
+      --surface: #ffffff;
+      --surface-2: #f9fafb;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Inter', sans-serif; color: var(--text); background: #f3f4f6; }
+
+    /* NAV */
+    nav {
+      position: sticky; top: 0; z-index: 100;
+      background: var(--primary); color: #fff;
+      padding: 14px 24px; display: flex; align-items: center; gap: 14px;
+      box-shadow: 0 2px 8px rgba(0,0,0,.18);
+    }
+    nav .logo { font-size: 20px; font-weight: 700; letter-spacing: -.3px; }
+    nav .sub  { font-size: 13px; opacity: .8; }
+    nav a { color: #fff; text-decoration: none; margin-left: auto; font-size: 13px; font-weight: 600;
+            background: rgba(255,255,255,.18); padding: 7px 16px; border-radius: 20px; }
+    nav a:hover { background: rgba(255,255,255,.3); }
+
+    /* LAYOUT */
+    .container { max-width: 860px; margin: 0 auto; padding: 32px 20px 60px; }
+
+    /* TOC */
+    .toc { background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+           padding: 20px 24px; margin-bottom: 32px; }
+    .toc h2 { font-size: 15px; font-weight: 700; margin-bottom: 12px; color: var(--primary); }
+    .toc ol { padding-left: 20px; }
+    .toc li { margin: 6px 0; }
+    .toc a { color: var(--primary); text-decoration: none; font-size: 14px; font-weight: 500; }
+    .toc a:hover { text-decoration: underline; }
+
+    /* SECTION */
+    section { background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+              padding: 28px 28px 24px; margin-bottom: 24px; }
+    section h2 { font-size: 18px; font-weight: 700; margin-bottom: 16px;
+                 padding-bottom: 10px; border-bottom: 2px solid var(--primary-light);
+                 display: flex; align-items: center; gap: 10px; }
+    section h2 .num { background: var(--primary); color: #fff; font-size: 12px; font-weight: 700;
+                       width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    h3 { font-size: 15px; font-weight: 700; margin: 20px 0 10px; color: #1e40af; }
+    p  { font-size: 14px; line-height: 1.7; margin-bottom: 10px; color: var(--text); }
+    ul, ol { padding-left: 20px; margin-bottom: 10px; }
+    li { font-size: 14px; line-height: 1.7; margin-bottom: 4px; }
+
+    /* STEP CARDS */
+    .steps { display: flex; flex-direction: column; gap: 12px; margin: 12px 0; }
+    .step  { display: flex; gap: 14px; align-items: flex-start;
+             background: var(--surface-2); border: 1px solid var(--border);
+             border-radius: 10px; padding: 14px 16px; }
+    .step .sn { background: var(--primary); color: #fff; font-size: 13px; font-weight: 700;
+                min-width: 28px; height: 28px; border-radius: 50%; display: flex;
+                align-items: center; justify-content: center; flex-shrink: 0; margin-top: 1px; }
+    .step .sc { font-size: 14px; line-height: 1.6; }
+    .step .sc strong { display: block; font-weight: 600; margin-bottom: 2px; }
+
+    /* BADGES */
+    .badge { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 700;
+             padding: 3px 10px; border-radius: 20px; white-space: nowrap; }
+    .badge-blue   { background: #dbeafe; color: #1d4ed8; }
+    .badge-green  { background: #d1fae5; color: #065f46; }
+    .badge-orange { background: #ffedd5; color: #c2410c; }
+    .badge-pink   { background: #fce7f3; color: #be185d; }
+    .badge-gray   { background: #e2e8f0; color: #334155; }
+    .badge-yellow { background: #fef9c3; color: #854d0e; }
+
+    /* TYPE TABLE */
+    .type-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; margin: 12px 0; }
+    .type-card { border-radius: 10px; padding: 12px 14px; border: 1.5px solid transparent; }
+    .type-card .tc-icon { font-size: 22px; margin-bottom: 6px; }
+    .type-card .tc-label { font-size: 13px; font-weight: 700; }
+    .type-card .tc-desc  { font-size: 12px; margin-top: 3px; opacity: .75; }
+
+    /* NOTE BOX */
+    .note { border-radius: 10px; padding: 14px 16px; font-size: 13px; line-height: 1.6; margin: 12px 0; display: flex; gap: 10px; }
+    .note-info    { background: #eff6ff; border: 1px solid #bfdbfe; color: #1e40af; }
+    .note-success { background: #ecfdf5; border: 1px solid #a7f3d0; color: #065f46; }
+    .note-warn    { background: #fffbeb; border: 1px solid #fcd34d; color: #92400e; }
+    .note-icon    { font-size: 18px; flex-shrink: 0; }
+
+    /* CODE */
+    code { background: #f1f5f9; color: #0f172a; font-size: 12.5px; padding: 2px 7px;
+           border-radius: 5px; font-family: 'Courier New', monospace; }
+
+    /* KEYBOARD */
+    kbd { display: inline-block; background: #f8fafc; border: 1px solid #cbd5e1;
+          border-bottom: 2px solid #94a3b8; border-radius: 5px; font-size: 12px;
+          padding: 2px 8px; font-family: monospace; }
+
+    /* SCREENSHOT PLACEHOLDER */
+    .img-box { background: var(--surface-2); border: 2px dashed var(--border);
+               border-radius: 10px; padding: 24px; text-align: center;
+               color: var(--text-muted); font-size: 13px; margin: 12px 0; }
+
+    /* FOOTER */
+    footer { text-align: center; font-size: 12px; color: var(--text-muted); padding: 20px; }
+
+    @media (max-width: 600px) {
+      section { padding: 20px 16px; }
+      .type-grid { grid-template-columns: 1fr 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<nav>
+  <div>
+    <div class="logo">💡 Lighting Survey</div>
+    <div class="sub">Hướng dẫn sử dụng</div>
+  </div>
+  <a href="index.html">← Mở ứng dụng</a>
+</nav>
+
+<div class="container">
+
+  <!-- MỤC LỤC -->
+  <div class="toc">
+    <h2>📋 Mục lục</h2>
+    <ol>
+      <li><a href="#s1">Giới thiệu</a></li>
+      <li><a href="#s2">Đăng nhập</a></li>
+      <li><a href="#s3">Giao diện bản đồ</a></li>
+      <li><a href="#s4">Thêm marker mới</a></li>
+      <li><a href="#s5">Xem và chỉnh sửa marker</a></li>
+      <li><a href="#s6">Tìm kiếm</a></li>
+      <li><a href="#s7">Loại marker</a></li>
+      <li><a href="#s8">Xuất báo cáo Excel</a></li>
+      <li><a href="#s9">Xuất CAD (DXF)</a></li>
+      <li><a href="#s10">Đồng bộ GitHub</a></li>
+      <li><a href="#s11">Cài PWA trên điện thoại</a></li>
+    </ol>
+  </div>
+
+  <!-- 1. GIỚI THIỆU -->
+  <section id="s1">
+    <h2><span class="num">1</span> Giới thiệu</h2>
+    <p>
+      <strong>Lighting Survey</strong> là ứng dụng web bản đồ dùng để khảo sát và quản lý hệ thống chiếu sáng công cộng.
+      Ứng dụng hoạt động trực tiếp trên trình duyệt, không cần cài đặt, có thể dùng offline sau lần tải đầu tiên.
+    </p>
+    <div class="note note-info">
+      <span class="note-icon">ℹ️</span>
+      <div>Dữ liệu được đồng bộ hai chiều: ghi vào <strong>Google Sheets</strong> qua Apps Script và lưu file Excel trên <strong>GitHub</strong>.</div>
+    </div>
+    <h3>Yêu cầu</h3>
+    <ul>
+      <li>Trình duyệt Chrome / Edge / Safari (phiên bản mới nhất)</li>
+      <li>Kết nối Internet để tải bản đồ và đồng bộ dữ liệu</li>
+      <li>Tài khoản được cấp bởi quản trị viên</li>
+    </ul>
+  </section>
+
+  <!-- 2. ĐĂNG NHẬP -->
+  <section id="s2">
+    <h2><span class="num">2</span> Đăng nhập</h2>
+    <p>Khi mở ứng dụng lần đầu, màn hình đăng nhập sẽ hiện ra.</p>
+    <div class="steps">
+      <div class="step">
+        <div class="sn">1</div>
+        <div class="sc"><strong>Nhập tên đăng nhập và mật khẩu</strong>
+          Do quản trị viên cấp. Tên đăng nhập không phân biệt chữ hoa/thường.</div>
+      </div>
+      <div class="step">
+        <div class="sn">2</div>
+        <div class="sc"><strong>Nhấn Đăng nhập</strong>
+          Sau khi xác thực thành công, bản đồ sẽ tải và hiển thị tên người dùng ở góc phải trên.</div>
+      </div>
+      <div class="step">
+        <div class="sn">3</div>
+        <div class="sc"><strong>Đăng xuất</strong>
+          Nhấn vào tên người dùng (góc phải trên) để đăng xuất.</div>
+      </div>
+    </div>
+    <div class="note note-warn">
+      <span class="note-icon">⚠️</span>
+      <div>Phiên đăng nhập được lưu trong trình duyệt. Xóa cache trình duyệt sẽ yêu cầu đăng nhập lại.</div>
+    </div>
+  </section>
+
+  <!-- 3. GIAO DIỆN -->
+  <section id="s3">
+    <h2><span class="num">3</span> Giao diện bản đồ</h2>
+
+    <h3>Thanh trên (Top Bar)</h3>
+    <ul>
+      <li><kbd>☰</kbd> — Mở bảng điều khiển (GitHub, xuất dữ liệu...)</li>
+      <li>Ô tìm kiếm — Tìm theo tên trụ, ID hoặc tọa độ</li>
+      <li>Tên người dùng — Nhấn để đăng xuất</li>
+    </ul>
+
+    <h3>Thanh dưới (Bottom Bar)</h3>
+    <ul>
+      <li><strong>Vị trí</strong> — Căn giữa bản đồ về vị trí GPS hiện tại</li>
+      <li><strong>+ Thêm marker</strong> — Bắt đầu thêm trụ / tủ mới</li>
+      <li><strong>Lưu</strong> — Tải xuống file Excel dữ liệu mới nhất</li>
+    </ul>
+
+    <h3>Bản đồ</h3>
+    <ul>
+      <li>Lớp nền mặc định: OpenStreetMap. Có thể chuyển sang Google Satellite bằng nút chuyển lớp (góc phải)</li>
+      <li>Zoom &lt; 15: các marker gộp thành cluster (hiển thị số lượng)</li>
+      <li>Zoom ≥ 15: hiển thị icon từng trụ riêng lẻ</li>
+      <li>Zoom ≥ 17: hiện nhãn tên trụ bên dưới icon</li>
+    </ul>
+  </section>
+
+  <!-- 4. THÊM MARKER -->
+  <section id="s4">
+    <h2><span class="num">4</span> Thêm marker mới</h2>
+    <div class="steps">
+      <div class="step">
+        <div class="sn">1</div>
+        <div class="sc"><strong>Nhấn "+ Thêm marker"</strong>
+          Nút chuyển sang màu đỏ, con trỏ bản đồ thay đổi — ứng dụng đang chờ chọn vị trí.</div>
+      </div>
+      <div class="step">
+        <div class="sn">2</div>
+        <div class="sc"><strong>Chọn vị trí</strong>
+          Có 3 cách:<br>
+          • <strong>Nhấn vào bản đồ</strong> tại vị trí cần đặt marker<br>
+          • Nhấn <kbd>Vị trí hiện tại</kbd> để dùng GPS điện thoại/máy tính<br>
+          • Nhấn <kbd>Chọn trên bản đồ</kbd> để kéo ghim đến vị trí</div>
+      </div>
+      <div class="step">
+        <div class="sn">3</div>
+        <div class="sc"><strong>Điền thông tin</strong>
+          Form nhập liệu hiện ra. Các trường cần điền:</div>
+      </div>
+    </div>
+
+    <h3>Các trường thông tin</h3>
+    <ul>
+      <li><strong>Tên trụ</strong> — Tên định danh (bắt buộc)</li>
+      <li><strong>Marker gốc</strong> — Trụ đầu chuỗi cùng basename (tự động gợi ý)</li>
+      <li><strong>Tủ điều khiển</strong> — Tên tủ điện quản lý trụ này</li>
+      <li><strong>Loại trụ</strong> — Chọn từ danh sách 6 loại (xem mục 7)</li>
+      <li><strong>Loại đèn</strong> — LED hoặc HPS (hoặc nhập tay)</li>
+      <li><strong>Công suất</strong> — VD: 100W, 150W</li>
+      <li><strong>Mã PE</strong> — Mã thiết bị PE</li>
+      <li><strong>Đường</strong> — Tự động điền từ tọa độ (Nominatim)</li>
+      <li><strong>Phường / Xã</strong> — Tự động điền từ tọa độ</li>
+      <li><strong>Ghi chú</strong> — Ghi chú bổ sung (tùy chọn)</li>
+    </ul>
+
+    <div class="note note-info">
+      <span class="note-icon">📍</span>
+      <div>Trường <strong>Đường</strong> và <strong>Phường / Xã</strong> được tra tự động từ tọa độ bằng OpenStreetMap. Chờ vài giây sau khi đặt marker.</div>
+    </div>
+
+    <div class="steps" style="margin-top:12px">
+      <div class="step">
+        <div class="sn">4</div>
+        <div class="sc"><strong>Chụp / chọn ảnh (tùy chọn)</strong>
+          Nhấn nút camera để chụp ảnh hiện trường hoặc chọn ảnh từ thư viện. Ảnh sẽ được upload lên GitHub.</div>
+      </div>
+      <div class="step">
+        <div class="sn">5</div>
+        <div class="sc"><strong>Nhấn "Lưu marker"</strong>
+          Dữ liệu được ghi vào Google Sheets ngay lập tức qua Apps Script.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 5. XEM / CHỈNH SỬA -->
+  <section id="s5">
+    <h2><span class="num">5</span> Xem và chỉnh sửa marker</h2>
+    <p>Nhấn vào bất kỳ icon trụ nào trên bản đồ để mở popup thông tin.</p>
+    <h3>Popup hiển thị</h3>
+    <ul>
+      <li>Tên trụ, loại, tủ điều khiển, loại trụ/cần/đèn, công suất, mã PE</li>
+      <li>Khoảng cách đến marker gốc và từng đoạn trong chuỗi</li>
+      <li>Tọa độ GPS</li>
+      <li>Đường / Phường Xã</li>
+      <li>Ảnh hiện trường (nếu có)</li>
+      <li>Thời gian cập nhật, người khảo sát</li>
+    </ul>
+    <h3>Chỉnh sửa</h3>
+    <div class="steps">
+      <div class="step">
+        <div class="sn">1</div>
+        <div class="sc"><strong>Nhấn "Chỉnh sửa"</strong> trong popup để mở form chỉnh sửa.</div>
+      </div>
+      <div class="step">
+        <div class="sn">2</div>
+        <div class="sc"><strong>Kéo marker</strong> trên bản đồ để thay đổi vị trí (hỗ trợ drag).</div>
+      </div>
+      <div class="step">
+        <div class="sn">3</div>
+        <div class="sc"><strong>Nhấn "Lưu marker"</strong> — dữ liệu cập nhật trực tiếp vào Google Sheets (upsert theo tên trụ / ID).</div>
+      </div>
+    </div>
+    <h3>Chỉ đường</h3>
+    <p>Nhấn <strong>"Chỉ đường"</strong> trong popup để mở tuyến đường xe máy từ vị trí hiện tại đến trụ (sử dụng OSRM).</p>
+  </section>
+
+  <!-- 6. TÌM KIẾM -->
+  <section id="s6">
+    <h2><span class="num">6</span> Tìm kiếm</h2>
+    <p>Nhập từ khóa vào ô tìm kiếm trên thanh trên, rồi nhấn <kbd>Enter</kbd> hoặc nút <strong>Tìm</strong>.</p>
+    <h3>Hỗ trợ tìm kiếm theo</h3>
+    <ul>
+      <li><strong>Tên trụ</strong> — tìm khớp một phần, không phân biệt dấu</li>
+      <li><strong>ID</strong> — tìm chính xác hoặc một phần</li>
+      <li><strong>Tọa độ</strong> — nhập dạng <code>lat,lon</code> (VD: <code>11.123, 106.456</code>), bản đồ sẽ zoom đến vị trí đó</li>
+    </ul>
+    <p>Nhấn vào kết quả để bản đồ căn giữa và mở popup thông tin của trụ đó.</p>
+  </section>
+
+  <!-- 7. LOẠI MARKER -->
+  <section id="s7">
+    <h2><span class="num">7</span> Loại marker</h2>
+    <div class="type-grid">
+      <div class="type-card" style="background:#e0f2fe;border-color:#0ea5e9">
+        <div class="tc-icon">💡</div>
+        <div class="tc-label" style="color:#0369a1">Trụ STK</div>
+        <div class="tc-desc">Icon cột đèn — màu xanh dương</div>
+      </div>
+      <div class="type-card" style="background:#fce7f3;border-color:#ec4899">
+        <div class="tc-icon">🎆</div>
+        <div class="tc-label" style="color:#be185d">Trụ trang trí</div>
+        <div class="tc-desc">Icon cột đèn — màu hồng</div>
+      </div>
+      <div class="type-card" style="background:#d1fae5;border-color:#10b981">
+        <div class="tc-icon">💡</div>
+        <div class="tc-label" style="color:#065f46">Trụ HTLT</div>
+        <div class="tc-desc">Icon cột đèn — màu xanh lá</div>
+      </div>
+      <div class="type-card" style="background:#ffedd5;border-color:#f97316">
+        <div class="tc-icon">💡</div>
+        <div class="tc-label" style="color:#c2410c">Trụ TTLT</div>
+        <div class="tc-desc">Icon cột đèn — màu cam</div>
+      </div>
+      <div class="type-card" style="background:#dbeafe;border-color:#2563eb">
+        <div class="tc-icon">🗄</div>
+        <div class="tc-label" style="color:#1d4ed8">Tủ chiếu sáng nổi</div>
+        <div class="tc-desc">Icon tủ điện — màu xanh đậm</div>
+      </div>
+      <div class="type-card" style="background:#e2e8f0;border-color:#334155">
+        <div class="tc-icon">🗄</div>
+        <div class="tc-label" style="color:#334155">Tủ chiếu sáng ngầm</div>
+        <div class="tc-desc">Icon tủ điện — màu xám đen</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 8. XUẤT BÁO CÁO -->
+  <section id="s8">
+    <h2><span class="num">8</span> Xuất báo cáo Excel</h2>
+    <p>Nhấn <kbd>☰</kbd> → <strong>Xuất báo cáo</strong>.</p>
+    <div class="steps">
+      <div class="step">
+        <div class="sn">1</div>
+        <div class="sc"><strong>Chọn bộ lọc</strong> — Từ ngày / Đến ngày, Phường/Xã, Loại marker.</div>
+      </div>
+      <div class="step">
+        <div class="sn">2</div>
+        <div class="sc"><strong>Nhấn "Xuất báo cáo"</strong> — File Excel tải xuống ngay, bao gồm sheet chi tiết và sheet tổng hợp theo loại.</div>
+      </div>
+    </div>
+    <div class="note note-success">
+      <span class="note-icon">✅</span>
+      <div>File Excel có 2 sheet: <strong>Chi tiết</strong> (toàn bộ các trụ đã lọc) và <strong>Tổng hợp</strong> (số lượng theo từng loại).</div>
+    </div>
+  </section>
+
+  <!-- 9. XUẤT CAD -->
+  <section id="s9">
+    <h2><span class="num">9</span> Xuất CAD (DXF)</h2>
+    <p>Nhấn <kbd>☰</kbd> → <strong>Export to CAD</strong>.</p>
+    <ul>
+      <li><strong>Chọn loại marker</strong> cần xuất (hoặc tất cả)</li>
+      <li><strong>Lọc theo basename</strong> nếu cần xuất một nhóm trụ</li>
+      <li>Nhấn <strong>Xuất DXF</strong> — file DXF tọa độ VN2000 tải về, có thể mở bằng AutoCAD / QGIS / BricsCAD</li>
+    </ul>
+    <div class="note note-info">
+      <span class="note-icon">📐</span>
+      <div>Hệ tọa độ xuất ra: <strong>VN-2000 múi 3° kinh tuyến trục 105°</strong>.</div>
+    </div>
+  </section>
+
+  <!-- 10. ĐỒNG BỘ GITHUB -->
+  <section id="s10">
+    <h2><span class="num">10</span> Đồng bộ GitHub</h2>
+    <p>Nhấn <kbd>☰</kbd> → nhập đường dẫn file → nhấn <strong>GitHub</strong>.</p>
+    <div class="steps">
+      <div class="step">
+        <div class="sn">1</div>
+        <div class="sc"><strong>Nhập đường dẫn file</strong> tại ô "Đường dẫn file", ví dụ: <code>data/khaosat.xlsx</code></div>
+      </div>
+      <div class="step">
+        <div class="sn">2</div>
+        <div class="sc"><strong>Nhấn "GitHub"</strong> — ứng dụng tải toàn bộ dữ liệu mới nhất từ Google Sheets, tạo file Excel và upload lên GitHub.</div>
+      </div>
+      <div class="step">
+        <div class="sn">3</div>
+        <div class="sc"><strong>Chờ thông báo</strong> "Đồng bộ thành công: N dòng → GitHub" xuất hiện ở phía dưới màn hình.</div>
+      </div>
+    </div>
+    <div class="note note-info">
+      <span class="note-icon">🔑</span>
+      <div>Token GitHub được lưu an toàn trong Google Apps Script (Script Properties). Người dùng không cần nhập token.</div>
+    </div>
+    <div class="note note-warn">
+      <span class="note-icon">⚠️</span>
+      <div>Thao tác này ghi đè file hiện tại trên GitHub. Đảm bảo đường dẫn file chính xác trước khi nhấn.</div>
+    </div>
+  </section>
+
+  <!-- 11. PWA -->
+  <section id="s11">
+    <h2><span class="num">11</span> Cài PWA trên điện thoại</h2>
+    <p>Ứng dụng hỗ trợ cài đặt như app thật trên điện thoại (PWA).</p>
+    <h3>Android (Chrome)</h3>
+    <div class="steps">
+      <div class="step">
+        <div class="sn">1</div>
+        <div class="sc">Mở trang web bằng Chrome → Nhấn menu <kbd>⋮</kbd> góc phải.</div>
+      </div>
+      <div class="step">
+        <div class="sn">2</div>
+        <div class="sc">Chọn <strong>"Thêm vào màn hình chính"</strong> hoặc <strong>"Cài đặt ứng dụng"</strong>.</div>
+      </div>
+      <div class="step">
+        <div class="sn">3</div>
+        <div class="sc">Nhấn <strong>Cài đặt</strong> → App xuất hiện trên màn hình chính.</div>
+      </div>
+    </div>
+    <h3>iOS (Safari)</h3>
+    <div class="steps">
+      <div class="step">
+        <div class="sn">1</div>
+        <div class="sc">Mở trang bằng Safari → Nhấn nút <strong>Chia sẻ</strong> (hình vuông + mũi tên lên).</div>
+      </div>
+      <div class="step">
+        <div class="sn">2</div>
+        <div class="sc">Chọn <strong>"Thêm vào màn hình chính"</strong> → Nhấn <strong>Thêm</strong>.</div>
+      </div>
+    </div>
+    <div class="note note-success">
+      <span class="note-icon">📱</span>
+      <div>Sau khi cài, ứng dụng mở toàn màn hình (không có thanh địa chỉ) và có thể hoạt động offline với dữ liệu đã cache.</div>
+    </div>
+  </section>
+
+</div>
+
+<footer>Lighting Survey v1.1 — Mai Vũ Lâm &nbsp;|&nbsp; maivulam2020@gmail.com</footer>
+
+</body>
+</html>

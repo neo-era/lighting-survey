@@ -12,7 +12,13 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css">
-    <link rel="icon" href="images/icon-192.png" type="image/gif">
+    <link rel="icon" href="images/icon-192.png" type="image/png">
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="images/icon-192.png">
+    <meta name="theme-color" content="#2563eb">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="KS Chiếu Sáng">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 
     <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
@@ -683,7 +689,8 @@
                         <select id="pages" class="ctrl-input" onchange="navigateToPage()">
                             <option value="index.html">Trang khảo sát</option>
                             <option value="https://neo-era.github.io/camera/">Quản lý camera</option>
-                            <option value="https://neo-era.github.io/dentat/dentat.html/">Quan lý đèn tắt/sự cố</option>
+                            <option value="https://neo-era.github.io/dentat/dentat.html">Quan lý đèn tắt/sự cố</option>
+                            <option value="https://neo-era.github.io/lighting-survey/huongdan.html">Hướng dẫn sử dụng</option>
                         </select>
                     </div>
 
@@ -2152,49 +2159,58 @@
 
         async function updateGitHubExcel() {
             try {
-                if (!newMarkerRows || newMarkerRows.length===0) { displayError('Không có marker mới để cập nhật lên GitHub.'); return; }
-                if (!githubOwner||!githubRepo||!githubBranch||!githubToken) {
-                    githubOwner='neo-era'; githubRepo='lighting-survey'; githubBranch='main';
-                    githubToken = prompt('Nhập GitHub token (repo scope):');
-                    if (!githubToken) return;
-                }
+                if (!KHAOSAT_GAS_URL) { displayError('Chưa cấu hình GAS URL.'); return; }
                 const pathInput = document.getElementById('githubPathInput');
-                const path = pathInput && pathInput.value.trim() ? pathInput.value.trim() : '';
-                displayError('Đang kiểm tra repo GitHub...');
-                if (!await checkGitHubBranchExists(githubOwner,githubRepo,githubBranch,githubToken)) {
-                    displayError(`Branch '${githubBranch}' không tồn tại.`); return;
+                const path = pathInput && pathInput.value.trim() ? pathInput.value.trim() : 'data/khaosat.xlsx';
+
+                // 1. Tải toàn bộ dữ liệu mới nhất từ Google Sheet
+                displayError('Đang tải dữ liệu từ Google Sheets...');
+                let csvRows;
+                try {
+                    const res = await fetch(KHAOSAT_CSV_URL + '&t=' + Date.now());
+                    if (!res.ok) throw new Error('HTTP ' + res.status);
+                    csvRows = parseCSVText(await res.text());
+                    if (csvRows.length < 2) throw new Error('Dữ liệu rỗng');
+                } catch(e) {
+                    displayError('Không tải được Google Sheets: ' + e.message); return;
                 }
-                await browseGitHubPath('');
-                if (!path) { displayError('Chọn file trong danh sách hoặc nhập đường dẫn.'); return; }
-                displayError('Đang cập nhật GitHub...');
-                await prepareImagePathsForGitHub(newMarkerRows, githubOwner, githubRepo, githubBranch, githubToken);
-                const header = ['ID','Tên trụ','Lat','Lon','Ghi chú','Trống','Loại','Tủ điều khiển','Loại trụ','Loại cần','Loại đèn','Ảnh','Thời gian cập nhật'];
-                const fileData = await getGitHubFileContent(githubOwner, githubRepo, path, githubBranch, githubToken);
-                let combinedRows = [header, ...newMarkerRows];
-                let sheetName = 'Sheet1';
-                if (fileData.content) {
-                    const wb = XLSX.read(base64ToBinary(fileData.content), { type:'array' });
-                    sheetName = wb.SheetNames[0]||sheetName;
-                    const existing = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { header:1, defval:'' });
-                    if (existing.length>0) combinedRows = [header, ...existing.slice(1), ...newMarkerRows];
-                }
-                let contentBase64='';
-                if (typeof ExcelJS!=='undefined'||(typeof window!=='undefined'&&window.ExcelJS)) {
-                    const buffer = await createExcelBufferWithImages(combinedRows.slice(1));
+                const header = csvRows[0];
+                const bodyRows = csvRows.slice(1);
+
+                // 2. Tạo file Excel
+                displayError('Đang tạo file Excel...');
+                let contentBase64 = '';
+                const ExcelJSGlobal = typeof ExcelJS!=='undefined' ? ExcelJS : (typeof window!=='undefined' ? window.ExcelJS : undefined);
+                if (ExcelJSGlobal) {
+                    const workbook = new ExcelJSGlobal.Workbook();
+                    const ws = workbook.addWorksheet('DanhSachTru');
+                    ws.addRow(header);
+                    bodyRows.forEach(row => ws.addRow(Array.isArray(row) ? [...row] : []));
+                    const buffer = await workbook.xlsx.writeBuffer();
                     if (buffer) contentBase64 = arrayBufferToBase64(buffer);
                 }
                 if (!contentBase64) {
                     const wb = XLSX.utils.book_new();
-                    const exportRows = combinedRows.slice(1).map(r=>{ const c=Array.isArray(r)?[...r]:[]; c[11]=''; return c; });
-                    const ws = XLSX.utils.aoa_to_sheet([header,...exportRows]);
-                    attachImagesToWorksheet(ws, combinedRows.slice(1));
-                    XLSX.utils.book_append_sheet(wb,ws,sheetName);
-                    contentBase64 = XLSX.write(wb,{bookType:'xlsx',type:'base64'});
+                    const ws = XLSX.utils.aoa_to_sheet([header, ...bodyRows.map(r => Array.isArray(r) ? [...r] : [])]);
+                    XLSX.utils.book_append_sheet(wb, ws, 'DanhSachTru');
+                    contentBase64 = XLSX.write(wb, { bookType: 'xlsx', type: 'base64' });
                 }
-                await updateGitHubFile(githubOwner, githubRepo, path, githubBranch, githubToken, contentBase64, fileData.sha);
-                newMarkerRows=[]; pendingNewMarker=false; addMarkerMode=false; updateAddMarkerButton();
-                displayError('Đã cập nhật GitHub thành công.');
-            } catch(e) { console.error('updateGitHubExcel error:', e); displayError('Lỗi GitHub: '+(e.message||e)); }
+
+                // 3. Gửi qua GAS — GAS dùng GITHUB_TOKEN trong Script Properties để upload
+                displayError('Đang đồng bộ lên GitHub...');
+                const gasRes = await fetch(KHAOSAT_GAS_URL, {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        action: 'upload_to_github',
+                        path: path,
+                        content: contentBase64,
+                        message: 'Đồng bộ dữ liệu khảo sát ' + new Date().toISOString().slice(0, 10)
+                    })
+                });
+                const gasData = await gasRes.json();
+                if (gasData.status !== 'ok') throw new Error(gasData.message || 'Upload thất bại');
+                displayError(`Đồng bộ thành công: ${bodyRows.length} dòng → GitHub (${path}).`);
+            } catch(e) { console.error('updateGitHubExcel error:', e); displayError('Lỗi GitHub: ' + (e.message || e)); }
         }
 
         function parseCSVText(text) {
@@ -2916,6 +2932,14 @@
     </div>
     <script>
         document.getElementById('imgLightbox').addEventListener('click', closeImageLightbox);
+    </script>
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('sw.js')
+                    .catch(err => console.warn('SW register failed:', err));
+            });
+        }
     </script>
 </body>
 </html>

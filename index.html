@@ -12,7 +12,13 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css">
-    <link rel="icon" href="images/icon-192.png" type="image/gif">
+    <link rel="icon" href="images/icon-192.png" type="image/png">
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="images/icon-192.png">
+    <meta name="theme-color" content="#2563eb">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="KS Chiếu Sáng">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 
     <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
@@ -442,6 +448,33 @@
         .custom-crosshair-icon { background: transparent; border: none; }
         @keyframes ks-pulse { 0%,100%{transform:scale(1);opacity:1} 50%{transform:scale(1.5);opacity:.7} }
 
+        /* Google Maps–style current position dot */
+        .gmap-loc-icon { background:none !important; border:none !important; overflow:visible !important; }
+        .gmap-dot {
+            width:18px; height:18px;
+            background:#4285f4;
+            border:3px solid #fff;
+            border-radius:50%;
+            box-shadow:0 1px 6px rgba(0,0,0,.45);
+            box-sizing:border-box;
+            position:relative;
+        }
+        .gmap-dot::before {
+            content:'';
+            position:absolute;
+            top:50%; left:50%;
+            width:42px; height:42px;
+            margin:-21px 0 0 -21px;
+            border-radius:50%;
+            background:rgba(66,133,244,.22);
+            animation:gmap-pulse 2s ease-out infinite;
+            pointer-events:none;
+        }
+        @keyframes gmap-pulse {
+            0%   { transform:scale(.25); opacity:1; }
+            100% { transform:scale(1.6); opacity:0; }
+        }
+
         /* ══ NÚT VỀ ĐẦU TRANG ══ */
         #backToTopBtn {
             display: none;
@@ -684,6 +717,7 @@
                             <option value="index.html">Trang khảo sát</option>
                             <option value="https://neo-era.github.io/camera/">Quản lý camera</option>
                             <option value="https://neo-era.github.io/dentat/dentat.html">Quan lý đèn tắt/sự cố</option>
+                            <option value="https://neo-era.github.io/lighting-survey/huongdan.html">Hướng dẫn sử dụng</option>
                         </select>
                     </div>
 
@@ -1386,9 +1420,9 @@
             5: makeCabinetIcon('#2563eb'),
             6: makeCabinetIcon('#334155'),
             currentPos: L.divIcon({
-                className: 'custom-crosshair-icon',
-                html: '<i class="fa fa-plus" style="color:#2563eb;font-size:20px;text-shadow:0 0 3px white"></i>',
-                iconSize:[20,20], iconAnchor:[10,10], popupAnchor:[0,-10]
+                className: 'gmap-loc-icon',
+                html: '<div class="gmap-dot"></div>',
+                iconSize:[18,18], iconAnchor:[9,9], popupAnchor:[0,-12]
             }),
             default: makePoleIcon('#94a3b8')
         };
@@ -2341,14 +2375,15 @@
 
         // ─── Tracking vị trí ───
         let currentLocationWatchId = null;
+        let currentLocationAccuracyCircle = null;
 
         function startTrackingCurrentLocation() {
             if (!navigator.geolocation) { displayError('Trình duyệt không hỗ trợ định vị.'); return; }
             if (currentLocationWatchId !== null) return;
             currentLocationWatchId = navigator.geolocation.watchPosition(
-                pos=>updateCurrentLocationMarker(pos.coords.latitude, pos.coords.longitude),
-                err=>displayError('Không thể lấy vị trí: '+err.message),
-                { enableHighAccuracy:true, maximumAge:5000, timeout:20000 }
+                pos => updateCurrentLocationMarker(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy),
+                err => displayError('Không thể lấy vị trí: ' + err.message),
+                { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 }
             );
             displayError('Đang theo dõi vị trí...');
         }
@@ -2361,11 +2396,37 @@
             }
         }
 
-        function updateCurrentLocationMarker(lat, lon) {
+        function updateCurrentLocationMarker(lat, lon, accuracy) {
             currentLocation = [lat, lon];
-            if (currentLocationMarker) currentLocationMarker.setLatLng(currentLocation);
-            else currentLocationMarker = L.marker(currentLocation, { icon:customIcons.currentPos }).addTo(map).bindPopup('Vị trí hiện tại');
-            if (currentLocationWatchId !== null) map.setView(currentLocation, Math.max(map.getZoom(), 17));
+
+            // Vòng tròn độ chính xác
+            if (typeof accuracy === 'number' && accuracy > 0) {
+                if (currentLocationAccuracyCircle) {
+                    currentLocationAccuracyCircle.setLatLng([lat, lon]).setRadius(accuracy);
+                } else {
+                    currentLocationAccuracyCircle = L.circle([lat, lon], {
+                        radius: accuracy,
+                        color: '#4285f4', fillColor: '#4285f4',
+                        fillOpacity: 0.08, weight: 1.5, opacity: 0.35
+                    }).addTo(map);
+                    currentLocationAccuracyCircle.bringToBack();
+                }
+            }
+
+            // Icon vị trí
+            if (currentLocationMarker) {
+                currentLocationMarker.setLatLng([lat, lon]);
+            } else {
+                currentLocationMarker = L.marker([lat, lon], {
+                    icon: customIcons.currentPos,
+                    zIndexOffset: 1000,
+                    interactive: false
+                }).addTo(map);
+            }
+
+            if (currentLocationWatchId !== null) {
+                map.setView([lat, lon], Math.max(map.getZoom(), 17), { animate: true });
+            }
         }
 
         function createMapControls() {
@@ -2506,10 +2567,31 @@
 
         function centerOnUserLocation() {
             if (!navigator.geolocation) { displayError('Trình duyệt không hỗ trợ định vị.'); return; }
+
+            const btn = document.querySelector('#bottomActionBar .bab-btn');
+            if (btn) { btn.style.opacity = '.5'; btn.style.pointerEvents = 'none'; }
+            const done = () => { if (btn) { btn.style.opacity = ''; btn.style.pointerEvents = ''; } };
+
+            // Lần 1: vị trí cache (nhanh) → center ngay
             navigator.geolocation.getCurrentPosition(
-                pos=>{ updateCurrentLocationMarker(pos.coords.latitude, pos.coords.longitude); map.setView([pos.coords.latitude, pos.coords.longitude], 19); },
-                err=>displayError('Không thể lấy vị trí: '+err.message),
-                { enableHighAccuracy:true, timeout:10000, maximumAge:0 }
+                pos => {
+                    done();
+                    const lat = pos.coords.latitude, lon = pos.coords.longitude;
+                    updateCurrentLocationMarker(lat, lon, pos.coords.accuracy);
+                    map.setView([lat, lon], Math.max(map.getZoom(), 17), { animate: true });
+                },
+                err => { done(); displayError('Không thể lấy vị trí: ' + err.message); },
+                { enableHighAccuracy: false, timeout: 5000, maximumAge: 30000 }
+            );
+
+            // Lần 2: GPS chính xác → cập nhật icon & vòng tròn (không zoom lại)
+            navigator.geolocation.getCurrentPosition(
+                pos => {
+                    const lat = pos.coords.latitude, lon = pos.coords.longitude;
+                    updateCurrentLocationMarker(lat, lon, pos.coords.accuracy);
+                },
+                () => {},
+                { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
             );
         }
 
@@ -2925,6 +3007,14 @@
     </div>
     <script>
         document.getElementById('imgLightbox').addEventListener('click', closeImageLightbox);
+    </script>
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('sw.js')
+                    .catch(err => console.warn('SW register failed:', err));
+            });
+        }
     </script>
 </body>
 </html>
