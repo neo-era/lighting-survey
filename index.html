@@ -13,6 +13,7 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css">
     <link rel="icon" href="images/icon-192.png" type="image/gif">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 
     <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
@@ -39,7 +40,9 @@
             --radius:    12px;
             --radius-lg: 20px;
             --radius-full: 9999px;
-            --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            --font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            --navy:   #0f172a; --navy2: #1e293b;
+            --orange: #f97316; --red:   #ef4444;
             --topbar-h:    60px;
             --bottombar-h: 72px;
             --safe-top:    env(safe-area-inset-top,    0px);
@@ -355,6 +358,32 @@
         }
         .marker-popup-card .footer button:active { opacity: .85; transform: scale(.98); }
 
+        /* ── Loại trụ quick-select chips ── */
+        .ptc-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 5px;
+            margin-bottom: 6px;
+        }
+        .ptc {
+            display: flex; align-items: center; gap: 5px;
+            padding: 5px 7px; border-radius: 8px;
+            border: 1.5px solid var(--border);
+            background: var(--surface); color: var(--text);
+            font-size: 11px; font-weight: 600; cursor: pointer;
+            transition: border-color .15s, background .15s, box-shadow .15s;
+            white-space: nowrap; overflow: hidden;
+            touch-action: manipulation;
+        }
+        .ptc svg { flex-shrink: 0; }
+        .ptc:active { opacity: .8; }
+        .ptc.active {
+            border-color: var(--ptc-color, var(--primary));
+            background: var(--ptc-bg, var(--primary-light));
+            box-shadow: 0 0 0 2px var(--ptc-color, var(--primary)) inset;
+            color: var(--ptc-color, var(--primary));
+        }
+
         .marker-image-preview { margin-top: 8px; display: flex; justify-content: center; }
         .marker-image-preview img {
             max-width: 100%; max-height: 140px;
@@ -502,59 +531,93 @@
         }
 
         /* ══ LEAFLET POPUP CARD ══ */
-        .leaflet-popup-content-wrapper {
-            border-radius: 16px !important;
-            box-shadow: 0 8px 32px rgba(0,0,0,.18) !important;
-            padding: 0 !important; overflow: hidden;
-            border: 1px solid var(--border);
-            min-width: 260px; max-width: 320px;
-        }
-        .leaflet-popup-content { margin: 0 !important; width: auto !important; }
+        .leaflet-popup-content-wrapper { border-radius: 18px !important; box-shadow: 0 12px 40px rgba(0,0,0,.22) !important; padding: 0 !important; overflow: hidden; border: none !important; min-width: 0; }
+        .leaflet-popup-content { margin: 0 !important; width: 290px !important; }
         .leaflet-popup-tip-container { margin-top: -1px; }
-        .pc { font-family: var(--font); color: var(--text); background: var(--surface); }
-        .pc-header {
-            padding: 14px 14px 12px; display: flex; gap: 10px; align-items: flex-start;
-            border-left: 4px solid var(--primary);
-            background: linear-gradient(135deg, #f0f9ff, var(--surface));
-        }
-        .pc-avatar-ph {
-            width: 42px; height: 42px; border-radius: 10px;
-            background: var(--primary-light);
-            display: flex; align-items: center; justify-content: center;
-            font-size: 20px; flex-shrink: 0;
-        }
-        .pc-name { font-size: 15px; font-weight: 700; color: var(--text); line-height: 1.3; word-break: break-word; }
-        .pc-sub { font-size: 10px; color: var(--text-muted); margin-top: 3px; font-family: monospace; }
-        .pc-body { padding: 10px 14px 8px; }
-        .pc-row { display: flex; align-items: flex-start; gap: 8px; padding: 5px 0; border-bottom: 1px solid #f1f5f9; font-size: 12px; }
+        .leaflet-popup-close-button { top: 8px !important; right: 10px !important; color: rgba(255,255,255,.8) !important; font-size: 18px !important; font-weight: 700 !important; }
+        .pc { font-family: 'Inter', system-ui, sans-serif; color: #1e293b; background: #fff; border-radius: 18px; overflow: hidden; }
+        .pc-topbar { height: 5px; }
+        .pc-header { padding: 14px 16px 10px; display: flex; gap: 12px; align-items: flex-start; }
+        .pc-avatar { width: 54px; height: 54px; border-radius: 12px; object-fit: cover; flex-shrink: 0; border: 2px solid rgba(0,0,0,.07); cursor: zoom-in; }
+        .pc-avatar-ph { width: 54px; height: 54px; border-radius: 12px; background: linear-gradient(135deg,#f1f5f9,#e2e8f0); display: flex; align-items: center; justify-content: center; font-size: 26px; flex-shrink: 0; }
+        .pc-meta { min-width: 0; flex: 1; }
+        .pc-name { font-size: 15px; font-weight: 800; color: #1e293b; line-height: 1.25; letter-spacing: -.2px; }
+        .pc-id { font-size: 11px; color: #64748b; margin-top: 2px; }
+        .pc-badge { display: inline-flex; align-items: center; gap: 4px; border-radius: 999px; padding: 3px 10px; font-size: 11px; font-weight: 700; margin-top: 7px; }
+        .pc-divider { height: 1px; background: #f1f5f9; margin: 0 16px; }
+        .pc-body { padding: 10px 16px 4px; }
+        .pc-row { display: flex; align-items: flex-start; gap: 8px; padding: 5px 0; font-size: 12.5px; border-bottom: 1px solid #f8fafc; flex-wrap: wrap; }
         .pc-row:last-child { border-bottom: none; }
-        .pc-row .pi { font-size: 13px; flex-shrink: 0; width: 18px; text-align: center; color: var(--text-muted); }
-        .pc-row .pk { color: var(--text-muted); font-weight: 600; white-space: nowrap; min-width: 60px; }
-        .pc-row .pv { color: var(--text); line-height: 1.4; flex: 1; }
-        .pc-dist-list {
-            display: block; width: 100%; margin-top: 4px; font-size: 11px;
-            border: 1px solid var(--border); border-radius: 6px;
-            background: var(--surface-2); padding: 2px; max-height: 90px;
-        }
-        .pc-photo { margin: 0 14px 8px; }
-        .pc-photo img { width: 100%; border-radius: 10px; max-height: 140px; object-fit: cover; }
-        .pc-actions {
-            display: flex; gap: 6px; padding: 10px 14px 14px;
-            border-top: 1px solid var(--border); background: var(--surface-2);
-        }
-        .pc-btn {
-            flex: 1; padding: 9px 4px; border-radius: 8px;
-            border: 1.5px solid var(--border);
-            font-size: 12px; font-weight: 600; cursor: pointer;
-            font-family: var(--font); background: var(--surface); color: var(--text);
-            text-align: center; transition: background .15s;
-        }
-        .pc-btn:active { background: #f1f5f9; }
-        .pc-btn.primary { background: var(--primary); color: #fff; border-color: var(--primary); }
-        .pc-btn.primary:active { background: var(--primary-dark); }
+        .pc-row .pi { font-size: 14px; flex-shrink: 0; width: 20px; text-align: center; margin-top: 1px; }
+        .pc-row .pk { color: #64748b; font-weight: 600; white-space: nowrap; min-width: 64px; flex-shrink: 0; font-size: 12px; }
+        .pc-row .pv { color: #1e293b; line-height: 1.45; flex: 1; min-width: 0; }
+        .pc-dist-list { flex: 0 0 100%; display: block; width: 100%; box-sizing: border-box; margin-top: 4px; font-size: 11px; border: 1px solid #e2e8f0; border-radius: 6px; background: #f8fafc; padding: 2px; max-height: 80px; }
+        .pc-coords { background: #f8fafc; border-radius: 8px; padding: 5px 10px; font-size: 10px; color: #64748b; font-family: monospace; margin-top: 8px; letter-spacing: .2px; }
+        .pc-actions { display: grid; gap: 8px; padding: 12px 16px 16px; }
+        .pc-actions.one   { grid-template-columns: 1fr; }
+        .pc-actions.two   { grid-template-columns: 1fr 1fr; }
+        .pc-btn { padding: 11px 6px; border-radius: 11px; border: none; font-size: 12px; font-weight: 700; cursor: pointer; font-family: 'Inter', system-ui, sans-serif; transition: opacity .15s, transform .1s; display: flex; align-items: center; justify-content: center; gap: 5px; touch-action: manipulation; min-height: 44px; white-space: nowrap; }
+        .pc-btn:active { opacity: .82; transform: scale(.97); }
+        .pc-btn.route { background: #0ea5e9; color: #fff; }
+        .pc-btn.edit  { background: #f1f5f9; color: #1e293b; }
+
+        /* ── Thumbnail icon on map ── */
+        .img-marker-icon img { width:44px;height:44px;object-fit:cover;border-radius:8px;border:2.5px solid #fff;box-shadow:0 2px 10px rgba(0,0,0,.45);display:block; }
+
+        /* ── Full-size lightbox ── */
+        #imgLightbox { display:none;position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.9);align-items:center;justify-content:center;cursor:zoom-out; }
+        #imgLightbox.open { display:flex; }
+        #imgLightbox img { max-width:96vw;max-height:96vh;object-fit:contain;border-radius:10px;box-shadow:0 8px 40px rgba(0,0,0,.6);pointer-events:none;display:block; }
+        #imgLightboxClose { position:absolute;top:14px;right:18px;color:#fff;font-size:36px;line-height:1;cursor:pointer;opacity:.85;z-index:1; }
+
+        /* ── LOGIN ── */
+        #loginOverlay { position:fixed;inset:0;z-index:99000;background:linear-gradient(135deg,var(--navy) 0%,#1e3a5f 100%);display:none;align-items:center;justify-content:center;padding:20px; }
+        #loginOverlay.visible { display:flex; }
+        .login-card { background:#fff;border-radius:22px;width:min(380px,100%);box-shadow:0 24px 60px rgba(0,0,0,.4);overflow:hidden; }
+        .login-head { background:linear-gradient(135deg,var(--navy),#1e3a5f);padding:28px 24px 22px;text-align:center;color:#fff; }
+        .login-icon { font-size:42px;margin-bottom:10px; }
+        .login-appname { font-size:17px;font-weight:800;letter-spacing:.02em;margin-bottom:4px;background:linear-gradient(135deg,#fbbf24,var(--orange));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent; }
+        .login-sub { font-size:12px;opacity:.65; }
+        .login-body { padding:22px 22px 24px; }
+        .login-body .lg { margin-bottom:14px; }
+        .login-body .lg label { font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:5px; }
+        .login-body .lg input { width:100%;padding:11px 14px;border:1.5px solid var(--border);border-radius:10px;font-size:15px;font-family:inherit;color:var(--text);outline:none;transition:border-color .2s;background:var(--surface-2);box-sizing:border-box; }
+        .login-body .lg input:focus { border-color:var(--orange);background:#fff;box-shadow:0 0 0 3px rgba(249,115,22,.1); }
+        #loginError { min-height:20px;font-size:13px;color:var(--red);margin-bottom:10px;text-align:center; }
+        .login-btn { width:100%;padding:13px;border-radius:12px;border:none;background:linear-gradient(135deg,var(--orange),#dc2626);color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;transition:opacity .2s;box-shadow:0 4px 16px rgba(249,115,22,.4); }
+        .login-btn:hover { opacity:.9; }
+        .login-btn:disabled { opacity:.6;cursor:not-allowed; }
+        /* user chip in topbar */
+        #topbarUser { display:flex;align-items:center;gap:6px;flex-shrink:0;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);border-radius:999px;padding:4px 10px 4px 6px;cursor:pointer;font-size:12px;font-weight:600;color:#fff;white-space:nowrap; }
+        #topbarUser .av { width:24px;height:24px;border-radius:50%;background:linear-gradient(135deg,var(--orange),#dc2626);display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0; }
     </style>
 </head>
 <body>
+
+    <!-- ═══ ĐĂNG NHẬP ═══ -->
+    <div id="loginOverlay">
+        <div class="login-card">
+            <div class="login-head">
+                <div class="login-icon">💡</div>
+                <div class="login-appname">KHẢO SÁT CHIẾU SÁNG</div>
+                <div class="login-sub">Hệ thống quản lý khảo sát trụ đèn đường</div>
+            </div>
+            <div class="login-body">
+                <div class="lg">
+                    <label>Tên đăng nhập</label>
+                    <input id="lUsername" type="text" placeholder="Nhập tên đăng nhập" autocomplete="username"
+                        onkeydown="if(event.key==='Enter')document.getElementById('lPassword').focus()">
+                </div>
+                <div class="lg">
+                    <label>Mật khẩu</label>
+                    <input id="lPassword" type="password" placeholder="Nhập mật khẩu" autocomplete="current-password"
+                        onkeydown="if(event.key==='Enter')doLogin()">
+                </div>
+                <div id="loginError"></div>
+                <button class="login-btn" id="loginBtn" onclick="doLogin()">Đăng nhập</button>
+            </div>
+        </div>
+    </div>
 
     <!-- ═══ BẢN ĐỒ ═══ -->
     <div id="map"></div>
@@ -566,8 +629,12 @@
         </button>
         <div class="topbar-search">
             <i class="fa fa-search"></i>
-            <input type="text" id="searchInput" placeholder="Tìm trụ đèn hoặc tọa độ..." autocomplete="off">
+            <input type="text" id="searchInput" placeholder="Tìm theo tên, ID hoặc tọa độ..." autocomplete="off">
             <button class="ts-btn" onclick="searchMarkers()">Tìm</button>
+        </div>
+        <div id="topbarUser" onclick="logout()" title="Đăng xuất" style="display:none">
+            <div class="av">👤</div>
+            <span id="topbarUserName"></span>
         </div>
     </div>
 
@@ -615,8 +682,8 @@
                         <label class="ctrl-label" for="pages">Chọn trang</label>
                         <select id="pages" class="ctrl-input" onchange="navigateToPage()">
                             <option value="index.html">Trang khảo sát</option>
-                            <option value="quan1.html">Quận 1</option>
-                            <option value="test.html">Kế hoạch</option>
+                            <option value="https://neo-era.github.io/camera/">Quản lý camera</option>
+                            <option value="https://neo-era.github.io/dentat/dentat.html">Quan lý đèn tắt/sự cố</option>
                         </select>
                     </div>
 
@@ -731,9 +798,12 @@
                             <label for="rptType">Loại marker</label>
                             <select id="rptType" onchange="renderReportPreview()">
                                 <option value="">Tất cả</option>
-                                <option value="1">Trụ thường</option>
-                                <option value="2">STK</option>
-                                <option value="6">Tủ điều khiển</option>
+                                <option value="1">Trụ STK</option>
+                                <option value="2">Trụ trang trí</option>
+                                <option value="3">Trụ HTLT</option>
+                                <option value="4">Trụ TTLT</option>
+                                <option value="5">Tủ chiếu sáng nổi</option>
+                                <option value="6">Tủ chiếu sáng ngầm</option>
                             </select>
                         </div>
                     </div>
@@ -801,12 +871,40 @@
                     <input id="markerCabinetInput" type="text" placeholder="Tên tủ điều khiển">
                 </div>
                 <div class="form-group">
-                    <label for="markerPoleTypeInput">Loại trụ</label>
-                    <input id="markerPoleTypeInput" type="text" placeholder="STK, BTLT...">
+                    <label for="markerPoleTypeSelect">Loại trụ</label>
+                    <select id="markerPoleTypeSelect" onchange="onPoleTypeSelectChange(this)">
+                        <option value="" disabled selected>-- Chọn loại trụ --</option>
+                        <option value="1">Trụ STK</option>
+                        <option value="2">Trụ trang trí</option>
+                        <option value="3">Trụ HTLT</option>
+                        <option value="4">Trụ TTLT</option>
+                        <option value="5">Tủ chiếu sáng nổi</option>
+                        <option value="6">Tủ chiếu sáng ngầm</option>
+                        <option value="0">-- Nhập tay --</option>
+                    </select>
+                    <input id="markerPoleTypeInput" type="text" placeholder="Nhập loại trụ..." autocomplete="off" style="display:none;margin-top:5px">
                 </div>
                 <div class="form-group">
-                    <label for="markerLampTypeInput">Loại đèn</label>
-                    <input id="markerLampTypeInput" type="text" placeholder="LED, HPS...">
+                    <label for="markerLampTypeSelect">Loại đèn</label>
+                    <select id="markerLampTypeSelect" onchange="onLampTypeSelectChange(this)">
+                        <option value="" disabled selected>-- Chọn loại đèn --</option>
+                        <option value="LED">LED</option>
+                        <option value="HPS">HPS</option>
+                        <option value="0">-- Nhập tay --</option>
+                    </select>
+                    <input id="markerLampTypeInput" type="text" placeholder="Nhập loại đèn..." autocomplete="off" style="display:none;margin-top:5px">
+                </div>
+                <div class="form-group">
+                    <label for="markerCongSuatInput">Công suất</label>
+                    <input id="markerCongSuatInput" type="text" placeholder="VD: 100W, 150W...">
+                </div>
+                <div class="form-group">
+                    <label for="markerMaPEInput">Mã PE</label>
+                    <input id="markerMaPEInput" type="text" placeholder="Nhập mã PE">
+                </div>
+                <div class="form-group">
+                    <label for="markerStreetInput">Đường</label>
+                    <input id="markerStreetInput" type="text" placeholder="Tên đường...">
                 </div>
                 <div class="form-group">
                     <label for="markerWardInput">Phường / Xã</label>
@@ -902,9 +1000,79 @@
             displayError(`Đã xuất file CAD: ${fileName}`);
         }
 
+        // ─── Auth ───
+        let currentUser = null;
+
+        function checkAuth() {
+            try { currentUser = JSON.parse(localStorage.getItem('ks_user') || 'null'); } catch(e) { currentUser = null; }
+            if (currentUser && currentUser.username) {
+                _showApp();
+            } else {
+                currentUser = null;
+                document.getElementById('loginOverlay').classList.add('visible');
+                setTimeout(() => { const el = document.getElementById('lUsername'); if (el) el.focus(); }, 150);
+            }
+        }
+
+        function _showApp() {
+            document.getElementById('loginOverlay').classList.remove('visible');
+            const chip = document.getElementById('topbarUser');
+            if (chip) {
+                chip.style.display = 'flex';
+                const nameEl = document.getElementById('topbarUserName');
+                if (nameEl) nameEl.textContent = currentUser.displayName || currentUser.username;
+            }
+            loadFromCSV();
+        }
+
+        async function doLogin() {
+            const username = (document.getElementById('lUsername').value || '').trim();
+            const password = document.getElementById('lPassword').value || '';
+            const errEl = document.getElementById('loginError');
+            const btn = document.getElementById('loginBtn');
+            errEl.textContent = '';
+            if (!username) { errEl.textContent = 'Vui lòng nhập tên đăng nhập'; return; }
+            if (!password) { errEl.textContent = 'Vui lòng nhập mật khẩu'; return; }
+            btn.disabled = true; btn.textContent = '⏳ Đang kiểm tra...';
+            try {
+                const res = await fetch(KHAOSAT_GAS_URL, {
+                    method: 'POST',
+                    body: JSON.stringify({ action: 'login', username, password })
+                });
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                const data = await res.json();
+                if (data.status === 'ok') {
+                    currentUser = data.user;
+                    localStorage.setItem('ks_user', JSON.stringify(currentUser));
+                    _showApp();
+                } else {
+                    errEl.textContent = data.message || 'Sai tên đăng nhập hoặc mật khẩu';
+                }
+            } catch(e) {
+                errEl.textContent = 'Lỗi kết nối: ' + e.message;
+            } finally {
+                btn.disabled = false; btn.textContent = 'Đăng nhập';
+            }
+        }
+
+        function logout() {
+            if (!confirm('Đăng xuất?')) return;
+            currentUser = null;
+            localStorage.removeItem('ks_user');
+            const chip = document.getElementById('topbarUser');
+            if (chip) chip.style.display = 'none';
+            document.getElementById('loginOverlay').classList.add('visible');
+            setTimeout(() => {
+                const el = document.getElementById('lUsername');
+                if (el) { el.value = ''; el.focus(); }
+                const pw = document.getElementById('lPassword');
+                if (pw) pw.value = '';
+            }, 150);
+        }
+
         // ─── Biến toàn cục ───
         let map;
-        let markersCluster = L.markerClusterGroup();
+        let markersCluster = L.markerClusterGroup({ disableClusteringAtZoom: 15, maxClusterRadius: 60, spiderfyOnMaxZoom: true });
         let labelLayerGroup = L.layerGroup();
         let markers = [];
         let loadedData = [];
@@ -925,6 +1093,9 @@
         let lastMarkerPoleType = '';
         let lastMarkerLampType = '';
         let lastMarkerWard = '';
+        let lastMarkerStreet = '';
+        let currentMarkerType = 1;
+        let _pendingGeocodePromise = null;
         let githubOwner = '';
         let githubRepo = '';
         let githubBranch = '';
@@ -994,55 +1165,61 @@
         function createMarkerPopupContent(row) {
             const name = row[1] || row[0] || '';
             const lat = parseCoord(row[2]), lon = parseCoord(row[3]);
-            const note = row[4] || '';
-            const ward = row[5] || '';
-            const tudieukhien = row[7] || '', loaitru = row[8] || '', loaiden = row[10] || '';
-            const imageValue = row[11] || '', updatedAt = row[12] || '';
+            const note = row[4] || '', nguoiKS = row[5] || '';
+            const type = parseInt(row[6]);
+            const tudieukhien = row[7] || '', loaitru = row[8] || '', loaican = row[9] || '', loaiden = row[10] || '';
+            const congSuat = row[11] || '', imageValue = row[12] || '', updatedAt = row[13] || '';
+            const maPE = row[16] || '', duong = row[17] || '', phuongXa = row[18] || '';
+            const cfg = TYPE_CONFIG[type] || { color: '#94a3b8', bg: '#f1f5f9', label: 'Không xác định', emoji: '💡' };
+
+            const avatarHtml = imageValue
+                ? `<img class="pc-avatar" src="${imageValue}" style="cursor:zoom-in" onerror="this.outerHTML='<div class=\\'pc-avatar-ph\\'>${cfg.emoji}</div>'" loading="lazy">`
+                : `<div class="pc-avatar-ph">${cfg.emoji}</div>`;
+
+            const coordStr = Number.isFinite(lat) && Number.isFinite(lon) ? `${lat.toFixed(6)}, ${lon.toFixed(6)}` : '—';
+
+            const pcRows = [];
+            if (tudieukhien) pcRows.push(`<div class="pc-row"><span class="pi">🗄</span><span class="pk">Tủ</span><span class="pv">${tudieukhien}</span></div>`);
+            if (loaitru)     pcRows.push(`<div class="pc-row"><span class="pi">🔌</span><span class="pk">Trụ</span><span class="pv">${loaitru}</span></div>`);
+            if (loaican)     pcRows.push(`<div class="pc-row"><span class="pi">📐</span><span class="pk">Cần</span><span class="pv">${loaican}</span></div>`);
+            if (loaiden)     pcRows.push(`<div class="pc-row"><span class="pi">💡</span><span class="pk">Đèn</span><span class="pv">${loaiden}</span></div>`);
+            if (congSuat)    pcRows.push(`<div class="pc-row"><span class="pi">⚡</span><span class="pk">Công suất</span><span class="pv">${congSuat}</span></div>`);
+            if (maPE)        pcRows.push(`<div class="pc-row"><span class="pi">🔑</span><span class="pk">Mã PE</span><span class="pv">${maPE}</span></div>`);
+            if (duong)       pcRows.push(`<div class="pc-row"><span class="pi">🛣</span><span class="pk">Đường</span><span class="pv">${duong}</span></div>`);
+            if (phuongXa)    pcRows.push(`<div class="pc-row"><span class="pi">📍</span><span class="pk">Phường/Xã</span><span class="pv">${phuongXa}</span></div>`);
+            if (nguoiKS)     pcRows.push(`<div class="pc-row"><span class="pi">👤</span><span class="pk">Người KS</span><span class="pv">${nguoiKS}</span></div>`);
+            if (note)        pcRows.push(`<div class="pc-row"><span class="pi">📝</span><span class="pk">Ghi chú</span><span class="pv">${note}</span></div>`);
+            if (updatedAt)   pcRows.push(`<div class="pc-row"><span class="pi">🕐</span><span class="pk">Cập nhật</span><span class="pv">${updatedAt}</span></div>`);
 
             const sameNameMarkers = getSameNameMarkers(name);
             const isAlreadyIncluded = sameNameMarkers.some(item => item.lat === lat && item.lon === lon && normalizeText(item.name||'') === normalizeText(name||''));
             if (!isAlreadyIncluded) sameNameMarkers.push({ lat, lon, name });
-            const sameNameCount = sameNameMarkers.length;
-
-            const pcRows = [];
-            if (note) pcRows.push(`<div class="pc-row"><span class="pi">📝</span><span class="pk">Ghi chú:</span><span class="pv">${note}</span></div>`);
-            if (ward) pcRows.push(`<div class="pc-row"><span class="pi">📍</span><span class="pk">Phường/Xã:</span><span class="pv">${ward}</span></div>`);
-            if (tudieukhien) pcRows.push(`<div class="pc-row"><span class="pi">🗄</span><span class="pk">Tủ:</span><span class="pv">${tudieukhien}</span></div>`);
-            if (loaitru) pcRows.push(`<div class="pc-row"><span class="pi">🔌</span><span class="pk">Trụ:</span><span class="pv">${loaitru}</span></div>`);
-            if (loaiden) pcRows.push(`<div class="pc-row"><span class="pi">💡</span><span class="pk">Đèn:</span><span class="pv">${loaiden}</span></div>`);
-            if (sameNameCount > 1) pcRows.push(`<div class="pc-row"><span class="pi">📊</span><span class="pk">Cùng tên:</span><span class="pv">${sameNameCount} trụ</span></div>`);
-            if (updatedAt) pcRows.push(`<div class="pc-row"><span class="pi">🕐</span><span class="pk">Cập nhật:</span><span class="pv">${updatedAt}</span></div>`);
-
-            let distancesHtml = '';
-            if (sameNameCount > 1) {
-                const filtered = sameNameMarkers.filter(m => !Array.isArray(m) || !m[13]);
-                const segments = [];
-                let totalDistance = 0;
-                for (let i = 1; i < filtered.length; i++) {
-                    const prev = filtered[i-1], cur = filtered[i];
+            if (sameNameMarkers.length > 1) {
+                const segments = []; let totalDistance = 0;
+                for (let i = 1; i < sameNameMarkers.length; i++) {
+                    const prev = sameNameMarkers[i-1], cur = sameNameMarkers[i];
                     const dist = getDistanceMeters(prev.lat||parseCoord(prev[2]), prev.lon||parseCoord(prev[3]), cur.lat||parseCoord(cur[2]), cur.lon||parseCoord(cur[3]));
                     totalDistance += dist;
                     segments.push(`<option>${(prev.name||prev[1]||'?')} → ${(cur.name||cur[1]||'?')}: ${Math.round(dist)} m</option>`);
                 }
-                distancesHtml = `<div class="pc-row"><span class="pi">📏</span><span class="pk">Khoảng cách:</span><span class="pv">${Math.round(totalDistance)} m<select size="4" class="pc-dist-list">${segments.join('')}</select></span></div>`;
+                pcRows.push(`<div class="pc-row"><span class="pi">📏</span><span class="pk">Khoảng cách</span><span class="pv">${Math.round(totalDistance)} m</span><select size="3" class="pc-dist-list">${segments.join('')}</select></div>`);
             }
 
-            const imageHtml = imageValue ? `<div class="pc-photo"><img src="${imageValue}" alt="Ảnh trụ" loading="lazy" onerror="this.parentNode.style.display='none'"></div>` : '';
-            const coordStr = Number.isFinite(lat) && Number.isFinite(lon) ? `${lat.toFixed(6)}, ${lon.toFixed(6)}` : '—';
-
             return `<div class="pc">
+              <div class="pc-topbar" style="background:${cfg.color}"></div>
               <div class="pc-header">
-                <div class="pc-avatar-ph">💡</div>
-                <div style="min-width:0">
+                ${avatarHtml}
+                <div class="pc-meta">
                   <div class="pc-name">${name || 'Không có tên'}</div>
-                  <div class="pc-sub">📡 ${coordStr}</div>
+                  ${row[0] ? `<div class="pc-id">ID: ${row[0]}</div>` : ''}
+                  <div class="pc-badge" style="background:${cfg.bg};color:${cfg.color}">${cfg.emoji} ${cfg.label}</div>
                 </div>
               </div>
-              ${imageHtml}
-              <div class="pc-body">${pcRows.join('')}${distancesHtml}</div>
-              <div class="pc-actions">
-                <button class="pc-btn primary" onclick="routeToMarkerLatLon(${lat},${lon})">🧭 Đi đến</button>
-                <button class="pc-btn" onclick="openEditMarker()">✏️ Sửa</button>
+              <div class="pc-divider"></div>
+              <div class="pc-body">${pcRows.join('')}<div class="pc-coords">📡 ${coordStr}</div></div>
+              <div class="pc-actions two">
+                <button class="pc-btn route" onclick="routeToMarkerLatLon(${lat},${lon})">🧭 Đi đến</button>
+                <button class="pc-btn edit" onclick="openEditMarker()">✏️ Sửa</button>
               </div>
             </div>`;
         }
@@ -1053,6 +1230,23 @@
                     if (Array.isArray(row) && (row[1]===markerName||row[0]===markerName)) { row[2]=newLat; row[3]=newLon; }
                 });
             });
+        }
+
+        function makeImageIcon(url) {
+            return L.divIcon({
+                className: 'img-marker-icon',
+                html: `<img src="${url}" alt="">`,
+                iconSize: [44, 44], iconAnchor: [22, 44], popupAnchor: [0, -48]
+            });
+        }
+
+        function openImageLightbox(url) {
+            document.getElementById('imgLightboxImg').src = url;
+            document.getElementById('imgLightbox').classList.add('open');
+        }
+
+        function closeImageLightbox() {
+            document.getElementById('imgLightbox').classList.remove('open');
         }
 
         function addMarkerRowToMap(row) {
@@ -1066,7 +1260,18 @@
             const marker = L.marker([lat, lon], { icon, draggable: true });
 
             marker.bindPopup(createMarkerPopupContent(row));
-            marker.on('popupopen', function() { _currentPopupRow = row; marker.setPopupContent(createMarkerPopupContent(row)); });
+            marker.on('popupopen', function() {
+                _currentPopupRow = row;
+                marker.setPopupContent(createMarkerPopupContent(row));
+                setTimeout(function() {
+                    const popup = marker.getPopup();
+                    if (!popup) return;
+                    const el = popup.getElement();
+                    if (!el) return;
+                    const avatar = el.querySelector('.pc-avatar');
+                    if (avatar) avatar.addEventListener('click', function() { openImageLightbox(avatar.src); });
+                }, 0);
+            });
             marker.on('dragend', function(e) {
                 const ll = e.target.getLatLng();
                 const newLat = ll.lat, newLon = ll.lng;
@@ -1082,11 +1287,12 @@
             });
 
             markersCluster.addLayer(marker);
-            markers.push({ lat, lon, name, note, marker });
+            const id = String(row[0] || '');
+            markers.push({ lat, lon, name, note, id, marker });
 
             if (name) {
                 labelLayerGroup.addLayer(L.marker([lat, lon], {
-                    icon: L.divIcon({ className: 'custom-label', html: `<div style="font-size:12px;font-weight:bold">${name}</div>`, iconSize: [80,20], iconAnchor: [40,30] }),
+                    icon: L.divIcon({ className: 'custom-label', html: `<div style="font-size:12px;font-weight:bold">${name}</div>`, iconSize: [80,20], iconAnchor: [40,-4] }),
                     interactive: false
                 }));
             }
@@ -1113,33 +1319,160 @@
             displayError('Chế độ thêm marker đã tắt.');
         }
 
-        // Custom Icons — loại 0–9 theo ICON_CONFIG
-        function makeDotIcon(color, pulse) {
-            const anim = pulse ? 'animation:ks-pulse 1.4s infinite;' : '';
+        const TYPE_CONFIG = {
+            1: { color: '#0ea5e9', bg: '#e0f2fe', label: 'Trụ STK',            emoji: '💡', shape: 'pole' },
+            2: { color: '#ec4899', bg: '#fce7f3', label: 'Trụ trang trí',      emoji: '🎆', shape: 'pole' },
+            3: { color: '#10b981', bg: '#d1fae5', label: 'Trụ HTLT',           emoji: '💡', shape: 'pole' },
+            4: { color: '#f97316', bg: '#ffedd5', label: 'Trụ TTLT',           emoji: '💡', shape: 'pole' },
+            5: { color: '#2563eb', bg: '#dbeafe', label: 'Tủ chiếu sáng nổi', emoji: '🗄', shape: 'cabinet' },
+            6: { color: '#334155', bg: '#e2e8f0', label: 'Tủ chiếu sáng ngầm',emoji: '🗄', shape: 'cabinet' },
+        };
+
+        function makeLampIcon(color) {
+            const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="26" height="42" viewBox="0 0 26 42">
+                <defs>
+                  <filter id="ls" x="-40%" y="-20%" width="180%" height="160%">
+                    <feDropShadow dx="0" dy="1" stdDeviation="1.2" flood-opacity=".45"/>
+                  </filter>
+                </defs>
+                <!-- pole -->
+                <rect x="10" y="18" width="4" height="24" rx="2" fill="${color}" filter="url(#ls)"/>
+                <!-- arm: curve up-right from top of pole -->
+                <path d="M12 18 C12 12 15 7 22 5" stroke="${color}" stroke-width="3.2"
+                      stroke-linecap="round" fill="none" filter="url(#ls)"/>
+                <!-- lamp head: horizontal pill -->
+                <rect x="16" y="1.5" width="10" height="7" rx="3.5" fill="${color}" filter="url(#ls)"/>
+                <!-- lamp glass / glow -->
+                <rect x="17.5" y="3" width="7" height="4" rx="2" fill="white" opacity="0.82"/>
+                <!-- base plate -->
+                <rect x="8" y="40" width="8" height="2" rx="1" fill="${color}" opacity="0.55"/>
+            </svg>`;
             return L.divIcon({
                 className: '',
-                html: `<div style="width:12px;height:12px;border-radius:50%;background:${color};border:2px solid #fff;box-shadow:0 0 4px rgba(0,0,0,.4);${anim}"></div>`,
-                iconSize:[12,12], iconAnchor:[6,6], popupAnchor:[0,-10]
+                html: svg,
+                iconSize: [26, 42], iconAnchor: [12, 42], popupAnchor: [4, -44]
             });
         }
+        // keep makePoleIcon as alias for legacy/default
+        function makePoleIcon(color) { return makeLampIcon(color); }
+
+        function makeCabinetIcon(color) {
+            return L.divIcon({
+                className: '',
+                html: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="28" viewBox="0 0 24 28">
+                    <rect x="2" y="1" width="20" height="24" rx="3"
+                        fill="${color}" stroke="white" stroke-width="1.5"
+                        style="filter:drop-shadow(0 1px 3px rgba(0,0,0,0.45))"/>
+                    <line x1="2" y1="11" x2="22" y2="11" stroke="white" stroke-width="1.2" opacity="0.65"/>
+                    <rect x="5" y="4" width="14" height="5" rx="1.5" fill="white" opacity="0.3"/>
+                    <circle cx="12" cy="18" r="2.8" fill="white" opacity="0.8"/>
+                    <line x1="8" y1="18" x2="10" y2="18" stroke="${color}" stroke-width="1.2"/>
+                </svg>`,
+                iconSize: [24, 28], iconAnchor: [12, 28], popupAnchor: [0, -30]
+            });
+        }
+
+        function makeMarkerIcon(typeNum) {
+            const cfg = TYPE_CONFIG[typeNum];
+            if (!cfg) return makePoleIcon('#94a3b8');
+            return cfg.shape === 'cabinet' ? makeCabinetIcon(cfg.color) : makePoleIcon(cfg.color);
+        }
+
         const customIcons = {
-            0: makeDotIcon('#0ea5e9'),          // Trụ STK + Đèn LED
-            1: makeDotIcon('#f59e0b'),          // Trụ STK + Đèn HPS
-            2: makeDotIcon('#ec4899'),          // Trụ trang trí
-            3: makeDotIcon('#10b981'),          // Trụ BTLT + Đèn LED
-            4: makeDotIcon('#f97316'),          // Trụ BTLT + Đèn HPS
-            5: L.icon({ iconUrl: 'images/9.png', iconSize:[20,24], iconAnchor:[10,12], popupAnchor:[0,-12] }), // Tủ lắp nổi
-            6: L.icon({ iconUrl: 'images/9.png', iconSize:[16,20], iconAnchor:[8,10],  popupAnchor:[0,-10] }), // Tủ lắp ngầm
-            7: makeDotIcon('#64748b'),          // Trụ BTLT điện lực ql
-            8: makeDotIcon('#7c3aed'),          // Trụ BTLT CS ql
-            9: makeDotIcon('#22c55e', true),    // Trụ BTLT đề xuất trồng mới
+            1: makeLampIcon('#0ea5e9'),
+            2: makeLampIcon('#ec4899'),
+            3: makeLampIcon('#10b981'),
+            4: makeLampIcon('#f97316'),
+            5: makeCabinetIcon('#2563eb'),
+            6: makeCabinetIcon('#334155'),
             currentPos: L.divIcon({
                 className: 'custom-crosshair-icon',
                 html: '<i class="fa fa-plus" style="color:#2563eb;font-size:20px;text-shadow:0 0 3px white"></i>',
                 iconSize:[20,20], iconAnchor:[10,10], popupAnchor:[0,-10]
             }),
-            default: makeDotIcon('#94a3b8')
+            default: makePoleIcon('#94a3b8')
         };
+
+        function _makePoleIconSvg(color) {
+            return `<svg xmlns="http://www.w3.org/2000/svg" width="13" height="20" viewBox="0 0 26 42">
+                <rect x="10" y="18" width="4" height="24" rx="2" fill="${color}"/>
+                <path d="M12 18 C12 12 15 7 22 5" stroke="${color}" stroke-width="3.5" stroke-linecap="round" fill="none"/>
+                <rect x="16" y="1.5" width="10" height="7" rx="3.5" fill="${color}"/>
+                <rect x="17.5" y="3" width="7" height="4" rx="2" fill="white" opacity="0.85"/>
+            </svg>`;
+        }
+        function _makeCabinetIconSvg(color) {
+            return `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="16" viewBox="0 0 24 28">
+                <rect x="2" y="1" width="20" height="24" rx="3" fill="${color}" stroke="white" stroke-width="2"/>
+                <line x1="2" y1="11" x2="22" y2="11" stroke="white" stroke-width="1.5" opacity="0.7"/>
+                <circle cx="12" cy="18" r="3" fill="white" opacity="0.85"/></svg>`;
+        }
+
+        function initPoleTypeChips() { /* chips replaced by select — no-op */ }
+
+        function onPoleTypeSelectChange(sel) {
+            const val = Number(sel.value);
+            const customInput = document.getElementById('markerPoleTypeInput');
+            if (val === 0) {
+                // nhập tay
+                currentMarkerType = 1;
+                if (customInput) { customInput.style.display = ''; customInput.value = ''; customInput.focus(); }
+            } else {
+                currentMarkerType = val;
+                const cfg = TYPE_CONFIG[val];
+                if (customInput) { customInput.style.display = 'none'; customInput.value = cfg ? cfg.label : ''; }
+            }
+        }
+
+        function selectPoleType(typeNum) {
+            const cfg = TYPE_CONFIG[typeNum];
+            if (!cfg) return;
+            currentMarkerType = typeNum;
+            const sel = document.getElementById('markerPoleTypeSelect');
+            if (sel) sel.value = String(typeNum);
+            const input = document.getElementById('markerPoleTypeInput');
+            if (input) { input.style.display = 'none'; input.value = cfg.label; }
+        }
+
+        function clearPoleTypeChips() {
+            currentMarkerType = 1;
+            const sel = document.getElementById('markerPoleTypeSelect');
+            if (sel) sel.value = '1';
+            const input = document.getElementById('markerPoleTypeInput');
+            if (input) { input.style.display = 'none'; input.value = TYPE_CONFIG[1].label; }
+        }
+
+        function onLampTypeSelectChange(sel) {
+            const manual = document.getElementById('markerLampTypeInput');
+            if (sel.value === '0') {
+                if (manual) { manual.style.display = ''; manual.value = ''; manual.focus(); }
+            } else {
+                if (manual) { manual.style.display = 'none'; manual.value = sel.value; }
+            }
+        }
+
+        function getLampTypeValue() {
+            const sel = document.getElementById('markerLampTypeSelect');
+            const manual = document.getElementById('markerLampTypeInput');
+            if (!sel) return manual ? manual.value.trim() : '';
+            return sel.value === '0' ? (manual ? manual.value.trim() : '') : sel.value;
+        }
+
+        function setLampTypeSelect(value) {
+            const sel = document.getElementById('markerLampTypeSelect');
+            const manual = document.getElementById('markerLampTypeInput');
+            if (!sel) return;
+            if (value === 'LED' || value === 'HPS') {
+                sel.value = value;
+                if (manual) { manual.style.display = 'none'; manual.value = value; }
+            } else if (value) {
+                sel.value = '0';
+                if (manual) { manual.style.display = ''; manual.value = value; }
+            } else {
+                sel.value = '';
+                if (manual) { manual.style.display = 'none'; manual.value = ''; }
+            }
+        }
 
         function initializeMap() {
             const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom:33, attribution:'© OpenStreetMap' });
@@ -1180,6 +1513,7 @@
                     if (tempMarker) tempMarker.setLatLng(e.latlng);
                     document.getElementById('markerCoordsText').textContent = `Tọa độ: ${e.latlng.lat.toFixed(6)}, ${e.latlng.lng.toFixed(6)}`;
                     displayError('Đã chọn vị trí trên bản đồ.');
+                    fillGeoFields(e.latlng.lat, e.latlng.lng);
                     pickMarkerMode = false;
                     return;
                 }
@@ -1262,8 +1596,23 @@
             nameInput.value = lastMarkerName ? getNextMarkerName(lastMarkerName) : '';
             noteInput.value = lastMarkerNote || '';
             cabinetInput.value = lastMarkerCabinet || '';
-            poleTypeInput.value = lastMarkerPoleType || '';
-            lampTypeInput.value = lastMarkerLampType || '';
+            setLampTypeSelect(lastMarkerLampType || '');
+            // restore select to last used type
+            if (lastMarkerPoleType) {
+                const matchEntry = Object.entries(TYPE_CONFIG).find(([,c]) => c.label === lastMarkerPoleType);
+                if (matchEntry) selectPoleType(Number(matchEntry[0]));
+                else {
+                    // custom text
+                    const sel = document.getElementById('markerPoleTypeSelect');
+                    if (sel) sel.value = '0';
+                    if (poleTypeInput) { poleTypeInput.style.display = ''; poleTypeInput.value = lastMarkerPoleType; }
+                    currentMarkerType = 1;
+                }
+            } else {
+                clearPoleTypeChips();
+            }
+            const streetInput = document.getElementById('markerStreetInput');
+            if (streetInput) streetInput.value = lastMarkerStreet || '';
             const wardInput = document.getElementById('markerWardInput');
             if (wardInput) wardInput.value = lastMarkerWard || '';
             // Populate datalist gợi ý phường/xã
@@ -1274,6 +1623,7 @@
             }
             preview.innerHTML = ''; fileInput.value = null;
             coordsText.textContent = `Tọa độ: ${lat.toFixed(6)}, ${lon.toFixed(6)}`;
+            fillGeoFields(lat, lon);
 
             if (baseSelect) {
                 function updateBaseDistanceInfo() {
@@ -1421,7 +1771,7 @@
         async function syncRowToGAS(row) {
             if (!KHAOSAT_GAS_URL) return;
             try {
-                let imagePath = row[11] || '';
+                let imagePath = row[12] || '';
                 if (imagePath && imagePath.startsWith('data:')) {
                     const ext = getImageExtensionFromDataUrl(imagePath);
                     const upRes = await fetch(KHAOSAT_GAS_URL, {
@@ -1429,7 +1779,7 @@
                         body: JSON.stringify({ action: 'upload_image', imageBase64: getBase64FromDataUrl(imagePath), soTru: row[1] || '', ext })
                     });
                     const upData = await upRes.json();
-                    if (upData.status === 'ok') { imagePath = upData.path; row[11] = imagePath; }
+                    if (upData.status === 'ok') { imagePath = upData.path; row[12] = imagePath; }
                 }
                 const res = await fetch(KHAOSAT_GAS_URL, {
                     method: 'POST',
@@ -1440,8 +1790,10 @@
                         ghiChu: row[4] || '', nguoiKS: row[5] || '', loai: row[6],
                         tuDieuKhien: row[7] || '', loaiTru: row[8] || '',
                         loaiCan: row[9] || '', loaiDen: row[10] || '',
-                        hinhAnh: imagePath, capNhat: row[12] || '',
-                        markerGoc: row[13] || '', khoangCach: row[14] || ''
+                        congSuat: row[11] || '', hinhAnh: imagePath,
+                        capNhat: row[13] || '', markerGoc: row[14] || '',
+                        khoangCach: row[15] || '', maPE: row[16] || '',
+                        duong: row[17] || '', phuongXa: row[18] || ''
                     })
                 });
                 const data = await res.json();
@@ -1453,7 +1805,12 @@
             }
         }
 
-        function saveMarkerPopup() {
+        async function saveMarkerPopup() {
+            // đợi geocoding hoàn tất nếu đang chạy
+            if (_pendingGeocodePromise) {
+                displayError('Đang tra cứu địa chỉ...');
+                try { await _pendingGeocodePromise; } catch(e) {}
+            }
             try {
                 if (!markerPopupLocation || !Array.isArray(markerPopupLocation) || markerPopupLocation.length !== 2) {
                     displayError('Chưa có vị trí — nhấn "Vị trí hiện tại" hoặc "Chọn trên bản đồ".');
@@ -1471,15 +1828,23 @@
                 if (!name) { displayError('Vui lòng nhập tên trụ.'); nameInput.focus(); return; }
                 const note = noteInput.value.trim();
                 const cabinetName = document.getElementById('markerCabinetInput').value.trim();
-                const poleType = document.getElementById('markerPoleTypeInput').value.trim();
-                const lampType = document.getElementById('markerLampTypeInput').value.trim();
+                const poleTypeSel = document.getElementById('markerPoleTypeSelect');
+                const poleTypeManual = document.getElementById('markerPoleTypeInput');
+                const selVal = poleTypeSel ? Number(poleTypeSel.value) : 0;
+                const poleType = (selVal === 0)
+                    ? (poleTypeManual ? poleTypeManual.value.trim() : '')
+                    : (TYPE_CONFIG[selVal] ? TYPE_CONFIG[selVal].label : '');
+                const lampType = getLampTypeValue();
+                const congSuat = (document.getElementById('markerCongSuatInput') || {}).value?.trim() || '';
+                const maPE = (document.getElementById('markerMaPEInput') || {}).value?.trim() || '';
+                const streetEl = document.getElementById('markerStreetInput');
+                const street = streetEl ? streetEl.value.trim() : '';
                 const wardEl = document.getElementById('markerWardInput');
                 const ward = wardEl ? wardEl.value.trim() : '';
                 lastMarkerName = name; lastMarkerNote = note; lastMarkerCabinet = cabinetName;
-                lastMarkerPoleType = poleType; lastMarkerLampType = lampType; lastMarkerWard = ward;
-                let type = 1;
-                if (cabinetName) type = 6;
-                else if (poleType.toUpperCase()==='STK') type = 2;
+                lastMarkerPoleType = poleType; lastMarkerLampType = lampType;
+                lastMarkerStreet = street; lastMarkerWard = ward;
+                const type = currentMarkerType || 1;
                 let baseMarkerName = '', distanceToBase = '';
                 if (baseSelect && baseSelect.value !== '') {
                     const bm = markers[parseInt(baseSelect.value, 10)];
@@ -1488,7 +1853,8 @@
                 if (!Array.isArray(loadedData)) loadedData = [];
                 if (!Array.isArray(newMarkerRows)) newMarkerRows = [];
                 const updatedAt = new Date().toLocaleString('vi-VN');
-                const newRow = ['',name,lat,lon,note,'',type,cabinetName,poleType,'',lampType,markerImageDataUrl||'',updatedAt,baseMarkerName,distanceToBase,ward];
+                const nguoiKS = currentUser ? (currentUser.displayName || currentUser.username) : '';
+                const newRow = ['',name,lat,lon,note,nguoiKS,type,cabinetName,poleType,'',lampType,congSuat,markerImageDataUrl||'',updatedAt,baseMarkerName,distanceToBase,maPE,street,ward];
                 loadedData.push(newRow); newMarkerRows.push(newRow);
                 markerImageDataUrl = null;
                 const newMarker = addMarkerRowToMap(newRow);
@@ -1597,11 +1963,11 @@
             const uploaded = [];
             for (const row of rows) {
                 if (!Array.isArray(row)) continue;
-                const img = row[11];
+                const img = row[12];
                 if (typeof img==='string' && img.startsWith('data:image/')) {
                     const path = getImagePathForMarker(row[1]||row[0]||'marker', img);
                     await uploadGitHubImageFile(owner,repo,path,branch,token,img,`Upload marker image ${path}`);
-                    row[11] = path; uploaded.push(path);
+                    row[12] = path; uploaded.push(path);
                 }
             }
             return uploaded;
@@ -1612,10 +1978,10 @@
             const downloaded = [];
             rows.forEach(row => {
                 if (!Array.isArray(row)) return;
-                const img = row[11];
+                const img = row[12];
                 if (typeof img==='string' && img.startsWith('data:image/')) {
                     const path = getImagePathForMarker(row[1]||row[0]||'marker', img);
-                    row[11] = path; downloaded.push({ dataUrl: img, path });
+                    row[12] = path; downloaded.push({ dataUrl: img, path });
                 }
             });
             downloaded.forEach(item => downloadDataUrlFile(item.dataUrl, item.path));
@@ -1635,19 +2001,19 @@
             if (!ExcelJSGlobal) return null;
             const workbook = new ExcelJSGlobal.Workbook();
             const ws = workbook.addWorksheet('Sheet1');
-            const header = ['ID','Tên trụ','Lat','Lon','Ghi chú','Trống','Loại','Tủ điều khiển','Loại trụ','Loại cần','Loại đèn','Ảnh','Thời gian cập nhật','Tên marker gốc','Khoảng cách (m)'];
+            const header = ['ID','Tên trụ','Lat','Lon','Ghi chú','Người KS','Loại','Tủ điều khiển','Loại trụ','Loại cần','Loại đèn','Công suất','Ảnh','Thời gian cập nhật','Tên marker gốc','Khoảng cách (m)','Mã PE'];
             ws.addRow(header);
-            [8,20,12,12,24,8,10,18,14,12,14,24,20,20,16].forEach((w,i)=>{ ws.getColumn(i+1).width = w; });
+            [8,20,12,12,24,14,10,18,14,12,14,12,24,20,20,16,12].forEach((w,i)=>{ ws.getColumn(i+1).width = w; });
             for (let i=0; i<rows.length; i++) {
                 const row = Array.isArray(rows[i]) ? [...rows[i]] : [];
-                const imgData = row[11]||'';
+                const imgData = row[12]||'';
                 const rowData = [...row];
-                if (typeof imgData==='string' && imgData.startsWith('data:image/')) rowData[11]='';
+                if (typeof imgData==='string' && imgData.startsWith('data:image/')) rowData[12]='';
                 const excelRow = ws.addRow(rowData);
                 if (typeof imgData==='string' && imgData.startsWith('data:image/')) {
                     const ext = getImageExtensionFromDataUrl(imgData);
                     const imageId = workbook.addImage({ base64: imgData.replace(/^data:image\/[^;]+;base64,/,''), extension: ext });
-                    ws.addImage(imageId, { tl:{col:11,row:excelRow.number-1}, ext:{width:180,height:120}, editAs:'oneCell' });
+                    ws.addImage(imageId, { tl:{col:12,row:excelRow.number-1}, ext:{width:180,height:120}, editAs:'oneCell' });
                     ws.getRow(excelRow.number).height = 95;
                 }
             }
@@ -1658,14 +2024,14 @@
             if (!worksheet || !Array.isArray(rows)) return;
             const images = [];
             rows.forEach((row, index) => {
-                const imgData = row[11];
+                const imgData = row[12];
                 const rowIndex = startRow + index;
-                const cellAddress = XLSX.utils.encode_cell({ r:rowIndex, c:11 });
+                const cellAddress = XLSX.utils.encode_cell({ r:rowIndex, c:12 });
                 if (typeof imgData==='string' && imgData.startsWith('data:image/')) {
                     worksheet[cellAddress] = { t:'s', v:'' };
-                    images.push({ image:imgData, origin:{r:rowIndex,c:11}, base64:true });
+                    images.push({ image:imgData, origin:{r:rowIndex,c:12}, base64:true });
                     worksheet['!cols'] = worksheet['!cols']||[];
-                    worksheet['!cols'][11] = { wpx:140 };
+                    worksheet['!cols'][12] = { wpx:140 };
                     worksheet['!rows'] = worksheet['!rows']||[];
                     worksheet['!rows'][rowIndex] = { hpx:120 };
                 } else if (typeof imgData==='string' && imgData) {
@@ -1786,49 +2152,58 @@
 
         async function updateGitHubExcel() {
             try {
-                if (!newMarkerRows || newMarkerRows.length===0) { displayError('Không có marker mới để cập nhật lên GitHub.'); return; }
-                if (!githubOwner||!githubRepo||!githubBranch||!githubToken) {
-                    githubOwner='neo-era'; githubRepo='lighting-survey'; githubBranch='main';
-                    githubToken = prompt('Nhập GitHub token (repo scope):');
-                    if (!githubToken) return;
-                }
+                if (!KHAOSAT_GAS_URL) { displayError('Chưa cấu hình GAS URL.'); return; }
                 const pathInput = document.getElementById('githubPathInput');
-                const path = pathInput && pathInput.value.trim() ? pathInput.value.trim() : '';
-                displayError('Đang kiểm tra repo GitHub...');
-                if (!await checkGitHubBranchExists(githubOwner,githubRepo,githubBranch,githubToken)) {
-                    displayError(`Branch '${githubBranch}' không tồn tại.`); return;
+                const path = pathInput && pathInput.value.trim() ? pathInput.value.trim() : 'data/khaosat.xlsx';
+
+                // 1. Tải toàn bộ dữ liệu mới nhất từ Google Sheet
+                displayError('Đang tải dữ liệu từ Google Sheets...');
+                let csvRows;
+                try {
+                    const res = await fetch(KHAOSAT_CSV_URL + '&t=' + Date.now());
+                    if (!res.ok) throw new Error('HTTP ' + res.status);
+                    csvRows = parseCSVText(await res.text());
+                    if (csvRows.length < 2) throw new Error('Dữ liệu rỗng');
+                } catch(e) {
+                    displayError('Không tải được Google Sheets: ' + e.message); return;
                 }
-                await browseGitHubPath('');
-                if (!path) { displayError('Chọn file trong danh sách hoặc nhập đường dẫn.'); return; }
-                displayError('Đang cập nhật GitHub...');
-                await prepareImagePathsForGitHub(newMarkerRows, githubOwner, githubRepo, githubBranch, githubToken);
-                const header = ['ID','Tên trụ','Lat','Lon','Ghi chú','Trống','Loại','Tủ điều khiển','Loại trụ','Loại cần','Loại đèn','Ảnh','Thời gian cập nhật'];
-                const fileData = await getGitHubFileContent(githubOwner, githubRepo, path, githubBranch, githubToken);
-                let combinedRows = [header, ...newMarkerRows];
-                let sheetName = 'Sheet1';
-                if (fileData.content) {
-                    const wb = XLSX.read(base64ToBinary(fileData.content), { type:'array' });
-                    sheetName = wb.SheetNames[0]||sheetName;
-                    const existing = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { header:1, defval:'' });
-                    if (existing.length>0) combinedRows = [header, ...existing.slice(1), ...newMarkerRows];
-                }
-                let contentBase64='';
-                if (typeof ExcelJS!=='undefined'||(typeof window!=='undefined'&&window.ExcelJS)) {
-                    const buffer = await createExcelBufferWithImages(combinedRows.slice(1));
+                const header = csvRows[0];
+                const bodyRows = csvRows.slice(1);
+
+                // 2. Tạo file Excel
+                displayError('Đang tạo file Excel...');
+                let contentBase64 = '';
+                const ExcelJSGlobal = typeof ExcelJS!=='undefined' ? ExcelJS : (typeof window!=='undefined' ? window.ExcelJS : undefined);
+                if (ExcelJSGlobal) {
+                    const workbook = new ExcelJSGlobal.Workbook();
+                    const ws = workbook.addWorksheet('DanhSachTru');
+                    ws.addRow(header);
+                    bodyRows.forEach(row => ws.addRow(Array.isArray(row) ? [...row] : []));
+                    const buffer = await workbook.xlsx.writeBuffer();
                     if (buffer) contentBase64 = arrayBufferToBase64(buffer);
                 }
                 if (!contentBase64) {
                     const wb = XLSX.utils.book_new();
-                    const exportRows = combinedRows.slice(1).map(r=>{ const c=Array.isArray(r)?[...r]:[]; c[11]=''; return c; });
-                    const ws = XLSX.utils.aoa_to_sheet([header,...exportRows]);
-                    attachImagesToWorksheet(ws, combinedRows.slice(1));
-                    XLSX.utils.book_append_sheet(wb,ws,sheetName);
-                    contentBase64 = XLSX.write(wb,{bookType:'xlsx',type:'base64'});
+                    const ws = XLSX.utils.aoa_to_sheet([header, ...bodyRows.map(r => Array.isArray(r) ? [...r] : [])]);
+                    XLSX.utils.book_append_sheet(wb, ws, 'DanhSachTru');
+                    contentBase64 = XLSX.write(wb, { bookType: 'xlsx', type: 'base64' });
                 }
-                await updateGitHubFile(githubOwner, githubRepo, path, githubBranch, githubToken, contentBase64, fileData.sha);
-                newMarkerRows=[]; pendingNewMarker=false; addMarkerMode=false; updateAddMarkerButton();
-                displayError('Đã cập nhật GitHub thành công.');
-            } catch(e) { console.error('updateGitHubExcel error:', e); displayError('Lỗi GitHub: '+(e.message||e)); }
+
+                // 3. Gửi qua GAS — GAS dùng GITHUB_TOKEN trong Script Properties để upload
+                displayError('Đang đồng bộ lên GitHub...');
+                const gasRes = await fetch(KHAOSAT_GAS_URL, {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        action: 'upload_to_github',
+                        path: path,
+                        content: contentBase64,
+                        message: 'Đồng bộ dữ liệu khảo sát ' + new Date().toISOString().slice(0, 10)
+                    })
+                });
+                const gasData = await gasRes.json();
+                if (gasData.status !== 'ok') throw new Error(gasData.message || 'Upload thất bại');
+                displayError(`Đồng bộ thành công: ${bodyRows.length} dòng → GitHub (${path}).`);
+            } catch(e) { console.error('updateGitHubExcel error:', e); displayError('Lỗi GitHub: ' + (e.message || e)); }
         }
 
         function parseCSVText(text) {
@@ -1915,7 +2290,7 @@
             const matches = [];
             for (let i=0; i<markers.length; i++) {
                 const item = markers[i];
-                if (normalizeText(item.name||'').includes(input) || normalizeText(item.note||'').includes(input))
+                if (normalizeText(item.name||'').includes(input) || normalizeText(item.note||'').includes(input) || normalizeText(item.id||'').includes(input))
                     matches.push({ index:i, item });
             }
             if (matches.length===1) {
@@ -1933,7 +2308,8 @@
                     const li = document.createElement('li');
                     const a = document.createElement('a');
                     a.href='#';
-                    a.textContent = `${match.item.name||'Không có tên'} (${match.item.lat.toFixed(5)}, ${match.item.lon.toFixed(5)})`;
+                    const idPart = match.item.id ? ` [${match.item.id}]` : '';
+                    a.textContent = `${match.item.name||'Không có tên'}${idPart} (${match.item.lat.toFixed(5)}, ${match.item.lon.toFixed(5)})`;
                     a.onclick = e=>{ e.preventDefault(); goToMarker(match.index); clearSearchResults(); };
                     li.appendChild(a); list.appendChild(li);
                 });
@@ -2084,12 +2460,26 @@
                 if (noteEl) noteEl.value = row[4] || '';
                 const cabinetEl = document.getElementById('markerCabinetInput');
                 if (cabinetEl) cabinetEl.value = row[7] || '';
-                const poleEl = document.getElementById('markerPoleTypeInput');
-                if (poleEl) poleEl.value = row[8] || '';
-                const lampEl = document.getElementById('markerLampTypeInput');
-                if (lampEl) lampEl.value = row[10] || '';
+                setLampTypeSelect(row[10] || '');
+                const congSuatEl = document.getElementById('markerCongSuatInput');
+                if (congSuatEl) congSuatEl.value = row[11] || '';
+                const maPEEl = document.getElementById('markerMaPEInput');
+                if (maPEEl) maPEEl.value = row[16] || '';
+                const streetEl2 = document.getElementById('markerStreetInput');
+                if (streetEl2) streetEl2.value = row[17] || '';
                 const wardEl = document.getElementById('markerWardInput');
-                if (wardEl) wardEl.value = row[5] || '';
+                if (wardEl) wardEl.value = row[18] || '';
+                const rowType = parseInt(row[6]);
+                if (rowType && TYPE_CONFIG[rowType]) {
+                    selectPoleType(rowType);
+                } else {
+                    // loại không khớp → nhập tay với text từ row[8]
+                    const sel = document.getElementById('markerPoleTypeSelect');
+                    if (sel) sel.value = '0';
+                    const poleEl = document.getElementById('markerPoleTypeInput');
+                    if (poleEl) { poleEl.style.display = ''; poleEl.value = row[8] || ''; }
+                    currentMarkerType = 1;
+                }
                 const coordsEl = document.getElementById('markerCoordsText');
                 if (coordsEl && Number.isFinite(lat) && Number.isFinite(lon))
                     coordsEl.textContent = `Tọa độ: ${lat.toFixed(6)}, ${lon.toFixed(6)}`;
@@ -2123,28 +2513,74 @@
             );
         }
 
+        async function reverseGeocode(lat, lon) {
+            try {
+                const url = `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json&accept-language=vi&addressdetails=1`;
+                const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
+                if (!res.ok) return null;
+                const data = await res.json();
+                return data.address || null;
+            } catch (e) { return null; }
+        }
+
+        async function fillGeoFields(lat, lon) {
+            const streetEl = document.getElementById('markerStreetInput');
+            const wardEl = document.getElementById('markerWardInput');
+            if (streetEl) { streetEl.value = ''; streetEl.placeholder = 'Đang tra cứu...'; }
+            if (wardEl)   { wardEl.value   = ''; wardEl.placeholder   = 'Đang tra cứu...'; }
+
+            const promise = reverseGeocode(lat, lon);
+            _pendingGeocodePromise = promise;
+
+            const addr = await promise;
+            if (_pendingGeocodePromise !== promise) return; // bị ghi đè bởi lần gọi mới hơn
+            _pendingGeocodePromise = null;
+
+            const road = addr ? (addr.road || addr.pedestrian || addr.footway || addr.path || addr.cycleway || '') : '';
+            const ward = addr ? (addr.suburb || addr.quarter || addr.neighbourhood || addr.village || addr.hamlet || addr.town || '') : '';
+
+            if (streetEl) { streetEl.value = road; streetEl.placeholder = 'Tên đường...'; }
+            if (wardEl)   { wardEl.value   = ward; wardEl.placeholder   = 'Nhập tên phường hoặc xã'; }
+        }
+
         function setMarkerToCurrentLocation() {
             if (!navigator.geolocation) { displayError('Trình duyệt không hỗ trợ định vị.'); return; }
-            displayError('Đang lấy GPS...');
+            const btn = document.getElementById('markerCurrentLocationBtn');
+            const setLoading = () => {
+                if (!btn) return;
+                btn.disabled = true;
+                btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Đang xác định...';
+                btn.classList.add('btn-secondary');
+                btn.classList.remove('btn-info');
+            };
+            const clearLoading = () => {
+                if (!btn) return;
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fa fa-location-arrow"></i> Vị trí hiện tại';
+                btn.classList.add('btn-info');
+                btn.classList.remove('btn-secondary');
+            };
+            setLoading();
             navigator.geolocation.getCurrentPosition(
-                pos=>{
-                    const lat=pos.coords.latitude, lon=pos.coords.longitude;
+                pos => {
+                    clearLoading();
+                    const lat = pos.coords.latitude, lon = pos.coords.longitude;
                     const overlay = document.getElementById('markerPopupForm');
                     const formOpen = overlay && overlay.style.display === 'flex';
-                    // Nếu form chưa mở (ví dụ bấm từ bottom bar) → mở form tại vị trí GPS
-                    if (!formOpen) {
-                        showMarkerPopupAt(lat, lon);
-                        return;
-                    }
-                    markerPopupLocation=[lat,lon]; pendingMarkerLocation=[lat,lon];
-                    if (tempMarker) tempMarker.setLatLng([lat,lon]);
-                    else tempMarker = L.marker([lat,lon], { icon:customIcons.currentPos }).addTo(map);
+                    if (!formOpen) { showMarkerPopupAt(lat, lon); return; }
+                    markerPopupLocation = [lat, lon]; pendingMarkerLocation = [lat, lon];
+                    if (tempMarker) tempMarker.setLatLng([lat, lon]);
+                    else tempMarker = L.marker([lat, lon], { icon: customIcons.currentPos }).addTo(map);
                     document.getElementById('markerCoordsText').textContent = `Tọa độ: ${lat.toFixed(6)}, ${lon.toFixed(6)}`;
-                    map.setView([lat,lon], Math.max(map.getZoom(), 17));
+                    map.setView([lat, lon], Math.max(map.getZoom(), 17));
                     displayError('Đã cập nhật vị trí.');
+                    fillGeoFields(lat, lon);
                 },
-                err=>displayError('Không thể lấy vị trí: '+err.message),
-                { enableHighAccuracy:true, timeout:15000, maximumAge:0 }
+                err => {
+                    clearLoading();
+                    displayError('Không thể lấy vị trí: ' + err.message);
+                },
+                { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
             );
         }
 
@@ -2156,7 +2592,8 @@
         // ─── Khởi tạo ───
         window.onload = function() {
             map = initializeMap();
-            loadFromCSV();
+            initPoleTypeChips();
+            checkAuth();
 
             window.addEventListener('offline', ()=>document.body.classList.add('offline'));
             window.addEventListener('online',  ()=>document.body.classList.remove('offline'));
@@ -2266,10 +2703,10 @@
         function getUniqueWards() {
             const wards = new Set();
             (Array.isArray(loadedData) ? loadedData : []).forEach(row => {
-                const w = (row[15] || '').toString().trim();
+                const w = (row[18] || '').toString().trim();
                 if (w) wards.add(w);
             });
-            return [...wards].sort((a,b) => a.localeCompare(b, 'vi', {sensitivity:'base'}));
+            return [...wards].sort((a, b) => a.localeCompare(b, 'vi', { sensitivity: 'base' }));
         }
 
         function populateReportWardFilter() {
@@ -2307,27 +2744,18 @@
 
             return (Array.isArray(loadedData) ? loadedData : []).filter((row, idx) => {
                 if (idx === 0 && typeof row[0] === 'string' && isNaN(parseCoord(row[2]))) return false; // bỏ header
-                const rowDate = parseRowDate(row[12]);
+                const rowDate = parseRowDate(row[13]);
                 if (fromDate && rowDate && rowDate < fromDate) return false;
                 if (toDate && rowDate && rowDate > toDate) return false;
-                if (ward && (row[15]||'').toString().trim() !== ward) return false;
+                if (ward && (row[18] || '').toString().trim() !== ward) return false;
                 if (type && String(row[6]) !== type) return false;
                 return true;
             });
         }
 
-        const MARKER_TYPE_LABEL = {
-            '0':'Trụ STK + Đèn LED',
-            '1':'Trụ STK + Đèn HPS',
-            '2':'Trụ trang trí',
-            '3':'Trụ BTLT + Đèn LED',
-            '4':'Trụ BTLT + Đèn HPS',
-            '5':'Tủ lắp nổi',
-            '6':'Tủ lắp ngầm',
-            '7':'Trụ BTLT điện lực ql',
-            '8':'Trụ BTLT CS ql',
-            '9':'Trụ BTLT đề xuất trồng mới'
-        };
+        const MARKER_TYPE_LABEL = Object.fromEntries(
+            Object.entries(TYPE_CONFIG).map(([k, v]) => [k, v.label])
+        );
 
         function renderReportPreview() {
             const rows = getReportFilteredRows();
@@ -2365,21 +2793,25 @@
             const tableRows = rows.map(r => `
                 <tr>
                     <td>${r[1]||'—'}</td>
-                    <td>${(r[15]||'—')}</td>
                     <td>${MARKER_TYPE_LABEL[String(r[6])]||'Không xác định'}</td>
                     <td>${r[8]||'—'}</td>
                     <td>${r[10]||'—'}</td>
-                    <td>${r[12]||'—'}</td>
+                    <td>${r[17]||'—'}</td>
+                    <td>${r[18]||'—'}</td>
+                    <td>${r[5]||'—'}</td>
+                    <td>${r[13]||'—'}</td>
                 </tr>`).join('');
 
             el.innerHTML = summary + `
                 <table>
                     <thead><tr>
                         <th>Tên trụ</th>
-                        <th>Phường/Xã</th>
                         <th>Loại</th>
                         <th>Loại trụ</th>
                         <th>Loại đèn</th>
+                        <th>Đường</th>
+                        <th>Phường/Xã</th>
+                        <th>Người KS</th>
                         <th>Ngày KS</th>
                     </tr></thead>
                     <tbody>${tableRows}</tbody>
@@ -2411,57 +2843,54 @@
                 wsSummary.addRow([]);
 
                 // Header tổng hợp
-                const summaryHeader = wsSummary.addRow(['Phường/Xã', 'Trụ thường', 'STK', 'Tủ điều khiển', 'Tổng cộng']);
+                const summaryHeader = wsSummary.addRow(['Loại thiết bị', 'Số lượng']);
                 summaryHeader.font = { bold: true };
                 summaryHeader.fill = { type:'pattern', pattern:'solid', fgColor:{ argb:'FF2563EB' } };
                 summaryHeader.getCell(1).font = { bold:true, color:{ argb:'FFFFFFFF' } };
                 summaryHeader.getCell(2).font = { bold:true, color:{ argb:'FFFFFFFF' } };
-                summaryHeader.getCell(3).font = { bold:true, color:{ argb:'FFFFFFFF' } };
-                summaryHeader.getCell(4).font = { bold:true, color:{ argb:'FFFFFFFF' } };
-                summaryHeader.getCell(5).font = { bold:true, color:{ argb:'FFFFFFFF' } };
 
-                // Tổng hợp theo phường/xã
-                const wardMap = {};
+                // Tổng hợp theo loại
+                const typeMap = {};
                 rows.forEach(r => {
-                    const w = (r[15]||'Chưa phân loại').trim();
-                    if (!wardMap[w]) wardMap[w] = { t1:0, t2:0, t6:0 };
                     const t = String(r[6]||'1');
-                    if (t==='6') wardMap[w].t6++; else if (t==='2') wardMap[w].t2++; else wardMap[w].t1++;
+                    if (!typeMap[t]) typeMap[t] = 0;
+                    typeMap[t]++;
                 });
-                let totalT1=0, totalT2=0, totalT6=0;
-                Object.entries(wardMap).sort(([a],[b])=>a.localeCompare(b,'vi',{sensitivity:'base'})).forEach(([w,v]) => {
-                    totalT1+=v.t1; totalT2+=v.t2; totalT6+=v.t6;
-                    wsSummary.addRow([w, v.t1, v.t2, v.t6, v.t1+v.t2+v.t6]);
+                let totalAll = 0;
+                Object.entries(typeMap).sort(([a],[b])=>Number(a)-Number(b)).forEach(([t,cnt]) => {
+                    totalAll += cnt;
+                    const label = (TYPE_CONFIG[Number(t)] || {label: 'Không xác định'}).label;
+                    wsSummary.addRow([label, cnt]);
                 });
-                const totalRow = wsSummary.addRow(['TỔNG', totalT1, totalT2, totalT6, totalT1+totalT2+totalT6]);
+                const totalRow = wsSummary.addRow(['TỔNG', totalAll]);
                 totalRow.font = { bold: true };
 
-                [20,14,10,16,12].forEach((w,i) => { wsSummary.getColumn(i+1).width = w; });
+                [30,12].forEach((w,i) => { wsSummary.getColumn(i+1).width = w; });
 
                 // ── Sheet 2: Chi tiết ──
                 const wsDetail = wb.addWorksheet('Chi tiết');
                 const detailHeader = wsDetail.addRow([
-                    'STT','Tên trụ','Phường/Xã','Lat','Lon','Ghi chú','Loại','Tủ điều khiển',
-                    'Loại trụ','Loại cần','Loại đèn','URL Ảnh','Ngày khảo sát','Marker gốc','Khoảng cách (m)'
+                    'STT','Tên trụ','Lat','Lon','Ghi chú','Người KS','Loại','Tủ điều khiển',
+                    'Loại trụ','Loại cần','Loại đèn','Công suất','URL Ảnh','Ngày khảo sát','Marker gốc','Khoảng cách (m)','Mã PE','Đường','Phường/Xã'
                 ]);
                 detailHeader.font = { bold: true };
                 detailHeader.fill = { type:'pattern', pattern:'solid', fgColor:{ argb:'FF1D4ED8' } };
-                ['STT','Tên trụ','Phường/Xã','Lat','Lon','Ghi chú','Loại','Tủ điều khiển','Loại trụ','Loại cần','Loại đèn','URL Ảnh','Ngày khảo sát','Marker gốc','Khoảng cách'].forEach((h,i) => {
+                ['STT','Tên trụ','Lat','Lon','Ghi chú','Người KS','Loại','Tủ điều khiển','Loại trụ','Loại cần','Loại đèn','Công suất','URL Ảnh','Ngày khảo sát','Marker gốc','Khoảng cách','Mã PE','Đường','Phường/Xã'].forEach((h,i) => {
                     detailHeader.getCell(i+1).font = { bold:true, color:{ argb:'FFFFFFFF' } };
                 });
 
                 rows.forEach((r, i) => {
                     wsDetail.addRow([
-                        i+1, r[1]||'', r[15]||'',
+                        i+1, r[1]||'',
                         parseCoord(r[2])||0, parseCoord(r[3])||0,
-                        r[4]||'', MARKER_TYPE_LABEL[String(r[6])]||'Không xác định',
-                        r[7]||'', r[8]||'', r[9]||'', r[10]||'',
-                        r[11]&&r[11].startsWith('data:')?'(base64)':r[11]||'',
-                        r[12]||'', r[13]||'', r[14]||''
+                        r[4]||'', r[5]||'', MARKER_TYPE_LABEL[String(r[6])]||'Không xác định',
+                        r[7]||'', r[8]||'', r[9]||'', r[10]||'', r[11]||'',
+                        r[12]&&r[12].startsWith('data:')?'(base64)':r[12]||'',
+                        r[13]||'', r[14]||'', r[15]||'', r[16]||'', r[17]||'', r[18]||''
                     ]);
                 });
 
-                [5,20,16,12,12,20,14,18,12,12,12,30,20,18,14].forEach((w,i) => { wsDetail.getColumn(i+1).width = w; });
+                [5,20,12,12,20,16,14,18,12,12,12,12,30,20,18,14,14,18,16].forEach((w,i) => { wsDetail.getColumn(i+1).width = w; });
 
                 const buffer = await wb.xlsx.writeBuffer();
                 const blob = new Blob([buffer], { type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
@@ -2472,14 +2901,14 @@
                 displayError(`Đã xuất báo cáo: ${fileName} (${rows.length} trụ)`);
             } else {
                 // Fallback: XLSX đơn giản
-                const header = ['STT','Tên trụ','Phường/Xã','Lat','Lon','Ghi chú','Loại','Tủ điều khiển','Loại trụ','Loại cần','Loại đèn','URL Ảnh','Ngày khảo sát','Marker gốc','Khoảng cách (m)'];
+                const header = ['STT','Tên trụ','Lat','Lon','Ghi chú','Người KS','Loại','Tủ điều khiển','Loại trụ','Loại cần','Loại đèn','Công suất','URL Ảnh','Ngày khảo sát','Marker gốc','Khoảng cách (m)','Mã PE','Đường','Phường/Xã'];
                 const dataRows = rows.map((r,i) => [
-                    i+1, r[1]||'', r[15]||'',
+                    i+1, r[1]||'',
                     parseCoord(r[2])||0, parseCoord(r[3])||0,
-                    r[4]||'', MARKER_TYPE_LABEL[String(r[6])]||'Không xác định',
-                    r[7]||'', r[8]||'', r[9]||'', r[10]||'',
-                    r[11]&&r[11].startsWith('data:')?'(base64)':r[11]||'',
-                    r[12]||'', r[13]||'', r[14]||''
+                    r[4]||'', r[5]||'', MARKER_TYPE_LABEL[String(r[6])]||'Không xác định',
+                    r[7]||'', r[8]||'', r[9]||'', r[10]||'', r[11]||'',
+                    r[12]&&r[12].startsWith('data:')?'(base64)':r[12]||'',
+                    r[13]||'', r[14]||'', r[15]||'', r[16]||'', r[17]||'', r[18]||''
                 ]);
                 const ws = XLSX.utils.aoa_to_sheet([header,...dataRows]);
                 const wbx = XLSX.utils.book_new();
@@ -2488,6 +2917,14 @@
                 displayError(`Đã xuất báo cáo: ${fileName} (${rows.length} trụ)`);
             }
         }
+    </script>
+
+    <div id="imgLightbox">
+        <span id="imgLightboxClose" onclick="closeImageLightbox()">&times;</span>
+        <img id="imgLightboxImg" src="" alt="">
+    </div>
+    <script>
+        document.getElementById('imgLightbox').addEventListener('click', closeImageLightbox);
     </script>
 </body>
 </html>

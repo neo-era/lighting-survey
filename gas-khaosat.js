@@ -22,7 +22,7 @@ const SHEET_NAME = 'DanhSachTru'; // ← Tên tab trong Google Sheet
 const HEADER = [
   'ID', 'Tên trụ', 'Lat', 'Lon', 'Ghi chú', 'Người KS',
   'Loại', 'Tủ điều khiển', 'Loại trụ', 'Loại cần', 'Loại đèn',
-  'Ảnh', 'Thời gian cập nhật', 'Marker gốc', 'Khoảng cách (m)'
+  'Công suất', 'Ảnh', 'Thời gian cập nhật', 'Marker gốc', 'Khoảng cách (m)', 'Mã PE', 'Đường', 'Phường/ Xã'
 ];
 
 // Map key payload JS → tên cột trong Sheet
@@ -38,10 +38,14 @@ const FIELD_MAP = {
   'loaiTru':     'Loại trụ',
   'loaiCan':     'Loại cần',
   'loaiDen':     'Loại đèn',
+  'congSuat':    'Công suất',
   'hinhAnh':     'Ảnh',
   'capNhat':     'Thời gian cập nhật',
   'markerGoc':   'Marker gốc',
   'khoangCach':  'Khoảng cách (m)',
+  'maPE':        'Mã PE',
+  'duong':       'Đường',
+  'phuongXa':    'Phường/ Xã',
 };
 
 // ── UTILS ──────────────────────────────────────────────────────────────────
@@ -146,6 +150,45 @@ function handleImageUpload(imageBase64, soTru, ext) {
   return jsonResponse({ status: 'ok', path: absoluteUrl });
 }
 
+// ── UPLOAD FILE LÊN GITHUB (proxy — dùng token lưu trong Script Properties) ─
+
+function handleGitHubUpload(filePath, contentBase64, message) {
+  const token = PropertiesService.getScriptProperties().getProperty('GITHUB_TOKEN');
+  if (!token) return jsonResponse({ status: 'error', message: 'GITHUB_TOKEN chưa cài trong Script Properties.' });
+  if (!filePath) return jsonResponse({ status: 'error', message: 'Thiếu đường dẫn file (path).' });
+
+  const apiUrl = 'https://api.github.com/repos/neo-era/lighting-survey/contents/'
+    + filePath.split('/').map(encodeURIComponent).join('/');
+  const headers = {
+    'Authorization': 'token ' + token,
+    'Accept': 'application/vnd.github+json',
+    'Content-Type': 'application/json'
+  };
+
+  // Lấy SHA nếu file đã tồn tại
+  let sha;
+  try {
+    const r = UrlFetchApp.fetch(apiUrl, { method: 'get', headers: headers, muteHttpExceptions: true });
+    if (r.getResponseCode() === 200) sha = JSON.parse(r.getContentText()).sha;
+  } catch (e) {}
+
+  const body = { message: message, content: contentBase64, branch: 'main' };
+  if (sha) body.sha = sha;
+
+  const res = UrlFetchApp.fetch(apiUrl, {
+    method: 'put',
+    headers: headers,
+    payload: JSON.stringify(body),
+    muteHttpExceptions: true
+  });
+
+  const code = res.getResponseCode();
+  if (code !== 200 && code !== 201) {
+    return jsonResponse({ status: 'error', message: 'GitHub API lỗi ' + code + ': ' + res.getContentText().slice(0, 300) });
+  }
+  return jsonResponse({ status: 'ok' });
+}
+
 // ── MAIN HANDLER ───────────────────────────────────────────────────────────
 
 // ── ĐĂNG NHẬP ──────────────────────────────────────────────────────────────
@@ -189,6 +232,10 @@ function doPost(e) {
 
     if (data.action === 'upload_image') {
       return handleImageUpload(data.imageBase64 || '', data.soTru || '', data.ext || 'jpg');
+    }
+
+    if (data.action === 'upload_to_github') {
+      return handleGitHubUpload(data.path || '', data.content || '', data.message || 'Đồng bộ dữ liệu khảo sát');
     }
 
     if (data.action === 'full_update') {
