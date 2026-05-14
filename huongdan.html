@@ -143,7 +143,7 @@
       <li><a href="#s8">Xuất báo cáo Excel</a></li>
       <li><a href="#s9">Xuất CAD (DXF)</a></li>
       <li><a href="#s10">Đồng bộ GitHub</a></li>
-      <li><a href="#s11">Cài PWA trên điện thoại</a></li>
+      <li><a href="#s11">Cài app trên điện thoại / máy tính</a></li>
     </ol>
   </div>
 
@@ -179,12 +179,12 @@
       <div class="step">
         <div class="sn">2</div>
         <div class="sc"><strong>Nhấn Đăng nhập</strong>
-          Sau khi xác thực thành công, bản đồ sẽ tải và hiển thị tên người dùng ở góc phải trên.</div>
+          Sau khi xác thực thành công, bản đồ sẽ tải. Tên người dùng hiển thị trong <strong>Bảng điều khiển bản đồ</strong> (nhấn nút <kbd>☰</kbd>).</div>
       </div>
       <div class="step">
         <div class="sn">3</div>
         <div class="sc"><strong>Đăng xuất</strong>
-          Nhấn vào tên người dùng (góc phải trên) để đăng xuất.</div>
+          Mở <kbd>☰</kbd> → nhấn vào thẻ tên người dùng (màu xanh dương trên cùng) để đăng xuất.</div>
       </div>
     </div>
     <div class="note note-warn">
@@ -199,9 +199,17 @@
 
     <h3>Thanh trên (Top Bar)</h3>
     <ul>
-      <li><kbd>☰</kbd> — Mở bảng điều khiển (GitHub, xuất dữ liệu...)</li>
+      <li><kbd>☰</kbd> — Mở bảng điều khiển (thông tin tài khoản, đồng bộ, GitHub, xuất dữ liệu...)</li>
       <li>Ô tìm kiếm — Tìm theo tên trụ, ID hoặc tọa độ</li>
-      <li>Tên người dùng — Nhấn để đăng xuất</li>
+    </ul>
+
+    <h3>Bảng điều khiển (☰)</h3>
+    <ul>
+      <li><strong>Thẻ tài khoản</strong> (trên cùng, màu xanh dương) — Hiển thị tên user, nhấn để đăng xuất</li>
+      <li><strong>Điều hướng</strong> — Chuyển sang các trang khác (camera, đèn tắt, hướng dẫn)</li>
+      <li><strong>Đồng bộ Google Sheet</strong> — Nút <strong>Cập nhật</strong> để đẩy các marker đã kéo lên Sheet (xem mục 5)</li>
+      <li><strong>GitHub</strong> — Lưu file Excel cục bộ hoặc đồng bộ lên repo</li>
+      <li><strong>Xuất dữ liệu</strong> — Xuất báo cáo Excel hoặc DXF (CAD)</li>
     </ul>
 
     <h3>Thanh dưới (Bottom Bar)</h3>
@@ -304,6 +312,27 @@
         <div class="sn">3</div>
         <div class="sc"><strong>Nhấn "Lưu marker"</strong> — dữ liệu cập nhật trực tiếp vào Google Sheets (upsert theo tên trụ / ID).</div>
       </div>
+    </div>
+
+    <h3>Đồng bộ vị trí marker đã kéo</h3>
+    <p>Khi bạn kéo marker trên bản đồ (drag), tọa độ mới được lưu trong bộ nhớ tạm. Để ghi lên Google Sheet một lần cho nhiều marker:</p>
+    <div class="steps">
+      <div class="step">
+        <div class="sn">1</div>
+        <div class="sc"><strong>Kéo nhiều marker</strong> đến vị trí mới — mỗi marker được kéo sẽ được đánh dấu chờ đồng bộ.</div>
+      </div>
+      <div class="step">
+        <div class="sn">2</div>
+        <div class="sc"><strong>Mở bảng điều khiển</strong> <kbd>☰</kbd> → mục <strong>Đồng bộ Google Sheet</strong>.</div>
+      </div>
+      <div class="step">
+        <div class="sn">3</div>
+        <div class="sc"><strong>Nhấn "Cập nhật"</strong> — số trên huy hiệu (badge) hiển thị bao nhiêu marker đang chờ. Ứng dụng đẩy lần lượt từng marker lên Google Sheet, hiện tiến độ "Đang cập nhật i/N…".</div>
+      </div>
+    </div>
+    <div class="note note-info">
+      <span class="note-icon">💡</span>
+      <div>Nút <strong>Cập nhật</strong> bị mờ (disabled) khi không có marker nào cần đồng bộ. Sau khi đồng bộ xong hoặc reload dữ liệu từ Google Sheet, danh sách chờ tự reset.</div>
     </div>
     <h3>Chỉ đường</h3>
     <p>Nhấn <strong>"Chỉ đường"</strong> trong popup để mở tuyến đường xe máy từ vị trí hiện tại đến trụ (sử dụng OSRM).</p>
@@ -424,8 +453,35 @@
 
   <!-- 11. PWA -->
   <section id="s11">
-    <h2><span class="num">11</span> Cài PWA trên điện thoại</h2>
-    <p>Ứng dụng hỗ trợ cài đặt như app thật trên điện thoại (PWA).</p>
+    <h2><span class="num">11</span> Cài app trên điện thoại / máy tính</h2>
+    <p>Ứng dụng hỗ trợ cài đặt như app thật (PWA) trên điện thoại lẫn máy tính.</p>
+
+    <h3>Máy tính (Chrome / Edge — Windows, macOS, Linux)</h3>
+    <div class="steps">
+      <div class="step">
+        <div class="sn">1</div>
+        <div class="sc">Mở link production bằng Chrome hoặc Edge: <code>https://neo-era.github.io/lighting-survey/</code><br>
+          <em>Lưu ý: không cài từ <code>localhost</code> hoặc <code>file://</code> — manifest cấu hình cho domain GitHub Pages.</em></div>
+      </div>
+      <div class="step">
+        <div class="sn">2</div>
+        <div class="sc">Nhìn vào <strong>thanh địa chỉ</strong> — có icon hình máy tính kèm dấu <kbd>⊕</kbd> ở góc phải (cạnh ngôi sao bookmark). Nhấn vào icon đó.<br>
+          Nếu không thấy: mở menu <kbd>⋮</kbd> → <strong>Cài đặt Khảo Sát Chiếu Sáng</strong> (hoặc <strong>Install Khảo Sát Chiếu Sáng</strong>).</div>
+      </div>
+      <div class="step">
+        <div class="sn">3</div>
+        <div class="sc">Nhấn <strong>Cài đặt</strong> → App mở trong cửa sổ riêng, không còn thanh địa chỉ. Icon xuất hiện trong Start Menu / Desktop / Launchpad.</div>
+      </div>
+      <div class="step">
+        <div class="sn">4</div>
+        <div class="sc"><strong>Gỡ cài đặt</strong> (nếu cần): mở app → bấm <kbd>⋮</kbd> trên cửa sổ app → <strong>Gỡ cài đặt Khảo Sát Chiếu Sáng</strong>.</div>
+      </div>
+    </div>
+    <div class="note note-info">
+      <span class="note-icon">💻</span>
+      <div>Trên máy tính, app cài xong sẽ chạy như phần mềm độc lập (window riêng, có thể ghim taskbar). Vẫn cần Internet để tải dữ liệu mới từ Google Sheets, nhưng bản đồ và CDN libraries đã cache offline.</div>
+    </div>
+
     <h3>Android (Chrome)</h3>
     <div class="steps">
       <div class="step">

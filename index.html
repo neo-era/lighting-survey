@@ -105,7 +105,7 @@
 
         /* Thanh tìm kiếm pill */
         .topbar-search {
-            flex: 1; min-width: 0;
+            flex: 0 1 30%; min-width: 0;
             display: flex; align-items: center;
             background: var(--surface);
             border-radius: var(--radius-full);
@@ -136,7 +136,8 @@
         #searchResultsWrapper {
             position: fixed;
             top: calc(var(--safe-top) + 68px);
-            left: 12px; right: 12px;
+            left: 68px; right: auto;
+            width: calc((100vw - 80px) * 0.3);
             z-index: 3001;
             pointer-events: none;
         }
@@ -640,7 +641,6 @@
 
         /* ══ RESPONSIVE — Mobile nhỏ (iPhone SE, Android < 390px) ══ */
         @media (max-width: 390px) {
-            #topbarUser { max-width: 100px; }
             .ptc-grid { grid-template-columns: 1fr 1fr; }
             .pc-actions.three { grid-template-columns: 1fr 1fr 1fr; gap: 5px; }
             .pc-btn { font-size: 11px; padding: 10px 3px; gap: 3px; }
@@ -654,7 +654,7 @@
             .marker-popup-card { width: 420px; max-height: 85vh; max-height: 85dvh; border-radius: var(--radius-lg); }
             .bs-handle { display: none; }
             #error { bottom: auto; top: calc(var(--safe-top) + 74px); }
-            #searchResultsWrapper { left: 68px; right: 12px; }
+            /* search results đã khớp 30% search bar — không cần override */
         }
 
         /* ══ LEAFLET POPUP CARD ══ */
@@ -718,9 +718,13 @@
         .login-btn:hover { opacity:.9; }
         .login-btn:disabled { opacity:.6;cursor:not-allowed; }
         /* user chip in topbar */
-        #topbarUser { display:flex;align-items:center;gap:6px;flex-shrink:0;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);border-radius:999px;padding:4px 10px 4px 6px;cursor:pointer;font-size:12px;font-weight:600;color:#fff;white-space:nowrap;max-width:140px; }
-        #topbarUser .av { width:24px;height:24px;border-radius:50%;background:linear-gradient(135deg,var(--orange),#dc2626);display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0; }
-        #topbarUserName { overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
+        #topbarUser { display:none; align-items:center; gap:12px; background:linear-gradient(135deg,#2563eb,#1d4ed8); border-radius:12px; padding:10px 14px; cursor:pointer; font-size:14px; font-weight:600; color:#fff; box-shadow:0 2px 8px rgba(37,99,235,.25); transition:transform .12s, box-shadow .15s; }
+        #topbarUser:hover { transform:translateY(-1px); box-shadow:0 4px 14px rgba(37,99,235,.35); }
+        #topbarUser .av { width:36px; height:36px; border-radius:50%; background:rgba(255,255,255,.22); display:flex; align-items:center; justify-content:center; font-size:18px; flex-shrink:0; }
+        #topbarUser .uinfo { flex:1; min-width:0; line-height:1.2; }
+        #topbarUserName { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:14px; font-weight:700; }
+        #topbarUser .uhint { display:block; font-size:11px; font-weight:500; opacity:.85; margin-top:1px; }
+        #topbarUser .ulogout { opacity:.8; flex-shrink:0; }
     </style>
 </head>
 <body>
@@ -762,10 +766,6 @@
             <i class="fa fa-search"></i>
             <input type="text" id="searchInput" placeholder="Tìm theo tên, ID hoặc tọa độ..." autocomplete="off">
             <button class="ts-btn" onclick="searchMarkers()">Tìm</button>
-        </div>
-        <div id="topbarUser" onclick="logout()" title="Đăng xuất" style="display:none">
-            <div class="av">👤</div>
-            <span id="topbarUserName"></span>
         </div>
     </div>
 
@@ -828,6 +828,16 @@
                     </button>
                 </div>
                 <div class="modal-body">
+
+                    <!-- User info -->
+                    <div id="topbarUser" onclick="logout()" title="Nhấn để đăng xuất" style="margin-bottom:18px;">
+                        <div class="av">👤</div>
+                        <div class="uinfo">
+                            <span id="topbarUserName"></span>
+                            <span class="uhint">Nhấn để đăng xuất</span>
+                        </div>
+                        <i class="fa fa-sign-out ulogout"></i>
+                    </div>
 
                     <!-- Điều hướng -->
                     <div class="ctrl-section">

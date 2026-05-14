@@ -165,6 +165,13 @@ _pendingGeocodePromise = reverseGeocode(lat, lon);
 if (_pendingGeocodePromise) await _pendingGeocodePromise;
 ```
 
+### Đồng bộ marker đã kéo — `dirtyMovedRows`
+`marker.on('dragend')` không gọi GAS ngay. Thay vào đó:
+1. `updateMarkerCoordinatesInData()` cập nhật `row[2]`, `row[3]`, `row[13]` (capNhat) và `dirtyMovedRows.add(row)`
+2. Nút **Cập nhật** trong modal → `pushMovedMarkersToSheet()` loop gọi `syncRowToGAS(row, {silent:true})` cho từng row, hiện badge số marker chờ + tiến độ "Đang cập nhật i/N..."
+3. `dirtyMovedRows.clear()` mỗi khi reload data (CSV / Excel) để tránh stale references
+4. `syncRowToGAS(row, opts)` nhận `opts.silent` để tắt toast khi batch + trả về `boolean`
+
 ### GitHub sync qua GAS proxy
 Client không giữ token. Luồng:
 1. Client tải CSV từ `KHAOSAT_CSV_URL`
