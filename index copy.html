@@ -843,21 +843,6 @@
 
                     <div class="ctrl-divider"></div>
 
-                    <!-- Đồng bộ -->
-                    <div class="ctrl-section">
-                        <div class="ctrl-title">Đồng bộ Google Sheet</div>
-                        <button id="updateMovedBtn" onclick="pushMovedMarkersToSheet()" class="ctrl-btn warning" disabled>
-                            <i class="fa fa-refresh"></i>
-                            <span id="updateMovedBtnLabel">Cập nhật</span>
-                            <span id="updateMovedBadge" style="display:none; margin-left:6px; background:rgba(255,255,255,.25); border-radius:10px; padding:1px 8px; font-size:11px; font-weight:700;">0</span>
-                        </button>
-                        <div style="font-size:11px; color:var(--text-muted); margin-top:6px; line-height:1.4;">
-                            Lưu các marker đã được kéo/di chuyển lên Google Sheet.
-                        </div>
-                    </div>
-
-                    <div class="ctrl-divider"></div>
-
                     <!-- GitHub -->
                     <div class="ctrl-section">
                         <div class="ctrl-title">GitHub</div>
@@ -1294,7 +1279,6 @@
         let markers = [];
         let loadedData = [];
         let newMarkerRows = [];
-        let dirtyMovedRows = new Set();
         let currentLocation = null;
         let currentLocationMarker = null;
         let tempMarker = null;
@@ -1459,47 +1443,9 @@
         function updateMarkerCoordinatesInData(markerName, newLat, newLon) {
             [loadedData, newMarkerRows].forEach(arr => {
                 if (Array.isArray(arr)) arr.forEach(row => {
-                    if (Array.isArray(row) && (row[1]===markerName||row[0]===markerName)) {
-                        row[2]=newLat; row[3]=newLon;
-                        row[13] = new Date().toLocaleString('vi-VN');
-                        dirtyMovedRows.add(row);
-                    }
+                    if (Array.isArray(row) && (row[1]===markerName||row[0]===markerName)) { row[2]=newLat; row[3]=newLon; }
                 });
             });
-            updateDirtyMovedBadge();
-        }
-
-        function updateDirtyMovedBadge() {
-            const n = dirtyMovedRows.size;
-            const badge = document.getElementById('updateMovedBadge');
-            const btn   = document.getElementById('updateMovedBtn');
-            if (badge) {
-                badge.textContent = n;
-                badge.style.display = n > 0 ? 'inline-flex' : 'none';
-            }
-            if (btn) btn.disabled = (n === 0);
-        }
-
-        async function pushMovedMarkersToSheet() {
-            const rows = [...dirtyMovedRows];
-            if (rows.length === 0) {
-                displayError('Không có marker nào cần cập nhật.');
-                return;
-            }
-            const btn = document.getElementById('updateMovedBtn');
-            const btnLabel = document.getElementById('updateMovedBtnLabel');
-            const origLabel = btnLabel ? btnLabel.textContent : '';
-            if (btn) btn.disabled = true;
-            let ok = 0, failed = 0;
-            for (let i = 0; i < rows.length; i++) {
-                if (btnLabel) btnLabel.textContent = `Đang cập nhật ${i+1}/${rows.length}...`;
-                const success = await syncRowToGAS(rows[i], { silent: true });
-                if (success) { dirtyMovedRows.delete(rows[i]); ok++; }
-                else failed++;
-            }
-            if (btnLabel) btnLabel.textContent = origLabel || 'Cập nhật';
-            updateDirtyMovedBadge();
-            displayError(`Đã cập nhật ${ok}/${rows.length} marker lên Google Sheets${failed ? ` (${failed} lỗi)` : ''}.`);
         }
 
         function makeImageIcon(url) {
@@ -1830,7 +1776,6 @@
                     const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
                     const jsonData = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
                     loadedData = jsonData;
-                    dirtyMovedRows.clear(); updateDirtyMovedBadge();
                     addMarkersToMap(jsonData);
                 } catch (error) {
                     displayError('Lỗi xử lý file Excel: ' + error.message);
@@ -2052,9 +1997,8 @@
             reader.readAsDataURL(file);
         }
 
-        async function syncRowToGAS(row, opts) {
-            const silent = !!(opts && opts.silent);
-            if (!KHAOSAT_GAS_URL) return false;
+        async function syncRowToGAS(row) {
+            if (!KHAOSAT_GAS_URL) return;
             try {
                 let imagePath = row[12] || '';
                 if (imagePath && imagePath.startsWith('data:')) {
@@ -2083,12 +2027,10 @@
                 });
                 const data = await res.json();
                 if (data.status !== 'ok') throw new Error(data.message || 'lỗi không rõ');
-                if (!silent) displayError('Đã lưu lên Google Sheets.');
-                return true;
+                displayError('Đã lưu lên Google Sheets.');
             } catch (e) {
                 console.error('syncRowToGAS:', e);
-                if (!silent) displayError('Lỗi lưu Google Sheets: ' + (e.message || e));
-                return false;
+                displayError('Lỗi lưu Google Sheets: ' + (e.message || e));
             }
         }
 
@@ -2522,7 +2464,6 @@
                 const rows = parseCSVText(await res.text());
                 if (rows.length < 2) throw new Error('Dữ liệu rỗng');
                 loadedData = rows;
-                dirtyMovedRows.clear(); updateDirtyMovedBadge();
                 addMarkersToMap(rows.slice(1));
                 displayError('');
             } catch (e) {

@@ -98,6 +98,7 @@ const KHAOSAT_CSV_URL = '...';   // URL publish CSV của Google Sheet (DanhSach
 |------------------|---------------------------------------------------------------|
 | login            | Xác thực từ sheet `TaiKhoan` (cột A=user, B=pass, C=tên, D=role) |
 | full_update      | Upsert 1 hàng vào `DanhSachTru` (tìm theo ID rồi Tên trụ)   |
+| delete_row       | Xóa 1 hàng khỏi `DanhSachTru` (tìm theo ID hoặc Tên trụ)    |
 | upload_image     | Upload ảnh base64 → `images/<name>.<ext>` trên GitHub        |
 | upload_to_github | Nhận Excel base64 từ client → upload file lên GitHub repo    |
 
