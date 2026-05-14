@@ -2332,7 +2332,7 @@
             try {
                 if (!newMarkerRows || newMarkerRows.length===0) { displayError('Không có marker mới để lưu.'); return; }
                 displayError('Đang chuẩn bị file...');
-                await _loadExcelJS();
+                try { await _loadExcelJS(); } catch(_) { /* fallback sang XLSX.js bên dưới */ }
                 prepareImagePathsForSave(newMarkerRows);
                 let downloadBlob = null;
                 if (typeof ExcelJS!=='undefined' || (typeof window!=='undefined' && window.ExcelJS)) {
@@ -2442,7 +2442,7 @@
         async function updateGitHubExcel() {
             try {
                 if (!KHAOSAT_GAS_URL) { displayError('Chưa cấu hình GAS URL.'); return; }
-                await _loadExcelJS();
+                try { await _loadExcelJS(); } catch(_) { /* fallback sang XLSX.js bên dưới */ }
                 const pathInput = document.getElementById('githubPathInput');
                 const path = pathInput && pathInput.value.trim() ? pathInput.value.trim() : 'data/khaosat.xlsx';
 
@@ -3367,7 +3367,7 @@
             const rows = getReportFilteredRows();
             if (!rows.length) { displayError('Không có dữ liệu để xuất.'); return; }
             displayError('Đang tải thư viện Excel...');
-            await _loadExcelJS();
+            try { await _loadExcelJS(); } catch(_) { /* fallback sang XLSX.js bên dưới */ }
 
             const fromVal = document.getElementById('rptDateFrom').value;
             const toVal = document.getElementById('rptDateTo').value;
