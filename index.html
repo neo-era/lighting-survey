@@ -108,7 +108,7 @@
         #searchInput {
             flex: 1; min-width: 0;
             border: none; outline: none;
-            font-size: 15px; font-family: var(--font);
+            font-size: 16px; font-family: var(--font);
             color: var(--text); background: transparent;
         }
         #searchInput::placeholder { color: var(--text-muted); }
@@ -254,7 +254,7 @@
         .ctrl-input {
             width: 100%; padding: 10px 12px;
             border: 1.5px solid var(--border); border-radius: var(--radius-sm);
-            font-size: 14px; font-family: var(--font); color: var(--text); background: var(--surface);
+            font-size: 16px; font-family: var(--font); color: var(--text); background: var(--surface);
             outline: none; transition: border-color .2s;
             -webkit-appearance: none; appearance: none;
             margin-bottom: 10px;
@@ -303,7 +303,9 @@
             background: rgba(0,0,0,.38);
         }
         .marker-popup-card {
-            width: 100%; max-height: 88vh;
+            width: 100%;
+            max-height: 88vh;
+            max-height: 88dvh;
             background: var(--surface);
             border-radius: var(--radius-lg) var(--radius-lg) 0 0;
             box-shadow: var(--shadow-xl);
@@ -337,7 +339,7 @@
         .marker-popup-card .body select {
             width: 100%; padding: 10px 12px;
             border: 1.5px solid var(--border); border-radius: var(--radius-sm);
-            font-size: 15px; font-family: var(--font); color: var(--text); background: var(--surface);
+            font-size: 16px; font-family: var(--font); color: var(--text); background: var(--surface);
             outline: none; transition: border-color .2s;
             -webkit-appearance: none; appearance: none;
         }
@@ -516,7 +518,7 @@
         .rpt-filters input, .rpt-filters select {
             width: 100%; padding: 9px 10px;
             border: 1.5px solid var(--border); border-radius: var(--radius-sm);
-            font-size: 14px; font-family: var(--font); color: var(--text); background: var(--surface);
+            font-size: 16px; font-family: var(--font); color: var(--text); background: var(--surface);
             outline: none; -webkit-appearance: none; appearance: none;
         }
         .rpt-filters input:focus, .rpt-filters select:focus { border-color: var(--primary); }
@@ -554,10 +556,20 @@
             #error { background: #374151; }
         }
 
+        /* ══ RESPONSIVE — Mobile nhỏ (iPhone SE, Android < 390px) ══ */
+        @media (max-width: 390px) {
+            #topbarUser { max-width: 100px; }
+            .ptc-grid { grid-template-columns: 1fr 1fr; }
+            .pc-actions.three { grid-template-columns: 1fr 1fr 1fr; gap: 5px; }
+            .pc-btn { font-size: 11px; padding: 10px 3px; gap: 3px; }
+            #addMarkerBtn { min-width: 100px; font-size: 13px; padding: 0 12px; }
+            .bab-btn { font-size: 9px; }
+        }
+
         /* ══ RESPONSIVE — Desktop ══ */
         @media (min-width: 768px) {
             #markerPopupForm { justify-content: flex-end; align-items: flex-end; padding: 0 16px 16px 0; }
-            .marker-popup-card { width: 380px; max-height: 85vh; border-radius: var(--radius-lg); }
+            .marker-popup-card { width: 420px; max-height: 85vh; max-height: 85dvh; border-radius: var(--radius-lg); }
             .bs-handle { display: none; }
             #error { bottom: auto; top: calc(var(--safe-top) + 74px); }
             #searchResultsWrapper { left: 68px; right: 12px; }
@@ -565,7 +577,7 @@
 
         /* ══ LEAFLET POPUP CARD ══ */
         .leaflet-popup-content-wrapper { border-radius: 18px !important; box-shadow: 0 12px 40px rgba(0,0,0,.22) !important; padding: 0 !important; overflow: hidden; border: none !important; min-width: 0; }
-        .leaflet-popup-content { margin: 0 !important; width: 290px !important; }
+        .leaflet-popup-content { margin: 0 !important; width: min(290px, calc(100vw - 48px)) !important; }
         .leaflet-popup-tip-container { margin-top: -1px; }
         .leaflet-popup-close-button { top: 8px !important; right: 10px !important; color: rgba(255,255,255,.8) !important; font-size: 18px !important; font-weight: 700 !important; }
         .pc { font-family: 'Inter', system-ui, sans-serif; color: #1e293b; background: #fff; border-radius: 18px; overflow: hidden; }
@@ -617,15 +629,16 @@
         .login-body { padding:22px 22px 24px; }
         .login-body .lg { margin-bottom:14px; }
         .login-body .lg label { font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:5px; }
-        .login-body .lg input { width:100%;padding:11px 14px;border:1.5px solid var(--border);border-radius:10px;font-size:15px;font-family:inherit;color:var(--text);outline:none;transition:border-color .2s;background:var(--surface-2);box-sizing:border-box; }
+        .login-body .lg input { width:100%;padding:11px 14px;border:1.5px solid var(--border);border-radius:10px;font-size:16px;font-family:inherit;color:var(--text);outline:none;transition:border-color .2s;background:var(--surface-2);box-sizing:border-box; }
         .login-body .lg input:focus { border-color:var(--orange);background:#fff;box-shadow:0 0 0 3px rgba(249,115,22,.1); }
         #loginError { min-height:20px;font-size:13px;color:var(--red);margin-bottom:10px;text-align:center; }
         .login-btn { width:100%;padding:13px;border-radius:12px;border:none;background:linear-gradient(135deg,var(--orange),#dc2626);color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;transition:opacity .2s;box-shadow:0 4px 16px rgba(249,115,22,.4); }
         .login-btn:hover { opacity:.9; }
         .login-btn:disabled { opacity:.6;cursor:not-allowed; }
         /* user chip in topbar */
-        #topbarUser { display:flex;align-items:center;gap:6px;flex-shrink:0;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);border-radius:999px;padding:4px 10px 4px 6px;cursor:pointer;font-size:12px;font-weight:600;color:#fff;white-space:nowrap; }
+        #topbarUser { display:flex;align-items:center;gap:6px;flex-shrink:0;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);border-radius:999px;padding:4px 10px 4px 6px;cursor:pointer;font-size:12px;font-weight:600;color:#fff;white-space:nowrap;max-width:140px; }
         #topbarUser .av { width:24px;height:24px;border-radius:50%;background:linear-gradient(135deg,var(--orange),#dc2626);display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0; }
+        #topbarUserName { overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
     </style>
 </head>
 <body>
@@ -1337,7 +1350,8 @@
             if (name) {
                 labelLayerGroup.addLayer(L.marker([lat, lon], {
                     icon: L.divIcon({ className: 'custom-label', html: `<div style="font-size:12px;font-weight:bold">${name}</div>`, iconSize: [80,20], iconAnchor: [40,-4] }),
-                    interactive: false
+                    interactive: false,
+                    pane: 'shadowPane'
                 }));
             }
             return marker;
