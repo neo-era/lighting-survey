@@ -254,6 +254,19 @@ function doPost(e) {
       return jsonResponse({ status: 'ok' });
     }
 
+    if (data.action === 'delete_row') {
+      const sheet = getSheet();
+      if (!sheet) throw new Error('Không tìm thấy sheet: ' + SHEET_NAME);
+      const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+      const hIdx    = buildHeaderIndex(headers);
+      const rowNum  = findRowNum(sheet, headers, hIdx, data);
+      if (rowNum > 0) {
+        sheet.deleteRow(rowNum);
+        return jsonResponse({ status: 'ok' });
+      }
+      return jsonResponse({ status: 'error', message: 'Không tìm thấy hàng để xóa.' });
+    }
+
     return jsonResponse({ status: 'error', message: 'action không hợp lệ: ' + data.action });
   } catch (err) {
     return jsonResponse({ status: 'error', message: err.message });

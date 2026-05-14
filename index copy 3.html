@@ -589,13 +589,10 @@
         .pc-actions { display: grid; gap: 8px; padding: 12px 16px 16px; }
         .pc-actions.one   { grid-template-columns: 1fr; }
         .pc-actions.two   { grid-template-columns: 1fr 1fr; }
-        .pc-actions.three { grid-template-columns: 1fr 1fr 1fr; }
         .pc-btn { padding: 11px 6px; border-radius: 11px; border: none; font-size: 12px; font-weight: 700; cursor: pointer; font-family: 'Inter', system-ui, sans-serif; transition: opacity .15s, transform .1s; display: flex; align-items: center; justify-content: center; gap: 5px; touch-action: manipulation; min-height: 44px; white-space: nowrap; }
         .pc-btn:active { opacity: .82; transform: scale(.97); }
-        .pc-btn.route  { background: #0ea5e9; color: #fff; }
-        .pc-btn.edit   { background: #f1f5f9; color: #1e293b; }
-        .pc-btn.delete { background: #fee2e2; color: #dc2626; }
-        .pc-btn.delete.confirm { background: #dc2626; color: #fff; }
+        .pc-btn.route { background: #0ea5e9; color: #fff; }
+        .pc-btn.edit  { background: #f1f5f9; color: #1e293b; }
 
         /* ── Thumbnail icon on map ── */
         .img-marker-icon img { width:44px;height:44px;object-fit:cover;border-radius:8px;border:2.5px solid #fff;box-shadow:0 2px 10px rgba(0,0,0,.45);display:block; }
@@ -1260,10 +1257,9 @@
               </div>
               <div class="pc-divider"></div>
               <div class="pc-body">${pcRows.join('')}<div class="pc-coords">📡 ${coordStr}</div></div>
-              <div class="pc-actions three">
+              <div class="pc-actions two">
                 <button class="pc-btn route" onclick="routeToMarkerLatLon(${lat},${lon})">🧭 Đi đến</button>
                 <button class="pc-btn edit" onclick="openEditMarker()">✏️ Sửa</button>
-                <button class="pc-btn delete" onclick="confirmDeleteMarker(this)">🗑 Xóa</button>
               </div>
             </div>`;
         }
@@ -2384,13 +2380,10 @@
         }
 
         let _toastTimer = null;
-        function displayError(message, type) {
+        function displayError(message) {
             const div = document.getElementById('error');
             div.textContent = message;
             div.classList.remove('toast-success','toast-warning','toast-error');
-            if (type === 'success') div.classList.add('toast-success');
-            else if (type === 'warning') div.classList.add('toast-warning');
-            else if (type === 'error') div.classList.add('toast-error');
             if (!message) { div.style.display = 'none'; return; }
             div.style.display = 'block';
             if (_toastTimer) clearTimeout(_toastTimer);
@@ -2569,72 +2562,6 @@
                 if (coordsEl && Number.isFinite(lat) && Number.isFinite(lon))
                     coordsEl.textContent = `Tọa độ: ${lat.toFixed(6)}, ${lon.toFixed(6)}`;
             }, 80);
-        }
-
-        function confirmDeleteMarker(btn) {
-            if (!btn.classList.contains('confirm')) {
-                btn.classList.add('confirm');
-                btn.textContent = '⚠️ Xác nhận?';
-                setTimeout(() => {
-                    if (btn.classList.contains('confirm')) {
-                        btn.classList.remove('confirm');
-                        btn.textContent = '🗑 Xóa';
-                    }
-                }, 3000);
-            } else {
-                deleteMarker();
-            }
-        }
-
-        async function deleteMarker() {
-            if (!_currentPopupRow) return;
-            const row = _currentPopupRow;
-            const name = row[1] || row[0] || '';
-            const lat = parseCoord(row[2]), lon = parseCoord(row[3]);
-            const id = String(row[0] || '');
-
-            map.closePopup();
-
-            // Xóa khỏi map
-            const md = markers.find(m =>
-                normalizeText(m.name||'') === normalizeText(name) &&
-                Math.abs((m.lat||0) - lat) < 0.000001 &&
-                Math.abs((m.lon||0) - lon) < 0.000001
-            );
-            if (md) {
-                markersCluster.removeLayer(md.marker);
-                labelLayerGroup.getLayers().slice().forEach(layer => {
-                    const html = layer.getIcon && layer.getIcon().options.html;
-                    if (html && html.includes(name)) labelLayerGroup.removeLayer(layer);
-                });
-                markers.splice(markers.indexOf(md), 1);
-            }
-
-            // Xóa khỏi dữ liệu cục bộ
-            [loadedData, newMarkerRows].forEach(arr => {
-                if (!Array.isArray(arr)) return;
-                const idx = arr.indexOf(row);
-                if (idx !== -1) arr.splice(idx, 1);
-            });
-
-            _currentPopupRow = null;
-            displayError(`Đã xóa marker "${name}" trên bản đồ — đang đồng bộ...`);
-
-            // Đồng bộ lên GAS / Google Sheet
-            try {
-                const resp = await fetch(KHAOSAT_GAS_URL, {
-                    method: 'POST',
-                    body: JSON.stringify({ action: 'delete_row', id, tenTru: name })
-                });
-                const json = await resp.json();
-                if (json.status === 'ok') {
-                    displayError(`Đã xóa "${name}" khỏi Google Sheet.`, 'success');
-                } else {
-                    displayError(`Xóa trên bản đồ OK, nhưng Sheet báo lỗi: ${json.message || ''}`, 'warning');
-                }
-            } catch (e) {
-                displayError(`Xóa trên bản đồ OK, không thể kết nối Sheet: ${e.message}`, 'warning');
-            }
         }
 
         function clearRoute() {
