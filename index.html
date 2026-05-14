@@ -7,6 +7,16 @@
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="author" content="Mai Vũ Lâm">
 
+    <!-- preconnect CDN sớm để browser thiết lập kết nối TCP/TLS song song -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="preconnect" href="https://cdn.jsdelivr.net">
+    <link rel="preconnect" href="https://unpkg.com">
+    <link rel="preconnect" href="https://cdnjs.cloudflare.com">
+    <link rel="preconnect" href="https://code.jquery.com">
+    <link rel="preconnect" href="https://netdna.bootstrapcdn.com">
+
+    <!-- CSS không blocking render -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/css/bootstrap.min.css">
     <link rel="stylesheet" href="https://netdna.bootstrapcdn.com/font-awesome/4.0.3/css/font-awesome.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
@@ -19,10 +29,9 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="KS Chiếu Sáng">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-
-    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Chỉ tải 3 weights cần thiết + display=swap để không chặn render -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <!-- jQuery + Bootstrap JS: đặt ở cuối body, KHÔNG ở đây -->
 
     <style>
         /* ══ DESIGN SYSTEM — CSS Variables ══ */
@@ -214,6 +223,79 @@
         #addMarkerBtn:active { transform: scale(.96); }
         #addMarkerBtn.btn-danger  { background: var(--danger);  box-shadow: 0 4px 14px rgba(239,68,68,.35); }
         #addMarkerBtn.btn-warning { background: var(--primary); box-shadow: 0 4px 14px rgba(37,99,235,.35); }
+
+        /* ══ FILTER PANEL ══ */
+        #filterOverlay {
+            position: fixed; inset: 0; z-index: 4900;
+            display: none; flex-direction: column; justify-content: flex-end;
+            background: rgba(0,0,0,.38);
+        }
+        #filterOverlay.open { display: flex; }
+        .filter-sheet {
+            width: 100%; max-height: 85vh; max-height: 85dvh;
+            background: var(--surface);
+            border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+            box-shadow: var(--shadow-xl);
+            display: flex; flex-direction: column; overflow: hidden;
+        }
+        .fs-header {
+            padding: 10px 16px 12px;
+            display: flex; align-items: center; justify-content: space-between;
+            border-bottom: 1px solid var(--border); flex-shrink: 0;
+        }
+        .fs-header h6 { font-size: 16px; font-weight: 700; margin: 0; color: var(--text); }
+        .fs-close { background: none; border: none; font-size: 22px; cursor: pointer; color: var(--text-muted); padding: 0; line-height: 1; }
+        .fs-body { padding: 14px 16px; overflow-y: auto; flex: 1; -webkit-overflow-scrolling: touch; }
+        .fs-label { font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: .5px; margin: 0 0 8px; }
+        .fs-type-chips { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 16px; }
+        .fs-chip {
+            display: inline-flex; align-items: center; gap: 6px;
+            padding: 7px 13px; border-radius: 999px;
+            border: 2px solid var(--border); background: var(--surface-2);
+            font-size: 13px; font-weight: 600; font-family: var(--font);
+            color: var(--text-muted); cursor: pointer;
+            transition: all .15s; touch-action: manipulation; user-select: none;
+        }
+        .fs-chip.on { color: #fff; border-color: transparent; }
+        .fs-chip .dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+        .fs-select {
+            width: 100%; padding: 10px 12px; margin-bottom: 14px;
+            border: 1.5px solid var(--border); border-radius: var(--radius-sm);
+            font-size: 15px; font-family: var(--font); color: var(--text);
+            background: var(--surface); outline: none;
+            -webkit-appearance: none; appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%236b7280' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+            background-repeat: no-repeat; background-position: right 12px center;
+            padding-right: 32px; transition: border-color .2s;
+        }
+        .fs-select:focus { border-color: var(--primary); }
+        .fs-footer {
+            padding: 12px 16px calc(12px + var(--safe-bottom));
+            background: var(--surface-2); border-top: 1px solid var(--border);
+            flex-shrink: 0; display: flex; gap: 8px;
+        }
+        .fs-apply {
+            flex: 1; padding: 13px; border: none; border-radius: var(--radius-sm);
+            background: var(--primary); color: #fff;
+            font-size: 15px; font-weight: 700; font-family: var(--font);
+            cursor: pointer; touch-action: manipulation;
+        }
+        .fs-clear {
+            padding: 13px 18px; border: 1.5px solid var(--border); border-radius: var(--radius-sm);
+            background: var(--surface); color: var(--text-muted);
+            font-size: 15px; font-weight: 600; font-family: var(--font);
+            cursor: pointer; touch-action: manipulation;
+        }
+        #filterBtn { position: relative; }
+        #filterBadge {
+            position: absolute; top: 3px; right: 6px;
+            min-width: 16px; height: 16px; padding: 0 4px;
+            background: var(--danger); color: #fff;
+            font-size: 10px; font-weight: 700; border-radius: 8px;
+            display: none; align-items: center; justify-content: center; line-height: 1;
+        }
+        #filterBadge.show { display: flex; }
+        #filterBtn.active { color: var(--primary); }
 
         /* ══ SIDE PANEL — modal slide từ trái ══ */
         .modal { z-index: 4050; }
@@ -707,10 +789,32 @@
             <i class="fa fa-plus"></i> Thêm marker
         </button>
 
+        <button id="filterBtn" class="bab-btn" onclick="openFilterPanel()" title="Bộ lọc">
+            <span id="filterBadge"></span>
+            <i class="fa fa-filter"></i>
+            <span>Lọc</span>
+        </button>
+
         <button class="bab-btn" onclick="saveMarkerData()" title="Lưu dữ liệu">
             <i class="fa fa-download"></i>
             <span>Lưu</span>
         </button>
+    </div>
+
+    <!-- ═══ FILTER PANEL ═══ -->
+    <div id="filterOverlay" onclick="if(event.target===this)closeFilterPanel()">
+        <div class="filter-sheet">
+            <div class="bs-handle"></div>
+            <div class="fs-header">
+                <h6>🔍 Bộ lọc đối tượng</h6>
+                <button class="fs-close" onclick="closeFilterPanel()">&times;</button>
+            </div>
+            <div class="fs-body" id="filterBody"></div>
+            <div class="fs-footer">
+                <button class="fs-clear" onclick="clearFilters()">Xóa lọc</button>
+                <button class="fs-apply" onclick="applyFilters()">Áp dụng (<span id="filterCount">0</span>)</button>
+            </div>
+        </div>
     </div>
 
     <!-- ═══ SIDE PANEL — Bảng điều khiển ═══ -->
@@ -748,7 +852,7 @@
                             <button onclick="saveMarkerData()" class="ctrl-btn success">
                                 <i class="fa fa-save"></i> Lưu Excel
                             </button>
-                            <button onclick="updateGitHubExcel()" class="ctrl-btn primary">
+                            <button id="githubSyncBtn" onclick="updateGitHubExcel()" class="ctrl-btn primary">
                                 <i class="fa fa-cloud-upload"></i> GitHub
                             </button>
                         </div>
@@ -979,10 +1083,13 @@
     </div>
 
     <!-- ═══ SCRIPTS ═══ -->
+    <!-- jQuery + Bootstrap JS tải ở đây (sau HTML đã render) thay vì trong <head> -->
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.3.1/exceljs.min.js"></script>
+    <!-- ExcelJS (~800KB) lazy-load: chỉ tải khi user xuất Excel/báo cáo -->
 
     <script>
         // ─── Export to CAD Modal ───
@@ -1078,6 +1185,7 @@
                 const nameEl = document.getElementById('topbarUserName');
                 if (nameEl) nameEl.textContent = currentUser.displayName || currentUser.username;
             }
+            _applyRoleUI();
             loadFromCSV();
         }
 
@@ -1124,6 +1232,44 @@
                 const pw = document.getElementById('lPassword');
                 if (pw) pw.value = '';
             }, 150);
+        }
+
+        // ── PHÂN QUYỀN ──────────────────────────────────────────────────────
+        // admin / user  → Read + Write + Delete
+        // user1         → Read + Write
+        // demo          → Read only
+        function canEdit()   { const r = currentUser && currentUser.role; return r === 'admin' || r === 'user' || r === 'user1'; }
+        function canDelete() { const r = currentUser && currentUser.role; return r === 'admin' || r === 'user'; }
+
+        function _applyRoleUI() {
+            const edit = canEdit();
+            // Ẩn nút Thêm marker với vai trò demo
+            const addBtn = document.getElementById('addMarkerBtn');
+            if (addBtn) addBtn.style.display = edit ? '' : 'none';
+            // Ẩn nút GitHub sync với vai trò demo
+            const ghBtn = document.getElementById('githubSyncBtn');
+            if (ghBtn) ghBtn.style.display = edit ? '' : 'none';
+            // Hiện role badge trên topbar tooltip
+            const chip = document.getElementById('topbarUser');
+            if (chip && currentUser) {
+                const labels = { admin: 'Quản trị', user: 'Đầy đủ', user1: 'Khảo sát viên', demo: 'Xem' };
+                chip.title = `${currentUser.displayName || currentUser.username} — ${labels[currentUser.role] || currentUser.role} (nhấn để đăng xuất)`;
+            }
+        }
+
+        // ── LAZY LOAD ExcelJS (chỉ tải khi user xuất Excel/báo cáo) ──────────
+        let _excelJsPromise = null;
+        function _loadExcelJS() {
+            if (typeof ExcelJS !== 'undefined') return Promise.resolve();
+            if (_excelJsPromise) return _excelJsPromise;
+            _excelJsPromise = new Promise((resolve, reject) => {
+                const s = document.createElement('script');
+                s.src = 'https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.3.1/exceljs.min.js';
+                s.onload = resolve;
+                s.onerror = () => { _excelJsPromise = null; reject(new Error('Không tải được ExcelJS')); };
+                document.head.appendChild(s);
+            });
+            return _excelJsPromise;
         }
 
         // ─── Biến toàn cục ───
@@ -1261,6 +1407,21 @@
                 pcRows.push(`<div class="pc-row"><span class="pi">📏</span><span class="pk">Khoảng cách</span><span class="pv">${Math.round(totalDistance)} m</span><select size="3" class="pc-dist-list">${segments.join('')}</select></div>`);
             }
 
+            let actionBtns, actionClass;
+            if (canDelete()) {
+                actionBtns = `<button class="pc-btn route" onclick="routeToMarkerLatLon(${lat},${lon})">🧭 Đi đến</button>
+                <button class="pc-btn edit" onclick="openEditMarker()">✏️ Sửa</button>
+                <button class="pc-btn delete" onclick="confirmDeleteMarker(this)">🗑 Xóa</button>`;
+                actionClass = 'three';
+            } else if (canEdit()) {
+                actionBtns = `<button class="pc-btn route" onclick="routeToMarkerLatLon(${lat},${lon})">🧭 Đi đến</button>
+                <button class="pc-btn edit" onclick="openEditMarker()">✏️ Sửa</button>`;
+                actionClass = 'two';
+            } else {
+                actionBtns = `<button class="pc-btn route" onclick="routeToMarkerLatLon(${lat},${lon})">🧭 Đi đến</button>`;
+                actionClass = 'one';
+            }
+
             return `<div class="pc">
               <div class="pc-topbar" style="background:${cfg.color}"></div>
               <div class="pc-header">
@@ -1273,10 +1434,8 @@
               </div>
               <div class="pc-divider"></div>
               <div class="pc-body">${pcRows.join('')}<div class="pc-coords">📡 ${coordStr}</div></div>
-              <div class="pc-actions three">
-                <button class="pc-btn route" onclick="routeToMarkerLatLon(${lat},${lon})">🧭 Đi đến</button>
-                <button class="pc-btn edit" onclick="openEditMarker()">✏️ Sửa</button>
-                <button class="pc-btn delete" onclick="confirmDeleteMarker(this)">🗑 Xóa</button>
+              <div class="pc-actions ${actionClass}">
+                ${actionBtns}
               </div>
             </div>`;
         }
@@ -1314,7 +1473,7 @@
             const type = parseInt(row[6]);
             const note = row[4] || '';
             const icon = customIcons[type] || customIcons.default;
-            const marker = L.marker([lat, lon], { icon, draggable: true });
+            const marker = L.marker([lat, lon], { icon, draggable: canEdit() });
 
             marker.bindPopup(createMarkerPopupContent(row));
             marker.on('popupopen', function() {
@@ -1626,6 +1785,7 @@
         }
 
         function startAddMarker() {
+            if (!canEdit()) { displayError('Bạn không có quyền thêm hoặc sửa đối tượng.', 'warning'); return; }
             if (addMarkerMode) { disableAddMarkerMode(); return; }
             enableAddMarkerMode();
             // Tự lấy GPS ngay — không cần tap vào bản đồ
@@ -2113,6 +2273,8 @@
         async function saveMarkerData() {
             try {
                 if (!newMarkerRows || newMarkerRows.length===0) { displayError('Không có marker mới để lưu.'); return; }
+                displayError('Đang chuẩn bị file...');
+                await _loadExcelJS();
                 prepareImagePathsForSave(newMarkerRows);
                 let downloadBlob = null;
                 if (typeof ExcelJS!=='undefined' || (typeof window!=='undefined' && window.ExcelJS)) {
@@ -2222,6 +2384,7 @@
         async function updateGitHubExcel() {
             try {
                 if (!KHAOSAT_GAS_URL) { displayError('Chưa cấu hình GAS URL.'); return; }
+                await _loadExcelJS();
                 const pathInput = document.getElementById('githubPathInput');
                 const path = pathInput && pathInput.value.trim() ? pathInput.value.trim() : 'data/khaosat.xlsx';
 
@@ -2651,6 +2814,129 @@
             }
         }
 
+        // ── FILTER ────────────────────────────────────────────────────────────
+        let _activeFilters = { types: [], nguoiKS: '', phuongXa: '', duong: '' };
+
+        function openFilterPanel() {
+            _buildFilterPanel();
+            document.getElementById('filterOverlay').classList.add('open');
+        }
+
+        function closeFilterPanel() {
+            document.getElementById('filterOverlay').classList.remove('open');
+        }
+
+        function _buildFilterPanel() {
+            const body = document.getElementById('filterBody');
+            if (!body) return;
+            const dataRows = Array.isArray(loadedData) ? loadedData.slice(1) : [];
+
+            const nguoiKSSet = new Set(), phuongXaSet = new Set(), duongSet = new Set();
+            dataRows.forEach(row => {
+                if (row[5]) nguoiKSSet.add(String(row[5]).trim());
+                if (row[18]) phuongXaSet.add(String(row[18]).trim());
+                if (row[17]) duongSet.add(String(row[17]).trim());
+            });
+
+            const chipsHtml = Object.entries(TYPE_CONFIG).map(([k, v]) => {
+                const on = _activeFilters.types.length === 0 || _activeFilters.types.includes(Number(k));
+                return `<button class="fs-chip${on?' on':''}" data-type="${k}"
+                    style="${on?`background:${v.color};border-color:${v.color};color:#fff`:''}">
+                    <span class="dot" style="background:${v.color}"></span>${v.label}</button>`;
+            }).join('');
+
+            const mkOpts = (set, sel) =>
+                `<option value="">Tất cả</option>` +
+                [...set].sort().map(v => `<option value="${v}"${v===sel?' selected':''}>${v}</option>`).join('');
+
+            body.innerHTML = `
+                <p class="fs-label">Loại đối tượng</p>
+                <div class="fs-type-chips">${chipsHtml}</div>
+                <p class="fs-label">Người khảo sát</p>
+                <select class="fs-select" id="fNguoiKS" onchange="_updateFilterCount()">${mkOpts(nguoiKSSet, _activeFilters.nguoiKS)}</select>
+                <p class="fs-label">Phường / Xã</p>
+                <select class="fs-select" id="fPhuongXa" onchange="_updateFilterCount()">${mkOpts(phuongXaSet, _activeFilters.phuongXa)}</select>
+                <p class="fs-label">Đường</p>
+                <select class="fs-select" id="fDuong" onchange="_updateFilterCount()">${mkOpts(duongSet, _activeFilters.duong)}</select>`;
+
+            body.querySelectorAll('.fs-chip').forEach(chip => {
+                chip.addEventListener('click', () => {
+                    chip.classList.toggle('on');
+                    const v = TYPE_CONFIG[chip.dataset.type];
+                    if (chip.classList.contains('on')) {
+                        chip.style.background = v.color;
+                        chip.style.borderColor = v.color;
+                        chip.style.color = '#fff';
+                    } else {
+                        chip.style.background = '';
+                        chip.style.borderColor = '';
+                        chip.style.color = '';
+                    }
+                    _updateFilterCount();
+                });
+            });
+            _updateFilterCount();
+        }
+
+        function _getSelectedTypes() {
+            return [...document.querySelectorAll('#filterBody .fs-chip.on')].map(c => Number(c.dataset.type));
+        }
+
+        function _getFilteredRows() {
+            const dataRows = Array.isArray(loadedData) ? loadedData.slice(1) : [];
+            const selTypes = _getSelectedTypes();
+            const allCount = Object.keys(TYPE_CONFIG).length;
+            const typeFilter = (selTypes.length === 0 || selTypes.length === allCount) ? [] : selTypes;
+            const nguoiKS = (document.getElementById('fNguoiKS') || {}).value || '';
+            const phuongXa = (document.getElementById('fPhuongXa') || {}).value || '';
+            const duong = (document.getElementById('fDuong') || {}).value || '';
+            return dataRows.filter(row => {
+                if (typeFilter.length && !typeFilter.includes(Number(row[6]))) return false;
+                if (nguoiKS && String(row[5] || '').trim() !== nguoiKS) return false;
+                if (phuongXa && String(row[18] || '').trim() !== phuongXa) return false;
+                if (duong && String(row[17] || '').trim() !== duong) return false;
+                return true;
+            });
+        }
+
+        function _updateFilterCount() {
+            const el = document.getElementById('filterCount');
+            if (el) el.textContent = _getFilteredRows().length;
+        }
+
+        function applyFilters() {
+            const selTypes = _getSelectedTypes();
+            const allCount = Object.keys(TYPE_CONFIG).length;
+            _activeFilters = {
+                types: selTypes.length === allCount ? [] : selTypes,
+                nguoiKS: (document.getElementById('fNguoiKS') || {}).value || '',
+                phuongXa: (document.getElementById('fPhuongXa') || {}).value || '',
+                duong: (document.getElementById('fDuong') || {}).value || ''
+            };
+            addMarkersToMap(_getFilteredRows());
+            closeFilterPanel();
+            _updateFilterBadge();
+        }
+
+        function clearFilters() {
+            _activeFilters = { types: [], nguoiKS: '', phuongXa: '', duong: '' };
+            const dataRows = Array.isArray(loadedData) ? loadedData.slice(1) : [];
+            addMarkersToMap(dataRows);
+            closeFilterPanel();
+            _updateFilterBadge();
+        }
+
+        function _updateFilterBadge() {
+            const cnt = (_activeFilters.types.length ? 1 : 0) +
+                        (_activeFilters.nguoiKS ? 1 : 0) +
+                        (_activeFilters.phuongXa ? 1 : 0) +
+                        (_activeFilters.duong ? 1 : 0);
+            const badge = document.getElementById('filterBadge');
+            const btn = document.getElementById('filterBtn');
+            if (badge) { badge.textContent = cnt; badge.classList.toggle('show', cnt > 0); }
+            if (btn) btn.classList.toggle('active', cnt > 0);
+        }
+
         function clearRoute() {
             if (routeLine) { map.removeLayer(routeLine); routeLine = null; }
         }
@@ -3021,6 +3307,8 @@
         async function exportReport() {
             const rows = getReportFilteredRows();
             if (!rows.length) { displayError('Không có dữ liệu để xuất.'); return; }
+            displayError('Đang tải thư viện Excel...');
+            await _loadExcelJS();
 
             const fromVal = document.getElementById('rptDateFrom').value;
             const toVal = document.getElementById('rptDateTo').value;

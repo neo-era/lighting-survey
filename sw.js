@@ -1,9 +1,23 @@
-const CACHE = 'lighting-survey-v2';
+const CACHE = 'lighting-survey-v3';
+
+// Assets tĩnh pre-cache khi install (icon + ảnh mẫu)
 const STATIC_ASSETS = [
   '/images/1.png','/images/2.png','/images/3.png','/images/4.png','/images/5.png',
   '/images/6.png','/images/7.png','/images/8.png','/images/9.png','/images/10.png',
   '/images/blank.png','/images/icon-192.png','/images/icon-512.png',
 ];
+
+// CDN libraries cache riêng — cache-first, không pre-install (tải lần đầu rồi cache)
+const CDN_HOSTS = [
+  'cdn.jsdelivr.net',
+  'cdnjs.cloudflare.com',
+  'unpkg.com',
+  'code.jquery.com',
+  'netdna.bootstrapcdn.com',
+  'fonts.googleapis.com',
+  'fonts.gstatic.com',
+];
+const CDN_CACHE = 'cdn-libs-v1';
 
 self.addEventListener('install', e => {
   e.waitUntil(
@@ -15,7 +29,8 @@ self.addEventListener('install', e => {
 self.addEventListener('activate', e => {
   e.waitUntil(
     caches.keys().then(keys => Promise.all(
-      keys.filter(k => k !== CACHE && k !== 'map-tiles-v1').map(k => caches.delete(k))
+      keys.filter(k => k !== CACHE && k !== 'map-tiles-v1' && k !== CDN_CACHE)
+          .map(k => caches.delete(k))
     ))
   );
   self.clients.claim();
@@ -24,7 +39,7 @@ self.addEventListener('activate', e => {
 self.addEventListener('fetch', e => {
   const url = e.request.url;
 
-  // Luôn fetch mới: Google Sheet CSV + GAS
+  // Luôn fetch mới: Google Sheet CSV + GAS (dữ liệu thay đổi liên tục)
   if (url.includes('docs.google.com') || url.includes('script.google.com')) {
     e.respondWith(fetch(e.request));
     return;
@@ -66,6 +81,23 @@ self.addEventListener('fetch', e => {
     );
     return;
   }
+
+  // CDN libraries (JS/CSS/fonts): cache-first, sau lần tải đầu luôn dùng cache
+  try {
+    const host = new URL(url).hostname;
+    if (CDN_HOSTS.some(h => host === h || host.endsWith('.' + h))) {
+      e.respondWith(
+        caches.open(CDN_CACHE).then(async c => {
+          const cached = await c.match(e.request);
+          if (cached) return cached;
+          const res = await fetch(e.request);
+          if (res.ok) c.put(e.request, res.clone());
+          return res;
+        })
+      );
+      return;
+    }
+  } catch (_) {}
 
   // Ảnh icon và assets tĩnh: cache-first
   e.respondWith(
