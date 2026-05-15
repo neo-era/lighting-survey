@@ -105,7 +105,7 @@
 
         /* Thanh tìm kiếm pill */
         .topbar-search {
-            flex: 0 1 30%; min-width: 0;
+            flex: 1; min-width: 0;
             display: flex; align-items: center;
             background: var(--surface);
             border-radius: var(--radius-full);
@@ -136,8 +136,7 @@
         #searchResultsWrapper {
             position: fixed;
             top: calc(var(--safe-top) + 68px);
-            left: 68px; right: auto;
-            width: calc((100vw - 80px) * 0.3);
+            left: 12px; right: 12px;
             z-index: 3001;
             pointer-events: none;
         }
@@ -654,7 +653,7 @@
             .marker-popup-card { width: 420px; max-height: 85vh; max-height: 85dvh; border-radius: var(--radius-lg); }
             .bs-handle { display: none; }
             #error { bottom: auto; top: calc(var(--safe-top) + 74px); }
-            /* search results đã khớp 30% search bar — không cần override */
+            #searchResultsWrapper { left: 68px; right: 12px; }
         }
 
         /* ══ LEAFLET POPUP CARD ══ */
@@ -725,6 +724,9 @@
         #topbarUserName { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:14px; font-weight:700; }
         #topbarUser .uhint { display:block; font-size:11px; font-weight:500; opacity:.85; margin-top:1px; }
         #topbarUser .ulogout { opacity:.8; flex-shrink:0; }
+
+        /* Đẩy góc topright của Leaflet xuống giữa màn hình (chứa ZoomDisplay + Layers) */
+        .leaflet-top.leaflet-right { top: 50%; transform: translateY(-50%); }
     </style>
 </head>
 <body>
@@ -855,14 +857,18 @@
 
                     <!-- Đồng bộ -->
                     <div class="ctrl-section">
-                        <div class="ctrl-title">Đồng bộ Google Sheet</div>
+                        <div class="ctrl-title">Chỉnh vị trí &amp; Đồng bộ</div>
+                        <button id="editPositionBtn" onclick="toggleEditPositionMode()" class="ctrl-btn outline" style="margin-bottom:8px;">
+                            <i class="fa fa-arrows"></i>
+                            <span id="editPositionBtnLabel">Bật chỉnh vị trí</span>
+                        </button>
                         <button id="updateMovedBtn" onclick="pushMovedMarkersToSheet()" class="ctrl-btn warning" disabled>
                             <i class="fa fa-refresh"></i>
                             <span id="updateMovedBtnLabel">Cập nhật</span>
                             <span id="updateMovedBadge" style="display:none; margin-left:6px; background:rgba(255,255,255,.25); border-radius:10px; padding:1px 8px; font-size:11px; font-weight:700;">0</span>
                         </button>
                         <div style="font-size:11px; color:var(--text-muted); margin-top:6px; line-height:1.4;">
-                            Lưu các marker đã được kéo/di chuyển lên Google Sheet.
+                            Mặc định marker bị khóa. Bật <strong>Chỉnh vị trí</strong> để kéo, sau đó <strong>Cập nhật</strong> để lưu lên Google Sheet.
                         </div>
                     </div>
 
@@ -1305,6 +1311,7 @@
         let loadedData = [];
         let newMarkerRows = [];
         let dirtyMovedRows = new Set();
+        let editPositionMode = false;
         let currentLocation = null;
         let currentLocationMarker = null;
         let tempMarker = null;
@@ -1490,6 +1497,30 @@
             if (btn) btn.disabled = (n === 0);
         }
 
+        function toggleEditPositionMode() {
+            if (!canEdit()) {
+                displayError('Tài khoản hiện tại không có quyền chỉnh vị trí.');
+                return;
+            }
+            editPositionMode = !editPositionMode;
+            const allow = editPositionMode;
+            markers.forEach(m => {
+                if (!m.marker || !m.marker.dragging) return;
+                if (allow) m.marker.dragging.enable();
+                else m.marker.dragging.disable();
+            });
+            const btn   = document.getElementById('editPositionBtn');
+            const label = document.getElementById('editPositionBtnLabel');
+            if (btn) {
+                btn.classList.toggle('warning', editPositionMode);
+                btn.classList.toggle('outline', !editPositionMode);
+            }
+            if (label) label.textContent = editPositionMode ? 'Đang cho phép kéo' : 'Bật chỉnh vị trí';
+            displayError(editPositionMode
+                ? 'Đã mở khóa — kéo marker trên bản đồ để dời vị trí.'
+                : 'Đã khóa vị trí marker.');
+        }
+
         async function pushMovedMarkersToSheet() {
             const rows = [...dirtyMovedRows];
             if (rows.length === 0) {
@@ -1537,7 +1568,7 @@
             const type = parseInt(row[6]);
             const note = row[4] || '';
             const icon = customIcons[type] || customIcons.default;
-            const marker = L.marker([lat, lon], { icon, draggable: canEdit() });
+            const marker = L.marker([lat, lon], { icon, draggable: editPositionMode && canEdit() });
 
             marker.bindPopup(createMarkerPopupContent(row));
             marker.on('popupopen', function() {
@@ -1763,16 +1794,7 @@
             const streetLabels = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager_only_labels/{z}/{x}/{y}{r}.png', { maxZoom:33, attribution:'© CartoDB', pane:'shadowPane' });
 
             map = L.map('map', { center:[10.762622,106.660172], zoom:13, maxZoom:33, layers:[osm] });
-
-            L.control.layers(
-                {
-                    'OpenStreetMap': osm,
-                    'Vệ tinh (Google)': googleSat,
-                    '🗺 Vệ tinh + tên đường': googleHybrid,
-                    'Satellite (old)': satellite
-                },
-                { '🏷 Nhãn tên đường': streetLabels }
-            ).addTo(map);
+            map.zoomControl.setPosition('topright');
 
             L.Control.ZoomDisplay = L.Control.extend({
                 options: { position: 'topright' },
@@ -1787,6 +1809,17 @@
                 _updateZoom: function() { if (this._container) this._container.innerHTML = 'Zoom: ' + this._map.getZoom(); }
             });
             new L.Control.ZoomDisplay().addTo(map);
+
+            L.control.layers(
+                {
+                    'OpenStreetMap': osm,
+                    'Vệ tinh (Google)': googleSat,
+                    '🗺 Vệ tinh + tên đường': googleHybrid,
+                    'Satellite (old)': satellite
+                },
+                { '🏷 Nhãn tên đường': streetLabels },
+                { position: 'topright' }
+            ).addTo(map);
 
             createMapControls();
             map.addLayer(markersCluster);
