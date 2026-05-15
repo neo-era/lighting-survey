@@ -207,7 +207,7 @@
     <ul>
       <li><strong>Thẻ tài khoản</strong> (trên cùng, màu xanh dương) — Hiển thị tên user, nhấn để đăng xuất</li>
       <li><strong>Điều hướng</strong> — Chuyển sang các trang khác (camera, đèn tắt, hướng dẫn)</li>
-      <li><strong>Đồng bộ Google Sheet</strong> — Nút <strong>Cập nhật</strong> để đẩy các marker đã kéo lên Sheet (xem mục 5)</li>
+      <li><strong>Chỉnh vị trí &amp; Đồng bộ</strong> — Bật/khóa kéo marker và đẩy các marker đã kéo lên Sheet (xem mục 5)</li>
       <li><strong>GitHub</strong> — Lưu file Excel cục bộ hoặc đồng bộ lên repo</li>
       <li><strong>Xuất dữ liệu</strong> — Xuất báo cáo Excel hoặc DXF (CAD)</li>
     </ul>
@@ -315,24 +315,32 @@
     </div>
 
     <h3>Đồng bộ vị trí marker đã kéo</h3>
-    <p>Khi bạn kéo marker trên bản đồ (drag), tọa độ mới được lưu trong bộ nhớ tạm. Để ghi lên Google Sheet một lần cho nhiều marker:</p>
+    <p>Mặc định <strong>marker bị khóa</strong> — không thể kéo trên bản đồ để tránh dời nhầm. Khi cần chỉnh vị trí:</p>
     <div class="steps">
       <div class="step">
         <div class="sn">1</div>
-        <div class="sc"><strong>Kéo nhiều marker</strong> đến vị trí mới — mỗi marker được kéo sẽ được đánh dấu chờ đồng bộ.</div>
+        <div class="sc"><strong>Mở bảng điều khiển</strong> <kbd>☰</kbd> → mục <strong>Chỉnh vị trí &amp; Đồng bộ</strong> → nhấn nút <strong>"Bật chỉnh vị trí"</strong>. Nút đổi thành cam ("Đang cho phép kéo") — marker giờ có thể kéo được.</div>
       </div>
       <div class="step">
         <div class="sn">2</div>
-        <div class="sc"><strong>Mở bảng điều khiển</strong> <kbd>☰</kbd> → mục <strong>Đồng bộ Google Sheet</strong>.</div>
+        <div class="sc"><strong>Kéo marker</strong> trên bản đồ đến vị trí mới — mỗi marker được kéo sẽ được đánh dấu chờ đồng bộ (badge số bên cạnh nút Cập nhật).</div>
       </div>
       <div class="step">
         <div class="sn">3</div>
-        <div class="sc"><strong>Nhấn "Cập nhật"</strong> — số trên huy hiệu (badge) hiển thị bao nhiêu marker đang chờ. Ứng dụng đẩy lần lượt từng marker lên Google Sheet, hiện tiến độ "Đang cập nhật i/N…".</div>
+        <div class="sc"><strong>Nhấn "Cập nhật"</strong> — ứng dụng đẩy lần lượt từng marker lên Google Sheet, hiện tiến độ "Đang cập nhật i/N…".</div>
+      </div>
+      <div class="step">
+        <div class="sn">4</div>
+        <div class="sc"><strong>Tắt chỉnh vị trí</strong> sau khi xong — nhấn lại nút (giờ là "Đang cho phép kéo") để khóa marker, tránh kéo nhầm.</div>
       </div>
     </div>
     <div class="note note-info">
       <span class="note-icon">💡</span>
       <div>Nút <strong>Cập nhật</strong> bị mờ (disabled) khi không có marker nào cần đồng bộ. Sau khi đồng bộ xong hoặc reload dữ liệu từ Google Sheet, danh sách chờ tự reset.</div>
+    </div>
+    <div class="note note-warn">
+      <span class="note-icon">🔒</span>
+      <div>Chỉ tài khoản có quyền chỉnh sửa (admin / user / user1) mới bật được chế độ kéo marker. Tài khoản <code>demo</code> không thể kéo dù có bấm nút.</div>
     </div>
     <h3>Chỉ đường</h3>
     <p>Nhấn <strong>"Chỉ đường"</strong> trong popup để mở tuyến đường xe máy từ vị trí hiện tại đến trụ (sử dụng OSRM).</p>
