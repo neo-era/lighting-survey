@@ -1788,12 +1788,13 @@
 
         function initializeMap() {
             const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom:33, attribution:'© OpenStreetMap' });
+            const googleMap = L.tileLayer('https://{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', { maxZoom:33, subdomains:['mt0','mt1','mt2','mt3'], attribution:'© Google' });
             const googleSat = L.tileLayer('https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', { maxZoom:20, attribution:'© Google' });
             const satellite = L.tileLayer('https://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', { maxZoom:33, subdomains:['mt0','mt1','mt2','mt3'], attribution:'© Google' });
             const googleHybrid = L.tileLayer('https://{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', { maxZoom:33, subdomains:['mt0','mt1','mt2','mt3'], attribution:'© Google' });
             const streetLabels = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager_only_labels/{z}/{x}/{y}{r}.png', { maxZoom:33, attribution:'© CartoDB', pane:'shadowPane' });
 
-            map = L.map('map', { center:[10.762622,106.660172], zoom:13, maxZoom:33, layers:[osm] });
+            map = L.map('map', { center:[10.762622,106.660172], zoom:13, maxZoom:33, layers:[googleMap] });
             map.zoomControl.setPosition('topright');
 
             L.Control.ZoomDisplay = L.Control.extend({
@@ -1812,9 +1813,10 @@
 
             L.control.layers(
                 {
+                    '🗺 Google Maps': googleMap,
                     'OpenStreetMap': osm,
                     'Vệ tinh (Google)': googleSat,
-                    '🗺 Vệ tinh + tên đường': googleHybrid,
+                    '🛰 Vệ tinh + tên đường': googleHybrid,
                     'Satellite (old)': satellite
                 },
                 { '🏷 Nhãn tên đường': streetLabels },
