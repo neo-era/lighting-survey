@@ -1365,9 +1365,12 @@
                 const child = String(r[1] || '').trim();
                 if (!child || !posIdx[child] || child === parent) return;
                 const from = posIdx[parent], to = posIdx[child];
-                L.polyline([from, to], {
+                const line = L.polyline([from, to], {
                     color: '#1e40af', weight: 2.5, dashArray: '7 5', opacity: 0.8
-                }).addTo(_cableLayerGroup);
+                });
+                line._cableRow = r;
+                line.addTo(_cableLayerGroup);
+                if (_cableEditMode) _attachCableEditHandler(line);
                 cableCount++;
                 const dist = String(r[15] || '').trim();
                 if (dist) {
