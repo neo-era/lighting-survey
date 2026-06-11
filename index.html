@@ -831,6 +831,13 @@
                 </div>
                 <div class="modal-body">
 
+                    <!-- Version badge -->
+                    <div id="dataVersionTag"
+                         style="display:none; font-size:11px; font-weight:700; color:rgba(255,255,255,.7);
+                                background:rgba(255,255,255,.12); border-radius:999px; padding:3px 10px;
+                                white-space:nowrap; text-align:center; margin-bottom:8px;">
+                    </div>
+
                     <!-- User info -->
                     <div id="topbarUser" onclick="logout()" title="Nhấn để đăng xuất" style="margin-bottom:18px;">
                         <div class="av">👤</div>
@@ -850,6 +857,7 @@
                             <option value="https://neo-era.github.io/camera/">Quản lý camera</option>
                             <option value="https://neo-era.github.io/dentat/dentat.html">Quan lý đèn tắt/sự cố</option>
                             <option value="https://neo-era.github.io/lighting-survey/huongdan.html">Hướng dẫn sử dụng</option>
+                            <option value="lichsu.html" id="pageOptLichSu" style="display:none">Lịch sử thao tác</option>
                         </select>
                     </div>
 
@@ -1217,6 +1225,7 @@
                 if (nameEl) nameEl.textContent = currentUser.displayName || currentUser.username;
             }
             _applyRoleUI();
+            _loadDataVersion();
             loadFromCSV();
         }
 
@@ -1286,6 +1295,9 @@
                 const labels = { admin: 'Quản trị', user: 'Đầy đủ', user1: 'Khảo sát viên', demo: 'Xem' };
                 chip.title = `${currentUser.displayName || currentUser.username} — ${labels[currentUser.role] || currentUser.role} (nhấn để đăng xuất)`;
             }
+            // Hiện option Lịch sử thao tác chỉ với admin
+            const optLichSu = document.getElementById('pageOptLichSu');
+            if (optLichSu) optLichSu.style.display = (currentUser && currentUser.role === 'admin') ? '' : 'none';
         }
 
         // ── LAZY LOAD ExcelJS (chỉ tải khi user xuất Excel/báo cáo) ──────────
@@ -1535,8 +1547,11 @@
             for (let i = 0; i < rows.length; i++) {
                 if (btnLabel) btnLabel.textContent = `Đang cập nhật ${i+1}/${rows.length}...`;
                 const success = await syncRowToGAS(rows[i], { silent: true });
-                if (success) { dirtyMovedRows.delete(rows[i]); ok++; }
-                else failed++;
+                if (success) {
+                    dirtyMovedRows.delete(rows[i]);
+                    ok++;
+                    _logAction('move', rows[i], { lat: rows[i][2], lon: rows[i][3] });
+                } else failed++;
             }
             if (btnLabel) btnLabel.textContent = origLabel || 'Cập nhật';
             updateDirtyMovedBadge();
@@ -2195,6 +2210,7 @@
                 pendingNewMarker = true; addMarkerMode = true; pendingMarkerLocation = null;
                 updateAddMarkerButton();
                 syncRowToGAS(newRow);
+                _logAction('edit', newRow, { nguoiKS: newRow[5], loai: newRow[6] });
                 displayError('Đã thêm marker — đang lưu lên Google Sheets...');
             } catch (error) {
                 console.error('saveMarkerPopup error:', error);
@@ -2537,7 +2553,32 @@
                 });
                 const gasData = await gasRes.json();
                 if (gasData.status !== 'ok') throw new Error(gasData.message || 'Upload thất bại');
-                displayError(`Đồng bộ thành công: ${bodyRows.length} dòng → GitHub (${path}).`);
+
+                // 4. Tăng version và push data/version.json
+                let verObj = { major: 1, minor: 0, patch: 0 };
+                try {
+                    const rawVer = await fetch(
+                        'https://raw.githubusercontent.com/neo-era/lighting-survey/main/data/version.json?t=' + Date.now()
+                    );
+                    if (rawVer.ok) {
+                        const parsed = await rawVer.json();
+                        verObj = { major: parseInt(parsed.major)||1, minor: parseInt(parsed.minor)||0, patch: (parseInt(parsed.patch)||0) + 1 };
+                    }
+                } catch (_) { verObj.patch = 1; }
+                verObj.updated = new Date().toISOString();
+                verObj.by = currentUser ? currentUser.username : '';
+                const verContent = btoa(unescape(encodeURIComponent(JSON.stringify(verObj, null, 2))));
+                await fetch(KHAOSAT_GAS_URL, {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        action: 'upload_to_github',
+                        path: 'data/version.json',
+                        content: verContent,
+                        message: `Cập nhật dữ liệu v${verObj.major}.${verObj.minor}.${verObj.patch}`
+                    })
+                });
+                _setDataVersion(verObj);
+                displayError(`Đồng bộ thành công: ${bodyRows.length} dòng → GitHub (${path}) — v${verObj.major}.${verObj.minor}.${verObj.patch}.`);
             } catch(e) { console.error('updateGitHubExcel error:', e); displayError('Lỗi GitHub: ' + (e.message || e)); }
         }
 
@@ -2910,6 +2951,7 @@
                 const json = await resp.json();
                 if (json.status === 'ok') {
                     displayError(`Đã xóa "${name}" khỏi Google Sheet.`, 'success');
+                    _logAction('delete', row, { lat: row[2], lon: row[3] });
                 } else {
                     displayError(`Xóa trên bản đồ OK, nhưng Sheet báo lỗi: ${json.message || ''}`, 'warning');
                 }
@@ -3039,6 +3081,38 @@
             const btn = document.getElementById('filterBtn');
             if (badge) { badge.textContent = cnt; badge.classList.toggle('show', cnt > 0); }
             if (btn) btn.classList.toggle('active', cnt > 0);
+        }
+
+        // ── LOG LỊCH SỬ THAO TÁC ─────────────────────────────────────────────
+        function _logAction(loaiThaoTac, row, chiTiet) {
+            if (!currentUser || !KHAOSAT_GAS_URL) return;
+            const payload = {
+                action: 'log_action',
+                loaiThaoTac,
+                id: String(row[0] || ''),
+                tenTru: String(row[1] || ''),
+                nguoiThucHien: currentUser.username || '',
+                thoiGian: new Date().toLocaleString('sv-SE', { timeZone: 'Asia/Ho_Chi_Minh' }).replace(' ', 'T'),
+                chiTiet: typeof chiTiet === 'string' ? chiTiet : JSON.stringify(chiTiet || {})
+            };
+            // fire-and-forget — không await, không block UI
+            fetch(KHAOSAT_GAS_URL, { method: 'POST', body: JSON.stringify(payload) }).catch(() => {});
+        }
+
+        // ── VERSION DỮ LIỆU ──────────────────────────────────────────────────
+        function _setDataVersion(v) {
+            const tag = document.getElementById('dataVersionTag');
+            if (!tag) return;
+            tag.textContent = `v${v.major}.${v.minor}.${v.patch}`;
+            tag.style.display = 'block';
+        }
+        async function _loadDataVersion() {
+            try {
+                const res = await fetch(
+                    'https://raw.githubusercontent.com/neo-era/lighting-survey/main/data/version.json?t=' + Date.now()
+                );
+                if (res.ok) _setDataVersion(await res.json());
+            } catch (_) {}
         }
 
         function clearRoute() {

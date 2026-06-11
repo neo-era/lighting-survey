@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Lịch sử thao tác — Khảo sát chiếu sáng</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary:    #2563eb;
+            --navy:       #0f172a;
+            --navy2:      #1e293b;
+            --surface:    #ffffff;
+            --surface-2:  #f8fafc;
+            --border:     #e2e8f0;
+            --text:       #111827;
+            --muted:      #6b7280;
+            --danger:     #ef4444;
+            --warning:    #f97316;
+            --success:    #10b981;
+            --radius:     10px;
+            --font: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            --safe-top:    env(safe-area-inset-top, 0px);
+            --safe-bottom: env(safe-area-inset-bottom, 0px);
+        }
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        html, body { height: 100%; font-family: var(--font); background: var(--surface-2); color: var(--text); }
+
+        /* ── TOPBAR ── */
+        #topbar {
+            position: sticky; top: 0; z-index: 100;
+            background: var(--navy);
+            padding: calc(12px + var(--safe-top)) 16px 12px;
+            display: flex; align-items: center; gap: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,.25);
+        }
+        #backBtn {
+            flex-shrink: 0;
+            background: rgba(255,255,255,.12); border: none; color: #fff;
+            border-radius: 8px; padding: 8px 14px;
+            font-size: 14px; font-weight: 600; font-family: var(--font);
+            cursor: pointer; white-space: nowrap;
+            transition: background .15s; touch-action: manipulation;
+        }
+        #backBtn:active { background: rgba(255,255,255,.22); }
+        #topbarTitle {
+            flex: 1; font-size: 17px; font-weight: 700; color: #fff;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        #reloadBtn {
+            flex-shrink: 0;
+            background: var(--primary); border: none; color: #fff;
+            border-radius: 8px; padding: 8px 14px;
+            font-size: 14px; font-weight: 600; font-family: var(--font);
+            cursor: pointer; white-space: nowrap;
+            transition: background .15s, transform .1s; touch-action: manipulation;
+        }
+        #reloadBtn:active { transform: scale(.95); }
+        #reloadBtn.loading { opacity: .7; pointer-events: none; }
+
+        /* ── FILTER BAR ── */
+        #filterBar {
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+            padding: 12px 16px;
+            display: flex; flex-wrap: wrap; gap: 8px;
+            position: sticky; top: calc(44px + var(--safe-top)); z-index: 99;
+        }
+        .fb-item { display: flex; flex-direction: column; gap: 3px; flex: 1; min-width: 120px; }
+        .fb-label { font-size: 10px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
+        .fb-ctrl {
+            padding: 8px 10px; border: 1.5px solid var(--border); border-radius: 8px;
+            font-size: 14px; font-family: var(--font); color: var(--text);
+            background: var(--surface); outline: none; width: 100%;
+            -webkit-appearance: none; appearance: none;
+            transition: border-color .2s;
+        }
+        .fb-ctrl:focus { border-color: var(--primary); }
+        #clearFiltersBtn {
+            align-self: flex-end;
+            padding: 8px 14px; border: 1.5px solid var(--border); border-radius: 8px;
+            background: var(--surface); color: var(--muted);
+            font-size: 13px; font-weight: 600; font-family: var(--font);
+            cursor: pointer; white-space: nowrap; touch-action: manipulation;
+        }
+
+        /* ── STATS BAR ── */
+        #statsBar {
+            padding: 8px 16px;
+            font-size: 13px; color: var(--muted);
+            display: flex; align-items: center; justify-content: space-between;
+        }
+        #statsBar strong { color: var(--text); }
+
+        /* ── TABLE WRAPPER ── */
+        #tableWrap {
+            padding: 0 16px calc(24px + var(--safe-bottom));
+        }
+
+        /* ── SETUP CARD (khi chưa có URL) ── */
+        #setupCard {
+            background: var(--surface); border-radius: var(--radius);
+            border: 1.5px dashed var(--border);
+            padding: 28px 24px; margin: 24px 16px;
+            text-align: center; display: none;
+        }
+        #setupCard .sc-icon { font-size: 40px; margin-bottom: 12px; }
+        #setupCard h3 { font-size: 16px; font-weight: 700; margin-bottom: 8px; }
+        #setupCard p { font-size: 13px; color: var(--muted); line-height: 1.6; margin-bottom: 16px; }
+        #setupCard ol { text-align: left; font-size: 13px; color: var(--muted); line-height: 1.8; margin-bottom: 20px; padding-left: 20px; }
+        #urlInput {
+            width: 100%; padding: 10px 12px; border: 1.5px solid var(--border);
+            border-radius: 8px; font-size: 14px; font-family: var(--font);
+            outline: none; margin-bottom: 10px; transition: border-color .2s;
+        }
+        #urlInput:focus { border-color: var(--primary); }
+        #saveUrlBtn {
+            width: 100%; padding: 12px; border: none; border-radius: 8px;
+            background: var(--primary); color: #fff;
+            font-size: 15px; font-weight: 700; font-family: var(--font);
+            cursor: pointer; touch-action: manipulation;
+        }
+
+        /* ── ERROR / EMPTY STATE ── */
+        #emptyState {
+            text-align: center; padding: 48px 24px; color: var(--muted);
+            font-size: 14px; display: none;
+        }
+        #emptyState .es-icon { font-size: 36px; margin-bottom: 12px; }
+
+        /* ── TABLE ── */
+        .log-table {
+            width: 100%; border-collapse: collapse;
+            background: var(--surface);
+            border-radius: var(--radius);
+            overflow: hidden;
+            box-shadow: 0 1px 4px rgba(0,0,0,.06);
+            font-size: 13px;
+        }
+        .log-table thead th {
+            background: var(--navy2); color: #fff;
+            padding: 11px 12px; font-size: 11px; font-weight: 700;
+            text-transform: uppercase; letter-spacing: .4px;
+            text-align: left; white-space: nowrap;
+        }
+        .log-table tbody tr {
+            border-bottom: 1px solid var(--border);
+            transition: background .1s;
+        }
+        .log-table tbody tr:last-child { border-bottom: none; }
+        .log-table tbody tr:hover { background: var(--surface-2); }
+        .log-table td {
+            padding: 10px 12px; vertical-align: top;
+            color: var(--text); line-height: 1.4;
+        }
+        .td-time { white-space: nowrap; font-size: 12px; color: var(--muted); min-width: 130px; }
+        .td-user { font-weight: 600; white-space: nowrap; }
+        .td-name { font-weight: 600; }
+        .td-id   { font-size: 12px; color: var(--muted); }
+        .td-detail { max-width: 220px; }
+
+        /* Badge loại thao tác */
+        .badge {
+            display: inline-block; padding: 3px 10px; border-radius: 999px;
+            font-size: 11px; font-weight: 700; white-space: nowrap;
+        }
+        .badge-delete { background: #fee2e2; color: #dc2626; }
+        .badge-edit   { background: #dbeafe; color: #1d4ed8; }
+        .badge-move   { background: #ffedd5; color: #c2410c; }
+        .badge-other  { background: #f1f5f9; color: #475569; }
+
+        /* Chi tiết có thể expand */
+        .detail-wrap { position: relative; }
+        .detail-text {
+            color: var(--muted); font-size: 12px;
+            overflow: hidden; display: -webkit-box;
+            -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+        }
+        .detail-text.expanded { -webkit-line-clamp: unset; }
+        .detail-toggle {
+            background: none; border: none; color: var(--primary);
+            font-size: 11px; font-weight: 600; cursor: pointer;
+            padding: 2px 0; font-family: var(--font);
+        }
+
+        /* ── LOADING SPINNER ── */
+        #loadingBar {
+            text-align: center; padding: 40px 16px;
+            color: var(--muted); font-size: 14px; display: none;
+        }
+        .spinner {
+            display: inline-block; width: 24px; height: 24px;
+            border: 3px solid var(--border); border-top-color: var(--primary);
+            border-radius: 50%; animation: spin .7s linear infinite;
+            vertical-align: middle; margin-right: 8px;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* ── RESPONSIVE ── */
+        @media (max-width: 600px) {
+            #filterBar { gap: 6px; }
+            .fb-item { min-width: 100px; }
+            .log-table { font-size: 12px; }
+            .log-table thead th, .log-table td { padding: 8px 8px; }
+            .td-detail { max-width: 120px; }
+            #tableWrap { padding: 0 8px calc(24px + var(--safe-bottom)); }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- ═══ TOPBAR ═══ -->
+    <div id="topbar">
+        <button id="backBtn" onclick="location.href='index.html'">← Quay lại</button>
+        <div id="topbarTitle">📋 Lịch sử thao tác</div>
+        <button id="reloadBtn" onclick="loadData()">↺ Tải lại</button>
+    </div>
+
+    <!-- ═══ FILTER BAR ═══ -->
+    <div id="filterBar">
+        <div class="fb-item">
+            <span class="fb-label">Thao tác</span>
+            <select class="fb-ctrl" id="fLoai" onchange="applyFilter()">
+                <option value="">Tất cả</option>
+                <option value="delete">Xóa</option>
+                <option value="edit">Sửa / Thêm</option>
+                <option value="move">Di chuyển</option>
+            </select>
+        </div>
+        <div class="fb-item">
+            <span class="fb-label">Tên trụ</span>
+            <input class="fb-ctrl" id="fTen" type="text" placeholder="Tìm tên trụ..." oninput="applyFilter()">
+        </div>
+        <div class="fb-item">
+            <span class="fb-label">Người thực hiện</span>
+            <input class="fb-ctrl" id="fNguoi" type="text" placeholder="Tìm người..." oninput="applyFilter()">
+        </div>
+        <button id="clearFiltersBtn" onclick="clearFilter()">✕ Xóa lọc</button>
+    </div>
+
+    <!-- ═══ STATS BAR ═══ -->
+    <div id="statsBar" style="display:none">
+        <span id="statsText"></span>
+    </div>
+
+    <!-- ═══ SETUP CARD ═══ -->
+    <div id="setupCard">
+        <div class="sc-icon">⚙️</div>
+        <h3>Cấu hình URL dữ liệu</h3>
+        <p>Để hiển thị lịch sử thao tác, bạn cần publish sheet <strong>LichSu</strong> trong Google Sheet thành CSV và điền URL vào bên dưới.</p>
+        <ol>
+            <li>Mở Google Sheet của dự án</li>
+            <li>Vào <strong>File → Share → Publish to web</strong></li>
+            <li>Chọn sheet: <strong>LichSu</strong> → định dạng: <strong>CSV</strong></li>
+            <li>Nhấn <strong>Publish</strong> → copy URL</li>
+            <li>Dán URL vào ô bên dưới và nhấn Lưu</li>
+        </ol>
+        <input id="urlInput" type="url" placeholder="https://docs.google.com/spreadsheets/d/e/.../pub?gid=...&output=csv">
+        <button id="saveUrlBtn" onclick="saveUrl()">Lưu URL và tải dữ liệu</button>
+    </div>
+
+    <!-- ═══ LOADING ═══ -->
+    <div id="loadingBar"><span class="spinner"></span> Đang tải dữ liệu...</div>
+
+    <!-- ═══ EMPTY STATE ═══ -->
+    <div id="emptyState">
+        <div class="es-icon">📭</div>
+        <div>Không có bản ghi nào phù hợp</div>
+    </div>
+
+    <!-- ═══ TABLE ═══ -->
+    <div id="tableWrap" style="display:none">
+        <div id="statsBar2" style="padding:8px 0 8px; font-size:13px; color:var(--muted);">
+            Hiển thị <strong id="showCount">0</strong> / <strong id="totalCount">0</strong> bản ghi
+        </div>
+        <table class="log-table" id="logTable">
+            <thead>
+                <tr>
+                    <th>Thời gian</th>
+                    <th>Người TH</th>
+                    <th>Thao tác</th>
+                    <th>Tên trụ</th>
+                    <th>ID</th>
+                    <th>Chi tiết</th>
+                </tr>
+            </thead>
+            <tbody id="logBody"></tbody>
+        </table>
+    </div>
+
+    <script>
+        // ── CẤU HÌNH ──────────────────────────────────────────────────────────
+        // Điền URL CSV của sheet LichSu vào đây, hoặc để trống để nhập thủ công
+        const LICHSU_CSV_URL_DEFAULT = '';
+
+        // ── STATE ─────────────────────────────────────────────────────────────
+        let allRows  = [];   // toàn bộ dữ liệu đã parse
+        let csvUrl   = '';
+
+        // ── INIT ──────────────────────────────────────────────────────────────
+        (function init() {
+            csvUrl = localStorage.getItem('lichsu_csv_url') || LICHSU_CSV_URL_DEFAULT;
+            if (csvUrl) {
+                loadData();
+            } else {
+                document.getElementById('setupCard').style.display = 'block';
+            }
+        })();
+
+        function saveUrl() {
+            const val = document.getElementById('urlInput').value.trim();
+            if (!val || !val.startsWith('http')) {
+                alert('Vui lòng nhập URL hợp lệ'); return;
+            }
+            csvUrl = val;
+            localStorage.setItem('lichsu_csv_url', csvUrl);
+            document.getElementById('setupCard').style.display = 'none';
+            loadData();
+        }
+
+        // ── TẢI DỮ LIỆU ──────────────────────────────────────────────────────
+        async function loadData() {
+            if (!csvUrl) { document.getElementById('setupCard').style.display = 'block'; return; }
+            const btn = document.getElementById('reloadBtn');
+            btn.classList.add('loading'); btn.textContent = '⏳ Đang tải...';
+            document.getElementById('loadingBar').style.display = 'block';
+            document.getElementById('tableWrap').style.display  = 'none';
+            document.getElementById('emptyState').style.display = 'none';
+
+            try {
+                const res = await fetch(csvUrl + '&t=' + Date.now());
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                const text = await res.text();
+                const rows = parseCSV(text);
+                // Bỏ header, đảo ngược để mới nhất lên đầu
+                allRows = rows.length > 1 ? rows.slice(1).reverse() : [];
+                applyFilter();
+            } catch (e) {
+                document.getElementById('loadingBar').style.display = 'none';
+                document.getElementById('emptyState').style.display = 'block';
+                document.getElementById('emptyState').innerHTML =
+                    `<div class="es-icon">⚠️</div><div>Lỗi tải dữ liệu: ${e.message}</div>
+                     <div style="margin-top:8px;font-size:12px">Kiểm tra lại URL hoặc kết nối mạng</div>`;
+            } finally {
+                btn.classList.remove('loading'); btn.textContent = '↺ Tải lại';
+                document.getElementById('loadingBar').style.display = 'none';
+            }
+        }
+
+        // ── PARSE CSV ─────────────────────────────────────────────────────────
+        function parseCSV(text) {
+            const rows = [];
+            const lines = text.split(/\r?\n/);
+            for (const line of lines) {
+                if (!line.trim()) continue;
+                const cols = [];
+                let cur = '', inQ = false;
+                for (let i = 0; i < line.length; i++) {
+                    const c = line[i];
+                    if (c === '"') {
+                        if (inQ && line[i+1] === '"') { cur += '"'; i++; }
+                        else inQ = !inQ;
+                    } else if (c === ',' && !inQ) {
+                        cols.push(cur); cur = '';
+                    } else cur += c;
+                }
+                cols.push(cur);
+                rows.push(cols);
+            }
+            return rows;
+        }
+
+        // ── LỌC & RENDER ─────────────────────────────────────────────────────
+        function applyFilter() {
+            const loai  = document.getElementById('fLoai').value.toLowerCase();
+            const ten   = document.getElementById('fTen').value.toLowerCase().trim();
+            const nguoi = document.getElementById('fNguoi').value.toLowerCase().trim();
+
+            const filtered = allRows.filter(r => {
+                const rLoai  = (r[2] || '').toLowerCase();
+                const rTen   = (r[4] || '').toLowerCase();
+                const rNguoi = (r[1] || '').toLowerCase();
+                if (loai  && !rLoai.includes(loai))   return false;
+                if (ten   && !rTen.includes(ten))      return false;
+                if (nguoi && !rNguoi.includes(nguoi))  return false;
+                return true;
+            });
+
+            renderTable(filtered);
+        }
+
+        function clearFilter() {
+            document.getElementById('fLoai').value  = '';
+            document.getElementById('fTen').value   = '';
+            document.getElementById('fNguoi').value = '';
+            applyFilter();
+        }
+
+        function renderTable(rows) {
+            const tbody = document.getElementById('logBody');
+            const wrap  = document.getElementById('tableWrap');
+            const empty = document.getElementById('emptyState');
+
+            document.getElementById('showCount').textContent  = rows.length;
+            document.getElementById('totalCount').textContent = allRows.length;
+
+            if (rows.length === 0) {
+                wrap.style.display  = 'none';
+                empty.style.display = 'block';
+                empty.innerHTML = '<div class="es-icon">📭</div><div>Không có bản ghi nào phù hợp</div>';
+                return;
+            }
+
+            empty.style.display = 'none';
+            wrap.style.display  = 'block';
+
+            tbody.innerHTML = rows.map((r, idx) => {
+                // r[0]=ThoiGian r[1]=NguoiTH r[2]=LoaiThaoTac r[3]=ID r[4]=TenTru r[5]=ChiTiet
+                const thoiGian = r[0] || '—';
+                const nguoi    = r[1] || '—';
+                const loai     = (r[2] || '').toLowerCase();
+                const id       = r[3] || '—';
+                const tenTru   = r[4] || '—';
+                const chiTiet  = r[5] || '';
+
+                const badgeClass = loai === 'delete' ? 'badge-delete'
+                                 : loai === 'edit'   ? 'badge-edit'
+                                 : loai === 'move'   ? 'badge-move'
+                                 : 'badge-other';
+                const badgeText  = loai === 'delete' ? '🗑 Xóa'
+                                 : loai === 'edit'   ? '✏️ Sửa'
+                                 : loai === 'move'   ? '📌 Di chuyển'
+                                 : loai || '—';
+
+                const detailHtml = chiTiet
+                    ? `<div class="detail-wrap">
+                          <div class="detail-text" id="dt${idx}">${escHtml(chiTiet)}</div>
+                          ${chiTiet.length > 60
+                            ? `<button class="detail-toggle" onclick="toggleDetail('dt${idx}',this)">Xem thêm</button>`
+                            : ''}
+                       </div>`
+                    : '<span style="color:var(--muted)">—</span>';
+
+                return `<tr>
+                    <td class="td-time">${escHtml(thoiGian)}</td>
+                    <td class="td-user">${escHtml(nguoi)}</td>
+                    <td><span class="badge ${badgeClass}">${badgeText}</span></td>
+                    <td class="td-name">${escHtml(tenTru)}</td>
+                    <td class="td-id">${escHtml(id)}</td>
+                    <td class="td-detail">${detailHtml}</td>
+                </tr>`;
+            }).join('');
+        }
+
+        function toggleDetail(id, btn) {
+            const el = document.getElementById(id);
+            if (!el) return;
+            const expanded = el.classList.toggle('expanded');
+            btn.textContent = expanded ? 'Thu gọn' : 'Xem thêm';
+        }
+
+        function escHtml(s) {
+            return String(s)
+                .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+                .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+        }
+    </script>
+</body>
+</html>

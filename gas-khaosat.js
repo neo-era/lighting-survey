@@ -228,6 +228,10 @@ function doPost(e) {
       return handleLogin((data.username || '').trim(), data.password || '');
     }
 
+    if (data.action === 'log_action') {
+      return handleLogAction(data);
+    }
+
     ensureHeader();
 
     if (data.action === 'upload_image') {
@@ -271,6 +275,35 @@ function doPost(e) {
   } catch (err) {
     return jsonResponse({ status: 'error', message: err.message });
   }
+}
+
+// ── LOG LỊCH SỬ THAO TÁC ──────────────────────────────────────────────────
+
+function handleLogAction(data) {
+  const ss    = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet   = ss.getSheetByName('LichSu');
+  if (!sheet) {
+    sheet = ss.insertSheet('LichSu');
+  }
+  if (sheet.getLastRow() === 0) {
+    sheet.getRange(1, 1, 1, 6).setValues([['Thời gian', 'Người thực hiện', 'Thao tác', 'ID', 'Tên trụ', 'Chi tiết']]);
+    sheet.getRange(1, 1, 1, 6)
+         .setFontWeight('bold')
+         .setBackground('#1e293b')
+         .setFontColor('#ffffff')
+         .setHorizontalAlignment('center');
+    sheet.setFrozenRows(1);
+    sheet.autoResizeColumns(1, 6);
+  }
+  sheet.appendRow([
+    data.thoiGian     || '',
+    data.nguoiThucHien || '',
+    data.loaiThaoTac  || '',
+    data.id           || '',
+    data.tenTru       || '',
+    data.chiTiet      || ''
+  ]);
+  return jsonResponse({ status: 'ok' });
 }
 
 // ── ROW CRUD ───────────────────────────────────────────────────────────────

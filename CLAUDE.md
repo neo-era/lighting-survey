@@ -131,10 +131,17 @@ const KHAOSAT_CSV_URL = '...';   // URL publish CSV của Google Sheet (DanhSach
 }
 ```
 
-### Service Worker (sw.js)
-- Cache tĩnh: `index.html`, icons, `data/khaosat.xlsx` (cache-first)
-- Map tiles OSM / Google: cache-first, tối đa 300 tile (`map-tiles-v1`)
-- Google Sheets CSV + GAS URL: **luôn fetch mới** (bỏ qua cache)
+### Service Worker (sw.js) — hiện tại v3
+
+| Cache name      | Chiến lược   | Nội dung                                          |
+|-----------------|--------------|---------------------------------------------------|
+| `lighting-survey-v3` | Network-first | `index.html`, `.html` (luôn lấy code mới)   |
+| `lighting-survey-v3` | Cache-first  | Icon/ảnh tĩnh (pre-cache khi install)             |
+| `map-tiles-v1`  | Cache-first  | Tile bản đồ OSM/Google/CartoDB (tối đa 300 tile)  |
+| `cdn-libs-v1`   | Cache-first  | Toàn bộ CDN JS/CSS/fonts (jQuery, Leaflet, v.v.)  |
+
+- Google Sheets CSV + GAS URL: **luôn fetch mới**, không cache
+- **Bump cache name** (`v3` → `v4`, v.v.) mỗi khi cần xóa cache cũ hoàn toàn
 - Đăng ký trong `index.html` (cuối body):
 ```javascript
 if ('serviceWorker' in navigator) {
@@ -144,16 +151,104 @@ if ('serviceWorker' in navigator) {
 
 ## Thư viện client
 
-| Thư viện                  | Phiên bản | Dùng cho                        |
-|---------------------------|-----------|---------------------------------|
-| Leaflet                   | 1.9.4     | Bản đồ                          |
-| leaflet.markercluster     | 1.5.3     | Gộp marker theo zoom            |
-| Bootstrap                 | 4.6.2     | Layout, modal                   |
-| jQuery                    | 3.7.1     | Bootstrap dependency            |
-| XLSX.js                   | 0.18.5    | Đọc/ghi Excel (fallback)        |
-| ExcelJS                   | 4.3.1     | Ghi Excel có hình ảnh (primary) |
-| Nominatim (OSM)           | —         | Reverse geocoding (tiếng Việt)  |
-| OSRM                      | —         | Chỉ đường xe máy                |
+| Thư viện                  | Phiên bản | Tải khi nào         | Dùng cho                        |
+|---------------------------|-----------|---------------------|---------------------------------|
+| Leaflet                   | 1.9.4     | Luôn (cuối body)    | Bản đồ                          |
+| leaflet.markercluster     | 1.5.3     | Luôn (cuối body)    | Gộp marker theo zoom            |
+| Bootstrap                 | 4.6.2     | Luôn (cuối body)    | Layout, modal                   |
+| jQuery                    | 3.7.1     | Luôn (cuối body)    | Bootstrap dependency            |
+| XLSX.js                   | 0.18.5    | Luôn (cuối body)    | Đọc/ghi Excel (fallback)        |
+| ExcelJS                   | 4.3.1     | **Lazy** — khi cần  | Ghi Excel có hình ảnh (primary) |
+| Nominatim (OSM)           | —         | Fetch on-demand     | Reverse geocoding (tiếng Việt)  |
+| OSRM                      | —         | Fetch on-demand     | Chỉ đường xe máy                |
+
+> **Lưu ý tải thư viện:** jQuery + Bootstrap chuyển xuống cuối `<body>` (không còn ở `<head>`) để HTML render ngay. ExcelJS lazy-load qua `_loadExcelJS()` — chỉ tải khi user gọi `saveMarkerData()`, `updateGitHubExcel()`, hoặc `exportReport()`.
+
+## Phân quyền người dùng
+
+Dữ liệu tài khoản đọc từ sheet `TaiKhoan` (cột A=tenDangNhap, B=matKhau, C=hoTen, D=vaiTro).
+Bảng phân quyền định nghĩa ở sheet `PhanQuyen`:
+
+| Vai trò | Xem bản đồ | Thêm/Sửa | Xóa | Kéo marker | GitHub sync |
+|---------|:---:|:---:|:---:|:---:|:---:|
+| `admin` | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `user`  | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `user1` | ✓ | ✓ | ✗ | ✓ | ✓ |
+| `demo`  | ✓ | ✗ | ✗ | ✗ | ✗ |
+
+**Hàm kiểm tra (index.html):**
+```javascript
+canEdit()   // true nếu role = admin | user | user1
+canDelete() // true nếu role = admin | user
+```
+
+**Enforcement:**
+- `_applyRoleUI()` — ẩn nút "Thêm marker" và "GitHub sync" với `demo`, gọi sau đăng nhập
+- `createMarkerPopupContent()` — render 1/2/3 nút hành động tùy role
+- `addMarkerRowToMap()` — `draggable: canEdit()`
+- `startAddMarker()` — guard trả về sớm nếu `!canEdit()`
+
+---
+
+## Tính năng đang phát triển
+
+### 1. Log lịch sử thao tác (chưa implement)
+
+**Mục tiêu:** Ghi lại mọi thao tác xóa và chỉnh sửa đối tượng để tra cứu lại sau.
+
+**Nơi lưu:** Tab mới trong Google Sheet tên **`LichSu`**
+
+**Cấu trúc cột sheet `LichSu`:**
+
+| Cột | Tên            | Mô tả                              |
+|-----|----------------|------------------------------------|
+| A   | Thời gian      | ISO timestamp (UTC+7)              |
+| B   | Người thực hiện| `currentUser.username`             |
+| C   | Thao tác       | `delete` / `edit` / `move`         |
+| D   | ID đối tượng   | `row[0]`                           |
+| E   | Tên trụ        | `row[1]`                           |
+| F   | Chi tiết       | JSON string — field nào thay đổi   |
+
+**GAS action mới cần thêm:** `log_action`
+```javascript
+// Payload gửi từ client
+{ action: 'log_action', loaiThaoTac, id, tenTru, nguoiThucHien, chiTiet }
+// GAS append 1 hàng vào sheet LichSu
+```
+
+**Điểm gọi trong client:**
+- `deleteMarker()` → sau khi GAS xác nhận xóa thành công
+- `saveMarkerPopup()` → sau khi GAS xác nhận lưu thành công (diff field cũ/mới)
+- `pushMovedMarkersToSheet()` → ghi loại `move` cho từng marker đã kéo
+
+**Quyền xem log:** Chỉ `admin` — sau khi đăng nhập, nếu `currentUser.role === 'admin'` thì hiển thị mục **"Lịch sử thao tác"** trong dropdown "Chọn trang" của controls panel (`#pages` select trong `controlsModal`). Các role khác không thấy option này.
+
+---
+
+### 2. Version tự động tăng khi push GitHub (chưa implement)
+
+**Mục tiêu:** Mỗi lần `updateGitHubExcel()` đồng bộ dữ liệu lên GitHub thành công, số version của data tăng lên, hiển thị trong app để biết dữ liệu đang ở bản nào.
+
+**Thiết kế:**
+- Hằng số trong `index.html`: `const DATA_VERSION = { major: 1, minor: 0, patch: 0 };`
+- Mỗi lần sync thành công: `patch++` (hoặc tăng theo ngày: `YYYY.MM.DD.n`)
+- Version lưu vào file `data/version.json` trên GitHub repo (cùng lúc push Excel)
+- Hiển thị ở topbar hoặc trong controls modal: **"Dữ liệu v1.0.42"**
+
+**File `data/version.json`:**
+```json
+{ "version": "1.0.42", "updated": "2026-06-11T08:30:00Z", "by": "admin" }
+```
+
+**Luồng:**
+1. `updateGitHubExcel()` tải xong dữ liệu → đọc `data/version.json` từ GitHub API để lấy số hiện tại
+2. Tăng patch: `patch + 1`
+3. Gửi 2 file lên GitHub cùng một commit: `data/khaosat.xlsx` + `data/version.json`
+4. Cập nhật UI hiển thị version mới
+
+**Lưu ý:** Dùng GAS action `upload_to_github` hai lần liên tiếp (xlsx rồi version.json), hoặc mở rộng GAS để nhận mảng file.
+
+---
 
 ## Các pattern quan trọng
 
