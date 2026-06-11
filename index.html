@@ -1423,8 +1423,7 @@
                 // 1. Vẽ đường cáp
                 _buildCableLines(rows);
 
-                // 2. Fit map + switch tile sang CartoDB
-                _fitMapToRows(rows);
+                // 2. Switch tile sang CartoDB (giữ nguyên góc nhìn hiện tại)
                 _switchToPrintTile();
 
                 // 3. Đợi tiles tải (~3s)
