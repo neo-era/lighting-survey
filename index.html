@@ -1362,36 +1362,74 @@
             overlay.id = 'printOverlay';
             overlay.style.cssText = 'position:absolute;inset:0;z-index:8000;pointer-events:none;font-family:Inter,sans-serif;';
             overlay.innerHTML = `
-                <div style="position:absolute;left:0;top:0;bottom:64px;width:150px;
+                <div style="position:absolute;left:0;top:0;bottom:88px;width:150px;
                             background:white;border-right:2px solid #1e293b;padding:10px 10px 10px 12px;overflow:hidden;">
                     <div style="font-size:10px;font-weight:800;color:#0f172a;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;border-bottom:1px solid #e2e8f0;padding-bottom:5px;">
                         Bảng ký hiệu
                     </div>
                     ${legendItems}${cableLegend}
                 </div>
-                <div style="position:absolute;left:0;right:0;bottom:0;height:64px;
-                            background:white;border-top:3px solid #1e293b;display:grid;
-                            grid-template-columns:1fr auto auto auto auto;align-items:stretch;">
-                    <div style="padding:4px 10px;border-right:1px solid #ccc;display:flex;flex-direction:column;justify-content:center;">
-                        <div style="font-size:9px;font-weight:700;color:#6b7280;text-transform:uppercase;">BẢN VẼ SƠ ĐỒ TUYẾN TRẠM ĐÈN — HỆ THỐNG CHIẾU SÁNG ĐÔ THỊ</div>
-                        <div style="font-size:15px;font-weight:800;color:#0f172a;margin-top:2px;">${tenTu || ''}</div>
-                    </div>
-                    <div style="padding:4px 12px;border-right:1px solid #ccc;display:flex;flex-direction:column;justify-content:center;min-width:90px;">
-                        <div style="font-size:9px;color:#6b7280;">TỈ LỆ</div>
-                        <div style="font-size:13px;font-weight:700;">1 : ${parseInt(scale).toLocaleString()}</div>
-                    </div>
-                    <div style="padding:4px 12px;border-right:1px solid #ccc;display:flex;flex-direction:column;justify-content:center;min-width:110px;">
-                        <div style="font-size:9px;color:#6b7280;">NGƯỜI LẬP</div>
-                        <div style="font-size:12px;font-weight:600;">${nguoiLap || ''}</div>
-                    </div>
-                    <div style="padding:4px 12px;border-right:1px solid #ccc;display:flex;flex-direction:column;justify-content:center;min-width:90px;">
-                        <div style="font-size:9px;color:#6b7280;">NGÀY</div>
-                        <div style="font-size:12px;font-weight:600;">${ngay || ''}</div>
-                    </div>
-                    <div style="padding:4px 12px;display:flex;flex-direction:column;justify-content:center;min-width:70px;">
-                        <div style="font-size:9px;color:#6b7280;">SỐ BV</div>
-                        <div style="font-size:12px;font-weight:600;">${soBanVe || ''}</div>
-                    </div>
+                <div style="position:absolute;left:0;right:0;bottom:0;height:88px;background:white;border-top:3px solid #1e293b;overflow:hidden;">
+                  <table style="width:100%;height:100%;border-collapse:collapse;table-layout:fixed;font-family:Arial,sans-serif;">
+                    <colgroup>
+                      <col style="width:16%"><col style="width:4%"><col style="width:16%"><col style="width:10%">
+                      <col style="width:34%"><col style="width:20%">
+                    </colgroup>
+                    <tr>
+                      <td rowspan="2" style="border-right:1px solid #94a3b8;border-bottom:1px solid #94a3b8;padding:3px 5px;font-size:8px;font-weight:800;color:#0f172a;text-align:center;vertical-align:middle;text-transform:uppercase;line-height:1.4;">
+                        TT QUẢN LÝ GIAO THÔNG VÀ HẠ TẦNG KỸ THUẬT TP.HCM
+                      </td>
+                      <td rowspan="4" style="border-right:1px solid #94a3b8;text-align:center;vertical-align:middle;font-size:18px;">&#9881;</td>
+                      <td rowspan="2" style="border-right:1px solid #94a3b8;border-bottom:1px solid #94a3b8;padding:3px 5px;font-size:8px;font-weight:800;color:#0f172a;text-align:center;vertical-align:middle;text-transform:uppercase;line-height:1.4;">
+                        CÔNG TY CỔ PHẦN CHIẾU SÁNG CÔNG CỘNG TP.HCM
+                      </td>
+                      <td style="border-right:1px solid #94a3b8;border-bottom:1px solid #94a3b8;padding:1px 5px;font-size:7.5px;font-weight:700;color:#475569;text-align:center;vertical-align:bottom;text-transform:uppercase;">
+                        NGƯỜI LẬP
+                      </td>
+                      <td rowspan="2" style="border-right:1px solid #94a3b8;padding:5px 10px;vertical-align:middle;text-align:center;">
+                        <div style="font-size:9.5px;font-weight:800;color:#0f172a;text-transform:uppercase;letter-spacing:.3px;">BẢN VẼ SƠ ĐỒ TUYẾN TRẠM ĐÈN</div>
+                        <div style="font-size:8.5px;font-weight:700;color:#0f172a;text-transform:uppercase;margin-top:1px;">HỆ THỐNG CHIẾU SÁNG ĐÔ THỊ</div>
+                      </td>
+                      <td style="border-bottom:1px solid #94a3b8;padding:2px 7px;vertical-align:middle;">
+                        <span style="font-size:7.5px;font-weight:700;color:#475569;">SHBV:</span>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style="border-right:1px solid #94a3b8;border-bottom:1px solid #94a3b8;padding:1px 5px;font-size:9px;font-weight:700;color:#0f172a;text-align:center;vertical-align:middle;">
+                        ${nguoiLap || ''}
+                      </td>
+                      <td style="border-bottom:1px solid #94a3b8;padding:2px 7px;vertical-align:middle;">
+                        <span style="font-size:7.5px;font-weight:700;color:#475569;">Số soát xét:</span>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style="border-right:1px solid #94a3b8;border-bottom:1px solid #94a3b8;padding:1px 5px;font-size:7px;font-weight:700;color:#475569;text-transform:uppercase;text-align:center;vertical-align:bottom;">
+                        CHUYÊN VIÊN PHỤ TRÁCH ĐỊA BÀN
+                      </td>
+                      <td style="border-right:1px solid #94a3b8;border-bottom:1px solid #94a3b8;padding:1px 5px;font-size:7px;font-weight:700;color:#475569;text-transform:uppercase;text-align:center;vertical-align:bottom;">
+                        CHIẾU SÁNG KHU VỰC TRUNG TÂM
+                      </td>
+                      <td style="border-right:1px solid #94a3b8;border-bottom:1px solid #94a3b8;padding:1px 5px;">&nbsp;</td>
+                      <td rowspan="2" style="border-right:1px solid #94a3b8;padding:5px 10px;vertical-align:middle;">
+                        <div style="font-size:7.5px;font-weight:700;color:#475569;margin-bottom:2px;">BẢN VẼ:</div>
+                        <div style="font-size:13px;font-weight:800;color:#0f172a;line-height:1.2;">${tenTu || ''}</div>
+                        <div style="font-size:8px;color:#2563eb;margin-top:2px;">Tỉ lệ: 1 : ${parseInt(scale).toLocaleString()}</div>
+                      </td>
+                      <td style="border-bottom:1px solid #94a3b8;padding:2px 7px;vertical-align:middle;">
+                        <div style="font-size:7.5px;font-weight:700;color:#475569;">Bản vẽ số:</div>
+                        <div style="font-size:11px;font-weight:800;color:#0f172a;">${soBanVe || ''}</div>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style="border-right:1px solid #94a3b8;padding:2px 5px;font-size:8.5px;font-weight:700;text-align:center;color:#0f172a;vertical-align:middle;">&nbsp;</td>
+                      <td style="border-right:1px solid #94a3b8;padding:2px 5px;font-size:8.5px;font-weight:700;text-align:center;color:#0f172a;vertical-align:middle;">&nbsp;</td>
+                      <td style="border-right:1px solid #94a3b8;padding:2px 5px;">&nbsp;</td>
+                      <td style="padding:2px 7px;vertical-align:middle;">
+                        <div style="font-size:7.5px;color:#475569;">Ngày:</div>
+                        <div style="font-size:9px;font-weight:700;color:#0f172a;">${ngay || ''}</div>
+                      </td>
+                    </tr>
+                  </table>
                 </div>`;
             document.getElementById('map').appendChild(overlay);
         }
