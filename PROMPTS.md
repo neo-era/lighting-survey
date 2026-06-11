@@ -1714,8 +1714,8 @@ Không thay đổi gì khác.
 4.8 → index.html: cycle detection trước _buildCableLines()         ✅ done
 
 5.1 → index.html: dropdown chọn tủ khi bật sơ đồ cáp (multi-select)    ✅ done
-5.2 → index.html: chế độ sửa cáp — xóa đoạn, đổi điểm gốc trực tiếp
-5.3 → index.html: xoay bản đồ khi xuất PDF (slider -60°→+60°)
+5.2 → index.html: chế độ sửa cáp — xóa đoạn, đổi điểm gốc trực tiếp    ✅ done
+5.3 → index.html: xoay bản đồ khi xuất PDF (slider -60°→+60°)          ✅ done
 ```
 
 ⚠️ Việc cần làm TRƯỚC KHI CHẠY 5.x:

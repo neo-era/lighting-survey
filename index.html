@@ -330,24 +330,24 @@
         }
 
         /* Nội dung side panel */
-        .ctrl-section { margin-bottom: 20px; }
-        .ctrl-title { font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: .6px; margin-bottom: 10px; }
-        .ctrl-label { display: block; font-size: 12px; font-weight: 600; color: var(--text); margin-bottom: 4px; }
+        .ctrl-section { margin-bottom: 12px; }
+        .ctrl-title { font-size: 10px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: .7px; margin-bottom: 7px; }
+        .ctrl-label { display: block; font-size: 11px; font-weight: 600; color: var(--text); margin-bottom: 3px; }
         .ctrl-input {
-            width: 100%; padding: 10px 12px;
+            width: 100%; padding: 8px 10px;
             border: 1.5px solid var(--border); border-radius: var(--radius-sm);
-            font-size: 16px; font-family: var(--font); color: var(--text); background: var(--surface);
+            font-size: 14px; font-family: var(--font); color: var(--text); background: var(--surface);
             outline: none; transition: border-color .2s;
             -webkit-appearance: none; appearance: none;
-            margin-bottom: 10px;
+            margin-bottom: 8px;
         }
         .ctrl-input:focus { border-color: var(--primary); }
         .ctrl-btn {
-            width: 100%; padding: 11px 16px;
+            width: 100%; padding: 9px 12px;
             border: none; border-radius: var(--radius-sm);
-            font-size: 14px; font-weight: 600; font-family: var(--font);
-            cursor: pointer; display: flex; align-items: center; gap: 8px; justify-content: center;
-            margin-bottom: 8px;
+            font-size: 13px; font-weight: 600; font-family: var(--font);
+            cursor: pointer; display: flex; align-items: center; gap: 7px; justify-content: center;
+            margin-bottom: 6px;
             transition: opacity .15s, transform .1s;
             touch-action: manipulation;
         }
@@ -357,9 +357,9 @@
         .ctrl-btn.warning { background: var(--secondary); color: white; }
         .ctrl-btn.dark    { background: #374151; color: white; }
         .ctrl-btn.outline { background: var(--surface-2); color: var(--text); border: 1.5px solid var(--border); }
-        .ctrl-btn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px; }
+        .ctrl-btn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 6px; }
         .ctrl-btn-grid .ctrl-btn { margin-bottom: 0; }
-        .ctrl-divider { height: 1px; background: var(--border); margin: 16px -16px; }
+        .ctrl-divider { height: 1px; background: var(--border); margin: 10px -16px; }
 
         /* GitHub contents */
         #githubContents { font-size: 13px; max-height: 220px; overflow-y: auto; }
@@ -643,6 +643,10 @@
             font-size:11px; font-weight:700; color:#1e40af;
             white-space:nowrap; pointer-events:none;
         }
+        .cable-ctx-popup .leaflet-popup-content-wrapper {
+            border-radius: 8px; border: 1.5px solid #1e293b; padding: 0;
+        }
+        .cable-ctx-popup .leaflet-popup-content { margin: 12px; }
 
         /* ══ DARK MODE ══ */
         @media (prefers-color-scheme: dark) {
@@ -772,20 +776,7 @@
     </div>
 
     <!-- ═══ BẢN ĐỒ ═══ -->
-    <div id="map">
-      <div id="printPreviewBar" style="display:none;position:absolute;top:12px;left:50%;
-        transform:translateX(-50%);z-index:9000;background:#1e293b;color:white;
-        border-radius:8px;padding:8px 16px;gap:10px;align-items:center;
-        font-size:13px;font-weight:600;box-shadow:0 4px 16px rgba(0,0,0,.4);">
-        <span><i class="fa fa-eye"></i> Xem trước bản vẽ</span>
-        <button onclick="exportDrawingPDF()" style="background:#2563eb;color:white;border:none;
-          border-radius:5px;padding:5px 12px;cursor:pointer;font-weight:700;">
-          <i class="fa fa-file-pdf-o"></i> Xuất PDF
-        </button>
-        <button onclick="closePrintPreview()" style="background:#475569;color:white;border:none;
-          border-radius:5px;padding:5px 10px;cursor:pointer;">Đóng</button>
-      </div>
-    </div>
+    <div id="map"></div>
 
     <!-- ═══ TOP BAR ═══ -->
     <div id="topBar">
@@ -857,33 +848,33 @@
                         <span aria-hidden="true">&times;</span>
                     </button>
                 </div>
-                <div class="modal-body">
+                <div class="modal-body" style="padding:14px 16px;">
 
-                    <!-- Version badge -->
-                    <div id="dataVersionTag"
-                         style="display:none; font-size:11px; font-weight:700; color:rgba(255,255,255,.7);
-                                background:rgba(255,255,255,.12); border-radius:999px; padding:3px 10px;
-                                white-space:nowrap; text-align:center; margin-bottom:8px;">
-                    </div>
-
-                    <!-- User info -->
-                    <div id="topbarUser" onclick="logout()" title="Nhấn để đăng xuất" style="margin-bottom:18px;">
-                        <div class="av">👤</div>
-                        <div class="uinfo">
-                            <span id="topbarUserName"></span>
-                            <span class="uhint">Nhấn để đăng xuất</span>
+                    <!-- User + version -->
+                    <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
+                        <div id="topbarUser" onclick="logout()" title="Nhấn để đăng xuất"
+                             style="flex:1;margin-bottom:0;">
+                            <div class="av">👤</div>
+                            <div class="uinfo">
+                                <span id="topbarUserName"></span>
+                                <span class="uhint">Nhấn để đăng xuất</span>
+                            </div>
+                            <i class="fa fa-sign-out ulogout"></i>
                         </div>
-                        <i class="fa fa-sign-out ulogout"></i>
+                        <div id="dataVersionTag"
+                             style="display:none;font-size:10px;font-weight:700;color:rgba(255,255,255,.7);
+                                    background:rgba(255,255,255,.12);border-radius:999px;padding:2px 8px;
+                                    white-space:nowrap;flex-shrink:0;">
+                        </div>
                     </div>
 
                     <!-- Điều hướng -->
                     <div class="ctrl-section">
                         <div class="ctrl-title">Điều hướng</div>
-                        <label class="ctrl-label" for="pages">Chọn trang</label>
-                        <select id="pages" class="ctrl-input" onchange="navigateToPage()">
+                        <select id="pages" class="ctrl-input" onchange="navigateToPage()" style="margin-bottom:0;">
                             <option value="index.html">Trang khảo sát</option>
                             <option value="https://neo-era.github.io/camera/">Quản lý camera</option>
-                            <option value="https://neo-era.github.io/dentat/dentat.html">Quan lý đèn tắt/sự cố</option>
+                            <option value="https://neo-era.github.io/dentat/dentat.html">Quản lý đèn tắt/sự cố</option>
                             <option value="https://neo-era.github.io/lighting-survey/huongdan.html">Hướng dẫn sử dụng</option>
                             <option value="lichsu.html" id="pageOptLichSu" style="display:none">Lịch sử thao tác</option>
                         </select>
@@ -893,18 +884,17 @@
 
                     <!-- Đồng bộ -->
                     <div class="ctrl-section">
-                        <div class="ctrl-title">Chỉnh vị trí &amp; Đồng bộ</div>
-                        <button id="editPositionBtn" onclick="toggleEditPositionMode()" class="ctrl-btn outline" style="margin-bottom:8px;">
-                            <i class="fa fa-arrows"></i>
-                            <span id="editPositionBtnLabel">Bật chỉnh vị trí</span>
-                        </button>
-                        <button id="updateMovedBtn" onclick="pushMovedMarkersToSheet()" class="ctrl-btn warning" disabled>
-                            <i class="fa fa-refresh"></i>
-                            <span id="updateMovedBtnLabel">Cập nhật</span>
-                            <span id="updateMovedBadge" style="display:none; margin-left:6px; background:rgba(255,255,255,.25); border-radius:10px; padding:1px 8px; font-size:11px; font-weight:700;">0</span>
-                        </button>
-                        <div style="font-size:11px; color:var(--text-muted); margin-top:6px; line-height:1.4;">
-                            Mặc định marker bị khóa. Bật <strong>Chỉnh vị trí</strong> để kéo, sau đó <strong>Cập nhật</strong> để lưu lên Google Sheet.
+                        <div class="ctrl-title">Vị trí &amp; Đồng bộ</div>
+                        <div class="ctrl-btn-grid">
+                            <button id="editPositionBtn" onclick="toggleEditPositionMode()" class="ctrl-btn outline">
+                                <i class="fa fa-arrows"></i>
+                                <span id="editPositionBtnLabel">Chỉnh vị trí</span>
+                            </button>
+                            <button id="updateMovedBtn" onclick="pushMovedMarkersToSheet()" class="ctrl-btn warning" disabled>
+                                <i class="fa fa-refresh"></i>
+                                <span id="updateMovedBtnLabel">Cập nhật</span>
+                                <span id="updateMovedBadge" style="display:none;background:rgba(255,255,255,.25);border-radius:10px;padding:0 6px;font-size:10px;font-weight:700;"></span>
+                            </button>
                         </div>
                     </div>
 
@@ -913,8 +903,7 @@
                     <!-- GitHub -->
                     <div class="ctrl-section">
                         <div class="ctrl-title">GitHub</div>
-                        <label class="ctrl-label" for="githubPathInput">Đường dẫn file</label>
-                        <input type="text" id="githubPathInput" class="ctrl-input" placeholder="data/khaosat.xlsx">
+                        <input type="text" id="githubPathInput" class="ctrl-input" placeholder="data/khaosat.xlsx" style="margin-bottom:6px;">
                         <div class="ctrl-btn-grid">
                             <button onclick="saveMarkerData()" class="ctrl-btn success">
                                 <i class="fa fa-save"></i> Lưu Excel
@@ -930,20 +919,24 @@
                     <!-- Xuất dữ liệu -->
                     <div class="ctrl-section">
                         <div class="ctrl-title">Xuất dữ liệu</div>
-                        <button onclick="showReportModal()" class="ctrl-btn primary" style="margin-bottom:8px">
-                            <i class="fa fa-bar-chart"></i> Xuất báo cáo
-                        </button>
-                        <button onclick="showExportCadModal()" class="ctrl-btn dark">
-                            <i class="fa fa-file-code-o"></i> Export to CAD
-                        </button>
-                        <button onclick="openPrintDrawingModal()" class="ctrl-btn outline" style="margin-top:8px;">
-                            <i class="fa fa-print"></i> In bản vẽ sơ đồ tuyến
-                        </button>
-                        <button id="btnToggleCable" onclick="toggleCableLayer()" class="ctrl-btn outline" style="margin-top:4px;">
-                            <i class="fa fa-share-alt"></i> Sơ đồ cáp
-                        </button>
+                        <div class="ctrl-btn-grid">
+                            <button onclick="showReportModal()" class="ctrl-btn primary">
+                                <i class="fa fa-bar-chart"></i> Báo cáo
+                            </button>
+                            <button onclick="showExportCadModal()" class="ctrl-btn dark">
+                                <i class="fa fa-file-code-o"></i> CAD
+                            </button>
+                        </div>
+                        <div class="ctrl-btn-grid">
+                            <button onclick="openPrintDrawingModal()" class="ctrl-btn outline">
+                                <i class="fa fa-print"></i> In bản vẽ
+                            </button>
+                            <button id="btnToggleCable" onclick="toggleCableLayer()" class="ctrl-btn outline">
+                                <i class="fa fa-share-alt"></i> Sơ đồ cáp
+                            </button>
+                        </div>
                         <button id="btnCableEdit" onclick="toggleCableEditMode()" class="ctrl-btn outline"
-                                style="margin-top:4px;display:none;">
+                                style="display:none;margin-bottom:0;">
                             <i class="fa fa-pencil"></i> Sửa cáp
                         </button>
                     </div>
@@ -1007,6 +1000,18 @@
               <div class="pd-item">
                 <div class="pd-label">Ngày</div>
                 <input id="pdNgay" class="pd-ctrl" type="date">
+              </div>
+            </div>
+            <div class="pd-row">
+              <div class="pd-item" style="flex:1;">
+                <div class="pd-label">Xoay bản đồ</div>
+                <div style="display:flex;align-items:center;gap:10px;">
+                  <input id="pdRotation" type="range" min="-60" max="60" value="0" step="1"
+                         style="flex:1;"
+                         oninput="document.getElementById('pdRotationVal').textContent=this.value+'°'">
+                  <span id="pdRotationVal"
+                        style="font-size:12px;font-weight:700;color:#1e293b;min-width:34px;text-align:right;">0°</span>
+                </div>
               </div>
             </div>
             <div class="pd-row">
@@ -1313,6 +1318,8 @@
                 const key = 'pd_' + id;
                 if (el && !el.value) el.value = localStorage.getItem(key) || '';
             });
+            const rotEl = document.getElementById('pdRotation');
+            if (rotEl) { rotEl.value = 0; document.getElementById('pdRotationVal').textContent = '0°'; }
             $('#printDrawingModal').modal('show');
         }
 
@@ -1351,8 +1358,9 @@
             }
             _removeCableLines();
             _cableLayerGroup = L.layerGroup().addTo(map);
+            // posIdx từ TẤT CẢ marker (kể cả tủ cha nằm ngoài filter)
             const posIdx = {};
-            rows.forEach(r => {
+            ((loadedData || []).slice(1)).forEach(r => {
                 const name = String(r[1] || '').trim();
                 const lat = parseCoord(r[2]), lon = parseCoord(r[3]);
                 if (name && Number.isFinite(lat) && Number.isFinite(lon)) posIdx[name] = [lat, lon];
@@ -1372,14 +1380,13 @@
                 line.addTo(_cableLayerGroup);
                 if (_cableEditMode) _attachCableEditHandler(line);
                 cableCount++;
-                const dist = String(r[15] || '').trim();
-                if (dist) {
-                    const mid = [(from[0]+to[0])/2, (from[1]+to[1])/2];
-                    L.marker(mid, {
-                        icon: L.divIcon({ className:'cable-label', html:`<span>${dist}m</span>`, iconSize:null, iconAnchor:[20,10] }),
-                        interactive: false, keyboard: false
-                    }).addTo(_cableLayerGroup);
-                }
+                const distVal = String(r[15] || '').trim();
+                const distLabel = distVal || String(haversineM(from[0], from[1], to[0], to[1]));
+                const mid = [(from[0]+to[0])/2, (from[1]+to[1])/2];
+                L.marker(mid, {
+                    icon: L.divIcon({ className:'cable-label', html:`<span>${distLabel}m</span>`, iconSize:null, iconAnchor:[20,10] }),
+                    interactive: false, keyboard: false
+                }).addTo(_cableLayerGroup);
             });
             if (cableCount === 0) {
                 displayError('Không có đường cáp — hãy nhập cột "Marker gốc" cho các trụ để vẽ sơ đồ.');
@@ -1388,6 +1395,117 @@
 
         function _removeCableLines() {
             if (_cableLayerGroup) { map.removeLayer(_cableLayerGroup); _cableLayerGroup = null; }
+        }
+
+        function _attachCableEditHandler(line) {
+            line.setStyle({ weight: 4, opacity: 1 });
+            line.getElement && (line.getElement().style.cursor = 'pointer');
+            line.on('click', function(e) {
+                L.DomEvent.stopPropagation(e);
+                _showCableContextMenu(e.latlng, line._cableRow);
+            });
+        }
+
+        function _showCableContextMenu(latlng, row) {
+            const childName  = String(row[1]  || '').trim();
+            const parentName = String(row[14] || '').trim();
+            const dist       = String(row[15] || '').trim();
+            L.popup({ closeButton: true, className: 'cable-ctx-popup' })
+                .setLatLng(latlng)
+                .setContent(`
+                    <div style="font-size:12px;font-weight:700;color:#0f172a;margin-bottom:8px;">
+                        Cáp: <span style="color:#1e40af;">${childName}</span>
+                        ← ${parentName}${dist ? ' <span style="color:#64748b;">('+dist+'m)</span>' : ''}
+                    </div>
+                    <div style="display:flex;flex-direction:column;gap:6px;">
+                        <button id="_cableCtxXoa"
+                            style="background:#ef4444;color:white;border:none;border-radius:5px;
+                                   padding:6px 10px;font-size:11px;font-weight:700;cursor:pointer;">
+                            🗑 Xóa đoạn cáp này
+                        </button>
+                        <button id="_cableCtxDoi"
+                            style="background:#1e40af;color:white;border:none;border-radius:5px;
+                                   padding:6px 10px;font-size:11px;font-weight:700;cursor:pointer;">
+                            ↩ Đổi điểm gốc (trụ cha)
+                        </button>
+                    </div>
+                `)
+                .openOn(map);
+            // Gán sự kiện sau khi popup đã render vào DOM (tránh lỗi dấu ngoặc kép trong onclick attr)
+            setTimeout(() => {
+                const btnXoa = document.getElementById('_cableCtxXoa');
+                if (btnXoa) btnXoa.addEventListener('click', () => {
+                    map.closePopup();
+                    _deleteCableSegment(childName);
+                });
+                const btnDoi = document.getElementById('_cableCtxDoi');
+                if (btnDoi) btnDoi.addEventListener('click', () => {
+                    map.closePopup();
+                    _pickParentMode(childName);
+                });
+            }, 0);
+        }
+
+        function _deleteCableSegment(childName) {
+            if (!Array.isArray(loadedData)) return;
+            const row = loadedData.slice(1).find(r => String(r[1] || '').trim() === childName);
+            if (!row) return;
+            row[14] = ''; row[15] = '';
+            syncRowToGAS(row, { silent: true });
+            _rebuildCableLines();
+            displaySuccess('Đã xóa đoạn cáp: ' + childName);
+        }
+
+        function _pickParentMode(childName) {
+            if (_pickParentActive) return;
+            _pickParentActive = true;
+            displayInfo('Click vào trụ/tủ để đặt làm điểm gốc cáp cho ' + childName + '. Nhấn ESC để hủy.');
+            map.getContainer().style.cursor = 'crosshair';
+            const onMapClick = function(e) {
+                let nearest = null, nearestDist = Infinity;
+                const q = map.latLngToContainerPoint(e.latlng);
+                // Tìm trong markersCluster (marker không nằm trực tiếp trên map)
+                (markersCluster ? markersCluster.getLayers() : []).forEach(function(layer) {
+                    if (layer instanceof L.Marker && layer._rowRef) {
+                        const p = map.latLngToContainerPoint(layer.getLatLng());
+                        const d = Math.hypot(p.x - q.x, p.y - q.y);
+                        if (d < 40 && d < nearestDist) { nearest = layer; nearestDist = d; }
+                    }
+                });
+                map.off('click', onMapClick);
+                document.removeEventListener('keydown', onEsc);
+                _pickParentActive = false;
+                map.getContainer().style.cursor = '';
+                if (!nearest) { displayError('Không tìm thấy trụ/tủ tại vị trí đó.'); return; }
+                const newParentName = String(nearest._rowRef[1] || '').trim();
+                if (!newParentName || newParentName === childName) return;
+                const row = (loadedData || []).slice(1).find(r => String(r[1] || '').trim() === childName);
+                if (!row) return;
+                const pLat = parseCoord(nearest._rowRef[2]), pLon = parseCoord(nearest._rowRef[3]);
+                const cLat = parseCoord(row[2]), cLon = parseCoord(row[3]);
+                row[14] = newParentName;
+                row[15] = (Number.isFinite(pLat) && Number.isFinite(cLat))
+                    ? haversineM(cLat, cLon, pLat, pLon) : '';
+                syncRowToGAS(row, { silent: true });
+                _rebuildCableLines();
+                displaySuccess('Đã đổi điểm gốc: ' + childName + ' ← ' + newParentName);
+            };
+            const onEsc = function(e) {
+                if (e.key !== 'Escape') return;
+                map.off('click', onMapClick);
+                document.removeEventListener('keydown', onEsc);
+                _pickParentActive = false;
+                map.getContainer().style.cursor = '';
+            };
+            map.on('click', onMapClick);
+            document.addEventListener('keydown', onEsc);
+        }
+
+        function _rebuildCableLines() {
+            const rows = _selectedTus
+                ? (loadedData || []).slice(1).filter(r => _selectedTus.has(String(r[7] || '').trim()))
+                : (loadedData || []).slice(1);
+            _buildCableLines(rows);
         }
 
         let _cableVisible = false;
@@ -1472,9 +1590,53 @@
             if (editBtn) editBtn.style.display = '';
         }
 
+        function toggleCableEditMode() {
+            _cableEditMode = !_cableEditMode;
+            const btn = document.getElementById('btnCableEdit');
+            if (btn) {
+                btn.classList.toggle('active', _cableEditMode);
+                btn.innerHTML = _cableEditMode
+                    ? '<i class="fa fa-pencil"></i> Đang sửa cáp'
+                    : '<i class="fa fa-pencil"></i> Sửa cáp';
+            }
+            _rebuildCableLines();
+        }
+
         // ── TILE SWITCHING (khi in) ───────────────────────────────────────
         let _savedBaseLayers = [];
         let _printCartoLayer = null;
+
+        let _currentMapRotation = 0;
+
+        function _rotateMap(delta) {
+            _currentMapRotation = Math.max(-60, Math.min(60, _currentMapRotation + delta));
+            _applyMapRotation(_currentMapRotation);
+            const el = document.getElementById('previewRotVal');
+            if (el) el.textContent = _currentMapRotation + '°';
+            const rotEl = document.getElementById('pdRotation');
+            if (rotEl) { rotEl.value = _currentMapRotation; document.getElementById('pdRotationVal').textContent = _currentMapRotation + '°'; }
+        }
+
+        function _applyMapRotation(angle) {
+            if (!angle) return;
+            const mapEl = document.getElementById('map');
+            const pane  = mapEl && mapEl.querySelector('.leaflet-map-pane');
+            if (!pane) return;
+            const mapRect  = mapEl.getBoundingClientRect();
+            const paneRect = pane.getBoundingClientRect();
+            const ox = mapRect.left + mapRect.width  / 2 - paneRect.left;
+            const oy = mapRect.top  + mapRect.height / 2 - paneRect.top;
+            const base = (pane.style.transform || '').replace(/\s*rotate\([^)]*\)/g, '').trim();
+            pane.style.transformOrigin = `${ox}px ${oy}px`;
+            pane.style.transform = base + ` rotate(${angle}deg)`;
+        }
+
+        function _clearMapRotation() {
+            const pane = document.querySelector('#map .leaflet-map-pane');
+            if (!pane) return;
+            pane.style.transform = (pane.style.transform || '').replace(/\s*rotate\([^)]*\)/g, '').trim();
+            pane.style.transformOrigin = '';
+        }
 
         function _switchToPrintTile() {
             _savedBaseLayers = [];
@@ -1669,12 +1831,18 @@
             displayError('Đang tải bản đồ xem trước...');
             await new Promise(r => setTimeout(r, 2000));
             _showPrintOverlay({ rows, tenTu: tenTu || tuName, scale, ngay, nguoiLap, soBanVe, cvPhuTrach, csKhuVuc });
+            _currentMapRotation = parseFloat((document.getElementById('pdRotation') || {}).value) || 0;
+            _applyMapRotation(_currentMapRotation);
+            const prevRotEl = document.getElementById('previewRotVal');
+            if (prevRotEl) prevRotEl.textContent = _currentMapRotation + '°';
             _previewMode = true;
             document.getElementById('printPreviewBar').style.display = 'flex';
         }
 
         function closePrintPreview() {
             _previewMode = false;
+            _currentMapRotation = 0;
+            _clearMapRotation();
             _hidePrintOverlay();
             _removeCableLines();
             _restoreOriginalTiles();
@@ -1698,6 +1866,7 @@
                 const ngay       = (document.getElementById('pdNgay')        || {}).value;
                 const cvPhuTrach = (document.getElementById('pdCVPhuTrach') || {}).value?.trim() || '';
                 const csKhuVuc   = (document.getElementById('pdCSKhuVuc')   || {}).value?.trim() || '';
+                const rotation   = parseFloat((document.getElementById('pdRotation') || {}).value) || 0;
                 if (cvPhuTrach) localStorage.setItem('pd_pdCVPhuTrach', cvPhuTrach);
                 if (csKhuVuc)   localStorage.setItem('pd_pdCSKhuVuc',   csKhuVuc);
                 if (nguoiLap)   localStorage.setItem('pd_pdNguoiLap',   nguoiLap);
@@ -1719,7 +1888,8 @@
 
                     // 4. Hiện overlay legend + title block
                     _showPrintOverlay({ rows, tenTu: tenTu || tuName, scale, ngay, nguoiLap, soBanVe, cvPhuTrach, csKhuVuc });
-                    await new Promise(r => setTimeout(r, 200));
+                    _applyMapRotation(rotation);
+                    await new Promise(r => setTimeout(r, 300));
                 }
 
                 // 5. Capture map (bao gồm overlay bên trong #map)
@@ -1773,6 +1943,7 @@
                 console.error('exportDrawingPDF:', err);
                 displayError('Lỗi xuất PDF: ' + (err.message || err));
             } finally {
+                _clearMapRotation();
                 _hidePrintOverlay();
                 _removeCableLines();
                 _restoreOriginalTiles();
@@ -1985,6 +2156,7 @@
         let githubBranch = '';
         let githubToken = '';
         let _currentPopupRow = null;
+        let _editingRow = null; // row đang sửa (null = thêm mới)
         const MAX_EXCEL_TEXT_LENGTH = 32767;
         const KHAOSAT_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRjBdN5epr38kL2jLituPUC4wJO_Ohr_AsFpzaZh6Azxxs_gkzGT5s3JiZ1uFkNQFP5epR2U_wYT6wT/pub?output=csv';
         const KHAOSAT_GAS_URL = 'https://script.google.com/macros/s/AKfycbxPFn7lnJZYdjUg5WlVq1P1JGI5O3rvcry_IVE3bhF5foDmbgT6KwBU4xFxHNwKruHRvQ/exec';
@@ -2003,7 +2175,7 @@
         }
 
         function normalizeMarkerBaseName(name) {
-            const base = (name || '').toString().trim().replace(/[\s\-]*\d+$/, '');
+            const base = (name || '').toString().trim().replace(/[_\s\-]*\d+$/, '');
             return normalizeText(base);
         }
 
@@ -2244,6 +2416,7 @@
             const note = row[4] || '';
             const icon = customIcons[type] || customIcons.default;
             const marker = L.marker([lat, lon], { icon, draggable: editPositionMode && canEdit() });
+            marker._rowRef = row;
 
             marker.bindPopup(createMarkerPopupContent(row));
             marker.on('popupopen', function() {
@@ -2659,29 +2832,52 @@
                     }
                     info.innerHTML = txt;
                 }
-                nameInput.oninput = function() {
+                function _fillBaseSelect() {
                     const bn = normalizeMarkerBaseName(nameInput.value.trim());
+                    const cabinetName = cabinetInput ? cabinetInput.value.trim() : '';
                     baseSelect.innerHTML = '';
+                    const addedIdx = new Set();
+                    // Luôn thêm tủ điều khiển trước
+                    if (cabinetName) {
+                        const ci = markers.findIndex(m => String(m.name||'').trim() === cabinetName);
+                        if (ci >= 0) {
+                            const opt = document.createElement('option');
+                            opt.value = ci; opt.textContent = markers[ci].name + ' [tủ]';
+                            baseSelect.appendChild(opt);
+                            addedIdx.add(ci);
+                        }
+                    }
                     markers.forEach((m, idx) => {
-                        if (normalizeMarkerBaseName(m.name||'') === bn) {
+                        if (!addedIdx.has(idx) && normalizeMarkerBaseName(m.name||'') === bn) {
                             const opt = document.createElement('option');
                             opt.value = idx; opt.textContent = m.name || 'Không tên';
                             baseSelect.appendChild(opt);
                         }
                     });
                     updateBaseDistanceInfo();
-                };
-                const newName = nameInput.value.trim();
-                const baseName = normalizeMarkerBaseName(newName);
-                baseSelect.innerHTML = '';
-                markers.forEach((m, idx) => {
-                    if (normalizeMarkerBaseName(m.name||'') === baseName) {
-                        const opt = document.createElement('option');
-                        opt.value = idx; opt.textContent = m.name || 'Không tên';
-                        baseSelect.appendChild(opt);
+                }
+                nameInput.oninput = _fillBaseSelect;
+                cabinetInput && (cabinetInput.oninput = _fillBaseSelect);
+                _fillBaseSelect();
+                baseSelect.onchange = function() {
+                    updateBaseDistanceInfo();
+                    // Sync sang markerGocInput + khoangCachInput
+                    const gocEl = document.getElementById('markerGocInput');
+                    const kEl   = document.getElementById('markerKhoangCachInput');
+                    if (!gocEl) return;
+                    if (baseSelect.value !== '') {
+                        const bm = markers[parseInt(baseSelect.value, 10)];
+                        if (bm) {
+                            gocEl.value = String(bm.name || '');
+                            if (kEl && markerPopupLocation) {
+                                kEl.value = Math.round(getDistanceMeters(bm.lat, bm.lon, markerPopupLocation[0], markerPopupLocation[1]));
+                            }
+                        }
+                    } else {
+                        gocEl.value = '';
+                        if (kEl) kEl.value = '';
                     }
-                });
-                baseSelect.onchange = updateBaseDistanceInfo;
+                };
                 baseSelect.onchange();
             }
 
@@ -2694,6 +2890,7 @@
             if (overlay) overlay.style.display = 'none';
             if (tempMarker) { map.removeLayer(tempMarker); tempMarker = null; }
             markerPopupLocation = null; markerImageDataUrl = null;
+            _editingRow = null;
             const fi = document.getElementById('markerImageInput');
             if (fi) fi.value = null;
         }
@@ -2878,17 +3075,48 @@
                 const updatedAt = new Date().toLocaleString('vi-VN');
                 const nguoiKS = currentUser ? (currentUser.displayName || currentUser.username) : '';
                 const _vn = convertLatLonToVn2000(lat, lon);
-                const newRow = ['',name,lat,lon,note,nguoiKS,type,cabinetName,poleType,'',lampType,congSuat,markerImageDataUrl||'',updatedAt,baseMarkerName,distanceToBase,maPE,street,ward,Math.round(_vn.x),Math.round(_vn.y)];
-                loadedData.push(newRow); newMarkerRows.push(newRow);
-                markerImageDataUrl = null;
-                const newMarker = addMarkerRowToMap(newRow);
-                if (newMarker) { map.setView([newMarker.getLatLng().lat, newMarker.getLatLng().lng], 19); newMarker.openPopup(); }
-                hideMarkerPopup();
-                pendingNewMarker = true; addMarkerMode = true; pendingMarkerLocation = null;
-                updateAddMarkerButton();
-                syncRowToGAS(newRow);
-                _logAction('edit', newRow, { nguoiKS: newRow[5], loai: newRow[6] });
-                displayError('Đã thêm marker — đang lưu lên Google Sheets...');
+
+                if (_editingRow) {
+                    // ── CHẾ ĐỘ SỬA ──
+                    const existingId = _editingRow[0];
+                    const oldName = String(_editingRow[1] || '').trim();
+                    const keepImg = markerImageDataUrl || _editingRow[12] || ''; // giữ ảnh cũ nếu không upload mới
+
+                    // Xóa marker cũ khỏi map
+                    const oldIdx = markers.findIndex(md => md.marker._rowRef === _editingRow);
+                    if (oldIdx >= 0) { markersCluster.removeLayer(markers[oldIdx].marker); markers.splice(oldIdx, 1); }
+                    labelLayerGroup.getLayers().slice().forEach(layer => {
+                        if (layer.getIcon && layer.getIcon().options.html && layer.getIcon().options.html.includes(oldName))
+                            labelLayerGroup.removeLayer(layer);
+                    });
+
+                    // Cập nhật row in-place (giữ ID, cập nhật tất cả field còn lại)
+                    const updated = ['',name,lat,lon,note,nguoiKS,type,cabinetName,poleType,'',lampType,congSuat,keepImg,updatedAt,baseMarkerName,distanceToBase,maPE,street,ward,Math.round(_vn.x),Math.round(_vn.y)];
+                    updated[0] = existingId;
+                    for (let i = 0; i < updated.length; i++) _editingRow[i] = updated[i];
+
+                    markerImageDataUrl = null;
+                    const updMarker = addMarkerRowToMap(_editingRow);
+                    if (updMarker) { map.setView([updMarker.getLatLng().lat, updMarker.getLatLng().lng], map.getZoom()); updMarker.openPopup(); }
+                    const rowRef = _editingRow; // lưu trước khi hideMarkerPopup() reset _editingRow = null
+                    hideMarkerPopup();
+                    syncRowToGAS(rowRef);
+                    _logAction('edit', rowRef, { nguoiKS: rowRef[5], loai: rowRef[6] });
+                    displayError('Đã cập nhật marker — đang lưu lên Google Sheets...');
+                } else {
+                    // ── CHẾ ĐỘ THÊM MỚI ──
+                    const newRow = ['',name,lat,lon,note,nguoiKS,type,cabinetName,poleType,'',lampType,congSuat,markerImageDataUrl||'',updatedAt,baseMarkerName,distanceToBase,maPE,street,ward,Math.round(_vn.x),Math.round(_vn.y)];
+                    loadedData.push(newRow); newMarkerRows.push(newRow);
+                    markerImageDataUrl = null;
+                    const newMarker = addMarkerRowToMap(newRow);
+                    if (newMarker) { map.setView([newMarker.getLatLng().lat, newMarker.getLatLng().lng], 19); newMarker.openPopup(); }
+                    hideMarkerPopup();
+                    pendingNewMarker = true; addMarkerMode = true; pendingMarkerLocation = null;
+                    updateAddMarkerButton();
+                    syncRowToGAS(newRow);
+                    _logAction('edit', newRow, { nguoiKS: newRow[5], loai: newRow[6] });
+                    displayError('Đã thêm marker — đang lưu lên Google Sheets...');
+                }
             } catch (error) {
                 console.error('saveMarkerPopup error:', error);
                 displayError('Lỗi khi lưu marker: ' + (error.message || error));
@@ -3534,40 +3762,74 @@
         function openEditMarker() {
             if (!_currentPopupRow) return;
             const row = _currentPopupRow;
+            _editingRow = row; // đánh dấu chế độ sửa
             const lat = parseCoord(row[2]), lon = parseCoord(row[3]);
             map.closePopup();
             showMarkerPopupAt(lat, lon);
+            // Hủy geocoding ngay — edit mode dùng dữ liệu từ row, không cần tra cứu lại địa chỉ
+            _pendingGeocodePromise = Promise.resolve(null);
             setTimeout(() => {
+                // Điền toàn bộ field từ row (ghi đè những gì showMarkerPopupAt đã set)
                 const nameEl = document.getElementById('markerNameInput');
-                if (nameEl) nameEl.value = row[1] || row[0] || '';
+                if (nameEl) {
+                    nameEl.value = row[1] || row[0] || '';
+                    nameEl.dispatchEvent(new Event('input')); // repopulate baseSelect
+                }
                 const noteEl = document.getElementById('markerNoteInput');
                 if (noteEl) noteEl.value = row[4] || '';
                 const cabinetEl = document.getElementById('markerCabinetInput');
                 if (cabinetEl) cabinetEl.value = row[7] || '';
-                setLampTypeSelect(row[10] || '');
-                const congSuatEl = document.getElementById('markerCongSuatInput');
-                if (congSuatEl) congSuatEl.value = row[11] || '';
-                const maPEEl = document.getElementById('markerMaPEInput');
-                if (maPEEl) maPEEl.value = row[16] || '';
-                const streetEl2 = document.getElementById('markerStreetInput');
-                if (streetEl2) streetEl2.value = row[17] || '';
-                const wardEl = document.getElementById('markerWardInput');
-                if (wardEl) wardEl.value = row[18] || '';
+
                 const rowType = parseInt(row[6]);
                 if (rowType && TYPE_CONFIG[rowType]) {
                     selectPoleType(rowType);
                 } else {
-                    // loại không khớp → nhập tay với text từ row[8]
                     const sel = document.getElementById('markerPoleTypeSelect');
                     if (sel) sel.value = '0';
                     const poleEl = document.getElementById('markerPoleTypeInput');
                     if (poleEl) { poleEl.style.display = ''; poleEl.value = row[8] || ''; }
                     currentMarkerType = 1;
                 }
+                setLampTypeSelect(row[10] || '');
+
+                const congSuatEl = document.getElementById('markerCongSuatInput');
+                if (congSuatEl) congSuatEl.value = row[11] || '';
+                const maPEEl = document.getElementById('markerMaPEInput');
+                if (maPEEl) maPEEl.value = row[16] || '';
+
+                // Đường / Phường: dùng dữ liệu từ row, khôi phục placeholder (geocoding đã bị hủy)
+                const streetEl2 = document.getElementById('markerStreetInput');
+                if (streetEl2) { streetEl2.value = row[17] || ''; streetEl2.placeholder = 'Tên đường...'; }
+                const wardEl = document.getElementById('markerWardInput');
+                if (wardEl) { wardEl.value = row[18] || ''; wardEl.placeholder = 'Nhập tên phường hoặc xã'; }
+
                 const markerGocEl = document.getElementById('markerGocInput');
                 if (markerGocEl) markerGocEl.value = row[14] || '';
                 const khoangCachEl = document.getElementById('markerKhoangCachInput');
                 if (khoangCachEl) khoangCachEl.value = row[15] || '';
+
+                // Ảnh hiện có
+                const imgVal = row[12] || '';
+                const preview = document.getElementById('markerImagePreview');
+                if (preview) {
+                    preview.innerHTML = imgVal
+                        ? `<img src="${imgVal}" style="max-width:100%;max-height:120px;border-radius:6px;margin-top:6px" onerror="this.style.display='none'">`
+                        : '';
+                }
+
+                // Pre-select baseSelect khớp với Marker gốc từ Sheet
+                const linkedGoc = String(row[14] || '').trim();
+                if (linkedGoc) {
+                    const bsel = document.getElementById('markerBaseSelect');
+                    if (bsel) {
+                        const matchOpt = Array.from(bsel.options).find(o => {
+                            const m = markers[parseInt(o.value, 10)];
+                            return m && String(m.name||'').trim() === linkedGoc;
+                        });
+                        if (matchOpt) { bsel.value = matchOpt.value; bsel.dispatchEvent(new Event('change')); }
+                    }
+                }
+
                 const coordsEl = document.getElementById('markerCoordsText');
                 if (coordsEl && Number.isFinite(lat) && Number.isFinite(lon))
                     coordsEl.textContent = `Tọa độ: ${lat.toFixed(6)}, ${lon.toFixed(6)}`;
@@ -3975,10 +4237,7 @@
             if (controlsModal) controlsModal.addEventListener('click', e=>{ if(e.target===controlsModal) closeControlsModal(); });
             document.addEventListener('click', e=>{ if(e.target&&e.target.classList&&e.target.classList.contains('modal-backdrop')) closeControlsModal(); });
 
-            const saveBtn = document.getElementById('markerPopupSave');
-            const cancelBtn = document.getElementById('markerPopupCancel');
-            if (saveBtn) saveBtn.addEventListener('click', saveMarkerPopup);
-            if (cancelBtn) cancelBtn.addEventListener('click', cancelMarkerPopup);
+            // onclick đã khai báo trong HTML (saveMarkerPopup / cancelMarkerPopup) — không thêm listener nữa để tránh gọi đôi
 
             const header = document.querySelector('#markerPopupForm .marker-popup-card header');
             const card = document.querySelector('#markerPopupForm .marker-popup-card');
@@ -4281,6 +4540,31 @@
             });
         }
     </script>
+
+    <!-- ── PRINT PREVIEW BAR ── -->
+    <div id="printPreviewBar" style="display:none;position:fixed;top:12px;left:50%;
+        transform:translateX(-50%);z-index:4500;background:#1e293b;color:white;
+        border-radius:8px;padding:8px 16px;gap:10px;align-items:center;
+        font-size:13px;font-weight:600;box-shadow:0 4px 16px rgba(0,0,0,.4);">
+      <span><i class="fa fa-eye"></i> Xem trước bản vẽ</span>
+      <span style="display:flex;align-items:center;gap:4px;border-left:1px solid rgba(255,255,255,.25);
+                   padding-left:10px;margin-left:2px;">
+        <button onclick="_rotateMap(-5)" title="Xoay trái 5°"
+            style="background:rgba(255,255,255,.15);color:white;border:none;border-radius:5px;
+                   width:28px;height:28px;cursor:pointer;font-size:14px;line-height:1;">↺</button>
+        <span id="previewRotVal"
+              style="font-size:11px;font-weight:700;min-width:28px;text-align:center;opacity:.85;">0°</span>
+        <button onclick="_rotateMap(5)" title="Xoay phải 5°"
+            style="background:rgba(255,255,255,.15);color:white;border:none;border-radius:5px;
+                   width:28px;height:28px;cursor:pointer;font-size:14px;line-height:1;">↻</button>
+      </span>
+      <button onclick="exportDrawingPDF()" style="background:#2563eb;color:white;border:none;
+        border-radius:5px;padding:5px 12px;cursor:pointer;font-weight:700;">
+        <i class="fa fa-file-pdf-o"></i> Xuất PDF
+      </button>
+      <button onclick="closePrintPreview()" style="background:#475569;color:white;border:none;
+        border-radius:5px;padding:5px 10px;cursor:pointer;">Đóng</button>
+    </div>
 
     <!-- ── CABLE DROPDOWN ── -->
     <div id="cableDropdown" style="display:none;position:fixed;z-index:9500;
