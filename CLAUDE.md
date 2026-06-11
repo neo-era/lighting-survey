@@ -197,7 +197,7 @@ canDelete() // true nếu role = admin | user
 
 ## Tính năng đang phát triển
 
-### 1. Log lịch sử thao tác (chưa implement)
+### 1. Log lịch sử thao tác ✅ đã implement
 
 **Mục tiêu:** Ghi lại mọi thao tác xóa và chỉnh sửa đối tượng để tra cứu lại sau.
 
@@ -230,7 +230,7 @@ canDelete() // true nếu role = admin | user
 
 ---
 
-### 2. Version tự động tăng khi push GitHub (chưa implement)
+### 2. Version tự động tăng khi push GitHub ✅ đã implement
 
 **Mục tiêu:** Mỗi lần `updateGitHubExcel()` đồng bộ dữ liệu lên GitHub thành công, số version của data tăng lên, hiển thị trong app để biết dữ liệu đang ở bản nào.
 
@@ -252,6 +252,76 @@ canDelete() // true nếu role = admin | user
 4. Cập nhật UI hiển thị version mới
 
 **Lưu ý:** Dùng GAS action `upload_to_github` hai lần liên tiếp (xlsx rồi version.json), hoặc mở rộng GAS để nhận mảng file.
+
+---
+
+### 3. In bản vẽ sơ đồ tuyến trạm đèn (chưa implement)
+
+**Mục tiêu:** Xuất bản vẽ kỹ thuật PDF chuẩn (A3/A4) từ dữ liệu khảo sát, gồm:
+- Nền bản đồ thực (OpenStreetMap/CartoDB)
+- Ký hiệu trụ/tủ đúng chuẩn (SVG icon đã có)
+- Đường cáp nối giữa các trụ + khoảng cách
+- Bảng ký hiệu (legend) bên trái
+- Khung bản vẽ (title block) phía dưới
+
+**Thách thức kỹ thuật chính — CORS tiles:**
+- `html2canvas` không capture được tile OSM tiêu chuẩn (không có header CORS)
+- **Giải pháp**: khi chuẩn bị in, tạm chuyển tile layer sang **CartoDB Voyager** (có CORS) với `crossOrigin: 'anonymous'`, capture bằng `html2canvas({ useCORS: true, allowTaint: false })`, rồi khôi phục tile gốc
+- Tile URL CartoDB: `https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png`
+
+**Thư viện cần thêm (lazy-load):**
+| Thư viện  | CDN                                                              | Mục đích               |
+|-----------|------------------------------------------------------------------|------------------------|
+| jsPDF     | `cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js`  | Tạo file PDF           |
+| html2canvas | `cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js` | Chụp map canvas |
+
+**Nguồn dữ liệu đường cáp:**
+- `row[14]` = `Marker gốc` — tên trụ cha (điểm kết nối cáp)
+- `row[15]` = `Khoảng cách (m)` — khoảng cách đến trụ cha
+- Dựng graph: mỗi trụ → trụ cha → vẽ polyline + label khoảng cách ở giữa đoạn
+
+**Cấu trúc bản vẽ (mô phỏng mẫu KNỞ P12 Trần Thiện Chánh):**
+```
+┌─────────────────────────────────────────────────────────────────┐
+│ BẢNG KÝ HIỆU │                                                  │
+│               │         BẢN ĐỒ (nền CartoDB)                    │
+│ 1. Đèn LED    │       + ký hiệu SVG trụ/tủ                      │
+│ 2. Trụ STK    │       + đường cáp + khoảng cách                 │
+│ 3. Tủ CS nổi  │                                                  │
+│ ...           │                                                  │
+├───────────────┴──────────────────────────────────────────────────┤
+│ KHUNG BẢN VẼ: Tên tủ | Khu vực | Tỉ lệ | Ngày | Số bản vẽ      │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Tỉ lệ bản vẽ:**
+- Preset cho user chọn: 1:500 / 1:1000 / 1:2000 / 1:5000
+- Auto-zoom map đến zoom tương ứng khi chọn tỉ lệ
+- Tính zoom từ tỉ lệ: `zoom = log2(559082264.028 / scale / (DPI/96))`
+
+**Khung bản vẽ (title block) — các trường nhập:**
+| Trường              | Nguồn dữ liệu              |
+|---------------------|----------------------------|
+| Tên tủ điều khiển   | Chọn từ dữ liệu khảo sát   |
+| Phường/Xã, Quận     | Tự động từ dữ liệu marker  |
+| Tỉ lệ               | User chọn                  |
+| Ngày lập            | Mặc định hôm nay           |
+| Người lập           | `currentUser.displayName`  |
+| Số bản vẽ           | Tự động hoặc nhập tay      |
+
+**Luồng xuất PDF:**
+1. User mở modal "In bản vẽ" → nhập thông tin title block, chọn tỉ lệ, chọn khổ giấy (A3/A4)
+2. App tạm chuyển tile sang CartoDB, zoom map đến tỉ lệ phù hợp
+3. Vẽ đường cáp lên `L.polyline` với className riêng
+4. Đợi tiles load xong (`map.on('load')` hoặc timeout 2s)
+5. `html2canvas(mapContainer, { useCORS: true })` → imageData
+6. Dùng jsPDF: đặt hình map vào vùng chính, vẽ legend trái, title block dưới bằng jsPDF text/rect API
+7. `doc.save('banve-[tenTu]-[ngay].pdf')`
+8. Khôi phục tile layer gốc, xóa polyline cáp tạm
+
+**File liên quan:**
+- `index.html` — thêm modal `#printDrawingModal`, hàm `exportDrawingPDF()`, `_buildCableLines()`, `_buildLegend()`, `_buildTitleBlock()`
+- `sw.js` — thêm `cdnjs.cloudflare.com` vào CDN_HOSTS (đã có)
 
 ---
 
@@ -283,7 +353,8 @@ Client không giữ token. Luồng:
 `searchMarkers()` tìm theo tên (bỏ dấu), ID, và tọa độ `lat,lon`.
 
 ### Xuất CAD
-DXF tọa độ VN-2000 múi 3°, kinh tuyến trục 105°. Hàm `toVN2000()`.
+DXF tọa độ VN-2000. Hàm `convertLatLonToVn2000(lat, lon)` → `{ x, y, zone }` (Gauss-Krüger, múi 6°, ellipsoid GRS80).
+Cùng hàm này được dùng để tính cột `VN2000-X`, `VN2000-Y` khi lưu marker.
 
 ### Excel xuất báo cáo
 2 sheet: **Chi tiết** (filtered rows) + **Tổng hợp** (count theo loại).
