@@ -302,40 +302,77 @@ L.divIcon({ className:'cable-label', html:`<span>${dist}m</span>` })
 
 ---
 
-#### Khung tên bản vẽ (title block) — `_showPrintOverlay()`
+#### Layout bản vẽ — `_showPrintOverlay()`
 
 **Bố cục tổng thể** (inject HTML vào `#map`, `position:absolute; inset:0`):
 ```
-┌────────────────────────────────────────────────────────────────────────┐
-│ BẢNG KÝ   │                                                            │
-│ HIỆU      │          BẢN ĐỒ (CartoDB + marker SVG + đường cáp)        │
-│ (150px)   │                                                            │
-│ icon + tên│                                                            │
-│ từng loại │                                                            │
-│ ──── cáp  │                                                            │
-├───────────┴────────────────────────┬──────────┬───────────┬──────┬────┤
-│ BẢN VẼ SƠ ĐỒ TUYẾN TRẠM ĐÈN       │ TỈ LỆ    │ NGƯỜI LẬP │ NGÀY │ SBV│
-│ HỆ THỐNG CHIẾU SÁNG ĐÔ THỊ        │          │           │      │    │
-│ [Tên bản vẽ / khu vực — to, đậm]  │ 1:1000   │ Nguyễn... │ ... │ 001│
-└────────────────────────────────────┴──────────┴───────────┴──────┴────┘
-  ←──────────────────── flex:1 ──────────────────→  ←── cố định ──────→
-                                                     (90 / 110 / 90 / 70px)
+┌──────────────────────── #printOverlay (inset:0) ───────────────────────┐
+│  ╔══════════════════ print-frame (inset:14px) ═══════════════════════╗  │
+│  ║  ┌──────── TIÊU ĐỀ (top:0, border-bottom) ────────────────────┐  ║  │
+│  ║  │  BẢN VẼ SƠ ĐỒ TUYẾN TRẠM ĐÈN HỆ THỐNG CHIẾU SÁNG ĐÔ THỊ  │  ║  │
+│  ║  │  TỦ ĐIỀU KHIỂN - [tenTu]          TL: 1 : [scale]          │  ║  │
+│  ║  └────────────────────────────────────────────────────────────┘  ║  │
+│  ║  ┌──────────────────────────────────────────────────────────┐    ║  │
+│  ║  │ [BẢNG KÝ HIỆU]  BẢN ĐỒ CartoDB toàn màn hình           │    ║  │
+│  ║  │ (float top-left) + marker SVG + đường cáp nét đứt        │    ║  │
+│  ║  │ [THỐNG KÊ: N trụ / X m cáp] — góc dưới phải             │    ║  │
+│  ║  └──────────────────────────────────────────────────────────┘    ║  │
+│  ║  ┌──────────────────── title block (110px) ──────────────────┐   ║  │
+│  ║  │ TT QLGT + CV PHỤ TRÁCH │ ⚙ │ CTCP + CS KV │ NGƯỜI LẬP │ BV │ SHBV│║  │
+│  ║  │ (trống ký tên)          │   │ (trống ký tên)│ (trống)   │ tên│ SX: │║  │
+│  ║  │ (trống)                 │   │ (trống)       │ (trống)   │ tỉlệ│ BVS:│║  │
+│  ║  │ [cvPhuTrach]            │   │ [csKhuVuc]    │[nguoiLap] │    │Ngày:│║  │
+│  ║  └──────────────────────────────────────────────────────────┘   ║  │
+│  ╚═══════════════════════════════════════════════════════════════════╝  │
+└────────────────────────────────────────────────────────────────────────┘
+                    ↑ margin trắng 14px mỗi cạnh ↑
 ```
 
-**Cấu trúc HTML title block** (grid 5 cột, cao 64px, viền top 3px #1e293b):
-| Cột | Nội dung | Min-width |
-|-----|----------|-----------|
-| 1 (flex:1) | Tiêu đề nhỏ "BẢN VẼ SƠ ĐỒ..." + tên bản vẽ lớn bên dưới | — |
-| 2 | TỈ LỆ / `1 : 1000` | 90px |
-| 3 | NGƯỜI LẬP / `currentUser.displayName` | 110px |
-| 4 | NGÀY / `pdNgay` | 90px |
-| 5 | SỐ BV / `pdSoBanVe` | 70px |
+**Print frame:** `position:absolute; inset:14px; border:2px solid #1e293b` — tạo margin in + khung viền kỹ thuật
 
-**Bảng ký hiệu legend** (trái, rộng 150px, cao = map - 64px, viền phải 2px):
-- Header: "Bảng ký hiệu" (10px, uppercase, bold)
-- Mỗi loại marker có trong tủ được chọn: SVG icon + tên loại
-- Cuối cùng: ký hiệu đường cáp (nét đứt xanh + label "Cáp nguồn")
+**Tiêu đề bản vẽ** (top header strip, `position:absolute; top:0`):
+- Dòng 1 (12px, bold, uppercase): **BẢN VẼ SƠ ĐỒ TUYẾN TRẠM ĐÈN HỆ THỐNG CHIẾU SÁNG ĐÔ THỊ**
+- Dòng 2 (9px): **TỦ ĐIỀU KHIỂN - [tenTu]** &emsp; **TL: 1 : [scale]**
+- Nền `rgba(255,255,255,.96)`, border-bottom phân tách với bản đồ
+
+**Bảng ký hiệu legend** (floating inside map, `position:absolute; top:12px; left:12px`):
+- `background:rgba(255,255,255,.94); border:1.5px solid #1e293b; border-radius:3px; padding:7px 10px`
+- Chỉ hiện loại marker thực sự xuất hiện trong data + ký hiệu cáp nguồn (nét đứt xanh)
 - Dùng `_makeLampIconSvg(color)` / `_makeCabinetIconSvg(color)` — SVG mini 14×16~20px
+
+**Thống kê** (stats div, `position:absolute; right:12px; bottom:122px`):
+- Tổng số trụ + tổng chiều dài cáp (Σ `row[15]`, bỏ qua rỗng/NaN)
+- `background:rgba(255,255,255,.92); border:1.5px solid #1e293b; font-size:9px; font-weight:700`
+
+**Khung tên (title block)** (cao **110px**, table 4 hàng × 6 cột):
+```
+Col:  16%               4%   16%               10%        34%               20%
+      ┌─────────────────┬────┬──────────────────┬──────────┬─────────────────┬──────────┐
+R1:   │ TT QLGT...      │    │ CTCP CSCC...     │ NGƯỜI LẬP│ BẢN VẼ SƠ ĐỒ   │ SHBV:    │
+      │ CHUYÊN VIÊN     │ ⚙  │ CHIẾU SÁNG KHU  │ (nhãn)   │ TUYẾN TRẠM ĐÈN  │          │
+      │ PHỤ TRÁCH ĐB    │    │ VỰC TRUNG TÂM   │          │ (rowspan=2)     │          │
+      ├─────────────────┤    ├──────────────────┼──────────┤                 ├──────────┤
+R2:   │ (trống ký tên)  │    │ (trống ký tên)   │ (trống)  │                 │ Soát xét:│
+      ├─────────────────┤    ├──────────────────┼──────────┼─────────────────┼──────────┤
+R3:   │ (trống)         │    │ (trống)          │ (trống)  │ BẢN VẼ: [tenTu] │ Bản vẽ số│
+      │                 │    │                  │          │ Tỉ lệ: 1:...    │(rowspan=2)│
+      ├─────────────────┤    ├──────────────────┼──────────┤                 ├──────────┤
+R4:   │ [cvPhuTrach]    │    │ [csKhuVuc]       │[nguoiLap]│                 │ Ngày:    │
+      └─────────────────┴────┴──────────────────┴──────────┴─────────────────┴──────────┘
+```
+- **Hàng 1**: tên tổ chức + nhãn vai trò gộp 1 ô (2 dòng text stacked) + NGƯỜI LẬP label + BV title + SHBV
+- **Hàng 2–3**: để trống cho ký tên (in ra rồi ký tay)
+- **Hàng 4**: tên thực tế — `cvPhuTrach`, `csKhuVuc`, `nguoiLap` (bottom-align) + Ngày
+
+**Modal fields** (`#printDrawingModal`):
+- `pdTuSelect` — tủ điều khiển, `pdScale` — tỉ lệ, `pdPaper` — khổ giấy
+- `pdTenTu` — tên bản vẽ, `pdSoBanVe` — số bản vẽ
+- `pdNguoiLap` — người lập, `pdNgay` — ngày
+- `pdCVPhuTrach` — chuyên viên phụ trách địa bàn, `pdCSKhuVuc` — chiếu sáng khu vực
+
+**File `banve-mau.html`** — preview tĩnh layout bản vẽ (không cần đăng nhập):
+- Cấu trúc: `.paper` (padding:14px) → `.print-frame` (border:2px) → `.map-wrap` + `.title-block`
+- Legend `.legend-float` + cable SVG inline + title header strip
 
 ---
 
@@ -354,40 +391,216 @@ L.divIcon({ className:'cable-label', html:`<span>${dist}m</span>` })
 1. Lazy-load jsPDF + html2canvas (`_loadPrintLibs()`)
 2. `_filterRowsByTu(tuName)` lọc rows theo tủ điều khiển
 3. `_buildCableLines(rows)` vẽ đường cáp lên map
-4. `_switchToPrintTile()` chuyển sang CartoDB (giữ nguyên góc nhìn — không auto-zoom)
-5. Đợi 3s để tiles tải
-6. `_showPrintOverlay(opts)` inject legend + title block vào `#map`
-7. `html2canvas(#map, { useCORS:true, scale:2, ignoreElements: controls/toast })`
-8. `new jsPDF({ orientation:'landscape', format:'a3'/'a4' })` → `addImage` full trang
-9. `doc.save('tên-ngày.pdf')`
-10. `finally`: `_hidePrintOverlay()`, `_removeCableLines()`, `_restoreOriginalTiles()`
+4. `_switchToPrintTile()` chuyển sang CartoDB
+5. `_zoomToScale(scale)` — zoom map theo tỉ lệ đã chọn (giữ nguyên center)
+6. Đợi 3s để CartoDB tiles tải
+7. `_showPrintOverlay(opts)` inject tiêu đề + legend + stats + title block vào `#map`
+8. `html2canvas(#map, { useCORS:true, scale:2, ignoreElements: controls/toast })`
+9. `new jsPDF({ orientation:'landscape', format:'a3'/'a4' })` → `addImage` full trang
+10. `doc.save('tên-ngày.pdf')`
+11. `finally`: `_hidePrintOverlay()`, `_removeCableLines()`, `_restoreOriginalTiles()`
 
 ---
 
 #### Các hàm đã implement (index.html)
 
-| Hàm | Vị trí | Mô tả |
-|-----|--------|-------|
-| `openPrintDrawingModal()` | ~line 1246 | Mở modal, điền tủ/người lập/ngày mặc định |
-| `_filterRowsByTu(tuName)` | ~line 1263 | Lọc loadedData theo row[7] |
-| `_buildCableLines(rows)` | ~line 1269 | Vẽ polyline cáp + nhãn m lên `_cableLayerGroup` |
-| `_removeCableLines()` | ~line 1308 | Xóa `_cableLayerGroup` khỏi map |
-| `_switchToPrintTile()` | ~line 1315 | Lưu tiles gốc, bật CartoDB CORS |
-| `_restoreOriginalTiles()` | ~line 1323 | Restore tiles gốc |
-| `_makeLampIconSvg(color)` | ~line 1910 | SVG đèn đường mini 14×20px |
-| `_makeCabinetIconSvg(color)` | ~line 1893 | SVG tủ điện mini 14×16px |
-| `_showPrintOverlay(opts)` | ~line 1332 | Inject legend + title block vào #map |
-| `_hidePrintOverlay()` | ~line 1399 | Xóa `#printOverlay` |
-| `exportDrawingPDF()` | ~line 1404 | Hàm chính — orchestrate toàn bộ luồng |
-| `_loadPrintLibs()` | ~line 1490 | Lazy-load jsPDF 2.5.1 + html2canvas 1.4.1 |
+| Hàm | Mô tả |
+|-----|-------|
+| `openPrintDrawingModal()` | Mở modal, điền tủ/người lập/ngày mặc định |
+| `_filterRowsByTu(tuName)` | Lọc loadedData theo row[7] (tủ điều khiển) |
+| `_buildCableLines(rows)` | Vẽ polyline cáp nét đứt + nhãn m lên `_cableLayerGroup` |
+| `_removeCableLines()` | Xóa `_cableLayerGroup` khỏi map |
+| `_switchToPrintTile()` | Lưu tiles gốc, bật CartoDB CORS |
+| `_restoreOriginalTiles()` | Restore tiles gốc sau khi capture |
+| `_zoomToScale(scale)` | Tính zoom từ tỉ lệ (công thức DPI 96) → `map.setZoom()` |
+| `_makeLampIconSvg(color)` | SVG đèn đường mini 14×20px cho legend |
+| `_makeCabinetIconSvg(color)` | SVG tủ điện mini 14×16px cho legend |
+| `_showPrintOverlay(opts)` | Inject tiêu đề + legend + stats + title block vào #map |
+| `_hidePrintOverlay()` | Xóa `#printOverlay` |
+| `exportDrawingPDF()` | Hàm chính — orchestrate toàn bộ luồng |
+| `_loadPrintLibs()` | Lazy-load jsPDF 2.5.1 + html2canvas 1.4.1 |
 
-#### Cải tiến cần làm (TODO)
+**`_showPrintOverlay(opts)` nhận:**
+```javascript
+{ rows, tenTu, scale, ngay, nguoiLap, soBanVe, cvPhuTrach, csKhuVuc }
+```
 
-- [ ] **Khung tên đúng chuẩn hơn**: thêm hàng "Chủ đầu tư / Đơn vị tư vấn / Người kiểm tra" như bản vẽ kỹ thuật thực tế
-- [ ] **Số liệu tổng hợp trong title block**: tổng số trụ, tổng chiều dài cáp (tính từ khoangCach)
-- [ ] **Zoom tự động theo tỉ lệ**: tính zoom từ `scale` → `map.setZoom()` trước khi capture
-- [ ] **Đường cáp thể hiện loại cáp**: màu khác nhau theo loại cáp (nếu có trường dữ liệu)
-- [ ] **Xuất nhiều trang** nếu tuyến dài không vừa 1 tờ
+**`_zoomToScale(scale)` — công thức:**
+```javascript
+const latRad = map.getCenter().lat * Math.PI / 180;
+const zoom = Math.log2(40075016.686 * Math.cos(latRad) * 96 / (25.4 * scale));
+map.setZoom(Math.round(zoom));
+```
+
+#### Tất cả cải tiến đã hoàn thành ✅
+
+- [x] Legend float inside map (không che map, semi-transparent)
+- [x] Print frame `inset:14px` — margin trắng xung quanh
+- [x] Title header strip ở đầu bản vẽ (tên BV + tủ + tỉ lệ)
+- [x] Thống kê tổng trụ + tổng cáp (góc dưới phải)
+- [x] Zoom tự động theo tỉ lệ (`_zoomToScale`)
+- [x] Title block 110px, 4 hàng: hàng 1 = label, hàng 2–3 = trống ký tên, hàng 4 = tên người
+- [x] Modal có đủ field: `pdCVPhuTrach` (chuyên viên), `pdCSKhuVuc` (khu vực)
+
+---
+
+### 4. Cải tiến bản vẽ — kế hoạch tiếp theo
+
+#### 4.1 — Khung tên 62.5% chiều rộng
+
+**Mục tiêu:** Thu hẹp title block xuống còn 62.5% chiều rộng, đặt góc dưới-phải, để lại phần bên trái cho bản đồ thở.
+
+**Thiết kế:**
+- Hiện tại (đã implement): `position:absolute; right:0; bottom:0; width:62.5%; height:110px`
+- Stats div: `right:calc(62.5% + 12px); bottom:122px`
+- Phần bên trái bên dưới bản đồ để trống (hoặc cho phép hiện thêm thông tin)
+
+---
+
+#### 4.2 — Xem trước khung in (Preview mode)
+
+**Mục tiêu:** Nút "Xem trước" trong modal hiển thị overlay bản vẽ trực tiếp trên bản đồ (không capture/export) để người dùng kiểm tra trước khi xuất PDF.
+
+**Thiết kế:**
+- Thêm nút **"Xem trước"** vào modal footer (bên cạnh "Xuất PDF")
+- Click → `$('#printDrawingModal').modal('hide')` + gọi `_switchToPrintTile()` + `_zoomToScale()` + `_buildCableLines()` + `_showPrintOverlay()`
+- Hiển thị thanh nổi **"Đang xem trước bản vẽ — [Xuất PDF] [Đóng xem trước]"** ở trên map
+- Nút "Xuất PDF" trong thanh nổi → capture + save + cleanup
+- Nút "Đóng xem trước" → `_hidePrintOverlay()` + `_removeCableLines()` + `_restoreOriginalTiles()`
+- State: `let _previewMode = false` — guard để không capture khi đang preview
+
+---
+
+#### 4.3 — Capture đúng tỉ lệ landscape
+
+**Mục tiêu:** Đảm bảo bản vẽ xuất PDF luôn theo chiều ngang tờ giấy, bất kể orientation màn hình người dùng.
+
+**Vấn đề hiện tại:** `html2canvas` capture `#map` theo kích thước DOM thực tế. Nếu màn hình dọc (mobile), canvas sẽ portrait → jsPDF landscape sẽ scale méo.
+
+**Giải pháp:**
+```javascript
+// Trước capture: force #map sang tỉ lệ landscape
+const mapEl = document.getElementById('map');
+const origW = mapEl.style.width, origH = mapEl.style.height;
+const pw = paper === 'a3' ? 420 : 297; // mm
+const ph = paper === 'a3' ? 297 : 210;
+const targetW = mapEl.offsetHeight * (pw / ph); // width để đạt tỉ lệ landscape
+mapEl.style.width = targetW + 'px';
+map.invalidateSize();
+await new Promise(r => setTimeout(r, 500)); // chờ Leaflet rerender
+// ... capture ...
+// Sau capture: restore
+mapEl.style.width = origW;
+map.invalidateSize();
+```
+
+---
+
+#### 4.4 — Đường cáp trên bản đồ thường + điều chỉnh điểm gốc
+
+**Mục tiêu 1 — Hiển thị cáp ngoài print mode:** Thêm nút toggle "Sơ đồ cáp" trong controls panel để bật/tắt `_cableLayerGroup` ngay trên bản đồ thường (không cần vào print mode).
+
+**Mục tiêu 2 — Điều chỉnh điểm gốc đoạn cáp:** Hiện tại cáp vẽ từ center lat/lon của trụ cha → trụ con. Cho phép đặt 1 điểm gốc tùy chỉnh (offset) để cáp xuất phát đúng vị trí thực (ví dụ: từ đỉnh cột, từ tủ điện, từ hố cáp).
+
+**Thiết kế điểm gốc:**
+- Thêm cột `row[N]` mới: **`capGocLat`**, **`capGocLon`** — tọa độ điểm xuất phát cáp
+- Nếu trống → fallback về lat/lon của marker cha (hành vi cũ)
+- Trong popup chỉnh sửa marker: thêm nút "Đặt điểm gốc cáp" → click map → lưu lat/lon vào field
+- `_buildCableLines()` kiểm tra `row[N]` trước khi dùng `posIdx[parent]`
+
+**Toggle button (controls panel):**
+```javascript
+let _cableVisible = false;
+function toggleCableLayer() {
+    _cableVisible = !_cableVisible;
+    if (_cableVisible) {
+        _buildCableLines(_filterRowsByTu(null)); // tất cả data
+    } else {
+        _removeCableLines();
+    }
+}
+```
+
+---
+
+#### 4.5 — Tính tự động khoảng cách cáp (Haversine)
+
+**Mục tiêu:** Khi người dùng chọn `Marker gốc` trong popup chỉnh sửa marker, tự động tính khoảng cách Haversine từ trụ con → trụ cha và điền vào ô `Khoảng cách (m)`. Giảm nhập tay, tránh sai số đo thực địa.
+
+**Công thức Haversine:**
+```javascript
+function haversineM(lat1, lon1, lat2, lon2) {
+    const R = 6371000;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat/2)**2 +
+              Math.cos(lat1 * Math.PI/180) * Math.cos(lat2 * Math.PI/180) * Math.sin(dLon/2)**2;
+    return Math.round(R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)));
+}
+```
+
+**Điểm gọi:** `onchange` của input `Marker gốc` trong popup → tìm lat/lon của trụ cha trong `loadedData` → tính haversine → điền vào input `Khoảng cách`.
+
+---
+
+#### 4.6 — Nhớ field modal bằng localStorage
+
+**Mục tiêu:** `pdCVPhuTrach`, `pdCSKhuVuc`, `pdNguoiLap` không reset khi đóng/mở modal.
+
+**Thiết kế:**
+- `openPrintDrawingModal()`: sau khi điền defaults, đọc `localStorage.getItem('pd_cv')` v.v. nếu input còn trống
+- `exportDrawingPDF()` / `openPrintPreview()`: lưu 3 field vào localStorage trước khi dùng
+```javascript
+localStorage.setItem('pd_cv', cvPhuTrach);
+localStorage.setItem('pd_ks', csKhuVuc);
+localStorage.setItem('pd_nl', nguoiLap);
+```
+
+---
+
+#### 4.7 — Đồng bộ lại `banve-mau.html`
+
+**Vấn đề:** `banve-mau.html` là bản preview tĩnh, hiện đã lệch so với `_showPrintOverlay()` thực tế:
+- Thiếu dải tiêu đề top (BẢN VẼ SƠ ĐỒ TUYẾN...)
+- Title block cũ (2 hàng) chưa phản ánh cấu trúc 4 hàng mới
+- Thiếu stats div (tổng trụ/cáp)
+
+**Cần làm:** Rewrite `banve-mau.html` để khớp với HTML được `_showPrintOverlay()` tạo ra.
+
+---
+
+#### 4.8 — Validate vòng lặp cáp (cycle detection)
+
+**Vấn đề:** Nếu trụ A có `Marker gốc` = B và B có `Marker gốc` = A → `_buildCableLines()` vẽ 2 đoạn nhưng không lỗi, sơ đồ sai.
+
+**Giải pháp:** Trước vòng lặp vẽ cáp, chạy DFS detect cycle:
+```javascript
+function _hasCycle(rows) {
+    const parent = {};
+    rows.forEach(r => { if (r[14]) parent[String(r[1])] = String(r[14]); });
+    for (const start of Object.keys(parent)) {
+        const visited = new Set();
+        let cur = start;
+        while (cur && parent[cur]) {
+            if (visited.has(cur)) return true; // cycle
+            visited.add(cur);
+            cur = parent[cur];
+        }
+    }
+    return false;
+}
+```
+Nếu phát hiện cycle → `displayError('Phát hiện vòng lặp cáp — kiểm tra lại Marker gốc')` + không vẽ.
+
+---
+
+#### Lưu ý vận hành quan trọng
+
+| Việc cần làm | Lý do | Ưu tiên |
+|---|---|---|
+| **Bump sw.js v5 → v6** | Nhiều tính năng mới đã thêm, người dùng khác chưa thấy | 🔴 Cao |
+| **Redeploy GAS New version** | Header sheet DanhSachTru mở rộng VN2000 từ session trước | 🔴 Cao |
+| **Sync banve-mau.html** | File preview lệch so với overlay thực | 🟡 Trung bình |
 
 ---
 

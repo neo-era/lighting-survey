@@ -772,7 +772,20 @@
     </div>
 
     <!-- ═══ BẢN ĐỒ ═══ -->
-    <div id="map"></div>
+    <div id="map">
+      <div id="printPreviewBar" style="display:none;position:absolute;top:12px;left:50%;
+        transform:translateX(-50%);z-index:9000;background:#1e293b;color:white;
+        border-radius:8px;padding:8px 16px;gap:10px;align-items:center;
+        font-size:13px;font-weight:600;box-shadow:0 4px 16px rgba(0,0,0,.4);">
+        <span><i class="fa fa-eye"></i> Xem trước bản vẽ</span>
+        <button onclick="exportDrawingPDF()" style="background:#2563eb;color:white;border:none;
+          border-radius:5px;padding:5px 12px;cursor:pointer;font-weight:700;">
+          <i class="fa fa-file-pdf-o"></i> Xuất PDF
+        </button>
+        <button onclick="closePrintPreview()" style="background:#475569;color:white;border:none;
+          border-radius:5px;padding:5px 10px;cursor:pointer;">Đóng</button>
+      </div>
+    </div>
 
     <!-- ═══ TOP BAR ═══ -->
     <div id="topBar">
@@ -926,6 +939,9 @@
                         <button onclick="openPrintDrawingModal()" class="ctrl-btn outline" style="margin-top:8px;">
                             <i class="fa fa-print"></i> In bản vẽ sơ đồ tuyến
                         </button>
+                        <button id="btnToggleCable" onclick="toggleCableLayer()" class="ctrl-btn outline" style="margin-top:4px;">
+                            <i class="fa fa-share-alt"></i> Sơ đồ cáp
+                        </button>
                     </div>
 
                     <div class="ctrl-divider"></div>
@@ -989,10 +1005,23 @@
                 <input id="pdNgay" class="pd-ctrl" type="date">
               </div>
             </div>
+            <div class="pd-row">
+              <div class="pd-item">
+                <div class="pd-label">Chuyên viên phụ trách địa bàn</div>
+                <input id="pdCVPhuTrach" class="pd-ctrl" type="text" placeholder="Tên chuyên viên">
+              </div>
+              <div class="pd-item">
+                <div class="pd-label">Chiếu sáng khu vực</div>
+                <input id="pdCSKhuVuc" class="pd-ctrl" type="text" placeholder="Tên phụ trách khu vực">
+              </div>
+            </div>
             <p class="pd-hint">&#9888;&#65039; Trước khi xuất: căn chỉnh bản đồ đến vùng cần in, chọn đúng tủ điều khiển. App sẽ tự chuyển sang nền CartoDB (hỗ trợ xuất ảnh) và vẽ đường cáp kết nối các trụ.</p>
           </div>
           <div class="modal-footer">
             <button type="button" class="btn btn-secondary" data-dismiss="modal">Đóng</button>
+            <button type="button" class="btn btn-outline-secondary" onclick="openPrintPreview()">
+              <i class="fa fa-eye"></i> Xem trước
+            </button>
             <button type="button" class="btn btn-primary" id="pdExportBtn" onclick="exportDrawingPDF()">
               <i class="fa fa-file-pdf-o"></i> Xuất PDF
             </button>
@@ -1195,6 +1224,18 @@
                     <label for="markerNoteInput">Ghi chú</label>
                     <textarea id="markerNoteInput" placeholder="Ghi chú (tùy chọn)"></textarea>
                 </div>
+                <div class="form-group">
+                    <label for="markerGocInput">Marker gốc (tên cáp nguồn)</label>
+                    <input id="markerGocInput" type="text" placeholder="Tên trụ / tủ cha"
+                        onchange="onMarkerGocChange(this.value,
+                            markerPopupLocation?markerPopupLocation[0]:0,
+                            markerPopupLocation?markerPopupLocation[1]:0,
+                            'markerKhoangCachInput')">
+                </div>
+                <div class="form-group">
+                    <label for="markerKhoangCachInput">Khoảng cách cáp (m)</label>
+                    <input id="markerKhoangCachInput" type="number" min="0" placeholder="Tự động khi chọn Marker gốc">
+                </div>
                 <input id="markerImageInput" type="file" accept="image/*" capture="environment" style="display:none" onchange="handleMarkerImageFile(event)">
                 <div class="marker-image-preview" id="markerImagePreview"></div>
                 <div id="markerCoordsText" class="coords-info">Tọa độ: —</div>
@@ -1263,6 +1304,11 @@
             if (nguoiEl && !nguoiEl.value && currentUser) nguoiEl.value = currentUser.displayName || currentUser.username || '';
             const ngayEl = document.getElementById('pdNgay');
             if (ngayEl && !ngayEl.value) ngayEl.value = new Date().toISOString().slice(0,10);
+            ['pdCVPhuTrach','pdCSKhuVuc','pdNguoiLap'].forEach(id => {
+                const el = document.getElementById(id);
+                const key = 'pd_' + id;
+                if (el && !el.value) el.value = localStorage.getItem(key) || '';
+            });
             $('#printDrawingModal').modal('show');
         }
 
@@ -1276,7 +1322,29 @@
             return rows.filter(r => String(r[7] || '') === tuName);
         }
 
+        function _detectCableCycle(rows) {
+            const parent = {};
+            rows.forEach(r => {
+                const name = String(r[1] || '').trim();
+                const par  = String(r[14] || '').trim();
+                if (name && par && name !== par) parent[name] = par;
+            });
+            for (const start of Object.keys(parent)) {
+                const visited = new Set();
+                let cur = start;
+                while (cur && parent[cur]) {
+                    if (visited.has(cur)) return true;
+                    visited.add(cur); cur = parent[cur];
+                }
+            }
+            return false;
+        }
+
         function _buildCableLines(rows) {
+            if (_detectCableCycle(rows)) {
+                displayError('⚠ Phát hiện vòng lặp Marker gốc — kiểm tra lại dữ liệu trước khi vẽ cáp.');
+                return;
+            }
             _removeCableLines();
             _cableLayerGroup = L.layerGroup().addTo(map);
             const posIdx = {};
@@ -1307,6 +1375,19 @@
 
         function _removeCableLines() {
             if (_cableLayerGroup) { map.removeLayer(_cableLayerGroup); _cableLayerGroup = null; }
+        }
+
+        let _cableVisible = false;
+        function toggleCableLayer() {
+            _cableVisible = !_cableVisible;
+            const btn = document.getElementById('btnToggleCable');
+            if (_cableVisible) {
+                _buildCableLines(_filterRowsByTu(null));
+                if (btn) btn.classList.add('active');
+            } else {
+                _removeCableLines();
+                if (btn) btn.classList.remove('active');
+            }
         }
 
         // ── TILE SWITCHING (khi in) ───────────────────────────────────────
@@ -1341,10 +1422,17 @@
             if (pts.length > 0) map.fitBounds(L.latLngBounds(pts), { padding: [80, 80], maxZoom: 17 });
         }
 
+        function _zoomToScale(scale) {
+            const lat = map.getCenter().lat;
+            const latRad = lat * Math.PI / 180;
+            const zoom = Math.log2(40075016.686 * Math.cos(latRad) * 96 / (25.4 * scale));
+            map.setZoom(Math.round(zoom));
+        }
+
         // ── PRINT OVERLAY (legend + title block) ─────────────────────────
         function _showPrintOverlay(opts) {
             _hidePrintOverlay();
-            const { rows, tenTu, scale, ngay, nguoiLap, soBanVe } = opts;
+            const { rows, tenTu, scale, ngay, nguoiLap, soBanVe, cvPhuTrach = '', csKhuVuc = '' } = opts;
             const usedTypes = [...new Set(rows.map(r => parseInt(r[6])).filter(t => TYPE_CONFIG[t]))];
             const legendItems = usedTypes.map(t => {
                 const cfg = TYPE_CONFIG[t];
@@ -1358,12 +1446,36 @@
                 <svg width="20" height="8"><line x1="0" y1="4" x2="20" y2="4" stroke="#1e40af" stroke-width="2" stroke-dasharray="5 3"/></svg>
                 <span style="font-size:11px;color:#1e293b;">Cáp nguồn</span>
             </div>`;
+            const totalTru = rows.length;
+            const totalCap = rows.reduce((s, r) => {
+                const v = parseFloat(String(r[15]).replace(',', '.'));
+                return s + (Number.isFinite(v) ? v : 0);
+            }, 0);
+            const statsHtml = `<div style="position:absolute;right:calc(62.5% + 12px);bottom:122px;
+                background:rgba(255,255,255,.92);border:1.5px solid #1e293b;border-radius:3px;
+                padding:5px 10px;font-size:9px;font-weight:700;color:#0f172a;font-family:Arial,sans-serif;
+                text-align:right;white-space:nowrap;">
+                Tổng: ${totalTru} trụ<br>
+                Tổng cáp: ${totalCap.toFixed(0)} m
+            </div>`;
             const overlay = document.createElement('div');
             overlay.id = 'printOverlay';
             overlay.style.cssText = 'position:absolute;inset:0;z-index:8000;pointer-events:none;font-family:Arial,sans-serif;';
             overlay.innerHTML = `
                 <!-- Khung in (margin + border) -->
                 <div style="position:absolute;inset:14px;border:2px solid #1e293b;">
+                    <!-- Tiêu đề bản vẽ (top center) -->
+                    <div style="position:absolute;top:0;left:0;right:0;z-index:10;
+                                background:rgba(255,255,255,.96);border-bottom:1.5px solid #1e293b;
+                                text-align:center;padding:5px 12px 4px;">
+                        <div style="font-size:12px;font-weight:900;color:#0f172a;text-transform:uppercase;letter-spacing:.5px;line-height:1.3;">
+                            BẢN VẼ SƠ ĐỒ TUYẾN TRẠM ĐÈN HỆ THỐNG CHIẾU SÁNG ĐÔ THỊ
+                        </div>
+                        <div style="font-size:9px;font-weight:700;color:#1e293b;margin-top:2px;letter-spacing:.3px;">
+                            TỦ ĐIỀU KHIỂN - ${tenTu || ''}
+                            <span style="margin-left:24px;">TL: 1 : ${parseInt(scale).toLocaleString()}</span>
+                        </div>
+                    </div>
                     <!-- Bảng ký hiệu (floating inside map, top-left) -->
                     <div style="position:absolute;top:12px;left:12px;z-index:10;
                                 background:rgba(255,255,255,.94);border:1.5px solid #1e293b;
@@ -1375,21 +1487,25 @@
                         </div>
                         ${legendItems}${cableLegend}
                     </div>
+                    ${statsHtml}
                     <!-- Khung tên (title block) -->
-                    <div style="position:absolute;left:0;right:0;bottom:0;height:88px;
-                                background:white;border-top:2px solid #1e293b;overflow:hidden;">
+                    <div style="position:absolute;right:0;bottom:0;width:62.5%;height:110px;
+                                background:white;border-top:2px solid #1e293b;border-left:2px solid #1e293b;overflow:hidden;">
                       <table style="width:100%;height:100%;border-collapse:collapse;table-layout:fixed;font-family:Arial,sans-serif;">
                         <colgroup>
                           <col style="width:16%"><col style="width:4%"><col style="width:16%"><col style="width:10%">
                           <col style="width:34%"><col style="width:20%">
                         </colgroup>
+                        <!-- Hàng 1: Tên tổ chức + nhãn vai trò (gộp chung 1 ô) + Người lập label + Tiêu đề BV + SHBV -->
                         <tr>
-                          <td rowspan="2" style="border-right:1px solid #94a3b8;border-bottom:1px solid #94a3b8;padding:3px 5px;font-size:8px;font-weight:800;color:#0f172a;text-align:center;vertical-align:middle;text-transform:uppercase;line-height:1.4;">
-                            TT QUẢN LÝ GIAO THÔNG VÀ HẠ TẦNG KỸ THUẬT TP.HCM
+                          <td style="border-right:1px solid #94a3b8;border-bottom:1px solid #94a3b8;padding:2px 5px;text-align:center;vertical-align:middle;">
+                            <div style="font-size:7.5px;font-weight:800;color:#0f172a;text-transform:uppercase;line-height:1.4;">TT QUẢN LÝ GIAO THÔNG VÀ HẠ TẦNG KỸ THUẬT TP.HCM</div>
+                            <div style="font-size:6.5px;font-weight:700;color:#475569;text-transform:uppercase;margin-top:3px;letter-spacing:.3px;">CHUYÊN VIÊN PHỤ TRÁCH ĐỊA BÀN</div>
                           </td>
                           <td rowspan="4" style="border-right:1px solid #94a3b8;text-align:center;vertical-align:middle;font-size:18px;">&#9881;</td>
-                          <td rowspan="2" style="border-right:1px solid #94a3b8;border-bottom:1px solid #94a3b8;padding:3px 5px;font-size:8px;font-weight:800;color:#0f172a;text-align:center;vertical-align:middle;text-transform:uppercase;line-height:1.4;">
-                            CÔNG TY CỔ PHẦN CHIẾU SÁNG CÔNG CỘNG TP.HCM
+                          <td style="border-right:1px solid #94a3b8;border-bottom:1px solid #94a3b8;padding:2px 5px;text-align:center;vertical-align:middle;">
+                            <div style="font-size:7.5px;font-weight:800;color:#0f172a;text-transform:uppercase;line-height:1.4;">CÔNG TY CỔ PHẦN CHIẾU SÁNG CÔNG CỘNG TP.HCM</div>
+                            <div style="font-size:6.5px;font-weight:700;color:#475569;text-transform:uppercase;margin-top:3px;letter-spacing:.3px;">CHIẾU SÁNG KHU VỰC TRUNG TÂM</div>
                           </td>
                           <td style="border-right:1px solid #94a3b8;border-bottom:1px solid #94a3b8;padding:1px 5px;font-size:7.5px;font-weight:700;color:#475569;text-align:center;vertical-align:bottom;text-transform:uppercase;">
                             NGƯỜI LẬP
@@ -1402,21 +1518,19 @@
                             <span style="font-size:7.5px;font-weight:700;color:#475569;">SHBV:</span>
                           </td>
                         </tr>
+                        <!-- Hàng 2: Để trống ký tên -->
                         <tr>
-                          <td style="border-right:1px solid #94a3b8;border-bottom:1px solid #94a3b8;padding:1px 5px;font-size:9px;font-weight:700;color:#0f172a;text-align:center;vertical-align:middle;">
-                            ${nguoiLap || ''}
-                          </td>
+                          <td style="border-right:1px solid #94a3b8;border-bottom:1px solid #94a3b8;padding:2px 5px;">&nbsp;</td>
+                          <td style="border-right:1px solid #94a3b8;border-bottom:1px solid #94a3b8;padding:2px 5px;">&nbsp;</td>
+                          <td style="border-right:1px solid #94a3b8;border-bottom:1px solid #94a3b8;padding:1px 5px;">&nbsp;</td>
                           <td style="border-bottom:1px solid #94a3b8;padding:2px 7px;vertical-align:middle;">
                             <span style="font-size:7.5px;font-weight:700;color:#475569;">Số soát xét:</span>
                           </td>
                         </tr>
+                        <!-- Hàng 3: BV name/scale + Bản vẽ số -->
                         <tr>
-                          <td style="border-right:1px solid #94a3b8;border-bottom:1px solid #94a3b8;padding:1px 5px;font-size:7px;font-weight:700;color:#475569;text-transform:uppercase;text-align:center;vertical-align:bottom;">
-                            CHUYÊN VIÊN PHỤ TRÁCH ĐỊA BÀN
-                          </td>
-                          <td style="border-right:1px solid #94a3b8;border-bottom:1px solid #94a3b8;padding:1px 5px;font-size:7px;font-weight:700;color:#475569;text-transform:uppercase;text-align:center;vertical-align:bottom;">
-                            CHIẾU SÁNG KHU VỰC TRUNG TÂM
-                          </td>
+                          <td style="border-right:1px solid #94a3b8;border-bottom:1px solid #94a3b8;padding:2px 5px;">&nbsp;</td>
+                          <td style="border-right:1px solid #94a3b8;border-bottom:1px solid #94a3b8;padding:2px 5px;">&nbsp;</td>
                           <td style="border-right:1px solid #94a3b8;border-bottom:1px solid #94a3b8;padding:1px 5px;">&nbsp;</td>
                           <td rowspan="2" style="border-right:1px solid #94a3b8;padding:5px 10px;vertical-align:middle;">
                             <div style="font-size:7.5px;font-weight:700;color:#475569;margin-bottom:2px;">BẢN VẼ:</div>
@@ -1428,10 +1542,11 @@
                             <div style="font-size:11px;font-weight:800;color:#0f172a;">${soBanVe || ''}</div>
                           </td>
                         </tr>
+                        <!-- Hàng 4: Tên CV + CS khu vực + Người lập + Ngày -->
                         <tr>
-                          <td style="border-right:1px solid #94a3b8;padding:2px 5px;font-size:8.5px;font-weight:700;text-align:center;color:#0f172a;vertical-align:middle;">&nbsp;</td>
-                          <td style="border-right:1px solid #94a3b8;padding:2px 5px;font-size:8.5px;font-weight:700;text-align:center;color:#0f172a;vertical-align:middle;">&nbsp;</td>
-                          <td style="border-right:1px solid #94a3b8;padding:2px 5px;">&nbsp;</td>
+                          <td style="border-right:1px solid #94a3b8;padding:2px 5px;font-size:8.5px;font-weight:700;text-align:center;color:#0f172a;vertical-align:bottom;">${cvPhuTrach}</td>
+                          <td style="border-right:1px solid #94a3b8;padding:2px 5px;font-size:8.5px;font-weight:700;text-align:center;color:#0f172a;vertical-align:bottom;">${csKhuVuc}</td>
+                          <td style="border-right:1px solid #94a3b8;padding:2px 5px;font-size:9px;font-weight:700;text-align:center;color:#0f172a;vertical-align:bottom;">${nguoiLap || ''}</td>
                           <td style="padding:2px 7px;vertical-align:middle;">
                             <div style="font-size:7.5px;color:#475569;">Ngày:</div>
                             <div style="font-size:9px;font-weight:700;color:#0f172a;">${ngay || ''}</div>
@@ -1448,6 +1563,42 @@
             if (el) el.remove();
         }
 
+        // ── PREVIEW MODE ──────────────────────────────────────────────────
+        let _previewMode = false;
+
+        async function openPrintPreview() {
+            const tuName     = (document.getElementById('pdTuSelect')   || {}).value || '';
+            const scale      = parseInt((document.getElementById('pdScale')      || {}).value) || 1000;
+            const tenTu      = (document.getElementById('pdTenTu')      || {}).value?.trim() || '';
+            const soBanVe    = (document.getElementById('pdSoBanVe')    || {}).value?.trim() || '';
+            const nguoiLap   = (document.getElementById('pdNguoiLap')   || {}).value?.trim() || '';
+            const ngay       = (document.getElementById('pdNgay')       || {}).value;
+            const cvPhuTrach = (document.getElementById('pdCVPhuTrach') || {}).value?.trim() || '';
+            const csKhuVuc   = (document.getElementById('pdCSKhuVuc')   || {}).value?.trim() || '';
+            if (cvPhuTrach) localStorage.setItem('pd_pdCVPhuTrach', cvPhuTrach);
+            if (csKhuVuc)   localStorage.setItem('pd_pdCSKhuVuc',   csKhuVuc);
+            if (nguoiLap)   localStorage.setItem('pd_pdNguoiLap',   nguoiLap);
+            const rows = _filterRowsByTu(tuName);
+            if (!rows.length) { displayError('Không có dữ liệu để xem trước.'); return; }
+            $('#printDrawingModal').modal('hide');
+            _buildCableLines(rows);
+            _switchToPrintTile();
+            _zoomToScale(scale);
+            displayError('Đang tải bản đồ xem trước...');
+            await new Promise(r => setTimeout(r, 2000));
+            _showPrintOverlay({ rows, tenTu: tenTu || tuName, scale, ngay, nguoiLap, soBanVe, cvPhuTrach, csKhuVuc });
+            _previewMode = true;
+            document.getElementById('printPreviewBar').style.display = 'flex';
+        }
+
+        function closePrintPreview() {
+            _previewMode = false;
+            _hidePrintOverlay();
+            _removeCableLines();
+            _restoreOriginalTiles();
+            document.getElementById('printPreviewBar').style.display = 'none';
+        }
+
         // ── XUẤT PDF BẢN VẼ SƠ ĐỒ TUYẾN ─────────────────────────────────
         async function exportDrawingPDF() {
             const exportBtn = document.getElementById('pdExportBtn');
@@ -1462,28 +1613,50 @@
                 const tenTu    = (document.getElementById('pdTenTu')     || {}).value.trim();
                 const soBanVe  = (document.getElementById('pdSoBanVe')   || {}).value.trim();
                 const nguoiLap = (document.getElementById('pdNguoiLap')  || {}).value.trim();
-                const ngay     = (document.getElementById('pdNgay')      || {}).value;
+                const ngay       = (document.getElementById('pdNgay')        || {}).value;
+                const cvPhuTrach = (document.getElementById('pdCVPhuTrach') || {}).value?.trim() || '';
+                const csKhuVuc   = (document.getElementById('pdCSKhuVuc')   || {}).value?.trim() || '';
+                if (cvPhuTrach) localStorage.setItem('pd_pdCVPhuTrach', cvPhuTrach);
+                if (csKhuVuc)   localStorage.setItem('pd_pdCSKhuVuc',   csKhuVuc);
+                if (nguoiLap)   localStorage.setItem('pd_pdNguoiLap',   nguoiLap);
 
-                const rows = _filterRowsByTu(tuName);
+                const rows = _previewMode ? _filterRowsByTu(tuName) : _filterRowsByTu(tuName);
                 if (rows.length === 0) { displayError('Không có dữ liệu để in.'); return; }
 
-                // 1. Vẽ đường cáp
-                _buildCableLines(rows);
+                if (!_previewMode) {
+                    // 1. Vẽ đường cáp
+                    _buildCableLines(rows);
 
-                // 2. Switch tile sang CartoDB (giữ nguyên góc nhìn hiện tại)
-                _switchToPrintTile();
+                    // 2. Switch tile sang CartoDB + zoom theo tỉ lệ
+                    _switchToPrintTile();
+                    _zoomToScale(scale);
 
-                // 3. Đợi tiles tải (~3s)
-                displayError('Đang chờ bản đồ tải...');
-                await new Promise(r => setTimeout(r, 3000));
+                    // 3. Đợi tiles tải (~3s)
+                    displayError('Đang chờ bản đồ tải...');
+                    await new Promise(r => setTimeout(r, 3000));
 
-                // 4. Hiện overlay legend + title block
-                _showPrintOverlay({ rows, tenTu: tenTu || tuName, scale, ngay, nguoiLap, soBanVe });
-                await new Promise(r => setTimeout(r, 200));
+                    // 4. Hiện overlay legend + title block
+                    _showPrintOverlay({ rows, tenTu: tenTu || tuName, scale, ngay, nguoiLap, soBanVe, cvPhuTrach, csKhuVuc });
+                    await new Promise(r => setTimeout(r, 200));
+                }
 
                 // 5. Capture map (bao gồm overlay bên trong #map)
                 displayError('Đang chụp bản vẽ...');
                 const mapEl = document.getElementById('map');
+
+                // Force landscape ratio trước khi capture
+                const origStyleW = mapEl.style.width;
+                const mmW = paper === 'a3' ? 420 : 297;
+                const mmH = paper === 'a3' ? 297 : 210;
+                const targetW = Math.round(mapEl.offsetHeight * mmW / mmH);
+                let resized = false;
+                if (mapEl.offsetWidth < targetW) {
+                    mapEl.style.width = targetW + 'px';
+                    map.invalidateSize({ animate: false });
+                    await new Promise(r => setTimeout(r, 500));
+                    resized = true;
+                }
+
                 const canvas = await window.html2canvas(mapEl, {
                     useCORS: true,
                     allowTaint: false,
@@ -1521,6 +1694,13 @@
                 _hidePrintOverlay();
                 _removeCableLines();
                 _restoreOriginalTiles();
+                if (resized) {
+                    mapEl.style.width = origStyleW;
+                    map.invalidateSize({ animate: false });
+                }
+                _previewMode = false;
+                const bar = document.getElementById('printPreviewBar');
+                if (bar) bar.style.display = 'none';
                 if (exportBtn) { exportBtn.disabled = false; exportBtn.innerHTML = '<i class="fa fa-file-pdf-o"></i> Xuất PDF'; }
             }
         }
@@ -1756,6 +1936,26 @@
             const dPhi = toRad(lat2 - lat1), dLambda = toRad(lon2 - lon1);
             const a = Math.sin(dPhi/2)*Math.sin(dPhi/2) + Math.cos(phi1)*Math.cos(phi2)*Math.sin(dLambda/2)*Math.sin(dLambda/2);
             return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+        }
+
+        function haversineM(lat1, lon1, lat2, lon2) {
+            const R = 6371000;
+            const dLat = (lat2 - lat1) * Math.PI / 180;
+            const dLon = (lon2 - lon1) * Math.PI / 180;
+            const a = Math.sin(dLat/2)**2 +
+                      Math.cos(lat1 * Math.PI/180) * Math.cos(lat2 * Math.PI/180) * Math.sin(dLon/2)**2;
+            return Math.round(R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)));
+        }
+
+        function onMarkerGocChange(parentName, childLat, childLon, distInputId) {
+            if (!parentName || !Array.isArray(loadedData)) return;
+            const pRow = loadedData.slice(1).find(r => String(r[1]).trim() === parentName.trim());
+            if (!pRow) return;
+            const pLat = parseCoord(pRow[2]), pLon = parseCoord(pRow[3]);
+            if (!Number.isFinite(pLat) || !Number.isFinite(pLon)) return;
+            const dist = haversineM(childLat, childLon, pLat, pLon);
+            const el = document.getElementById(distInputId);
+            if (el && !el.value) el.value = dist;
         }
 
         function convertLatLonToVn2000(lat, lon) {
@@ -2277,6 +2477,7 @@
                     const jsonData = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
                     loadedData = jsonData;
                     dirtyMovedRows.clear(); updateDirtyMovedBadge();
+                    if (_cableVisible) { _removeCableLines(); _cableVisible = false; const _cb = document.getElementById('btnToggleCable'); if (_cb) _cb.classList.remove('active'); }
                     addMarkersToMap(jsonData);
                 } catch (error) {
                     displayError('Lỗi xử lý file Excel: ' + error.message);
@@ -2579,8 +2780,14 @@
                 lastMarkerPoleType = poleType; lastMarkerLampType = lampType;
                 lastMarkerStreet = street; lastMarkerWard = ward;
                 const type = currentMarkerType || 1;
+                const markerGocVal     = (document.getElementById('markerGocInput')      || {}).value?.trim() || '';
+                const khoangCachVal    = (document.getElementById('markerKhoangCachInput') || {}).value?.trim() || '';
                 let baseMarkerName = '', distanceToBase = '';
-                if (baseSelect && baseSelect.value !== '') {
+                if (markerGocVal) {
+                    baseMarkerName  = markerGocVal;
+                    distanceToBase  = khoangCachVal || haversineM(lat, lon,
+                        ...(()=>{ const p = (loadedData||[]).slice(1).find(r=>String(r[1]).trim()===markerGocVal); return p ? [parseCoord(p[2]),parseCoord(p[3])] : [lat,lon]; })());
+                } else if (baseSelect && baseSelect.value !== '') {
                     const bm = markers[parseInt(baseSelect.value, 10)];
                     if (bm) { baseMarkerName = bm.name||''; distanceToBase = Math.round(getDistanceMeters(bm.lat,bm.lon,lat,lon)); }
                 }
@@ -3275,6 +3482,10 @@
                     if (poleEl) { poleEl.style.display = ''; poleEl.value = row[8] || ''; }
                     currentMarkerType = 1;
                 }
+                const markerGocEl = document.getElementById('markerGocInput');
+                if (markerGocEl) markerGocEl.value = row[14] || '';
+                const khoangCachEl = document.getElementById('markerKhoangCachInput');
+                if (khoangCachEl) khoangCachEl.value = row[15] || '';
                 const coordsEl = document.getElementById('markerCoordsText');
                 if (coordsEl && Number.isFinite(lat) && Number.isFinite(lon))
                     coordsEl.textContent = `Tọa độ: ${lat.toFixed(6)}, ${lon.toFixed(6)}`;

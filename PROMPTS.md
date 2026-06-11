@@ -784,23 +784,494 @@ Không thay đổi gì khác.
 
 ---
 
+### PROMPT 3.6 — Zoom tự động theo tỉ lệ khi xuất PDF
+
+```
+Dự án: PWA khảo sát chiếu sáng — index.html.
+
+Ngữ cảnh:
+- `map` — Leaflet map global
+- `exportDrawingPDF()` đã có, lấy `scale` từ `pdScale` (500/1000/2000/5000)
+- Người dùng muốn: chọn tỉ lệ 1:1000 → app tự zoom map tới zoom level tương ứng
+- Công thức tính zoom từ tỉ lệ (tại latitude trung bình):
+    zoom = log2(40075016.686 * cos(lat_rad) * 96 / (25.4 * scale))
+    Trong đó lat_rad = map.getCenter().lat * Math.PI / 180
+- Sau khi setZoom, không fitBounds — chỉ zoom tại center hiện tại
+
+Nhiệm vụ: Thêm hàm `_zoomToScale(scale)` và gọi nó trong `exportDrawingPDF()`.
+
+**Thêm hàm (đặt ngay sau `_fitMapToRows()`):**
+```javascript
+function _zoomToScale(scale) {
+    const lat = map.getCenter().lat;
+    const latRad = lat * Math.PI / 180;
+    const zoom = Math.log2(40075016.686 * Math.cos(latRad) * 96 / (25.4 * scale));
+    map.setZoom(Math.round(zoom));
+}
+```
+
+**Sửa `exportDrawingPDF()`** — thêm ngay sau `_switchToPrintTile()`:
+```javascript
+// 2b. Zoom theo tỉ lệ
+_zoomToScale(scale);
+```
+
+Không thay đổi gì khác.
+```
+
+---
+
+### PROMPT 3.7 — Tổng số trụ + tổng chiều dài cáp trong overlay
+
+```
+Dự án: PWA khảo sát chiếu sáng — index.html.
+
+Ngữ cảnh:
+- `_showPrintOverlay(opts)` đã có, nhận `{ rows, tenTu, scale, ngay, nguoiLap, soBanVe }`
+- `rows` là mảng data (mỗi row = 1 trụ): row[15] = khoangCach (string, đơn vị m)
+- Muốn hiển thị thêm "Tổng: N trụ — X m cáp" ở góc dưới phải bên trong bản đồ
+  (bên trên title block, ngoài vùng bảng ký hiệu)
+
+Nhiệm vụ: Trong `_showPrintOverlay()`, thêm 1 div thống kê góc dưới-phải bên trong map.
+
+**Thêm vào `overlay.innerHTML` (trước thẻ đóng `</div>` cuối của print-frame, trước title block):**
+```javascript
+// Tính tổng
+const totalTru = rows.length;
+const totalCap = rows.reduce((s, r) => {
+    const v = parseFloat(String(r[15]).replace(',', '.'));
+    return s + (Number.isFinite(v) ? v : 0);
+}, 0);
+const statsHtml = `<div style="position:absolute;right:12px;bottom:100px;
+    background:rgba(255,255,255,.92);border:1.5px solid #1e293b;border-radius:3px;
+    padding:5px 10px;font-size:9px;font-weight:700;color:#0f172a;font-family:Arial,sans-serif;
+    text-align:right;white-space:nowrap;">
+    Tổng: ${totalTru} trụ<br>
+    Tổng cáp: ${totalCap.toFixed(0)} m
+</div>`;
+```
+
+**Chèn `${statsHtml}` vào bên trong div print-frame**, ngay trước div khung tên (title block).
+
+Không thay đổi gì khác.
+```
+
+---
+
+### PROMPT 3.8 — Mở rộng modal: Người kiểm tra + Đơn vị
+
+```
+Dự án: PWA khảo sát chiếu sáng — index.html.
+
+Ngữ cảnh:
+- Modal #printDrawingModal đã có các field: pdTuSelect, pdScale, pdPaper, pdTenTu, pdSoBanVe, pdNguoiLap, pdNgay
+- _showPrintOverlay(opts) nhận { rows, tenTu, scale, ngay, nguoiLap, soBanVe }
+- Title block hiện có hàng "CHUYÊN VIÊN PHỤ TRÁCH ĐỊA BÀN" và "CHIẾU SÁNG KHU VỰC TRUNG TÂM" — tên người trống
+- Muốn: thêm 2 field nhập tên người vào modal + điền vào 2 ô đó trong title block
+
+Nhiệm vụ: 3 thay đổi nhỏ.
+
+**Thay đổi 1 — Thêm vào modal body (sau pd-row người lập/ngày):**
+```html
+<div class="pd-row">
+  <div class="pd-item">
+    <div class="pd-label">Chuyên viên phụ trách địa bàn</div>
+    <input id="pdCVPhuTrach" class="pd-ctrl" type="text" placeholder="Tên chuyên viên">
+  </div>
+  <div class="pd-item">
+    <div class="pd-label">Chiếu sáng khu vực</div>
+    <input id="pdCSKhuVuc" class="pd-ctrl" type="text" placeholder="Tên phụ trách khu vực">
+  </div>
+</div>
+```
+
+**Thay đổi 2 — Trong `exportDrawingPDF()`**, thêm đọc 2 field mới:
+```javascript
+const cvPhuTrach = (document.getElementById('pdCVPhuTrach') || {}).value?.trim() || '';
+const csKhuVuc   = (document.getElementById('pdCSKhuVuc')  || {}).value?.trim() || '';
+```
+Và truyền vào `_showPrintOverlay({ ..., cvPhuTrach, csKhuVuc })`.
+
+**Thay đổi 3 — Trong `_showPrintOverlay(opts)`**, thêm `cvPhuTrach, csKhuVuc` vào destructure và điền vào 2 ô `tb-name-val` trống trong hàng 4 của title block:
+```javascript
+const { rows, tenTu, scale, ngay, nguoiLap, soBanVe, cvPhuTrach = '', csKhuVuc = '' } = opts;
+// 2 td tên người (hàng 4, cột 1 và 2):
+<td ...>${cvPhuTrach}</td>
+<td ...>${csKhuVuc}</td>
+```
+
+Không thay đổi gì khác.
+```
+
+---
+
+---
+
+### PROMPT 4.1 — Khung tên 1/2 chiều rộng
+
+```
+Dự án: PWA khảo sát chiếu sáng — index.html.
+
+Ngữ cảnh:
+- `_showPrintOverlay()` có title block: `position:absolute;left:0;right:0;bottom:0;height:110px`
+- Stats div: `position:absolute;right:12px;bottom:122px`
+- Muốn: title block thu 50% chiều rộng, đặt góc dưới-phải
+
+Nhiệm vụ: 2 thay đổi trong `_showPrintOverlay()`.
+
+1. Title block div: đổi `left:0;right:0` → `right:0;width:50%`
+2. Stats div: đổi `right:12px;bottom:122px` → `right:calc(50% + 12px);bottom:122px`
+
+Không thay đổi gì khác.
+```
+
+---
+
+### PROMPT 4.2 — Xem trước bản vẽ trước khi xuất PDF
+
+```
+Dự án: PWA khảo sát chiếu sáng — index.html.
+
+Ngữ cảnh:
+- Modal #printDrawingModal có nút "Xuất PDF" (id="pdExportBtn")
+- _showPrintOverlay(), _switchToPrintTile(), _zoomToScale(), _buildCableLines() đã có
+- Muốn: nút "Xem trước" → hiện overlay trên bản đồ → kiểm tra rồi mới xuất
+
+Nhiệm vụ: 3 thay đổi.
+
+**1. Thêm biến state + 2 hàm mới (sau _hidePrintOverlay):**
+```javascript
+let _previewMode = false;
+
+async function openPrintPreview() {
+    const tuName     = (document.getElementById('pdTuSelect')   || {}).value || '';
+    const scale      = parseInt((document.getElementById('pdScale') || {}).value) || 1000;
+    const tenTu      = (document.getElementById('pdTenTu')      || {}).value?.trim() || '';
+    const soBanVe    = (document.getElementById('pdSoBanVe')    || {}).value?.trim() || '';
+    const nguoiLap   = (document.getElementById('pdNguoiLap')   || {}).value?.trim() || '';
+    const ngay       = (document.getElementById('pdNgay')       || {}).value;
+    const cvPhuTrach = (document.getElementById('pdCVPhuTrach') || {}).value?.trim() || '';
+    const csKhuVuc   = (document.getElementById('pdCSKhuVuc')   || {}).value?.trim() || '';
+    const rows = _filterRowsByTu(tuName);
+    if (!rows.length) { displayError('Không có dữ liệu.'); return; }
+    $('#printDrawingModal').modal('hide');
+    _buildCableLines(rows);
+    _switchToPrintTile();
+    _zoomToScale(scale);
+    await new Promise(r => setTimeout(r, 2000));
+    _showPrintOverlay({ rows, tenTu: tenTu || tuName, scale, ngay, nguoiLap, soBanVe, cvPhuTrach, csKhuVuc });
+    _previewMode = true;
+    document.getElementById('printPreviewBar').style.display = 'flex';
+}
+
+function closePrintPreview() {
+    _previewMode = false;
+    _hidePrintOverlay();
+    _removeCableLines();
+    _restoreOriginalTiles();
+    document.getElementById('printPreviewBar').style.display = 'none';
+}
+```
+
+**2. Thanh nổi HTML (ngay sau thẻ mở `<div id="map"`):**
+```html
+<div id="printPreviewBar" style="display:none;position:absolute;top:12px;left:50%;
+  transform:translateX(-50%);z-index:9000;background:#1e293b;color:white;
+  border-radius:8px;padding:8px 16px;gap:10px;align-items:center;
+  font-size:13px;font-weight:600;box-shadow:0 4px 16px rgba(0,0,0,.4);">
+  <span><i class="fa fa-eye"></i> Xem trước bản vẽ</span>
+  <button onclick="exportDrawingPDF()" style="background:#2563eb;color:white;border:none;
+    border-radius:5px;padding:5px 12px;cursor:pointer;font-weight:700;">
+    <i class="fa fa-file-pdf-o"></i> Xuất PDF
+  </button>
+  <button onclick="closePrintPreview()" style="background:#475569;color:white;border:none;
+    border-radius:5px;padding:5px 10px;cursor:pointer;">Đóng</button>
+</div>
+```
+
+**3. Nút "Xem trước" vào modal footer (trước nút Xuất PDF):**
+```html
+<button type="button" class="btn btn-outline-secondary" onclick="openPrintPreview()">
+  <i class="fa fa-eye"></i> Xem trước
+</button>
+```
+
+**4. Sửa `exportDrawingPDF()`:** nếu `_previewMode === true`, bỏ qua build cables + switch tile + zoom + showOverlay (đã có), capture ngay.
+```javascript
+if (!_previewMode) {
+    _buildCableLines(rows);
+    _switchToPrintTile();
+    _zoomToScale(scale);
+    await new Promise(r => setTimeout(r, 3000));
+    _showPrintOverlay({ ... });
+    await new Promise(r => setTimeout(r, 200));
+}
+```
+```
+
+---
+
+### PROMPT 4.3 — Capture đúng tỉ lệ landscape
+
+```
+Dự án: PWA khảo sát chiếu sáng — index.html.
+
+Ngữ cảnh:
+- exportDrawingPDF() dùng html2canvas capture #map
+- Trên mobile, #map cao hơn rộng → PDF landscape bị méo tỉ lệ
+
+Nhiệm vụ: Trong exportDrawingPDF(), ngay trước html2canvas, thêm:
+```javascript
+// Force landscape ratio
+const mapEl = document.getElementById('map');
+const origStyleW = mapEl.style.width;
+const mmW = paper === 'a3' ? 420 : 297;
+const mmH = paper === 'a3' ? 297 : 210;
+const targetW = Math.round(mapEl.offsetHeight * mmW / mmH);
+let resized = false;
+if (mapEl.offsetWidth < targetW) {
+    mapEl.style.width = targetW + 'px';
+    map.invalidateSize({ animate: false });
+    await new Promise(r => setTimeout(r, 500));
+    resized = true;
+}
+```
+
+Trong `finally`, sau `_restoreOriginalTiles()`:
+```javascript
+if (resized) {
+    mapEl.style.width = origStyleW;
+    map.invalidateSize({ animate: false });
+}
+```
+
+Không thay đổi gì khác.
+```
+
+---
+
+### PROMPT 4.4 — Toggle đường cáp trên bản đồ chính
+
+```
+Dự án: PWA khảo sát chiếu sáng — index.html.
+
+Ngữ cảnh:
+- _buildCableLines(rows) và _removeCableLines() đã có
+- _filterRowsByTu(tuName): tuName=null/''/undefined trả về tất cả rows
+
+Nhiệm vụ: 2 thay đổi.
+
+**1. Thêm biến + hàm toggle (sau _removeCableLines):**
+```javascript
+let _cableVisible = false;
+function toggleCableLayer() {
+    _cableVisible = !_cableVisible;
+    const btn = document.getElementById('btnToggleCable');
+    if (_cableVisible) {
+        _buildCableLines(_filterRowsByTu(null));
+        if (btn) btn.classList.add('active');
+    } else {
+        _removeCableLines();
+        if (btn) btn.classList.remove('active');
+    }
+}
+```
+
+**2. Nút trong controls panel (sau nút "In bản vẽ"):**
+```html
+<button id="btnToggleCable" onclick="toggleCableLayer()" class="ctrl-btn outline" style="margin-top:4px;">
+  <i class="fa fa-share-alt"></i> Sơ đồ cáp
+</button>
+```
+
+**3. Reset trong loadFromCSV() và loadFromExcel()** (sau dirtyMovedRows.clear()):
+```javascript
+if (_cableVisible) { _removeCableLines(); _cableVisible = false;
+    const btn = document.getElementById('btnToggleCable');
+    if (btn) btn.classList.remove('active');
+}
+```
+
+Không thay đổi gì khác.
+```
+
+---
+
+### PROMPT 4.5 — Tự động tính khoảng cách cáp khi chọn Marker gốc
+
+```
+Dự án: PWA khảo sát chiếu sáng — index.html.
+
+Ngữ cảnh:
+- Popup chỉnh sửa marker có input "Marker gốc" (tên trụ cha) và input "Khoảng cách (m)"
+- loadedData chứa tất cả rows, mỗi row: row[1]=tên, row[2]=lat, row[3]=lon
+- Muốn: khi người dùng thay đổi Marker gốc → tự tính khoảng cách Haversine → điền vào ô Khoảng cách
+
+Nhiệm vụ: 2 thay đổi nhỏ.
+
+**1. Thêm hàm Haversine (đặt gần các hàm utility):**
+```javascript
+function haversineM(lat1, lon1, lat2, lon2) {
+    const R = 6371000;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat/2)**2 +
+              Math.cos(lat1 * Math.PI/180) * Math.cos(lat2 * Math.PI/180) *
+              Math.sin(dLon/2)**2;
+    return Math.round(R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)));
+}
+```
+
+**2. Trong HTML popup** (input Marker gốc), thêm handler `oninput` hoặc `onchange`:
+```javascript
+function onMarkerGocChange(parentName, childLat, childLon, distInputId) {
+    if (!parentName || !Array.isArray(loadedData)) return;
+    const pRow = loadedData.slice(1).find(r => String(r[1]).trim() === parentName.trim());
+    if (!pRow) return;
+    const pLat = parseCoord(pRow[2]), pLon = parseCoord(pRow[3]);
+    if (!Number.isFinite(pLat) || !Number.isFinite(pLon)) return;
+    const dist = haversineM(childLat, childLon, pLat, pLon);
+    const el = document.getElementById(distInputId);
+    if (el && !el.value) el.value = dist; // chỉ điền nếu còn trống
+}
+```
+Gọi từ `onchange` của input Marker gốc, truyền lat/lon của marker hiện tại.
+
+Không thay đổi gì khác.
+```
+
+---
+
+### PROMPT 4.6 — Nhớ field modal bằng localStorage
+
+```
+Dự án: PWA khảo sát chiếu sáng — index.html.
+
+Ngữ cảnh:
+- openPrintDrawingModal() điền pdNguoiLap từ currentUser nếu còn trống
+- Muốn: pdCVPhuTrach, pdCSKhuVuc, pdNguoiLap được nhớ sau mỗi lần xuất/preview
+- localStorage keys: 'pd_cvPhuTrach', 'pd_csKhuVuc', 'pd_nguoiLap'
+
+Nhiệm vụ: 2 điểm sửa.
+
+**1. Trong openPrintDrawingModal()** — sau khi điền nguoiLap từ currentUser, đọc localStorage:
+```javascript
+['pdCVPhuTrach','pdCSKhuVuc','pdNguoiLap'].forEach(id => {
+    const el = document.getElementById(id);
+    const key = 'pd_' + id;
+    if (el && !el.value) el.value = localStorage.getItem(key) || '';
+});
+```
+
+**2. Trong exportDrawingPDF() và openPrintPreview()** — sau khi đọc các field, lưu vào localStorage:
+```javascript
+if (cvPhuTrach) localStorage.setItem('pd_pdCVPhuTrach', cvPhuTrach);
+if (csKhuVuc)   localStorage.setItem('pd_pdCSKhuVuc',   csKhuVuc);
+if (nguoiLap)   localStorage.setItem('pd_pdNguoiLap',   nguoiLap);
+```
+
+Không thay đổi gì khác.
+```
+
+---
+
+### PROMPT 4.7 — Sync banve-mau.html với overlay thực tế
+
+```
+Dự án: PWA khảo sát chiếu sáng — banve-mau.html.
+
+Ngữ cảnh:
+- banve-mau.html là file preview tĩnh, hiện đang lệch so với _showPrintOverlay() trong index.html
+- Các thay đổi cần sync:
+  1. Thêm dải tiêu đề (title header strip) ở top:0 bên trong .print-frame
+     - Dòng 1: "BẢN VẼ SƠ ĐỒ TUYẾN TRẠM ĐÈN HỆ THỐNG CHIẾU SÁNG ĐÔ THỊ" (12px, bold)
+     - Dòng 2: "TỦ ĐIỀU KHIỂN - [tên tủ mẫu]   TL: 1 : 1 000" (9px)
+  2. Title block: cập nhật thành 4 hàng mới (hàng 1 = label gộp, hàng 2–3 trống, hàng 4 = tên)
+  3. Stats div: góc dưới phải, "Tổng: N trụ / X m cáp"
+  4. Height title block: 110px thay vì giá trị cũ
+
+Nhiệm vụ: Rewrite banve-mau.html để visual match với _showPrintOverlay().
+Giữ nguyên: .paper > .print-frame structure, map-bg background, legend-float, cable SVG lines.
+Thay thế: title block HTML + thêm header strip + thêm stats div.
+```
+
+---
+
+### PROMPT 4.8 — Phát hiện vòng lặp cáp trước khi vẽ
+
+```
+Dự án: PWA khảo sát chiếu sáng — index.html.
+
+Ngữ cảnh:
+- _buildCableLines(rows) vẽ polyline từ row[14] (tên cha) → row[1] (tên con)
+- Nếu A.markerGoc=B và B.markerGoc=A → vẽ được nhưng sơ đồ sai (không báo lỗi)
+
+Nhiệm vụ: Thêm hàm detect cycle + gọi trong _buildCableLines().
+
+**Thêm hàm (đặt ngay trước _buildCableLines):**
+```javascript
+function _detectCableCycle(rows) {
+    const parent = {};
+    rows.forEach(r => {
+        const name = String(r[1] || '').trim();
+        const par  = String(r[14] || '').trim();
+        if (name && par && name !== par) parent[name] = par;
+    });
+    for (const start of Object.keys(parent)) {
+        const visited = new Set();
+        let cur = start;
+        while (cur && parent[cur]) {
+            if (visited.has(cur)) return true;
+            visited.add(cur); cur = parent[cur];
+        }
+    }
+    return false;
+}
+```
+
+**Đầu _buildCableLines(rows)**, thêm:
+```javascript
+if (_detectCableCycle(rows)) {
+    displayError('⚠ Phát hiện vòng lặp Marker gốc — kiểm tra lại dữ liệu trước khi vẽ cáp.');
+    return;
+}
+```
+
+Không thay đổi gì khác.
+```
+
+---
+
 ## THỨ TỰ CHẠY KHUYẾN NGHỊ
 
 ```
-1.1 → gas-khaosat.js: thêm log_action           ✅ done
-1.2 → index.html: thêm _logAction() + hook 3 điểm ✅ done
-1.3 → lichsu.html: tạo trang mới                 ✅ done
-1.4 → index.html: hiện option Lịch sử cho admin  ✅ done
+1.1 → gas-khaosat.js: thêm log_action              ✅ done
+1.2 → index.html: thêm _logAction() + hook 3 điểm  ✅ done
+1.3 → lichsu.html: tạo trang mới                   ✅ done
+1.4 → index.html: hiện option Lịch sử cho admin    ✅ done
 
-2.1 → index.html: logic push version.json         ✅ done
-2.2 → index.html: badge version trong topbar      ✅ done
+2.1 → index.html: logic push version.json           ✅ done
+2.2 → index.html: badge version trong topbar        ✅ done
 
-3.1 → index.html: nút In bản vẽ + _loadPrintLibs()
-3.2 → index.html: modal HTML + openPrintDrawingModal()
-3.3 → index.html: _buildCableLines() + helpers
-3.4 → index.html: tile switch + overlay legend/titleblock
-3.5 → index.html: exportDrawingPDF() main function
+3.1 → index.html: nút In bản vẽ + _loadPrintLibs() ✅ done
+3.2 → index.html: modal HTML + openPrintDrawingModal() ✅ done
+3.3 → index.html: _buildCableLines() + helpers      ✅ done
+3.4 → index.html: tile switch + overlay legend/titleblock ✅ done
+3.5 → index.html: exportDrawingPDF() main function  ✅ done
+3.6 → index.html: _zoomToScale()                   ✅ done
+3.7 → index.html: stats trụ/cáp trong overlay      ✅ done
+3.8 → index.html: field cvPhuTrach + csKhuVuc       ✅ done
+
+4.1 → index.html: title block 50% chiều rộng
+4.2 → index.html: nút Xem trước + preview bar
+4.3 → index.html: force landscape ratio trước capture
+4.4 → index.html: toggle đường cáp trên bản đồ chính
+4.5 → index.html: tự động tính khoảng cách Haversine khi chọn Marker gốc
+4.6 → index.html: localStorage nhớ field modal
+4.7 → banve-mau.html: sync lại với _showPrintOverlay() thực tế
+4.8 → index.html: cycle detection trước _buildCableLines()
 ```
 
-Sau khi hoàn thành tính năng 3:
-→ Bump sw.js CACHE từ 'lighting-survey-v4' → 'lighting-survey-v5' để clear cache cũ
+⚠️ Việc cần làm TRƯỚC KHI CHẠY 4.x:
+→ Bump sw.js v5 → v6 (người dùng chưa thấy thay đổi 3.x)
+→ Redeploy GAS New version (header VN2000 từ session trước)
