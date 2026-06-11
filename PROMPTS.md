@@ -1684,6 +1684,145 @@ Không thay đổi gì khác.
 
 ---
 
+---
+
+## TÍNH NĂNG 6: Sửa lỗi & cải tiến form chỉnh sửa marker
+
+---
+
+### PROMPT 6.1 — Fix chế độ Edit marker (`_editingRow`)
+
+```
+Dự án: PWA khảo sát chiếu sáng — index.html.
+
+Vấn đề hiện tại:
+- saveMarkerPopup() luôn tạo marker MỚI dù đang sửa marker cũ → dữ liệu bị nhân đôi
+- Khi đổi tên marker khi sửa → GAS không tìm được row cũ (ID bị mất)
+- Nút Lưu bị gọi 2 lần do có cả onclick attribute lẫn addEventListener
+
+Nhiệm vụ: 4 thay đổi.
+
+**1. Thêm biến state** ngay sau `let _currentPopupRow = null;`:
+```javascript
+let _editingRow = null; // row đang sửa (null = thêm mới)
+```
+
+**2. `openEditMarker()`** — set `_editingRow = row` TRƯỚC khi gọi `showMarkerPopupAt()`:
+```javascript
+_editingRow = row;
+...
+showMarkerPopupAt(lat, lon);
+// Hủy geocoding — dùng dữ liệu từ row
+_pendingGeocodePromise = Promise.resolve(null);
+```
+
+Trong setTimeout (80ms), điền đầy đủ field từ row (cabinet trước, name sau + dispatch input),
+khôi phục ảnh cũ vào `#markerImagePreview`, khôi phục placeholder Đường/Phường.
+
+**3. `hideMarkerPopup()`** — thêm `_editingRow = null;` sau `markerPopupLocation = null;`
+
+**4. `saveMarkerPopup()`** — tách 2 nhánh sau khi build `newRow`:
+
+```javascript
+if (_editingRow) {
+    // EDIT: giữ ID, xóa marker cũ, update row in-place, tạo marker mới
+    const existingId = _editingRow[0];
+    // Xóa marker cũ khỏi map + labelLayerGroup
+    // Cập nhật _editingRow[] in-place (giữ id, tất cả field khác ghi đè)
+    const rowRef = _editingRow; // lưu trước hideMarkerPopup() reset về null
+    hideMarkerPopup();
+    syncRowToGAS(rowRef);
+    _logAction('edit', rowRef, {...});
+    displayError('Đã cập nhật marker...');
+} else {
+    // ADD: logic cũ
+    loadedData.push(newRow); newMarkerRows.push(newRow);
+    ...
+}
+```
+
+**5. Xóa addEventListener trùng** — bỏ đoạn:
+```javascript
+if (saveBtn) saveBtn.addEventListener('click', saveMarkerPopup);
+if (cancelBtn) cancelBtn.addEventListener('click', cancelMarkerPopup);
+```
+(onclick đã khai báo trong HTML)
+
+Không thay đổi gì khác.
+```
+
+---
+
+### PROMPT 6.2 — Cải tiến dropdown Marker gốc (baseSelect)
+
+```
+Dự án: PWA khảo sát chiếu sáng — index.html.
+
+Vấn đề hiện tại:
+- Regex normalizeMarkerBaseName dùng /[\s\-]*\d+$/ → không strip dấu _ → VTS_H232VTS_19 cho basename VTS_H232VTS_ (thừa _), không khớp với tủ VTS_H232VTS
+- Tủ điều khiển không xuất hiện trong baseSelect
+- Chọn option trong baseSelect không cập nhật markerGocInput → khi lưu dùng giá trị cũ
+
+Nhiệm vụ: 3 thay đổi.
+
+**1. Sửa regex** trong `normalizeMarkerBaseName()`:
+```javascript
+const base = (name || '').toString().trim().replace(/[_\s\-]*\d+$/, '');
+```
+(thêm `_` vào character class)
+
+**2. Trong `showMarkerPopupAt()`**, thay `baseSelect.onchange = updateBaseDistanceInfo` bằng hàm `_fillBaseSelect()` mới:
+- Luôn thêm tủ (từ `cabinetInput.value`) vào đầu list với nhãn `[tủ]`
+- Sau đó các marker cùng basename
+- Gọi `_fillBaseSelect` từ `oninput` của cả `nameInput` và `cabinetInput`
+
+**3. `baseSelect.onchange`** — ngoài `updateBaseDistanceInfo`, cũng sync sang `markerGocInput` và `markerKhoangCachInput`:
+```javascript
+const bm = markers[parseInt(baseSelect.value, 10)];
+if (bm) {
+    gocEl.value = bm.name;
+    kEl.value = Math.round(getDistanceMeters(bm.lat, bm.lon, markerPopupLocation[0], markerPopupLocation[1]));
+}
+```
+
+**4. `openEditMarker()` setTimeout** — sau khi set cabinet + name + dispatch input, pre-select option khớp `row[14]`:
+```javascript
+const matchOpt = Array.from(bsel.options).find(o => {
+    const m = markers[parseInt(o.value, 10)];
+    return m && m.name.trim() === linkedGoc;
+});
+if (matchOpt) { bsel.value = matchOpt.value; bsel.dispatchEvent(new Event('change')); }
+```
+
+Không thay đổi gì khác.
+```
+
+---
+
+### PROMPT 6.3 — Nhãn khoảng cách cáp luôn hiển thị
+
+```
+Dự án: PWA khảo sát chiếu sáng — index.html.
+
+Vấn đề: nhãn số mét chỉ hiện khi row[15] có giá trị. Nếu trống → không có nhãn.
+
+Nhiệm vụ: Trong `_buildCableLines()`, luôn vẽ nhãn — dùng row[15] nếu có, tính Haversine nếu không:
+
+```javascript
+const distVal = String(r[15] || '').trim();
+const distLabel = distVal || String(haversineM(from[0], from[1], to[0], to[1]));
+const mid = [(from[0]+to[0])/2, (from[1]+to[1])/2];
+L.marker(mid, {
+    icon: L.divIcon({ className:'cable-label', html:`<span>${distLabel}m</span>`, iconSize:null, iconAnchor:[20,10] }),
+    interactive: false, keyboard: false
+}).addTo(_cableLayerGroup);
+```
+
+Không thay đổi gì khác.
+```
+
+---
+
 ## THỨ TỰ CHẠY KHUYẾN NGHỊ
 
 ```
@@ -1716,6 +1855,10 @@ Không thay đổi gì khác.
 5.1 → index.html: dropdown chọn tủ khi bật sơ đồ cáp (multi-select)    ✅ done
 5.2 → index.html: chế độ sửa cáp — xóa đoạn, đổi điểm gốc trực tiếp    ✅ done
 5.3 → index.html: xoay bản đồ khi xuất PDF (slider -60°→+60°)          ✅ done
+
+6.1 → index.html: fix edit marker (_editingRow, double-listener, rowRef) ✅ done
+6.2 → index.html: cải tiến baseSelect (tủ luôn hiện, sync markerGocInput) ✅ done
+6.3 → index.html: nhãn khoảng cách cáp luôn hiển thị (Haversine fallback) ✅ done
 ```
 
 ⚠️ Việc cần làm TRƯỚC KHI CHẠY 5.x:

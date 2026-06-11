@@ -685,11 +685,32 @@ Nếu phát hiện cycle → `displayError('Phát hiện vòng lặp cáp — ki
 | ~~Bump sw.js v5 → v6~~ | ✅ Đã bump lên v6 | — |
 | **Redeploy GAS New version** | Header sheet DanhSachTru mở rộng VN2000 từ session trước | 🔴 Cao |
 | ~~Sync banve-mau.html~~ | ✅ Đã rewrite đồng bộ với `_showPrintOverlay()` | — |
-| **Implement 4.4.1 + 4.4.2** | Sơ đồ cáp chọn tủ + chỉnh sửa trực tiếp | 🟡 Trung bình |
+| ~~Implement 4.4.1 + 4.4.2~~ | ✅ Đã implement (PROMPT 5.1 + 5.2) | — |
+| ~~Fix edit marker mode~~ | ✅ `_editingRow` state, double-listener, geocode cancel | — |
 
 ---
 
 ## Các pattern quan trọng
+
+### Chỉnh sửa marker — `_editingRow`
+
+`saveMarkerPopup()` dùng biến `_editingRow` để phân biệt chế độ:
+- **`_editingRow = null`** → thêm mới: `loadedData.push(newRow)`, tạo marker mới trên map
+- **`_editingRow = row`** → sửa: cập nhật row in-place (giữ `row[0]` = ID), xóa marker cũ, tạo marker mới
+
+`openEditMarker()`:
+1. Set `_editingRow = _currentPopupRow` trước khi gọi `showMarkerPopupAt()`
+2. Hủy geocoding ngay (`_pendingGeocodePromise = Promise.resolve(null)`) — dùng dữ liệu row
+3. setTimeout 80ms: điền toàn bộ field từ row, khôi phục ảnh cũ, pre-select baseSelect khớp `row[14]`
+
+`hideMarkerPopup()` reset `_editingRow = null`. Capture `const rowRef = _editingRow` trước khi gọi `hideMarkerPopup()` để tránh null reference khi gọi `syncRowToGAS`.
+
+### Dropdown Marker gốc — `markerBaseSelect`
+
+- `normalizeMarkerBaseName(name)`: `replace(/[_\s\-]*\d+$/, '')` — strip `_NNN` ở cuối (kể cả dấu gạch dưới) để `VTS_H232VTS_19` → basename `VTS_H232VTS` khớp với tủ `VTS_H232VTS`
+- `_fillBaseSelect()`: luôn thêm tủ điều khiển (`markerCabinetInput.value`) vào đầu list gắn nhãn `[tủ]`, sau đó các trụ cùng basename
+- Khi `baseSelect` thay đổi → tự sync sang `markerGocInput` + tính khoảng cách Haversine vào `markerKhoangCachInput`
+- Gọi `_fillBaseSelect()` từ `oninput` của cả `nameInput` và `cabinetInput`
 
 ### Reverse geocoding không đồng bộ
 ```javascript
@@ -697,6 +718,8 @@ Nếu phát hiện cycle → `displayError('Phát hiện vòng lặp cáp — ki
 _pendingGeocodePromise = reverseGeocode(lat, lon);
 // saveMarkerPopup() await promise này nếu vẫn còn pending
 if (_pendingGeocodePromise) await _pendingGeocodePromise;
+// openEditMarker() hủy geocoding để dùng dữ liệu row thay vì tra cứu lại
+_pendingGeocodePromise = Promise.resolve(null);
 ```
 
 ### Đồng bộ marker đã kéo — `dirtyMovedRows`

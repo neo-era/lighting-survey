@@ -302,16 +302,20 @@
     <div class="steps">
       <div class="step">
         <div class="sn">1</div>
-        <div class="sc"><strong>Nhấn "Chỉnh sửa"</strong> trong popup để mở form chỉnh sửa.</div>
+        <div class="sc"><strong>Nhấn "✏️ Sửa"</strong> trong popup — form mở với toàn bộ thông tin hiện tại của marker (tên, loại, tủ điều khiển, đường/phường, ảnh…).</div>
       </div>
       <div class="step">
         <div class="sn">2</div>
-        <div class="sc"><strong>Kéo marker</strong> trên bản đồ để thay đổi vị trí (hỗ trợ drag).</div>
+        <div class="sc"><strong>Trường "Marker gốc (cùng basename)"</strong> — dropdown tự động gợi ý tủ điều khiển (đầu tiên, gắn nhãn <em>[tủ]</em>) và các trụ cùng basename. Chọn từ dropdown sẽ tự tính khoảng cách cáp (Haversine) vào ô Khoảng cách.</div>
       </div>
       <div class="step">
         <div class="sn">3</div>
-        <div class="sc"><strong>Nhấn "Lưu marker"</strong> — dữ liệu cập nhật trực tiếp vào Google Sheets (upsert theo tên trụ / ID).</div>
+        <div class="sc"><strong>Nhấn "Lưu marker"</strong> — dữ liệu cập nhật đúng hàng trên Google Sheets (nhận dạng theo ID, giữ nguyên dù đổi tên). Ảnh cũ được giữ lại nếu không upload ảnh mới.</div>
       </div>
+    </div>
+    <div class="note note-info">
+      <span class="note-icon">💡</span>
+      <div>Khi mở form sửa, app <strong>không tra cứu lại địa chỉ</strong> (geocoding) để tránh ghi đè dữ liệu Đường/Phường đã có. Nếu cần tra cứu lại, nhấn "Vị trí hiện tại" hoặc "Chọn trên bản đồ" trong form.</div>
     </div>
 
     <h3>Đồng bộ vị trí marker đã kéo</h3>
