@@ -136,17 +136,17 @@ Tự động cập nhật tại 2 điểm: `saveMarkerPopup()` (thêm/sửa mark
 }
 ```
 
-### Service Worker (sw.js) — hiện tại v3
+### Service Worker (sw.js) — hiện tại v5
 
 | Cache name      | Chiến lược   | Nội dung                                          |
 |-----------------|--------------|---------------------------------------------------|
-| `lighting-survey-v3` | Network-first | `index.html`, `.html` (luôn lấy code mới)   |
-| `lighting-survey-v3` | Cache-first  | Icon/ảnh tĩnh (pre-cache khi install)             |
+| `lighting-survey-v5` | Network-first | `index.html`, `.html` (luôn lấy code mới)   |
+| `lighting-survey-v5` | Cache-first  | Icon/ảnh tĩnh (pre-cache khi install)             |
 | `map-tiles-v1`  | Cache-first  | Tile bản đồ OSM/Google/CartoDB (tối đa 300 tile)  |
 | `cdn-libs-v1`   | Cache-first  | Toàn bộ CDN JS/CSS/fonts (jQuery, Leaflet, v.v.)  |
 
 - Google Sheets CSV + GAS URL: **luôn fetch mới**, không cache
-- **Bump cache name** (`v3` → `v4`, v.v.) mỗi khi cần xóa cache cũ hoàn toàn
+- **Bump cache name** (`v5` → `v6`, v.v.) mỗi khi cần xóa cache cũ hoàn toàn
 - Đăng ký trong `index.html` (cuối body):
 ```javascript
 if ('serviceWorker' in navigator) {
@@ -164,10 +164,12 @@ if ('serviceWorker' in navigator) {
 | jQuery                    | 3.7.1     | Luôn (cuối body)    | Bootstrap dependency            |
 | XLSX.js                   | 0.18.5    | Luôn (cuối body)    | Đọc/ghi Excel (fallback)        |
 | ExcelJS                   | 4.3.1     | **Lazy** — khi cần  | Ghi Excel có hình ảnh (primary) |
+| jsPDF                     | 2.5.1     | **Lazy** — khi in   | Tạo file PDF bản vẽ             |
+| html2canvas               | 1.4.1     | **Lazy** — khi in   | Chụp map canvas → image         |
 | Nominatim (OSM)           | —         | Fetch on-demand     | Reverse geocoding (tiếng Việt)  |
 | OSRM                      | —         | Fetch on-demand     | Chỉ đường xe máy                |
 
-> **Lưu ý tải thư viện:** jQuery + Bootstrap chuyển xuống cuối `<body>` (không còn ở `<head>`) để HTML render ngay. ExcelJS lazy-load qua `_loadExcelJS()` — chỉ tải khi user gọi `saveMarkerData()`, `updateGitHubExcel()`, hoặc `exportReport()`.
+> **Lưu ý tải thư viện:** jQuery + Bootstrap chuyển xuống cuối `<body>` (không còn ở `<head>`) để HTML render ngay. ExcelJS lazy-load qua `_loadExcelJS()` — chỉ tải khi user gọi `saveMarkerData()`, `updateGitHubExcel()`, hoặc `exportReport()`. jsPDF + html2canvas lazy-load qua `_loadPrintLibs()` — chỉ tải khi user bấm "Xuất PDF" trong modal In bản vẽ.
 
 ## Phân quyền người dùng
 
@@ -255,73 +257,137 @@ canDelete() // true nếu role = admin | user
 
 ---
 
-### 3. In bản vẽ sơ đồ tuyến trạm đèn (chưa implement)
+### 3. In bản vẽ sơ đồ tuyến trạm đèn ✅ đã implement
 
-**Mục tiêu:** Xuất bản vẽ kỹ thuật PDF chuẩn (A3/A4) từ dữ liệu khảo sát, gồm:
-- Nền bản đồ thực (OpenStreetMap/CartoDB)
-- Ký hiệu trụ/tủ đúng chuẩn (SVG icon đã có)
-- Đường cáp nối giữa các trụ + khoảng cách
+**Mục tiêu:** Xuất bản vẽ kỹ thuật PDF (A3/A4 ngang) từ dữ liệu khảo sát, mô phỏng mẫu bản vẽ KNỞ P12 Trần Thiện Chánh:
+- Nền bản đồ thực (CartoDB Voyager — có CORS)
+- Ký hiệu trụ/tủ SVG đúng chuẩn
+- **Đường cáp nối giữa các trụ + nhãn khoảng cách (m)**
 - Bảng ký hiệu (legend) bên trái
-- Khung bản vẽ (title block) phía dưới
+- **Khung bản vẽ (title block) phía dưới theo chuẩn bản vẽ kỹ thuật**
 
-**Thách thức kỹ thuật chính — CORS tiles:**
-- `html2canvas` không capture được tile OSM tiêu chuẩn (không có header CORS)
-- **Giải pháp**: khi chuẩn bị in, tạm chuyển tile layer sang **CartoDB Voyager** (có CORS) với `crossOrigin: 'anonymous'`, capture bằng `html2canvas({ useCORS: true, allowTaint: false })`, rồi khôi phục tile gốc
+---
+
+#### Đường cáp (cable lines) — `_buildCableLines(rows)`
+
+**Nguồn dữ liệu:**
+- `row[14]` = `Marker gốc` — tên trụ cha (điểm nguồn cáp)
+- `row[15]` = `Khoảng cách (m)` — chiều dài đoạn cáp đến trụ cha
+
+**Cách vẽ:**
+```
+Mỗi trụ có row[14] → tìm tọa độ trụ cha → vẽ polyline nét đứt
+Nhãn khoảng cách đặt tại midpoint của đoạn cáp
+```
+
+**Thông số Leaflet:**
+```javascript
+L.polyline([from, to], {
+    color: '#1e40af', weight: 2.5, dashArray: '7 5', opacity: 0.8
+})
+// Nhãn midpoint:
+L.divIcon({ className:'cable-label', html:`<span>${dist}m</span>` })
+// CSS: nền trắng semi-transparent, viền xanh #1e40af, font 11px bold
+```
+
+**Cách nhập dữ liệu cáp vào khảo sát:**
+- Trụ đầu tuyến (gần tủ nhất): `Marker gốc` = tên tủ điều khiển, `Khoảng cách` = khoảng cách thực tế
+- Trụ tiếp theo: `Marker gốc` = tên trụ trước, `Khoảng cách` = khoảng cách đến trụ trước
+- → App tự vẽ chuỗi đoạn cáp liên tiếp tạo thành sơ đồ tuyến
+
+**Ký hiệu trong legend:**
+```
+───── ─────   Cáp nguồn  (đường đứt nét xanh đậm)
+```
+
+---
+
+#### Khung tên bản vẽ (title block) — `_showPrintOverlay()`
+
+**Bố cục tổng thể** (inject HTML vào `#map`, `position:absolute; inset:0`):
+```
+┌────────────────────────────────────────────────────────────────────────┐
+│ BẢNG KÝ   │                                                            │
+│ HIỆU      │          BẢN ĐỒ (CartoDB + marker SVG + đường cáp)        │
+│ (150px)   │                                                            │
+│ icon + tên│                                                            │
+│ từng loại │                                                            │
+│ ──── cáp  │                                                            │
+├───────────┴────────────────────────┬──────────┬───────────┬──────┬────┤
+│ BẢN VẼ SƠ ĐỒ TUYẾN TRẠM ĐÈN       │ TỈ LỆ    │ NGƯỜI LẬP │ NGÀY │ SBV│
+│ HỆ THỐNG CHIẾU SÁNG ĐÔ THỊ        │          │           │      │    │
+│ [Tên bản vẽ / khu vực — to, đậm]  │ 1:1000   │ Nguyễn... │ ... │ 001│
+└────────────────────────────────────┴──────────┴───────────┴──────┴────┘
+  ←──────────────────── flex:1 ──────────────────→  ←── cố định ──────→
+                                                     (90 / 110 / 90 / 70px)
+```
+
+**Cấu trúc HTML title block** (grid 5 cột, cao 64px, viền top 3px #1e293b):
+| Cột | Nội dung | Min-width |
+|-----|----------|-----------|
+| 1 (flex:1) | Tiêu đề nhỏ "BẢN VẼ SƠ ĐỒ..." + tên bản vẽ lớn bên dưới | — |
+| 2 | TỈ LỆ / `1 : 1000` | 90px |
+| 3 | NGƯỜI LẬP / `currentUser.displayName` | 110px |
+| 4 | NGÀY / `pdNgay` | 90px |
+| 5 | SỐ BV / `pdSoBanVe` | 70px |
+
+**Bảng ký hiệu legend** (trái, rộng 150px, cao = map - 64px, viền phải 2px):
+- Header: "Bảng ký hiệu" (10px, uppercase, bold)
+- Mỗi loại marker có trong tủ được chọn: SVG icon + tên loại
+- Cuối cùng: ký hiệu đường cáp (nét đứt xanh + label "Cáp nguồn")
+- Dùng `_makeLampIconSvg(color)` / `_makeCabinetIconSvg(color)` — SVG mini 14×16~20px
+
+---
+
+#### CORS tiles — giải pháp
+
+- `html2canvas` không capture được tile OSM/Google (không có CORS header)
+- **Giải pháp**: `_switchToPrintTile()` dùng `map.eachLayer()` lưu + xóa tất cả `L.TileLayer`, thêm CartoDB Voyager với `crossOrigin: 'anonymous'`
+- `_restoreOriginalTiles()` restore lại sau khi capture
+- Đợi 3 giây sau khi switch để CartoDB load xong
 - Tile URL CartoDB: `https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png`
 
-**Thư viện cần thêm (lazy-load):**
-| Thư viện  | CDN                                                              | Mục đích               |
-|-----------|------------------------------------------------------------------|------------------------|
-| jsPDF     | `cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js`  | Tạo file PDF           |
-| html2canvas | `cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js` | Chụp map canvas |
+---
 
-**Nguồn dữ liệu đường cáp:**
-- `row[14]` = `Marker gốc` — tên trụ cha (điểm kết nối cáp)
-- `row[15]` = `Khoảng cách (m)` — khoảng cách đến trụ cha
-- Dựng graph: mỗi trụ → trụ cha → vẽ polyline + label khoảng cách ở giữa đoạn
+#### Luồng xuất PDF (`exportDrawingPDF()`)
 
-**Cấu trúc bản vẽ (mô phỏng mẫu KNỞ P12 Trần Thiện Chánh):**
-```
-┌─────────────────────────────────────────────────────────────────┐
-│ BẢNG KÝ HIỆU │                                                  │
-│               │         BẢN ĐỒ (nền CartoDB)                    │
-│ 1. Đèn LED    │       + ký hiệu SVG trụ/tủ                      │
-│ 2. Trụ STK    │       + đường cáp + khoảng cách                 │
-│ 3. Tủ CS nổi  │                                                  │
-│ ...           │                                                  │
-├───────────────┴──────────────────────────────────────────────────┤
-│ KHUNG BẢN VẼ: Tên tủ | Khu vực | Tỉ lệ | Ngày | Số bản vẽ      │
-└─────────────────────────────────────────────────────────────────┘
-```
+1. Lazy-load jsPDF + html2canvas (`_loadPrintLibs()`)
+2. `_filterRowsByTu(tuName)` lọc rows theo tủ điều khiển
+3. `_buildCableLines(rows)` vẽ đường cáp lên map
+4. `_switchToPrintTile()` chuyển sang CartoDB (giữ nguyên góc nhìn — không auto-zoom)
+5. Đợi 3s để tiles tải
+6. `_showPrintOverlay(opts)` inject legend + title block vào `#map`
+7. `html2canvas(#map, { useCORS:true, scale:2, ignoreElements: controls/toast })`
+8. `new jsPDF({ orientation:'landscape', format:'a3'/'a4' })` → `addImage` full trang
+9. `doc.save('tên-ngày.pdf')`
+10. `finally`: `_hidePrintOverlay()`, `_removeCableLines()`, `_restoreOriginalTiles()`
 
-**Tỉ lệ bản vẽ:**
-- Preset cho user chọn: 1:500 / 1:1000 / 1:2000 / 1:5000
-- Auto-zoom map đến zoom tương ứng khi chọn tỉ lệ
-- Tính zoom từ tỉ lệ: `zoom = log2(559082264.028 / scale / (DPI/96))`
+---
 
-**Khung bản vẽ (title block) — các trường nhập:**
-| Trường              | Nguồn dữ liệu              |
-|---------------------|----------------------------|
-| Tên tủ điều khiển   | Chọn từ dữ liệu khảo sát   |
-| Phường/Xã, Quận     | Tự động từ dữ liệu marker  |
-| Tỉ lệ               | User chọn                  |
-| Ngày lập            | Mặc định hôm nay           |
-| Người lập           | `currentUser.displayName`  |
-| Số bản vẽ           | Tự động hoặc nhập tay      |
+#### Các hàm đã implement (index.html)
 
-**Luồng xuất PDF:**
-1. User mở modal "In bản vẽ" → nhập thông tin title block, chọn tỉ lệ, chọn khổ giấy (A3/A4)
-2. App tạm chuyển tile sang CartoDB, zoom map đến tỉ lệ phù hợp
-3. Vẽ đường cáp lên `L.polyline` với className riêng
-4. Đợi tiles load xong (`map.on('load')` hoặc timeout 2s)
-5. `html2canvas(mapContainer, { useCORS: true })` → imageData
-6. Dùng jsPDF: đặt hình map vào vùng chính, vẽ legend trái, title block dưới bằng jsPDF text/rect API
-7. `doc.save('banve-[tenTu]-[ngay].pdf')`
-8. Khôi phục tile layer gốc, xóa polyline cáp tạm
+| Hàm | Vị trí | Mô tả |
+|-----|--------|-------|
+| `openPrintDrawingModal()` | ~line 1246 | Mở modal, điền tủ/người lập/ngày mặc định |
+| `_filterRowsByTu(tuName)` | ~line 1263 | Lọc loadedData theo row[7] |
+| `_buildCableLines(rows)` | ~line 1269 | Vẽ polyline cáp + nhãn m lên `_cableLayerGroup` |
+| `_removeCableLines()` | ~line 1308 | Xóa `_cableLayerGroup` khỏi map |
+| `_switchToPrintTile()` | ~line 1315 | Lưu tiles gốc, bật CartoDB CORS |
+| `_restoreOriginalTiles()` | ~line 1323 | Restore tiles gốc |
+| `_makeLampIconSvg(color)` | ~line 1910 | SVG đèn đường mini 14×20px |
+| `_makeCabinetIconSvg(color)` | ~line 1893 | SVG tủ điện mini 14×16px |
+| `_showPrintOverlay(opts)` | ~line 1332 | Inject legend + title block vào #map |
+| `_hidePrintOverlay()` | ~line 1399 | Xóa `#printOverlay` |
+| `exportDrawingPDF()` | ~line 1404 | Hàm chính — orchestrate toàn bộ luồng |
+| `_loadPrintLibs()` | ~line 1490 | Lazy-load jsPDF 2.5.1 + html2canvas 1.4.1 |
 
-**File liên quan:**
-- `index.html` — thêm modal `#printDrawingModal`, hàm `exportDrawingPDF()`, `_buildCableLines()`, `_buildLegend()`, `_buildTitleBlock()`
-- `sw.js` — thêm `cdnjs.cloudflare.com` vào CDN_HOSTS (đã có)
+#### Cải tiến cần làm (TODO)
+
+- [ ] **Khung tên đúng chuẩn hơn**: thêm hàng "Chủ đầu tư / Đơn vị tư vấn / Người kiểm tra" như bản vẽ kỹ thuật thực tế
+- [ ] **Số liệu tổng hợp trong title block**: tổng số trụ, tổng chiều dài cáp (tính từ khoangCach)
+- [ ] **Zoom tự động theo tỉ lệ**: tính zoom từ `scale` → `map.setZoom()` trước khi capture
+- [ ] **Đường cáp thể hiện loại cáp**: màu khác nhau theo loại cáp (nếu có trường dữ liệu)
+- [ ] **Xuất nhiều trang** nếu tuyến dài không vừa 1 tờ
 
 ---
 
