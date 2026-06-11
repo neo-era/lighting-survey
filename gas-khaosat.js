@@ -22,7 +22,8 @@ const SHEET_NAME = 'DanhSachTru'; // ← Tên tab trong Google Sheet
 const HEADER = [
   'ID', 'Tên trụ', 'Lat', 'Lon', 'Ghi chú', 'Người KS',
   'Loại', 'Tủ điều khiển', 'Loại trụ', 'Loại cần', 'Loại đèn',
-  'Công suất', 'Ảnh', 'Thời gian cập nhật', 'Marker gốc', 'Khoảng cách (m)', 'Mã PE', 'Đường', 'Phường/ Xã'
+  'Công suất', 'Ảnh', 'Thời gian cập nhật', 'Marker gốc', 'Khoảng cách (m)', 'Mã PE', 'Đường', 'Phường/ Xã',
+  'VN2000-X', 'VN2000-Y'
 ];
 
 // Map key payload JS → tên cột trong Sheet
@@ -46,6 +47,8 @@ const FIELD_MAP = {
   'maPE':        'Mã PE',
   'duong':       'Đường',
   'phuongXa':    'Phường/ Xã',
+  'vn2000x':     'VN2000-X',
+  'vn2000y':     'VN2000-Y',
 };
 
 // ── UTILS ──────────────────────────────────────────────────────────────────

@@ -1491,6 +1491,9 @@
                     if (Array.isArray(row) && (row[1]===markerName||row[0]===markerName)) {
                         row[2]=newLat; row[3]=newLon;
                         row[13] = new Date().toLocaleString('vi-VN');
+                        const _vn = convertLatLonToVn2000(newLat, newLon);
+                        row[19] = Math.round(_vn.x);
+                        row[20] = Math.round(_vn.y);
                         dirtyMovedRows.add(row);
                     }
                 });
@@ -2138,7 +2141,8 @@
                         congSuat: row[11] || '', hinhAnh: imagePath,
                         capNhat: row[13] || '', markerGoc: row[14] || '',
                         khoangCach: row[15] || '', maPE: row[16] || '',
-                        duong: row[17] || '', phuongXa: row[18] || ''
+                        duong: row[17] || '', phuongXa: row[18] || '',
+                        vn2000x: row[19] || '', vn2000y: row[20] || ''
                     })
                 });
                 const data = await res.json();
@@ -2201,7 +2205,8 @@
                 if (!Array.isArray(newMarkerRows)) newMarkerRows = [];
                 const updatedAt = new Date().toLocaleString('vi-VN');
                 const nguoiKS = currentUser ? (currentUser.displayName || currentUser.username) : '';
-                const newRow = ['',name,lat,lon,note,nguoiKS,type,cabinetName,poleType,'',lampType,congSuat,markerImageDataUrl||'',updatedAt,baseMarkerName,distanceToBase,maPE,street,ward];
+                const _vn = convertLatLonToVn2000(lat, lon);
+                const newRow = ['',name,lat,lon,note,nguoiKS,type,cabinetName,poleType,'',lampType,congSuat,markerImageDataUrl||'',updatedAt,baseMarkerName,distanceToBase,maPE,street,ward,Math.round(_vn.x),Math.round(_vn.y)];
                 loadedData.push(newRow); newMarkerRows.push(newRow);
                 markerImageDataUrl = null;
                 const newMarker = addMarkerRowToMap(newRow);

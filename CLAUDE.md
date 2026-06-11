@@ -41,29 +41,34 @@ const KHAOSAT_GAS_URL = '...';   // URL Web App đã deploy (doPost endpoint)
 const KHAOSAT_CSV_URL = '...';   // URL publish CSV của Google Sheet (DanhSachTru)
 ```
 
-## Cấu trúc cột Google Sheet (DanhSachTru) — 19 cột
+## Cấu trúc cột Google Sheet (DanhSachTru) — 21 cột
 
-| Index | Tên cột            | Key payload JS  |
-|-------|--------------------|-----------------|
-| [0]   | ID                 | id              |
-| [1]   | Tên trụ            | tenTru          |
-| [2]   | Lat                | lat             |
-| [3]   | Lon                | lon             |
-| [4]   | Ghi chú            | ghiChu          |
-| [5]   | Người KS           | nguoiKS         |
-| [6]   | Loại               | loai            |
-| [7]   | Tủ điều khiển      | tuDieuKhien     |
-| [8]   | Loại trụ           | loaiTru         |
-| [9]   | Loại cần           | loaiCan         |
-| [10]  | Loại đèn           | loaiDen         |
-| [11]  | Công suất          | congSuat        |
-| [12]  | Ảnh                | hinhAnh         |
-| [13]  | Thời gian cập nhật | capNhat         |
-| [14]  | Marker gốc         | markerGoc       |
-| [15]  | Khoảng cách (m)    | khoangCach      |
-| [16]  | Mã PE              | maPE            |
-| [17]  | Đường              | duong           |
-| [18]  | Phường/ Xã         | phuongXa        |
+| Index | Tên cột            | Key payload JS  | Ghi chú                        |
+|-------|--------------------|-----------------|--------------------------------|
+| [0]   | ID                 | id              |                                |
+| [1]   | Tên trụ            | tenTru          |                                |
+| [2]   | Lat                | lat             |                                |
+| [3]   | Lon                | lon             |                                |
+| [4]   | Ghi chú            | ghiChu          |                                |
+| [5]   | Người KS           | nguoiKS         |                                |
+| [6]   | Loại               | loai            |                                |
+| [7]   | Tủ điều khiển      | tuDieuKhien     |                                |
+| [8]   | Loại trụ           | loaiTru         |                                |
+| [9]   | Loại cần           | loaiCan         |                                |
+| [10]  | Loại đèn           | loaiDen         |                                |
+| [11]  | Công suất          | congSuat        |                                |
+| [12]  | Ảnh                | hinhAnh         |                                |
+| [13]  | Thời gian cập nhật | capNhat         |                                |
+| [14]  | Marker gốc         | markerGoc       |                                |
+| [15]  | Khoảng cách (m)    | khoangCach      |                                |
+| [16]  | Mã PE              | maPE            |                                |
+| [17]  | Đường              | duong           |                                |
+| [18]  | Phường/ Xã         | phuongXa        |                                |
+| [19]  | VN2000-X           | vn2000x         | Tự tính từ Lat/Lon (integer m) |
+| [20]  | VN2000-Y           | vn2000y         | Tự tính từ Lat/Lon (integer m) |
+
+**VN2000**: Tọa độ phẳng Gauss-Krüger, múi 6°, ellipsoid GRS80 (hàm `convertLatLonToVn2000(lat,lon)` → `{x, y, zone}`).
+Tự động cập nhật tại 2 điểm: `saveMarkerPopup()` (thêm/sửa marker) và `updateMarkerCoordinatesInData()` (kéo marker).
 
 ## 6 loại marker (TYPE_CONFIG)
 
