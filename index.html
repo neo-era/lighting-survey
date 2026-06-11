@@ -1074,7 +1074,8 @@
                     </div>
                     <div class="form-group">
                         <label for="exportCadBasename">Lọc theo basename</label>
-                        <input type="text" id="exportCadBasename" class="form-control" placeholder="Ví dụ: T1, T2...">
+                        <input type="text" id="exportCadBasename" class="form-control" placeholder="Ví dụ: T1, T2..." list="cadBasenameList" autocomplete="off">
+                        <datalist id="cadBasenameList"></datalist>
                     </div>
                     <div id="exportCadCountInfo"></div>
                 </div>
@@ -1266,6 +1267,18 @@
         function showExportCadModal() {
             document.getElementById('exportCadType').value = 'new';
             document.getElementById('exportCadBasename').value = '';
+            // Populate datalist basename
+            const dl = document.getElementById('cadBasenameList');
+            if (dl && Array.isArray(loadedData) && loadedData.length > 1) {
+                const bnSet = new Set();
+                loadedData.slice(1).forEach(r => {
+                    const name = String(r[1] || '').trim();
+                    if (!name) return;
+                    const bn = name.replace(/[_\s\-]*\d+$/, '').trim();
+                    if (bn) bnSet.add(bn);
+                });
+                dl.innerHTML = [...bnSet].sort().map(b => `<option value="${b}">`).join('');
+            }
             updateExportCadCountInfo();
             if (typeof $ !== 'undefined' && $.fn.modal) {
                 $('#exportCadModal').modal('show');
