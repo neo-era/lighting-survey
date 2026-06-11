@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="vi">
 <head>
-    <title>Lighting System V1.1</title>
+    <title>Lighting System V1.2</title>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
@@ -942,6 +942,10 @@
                         <button id="btnToggleCable" onclick="toggleCableLayer()" class="ctrl-btn outline" style="margin-top:4px;">
                             <i class="fa fa-share-alt"></i> Sơ đồ cáp
                         </button>
+                        <button id="btnCableEdit" onclick="toggleCableEditMode()" class="ctrl-btn outline"
+                                style="margin-top:4px;display:none;">
+                            <i class="fa fa-pencil"></i> Sửa cáp
+                        </button>
                     </div>
 
                     <div class="ctrl-divider"></div>
@@ -1353,15 +1357,18 @@
                 const lat = parseCoord(r[2]), lon = parseCoord(r[3]);
                 if (name && Number.isFinite(lat) && Number.isFinite(lon)) posIdx[name] = [lat, lon];
             });
+            let cableCount = 0;
             rows.forEach(r => {
                 const parent = String(r[14] || '').trim();
-                if (!parent || !posIdx[parent]) return;
+                if (!parent) return;
+                if (!posIdx[parent]) { console.warn('[cable] Không tìm thấy vị trí trụ cha:', parent); return; }
                 const child = String(r[1] || '').trim();
                 if (!child || !posIdx[child] || child === parent) return;
                 const from = posIdx[parent], to = posIdx[child];
                 L.polyline([from, to], {
                     color: '#1e40af', weight: 2.5, dashArray: '7 5', opacity: 0.8
                 }).addTo(_cableLayerGroup);
+                cableCount++;
                 const dist = String(r[15] || '').trim();
                 if (dist) {
                     const mid = [(from[0]+to[0])/2, (from[1]+to[1])/2];
@@ -1371,6 +1378,9 @@
                     }).addTo(_cableLayerGroup);
                 }
             });
+            if (cableCount === 0) {
+                displayError('Không có đường cáp — hãy nhập cột "Marker gốc" cho các trụ để vẽ sơ đồ.');
+            }
         }
 
         function _removeCableLines() {
@@ -1378,16 +1388,85 @@
         }
 
         let _cableVisible = false;
+        let _selectedTus = null; // null = tất cả; Set<string> = tủ đã chọn
+        let _cableEditMode = false;
+        let _pickParentActive = false;
+
         function toggleCableLayer() {
-            _cableVisible = !_cableVisible;
-            const btn = document.getElementById('btnToggleCable');
             if (_cableVisible) {
-                _buildCableLines(_filterRowsByTu(null));
-                if (btn) btn.classList.add('active');
-            } else {
+                _cableVisible = false;
                 _removeCableLines();
+                const btn = document.getElementById('btnToggleCable');
                 if (btn) btn.classList.remove('active');
+                const editBtn = document.getElementById('btnCableEdit');
+                if (editBtn) editBtn.style.display = 'none';
+                return;
             }
+            // Cables OFF → mở dropdown chọn tủ
+            const dd = document.getElementById('cableDropdown');
+            const tus = [...new Set(
+                (loadedData || []).slice(1).map(r => String(r[7] || '').trim()).filter(Boolean)
+            )].sort();
+            const list = document.getElementById('cableTuList');
+            list.innerHTML = `
+                <label style="display:flex;align-items:center;gap:7px;font-size:11px;padding:3px 0;cursor:pointer;font-weight:700;">
+                  <input type="checkbox" id="cbAllTus" onchange="toggleAllTuCbs(this.checked)" checked>
+                  Tất cả tủ
+                </label>
+                <hr style="margin:4px 0;border:none;border-top:1px solid #e2e8f0;">
+                ${tus.map(t => `
+                  <label style="display:flex;align-items:center;gap:7px;font-size:11px;padding:2px 0;cursor:pointer;">
+                    <input type="checkbox" class="cb-tu" value="${t.replace(/"/g,'&quot;')}" checked
+                           onchange="onTuCbChange()"> ${t}
+                  </label>`).join('')}
+                ${tus.length === 0 ? '<div style="font-size:11px;color:#94a3b8;padding:4px 0;">Không có dữ liệu tủ</div>' : ''}
+            `;
+            const btn = document.getElementById('btnToggleCable');
+            const rect = btn.getBoundingClientRect();
+            dd.style.top  = (rect.bottom + 6) + 'px';
+            dd.style.left = rect.left + 'px';
+            dd.style.display = 'block';
+            setTimeout(() => {
+                document.addEventListener('click', _onOutsideCableDropdown, { capture: true, once: true });
+            }, 0);
+        }
+
+        function _onOutsideCableDropdown(e) {
+            const dd = document.getElementById('cableDropdown');
+            if (!dd) return;
+            if (!dd.contains(e.target) && e.target.id !== 'btnToggleCable') {
+                dd.style.display = 'none';
+            } else {
+                document.addEventListener('click', _onOutsideCableDropdown, { capture: true, once: true });
+            }
+        }
+
+        function toggleAllTuCbs(checked) {
+            document.querySelectorAll('.cb-tu').forEach(cb => cb.checked = checked);
+        }
+
+        function onTuCbChange() {
+            const all = [...document.querySelectorAll('.cb-tu')].every(cb => cb.checked);
+            const cbAll = document.getElementById('cbAllTus');
+            if (cbAll) cbAll.checked = all;
+        }
+
+        function drawSelectedCables() {
+            document.getElementById('cableDropdown').style.display = 'none';
+            const cbAll = document.getElementById('cbAllTus');
+            const allChecked = cbAll && cbAll.checked;
+            _selectedTus = allChecked ? null : new Set(
+                [...document.querySelectorAll('.cb-tu:checked')].map(cb => cb.value)
+            );
+            const rows = _selectedTus
+                ? (loadedData || []).slice(1).filter(r => _selectedTus.has(String(r[7] || '').trim()))
+                : (loadedData || []).slice(1);
+            _buildCableLines(rows);
+            _cableVisible = true;
+            const btn = document.getElementById('btnToggleCable');
+            if (btn) btn.classList.add('active');
+            const editBtn = document.getElementById('btnCableEdit');
+            if (editBtn) editBtn.style.display = '';
         }
 
         // ── TILE SWITCHING (khi in) ───────────────────────────────────────
@@ -4097,7 +4176,7 @@
 
             if (ExcelJSGlobal) {
                 const wb = new ExcelJSGlobal.Workbook();
-                wb.creator = 'Lighting System V1.1';
+                wb.creator = 'Lighting System V1.2';
                 wb.created = new Date();
 
                 // ── Sheet 1: Tổng hợp theo phường/xã ──
@@ -4199,5 +4278,21 @@
             });
         }
     </script>
+
+    <!-- ── CABLE DROPDOWN ── -->
+    <div id="cableDropdown" style="display:none;position:fixed;z-index:9500;
+        background:white;border:1.5px solid #1e293b;border-radius:8px;
+        padding:12px;min-width:220px;box-shadow:0 6px 24px rgba(0,0,0,.25);">
+      <div style="font-size:11px;font-weight:800;color:#0f172a;margin-bottom:8px;
+                  text-transform:uppercase;letter-spacing:.4px;">Chọn tủ điều khiển</div>
+      <div id="cableTuList" style="max-height:180px;overflow-y:auto;margin-bottom:10px;"></div>
+      <div style="display:flex;gap:8px;">
+        <button onclick="drawSelectedCables()" class="ctrl-btn" style="flex:1;font-size:12px;">
+          <i class="fa fa-share-alt"></i> Vẽ sơ đồ cáp
+        </button>
+        <button onclick="document.getElementById('cableDropdown').style.display='none'"
+                class="ctrl-btn outline" style="font-size:12px;padding:0 12px;">Đóng</button>
+      </div>
+    </div>
 </body>
 </html>

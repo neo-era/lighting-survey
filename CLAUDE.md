@@ -496,27 +496,111 @@ map.invalidateSize();
 
 ---
 
-#### 4.4 — Đường cáp trên bản đồ thường + điều chỉnh điểm gốc
+#### 4.4 — Sơ đồ cáp nâng cao: chọn tủ + chỉnh sửa trực tiếp ✅ toggle cơ bản đã implement
 
-**Mục tiêu 1 — Hiển thị cáp ngoài print mode:** Thêm nút toggle "Sơ đồ cáp" trong controls panel để bật/tắt `_cableLayerGroup` ngay trên bản đồ thường (không cần vào print mode).
+##### 4.4.1 — Lọc theo tủ khi bật sơ đồ cáp (multi-select)
 
-**Mục tiêu 2 — Điều chỉnh điểm gốc đoạn cáp:** Hiện tại cáp vẽ từ center lat/lon của trụ cha → trụ con. Cho phép đặt 1 điểm gốc tùy chỉnh (offset) để cáp xuất phát đúng vị trí thực (ví dụ: từ đỉnh cột, từ tủ điện, từ hố cáp).
+**Vấn đề hiện tại:** Nút "Sơ đồ cáp" vẽ tất cả dữ liệu ngay lập tức, không cho phép chọn tủ.
 
-**Thiết kế điểm gốc:**
-- Thêm cột `row[N]` mới: **`capGocLat`**, **`capGocLon`** — tọa độ điểm xuất phát cáp
-- Nếu trống → fallback về lat/lon của marker cha (hành vi cũ)
-- Trong popup chỉnh sửa marker: thêm nút "Đặt điểm gốc cáp" → click map → lưu lat/lon vào field
-- `_buildCableLines()` kiểm tra `row[N]` trước khi dùng `posIdx[parent]`
+**Thiết kế:**
+- Khi click "Sơ đồ cáp" lần đầu → mở panel nhỏ ngay bên dưới nút (dropdown, không phải modal):
+  ```
+  ┌─────────────────────────────┐
+  │ ☑ Tất cả tủ                 │
+  │ ☑ VTS_H23VTS               │
+  │ ☐ P12_TTC_01               │
+  │ ☐ P12_TTC_02               │
+  │ [Vẽ sơ đồ cáp]             │
+  └─────────────────────────────┘
+  ```
+- Danh sách tủ = unique values của `row[7]` (Tủ điều khiển) trong `loadedData`
+- Checkbox "Tất cả" toggle toàn bộ; uncheck 1 item thì uncheck "Tất cả"
+- Nút "Vẽ" → gọi `_buildCableLines(rowsFiltered)` với rows lọc theo tủ đã chọn
+- Click bên ngoài dropdown → đóng mà không vẽ
 
-**Toggle button (controls panel):**
+**State:**
 ```javascript
-let _cableVisible = false;
-function toggleCableLayer() {
-    _cableVisible = !_cableVisible;
-    if (_cableVisible) {
-        _buildCableLines(_filterRowsByTu(null)); // tất cả data
-    } else {
-        _removeCableLines();
+let _selectedTus = new Set(); // tên tủ đang chọn, null = tất cả
+```
+
+**Hàm lọc mở rộng:**
+```javascript
+function _filterRowsByTuSet(tuSet) {
+    if (!Array.isArray(loadedData) || loadedData.length < 2) return [];
+    const rows = loadedData.slice(1);
+    if (!tuSet || tuSet.size === 0) return rows;
+    return rows.filter(r => tuSet.has(String(r[7] || '').trim()));
+}
+```
+
+---
+
+##### 4.4.2 — Chỉnh sửa đường cáp trực tiếp trên bản đồ
+
+**Mục tiêu:** Sau khi vẽ sơ đồ cáp, người dùng có thể:
+1. **Xóa đoạn cáp** → đặt `row[14] = ''` (Marker gốc) + sync GAS
+2. **Dịch chuyển điểm đầu** (từ trụ cha khác) → đổi `row[14]` sang tên trụ mới + sync GAS
+3. **Dịch chuyển điểm cuối** (đổi trụ con nhận cáp) → không cần (cáp là 1-chiều từ cha → con)
+
+**Chế độ chỉnh sửa cáp (`_cableEditMode`):**
+
+Thêm nút toggle "Sửa cáp" (chỉ hiện khi `_cableVisible = true`):
+```
+[ Sơ đồ cáp ✓ ] [ ✏ Sửa cáp ]
+```
+
+Khi `_cableEditMode = true`:
+- Mỗi polyline cáp có `cursor: pointer` + `on('click')` handler
+- Click vào đoạn cáp → hiện context popup nhỏ trên map:
+  ```
+  ┌──────────────────────────────────────┐
+  │  Cáp: VTS_H23_4 ← VTS_H23VTS (42m)  │
+  │  [🗑 Xóa đoạn này]  [↩ Đổi điểm gốc]│
+  └──────────────────────────────────────┘
+  ```
+- **Xóa:** `row[14] = ''`, `row[15] = ''` → `syncRowToGAS(row)` → redraw
+- **Đổi điểm gốc:** vào mode "chọn điểm gốc mới" — cursor crosshair, click marker khác trên bản đồ → `row[14] = newParentName` → tính lại Haversine → `syncRowToGAS(row)` → redraw
+
+**Data binding:**
+Mỗi `L.polyline` trong `_buildCableLines` cần lưu reference đến `row`:
+```javascript
+const line = L.polyline([from, to], { ... });
+line._cableRow = r;   // reference đến row gốc trong loadedData
+line.addTo(_cableLayerGroup);
+if (_cableEditMode) _attachCableEditHandler(line);
+```
+
+**`_attachCableEditHandler(line)`:**
+```javascript
+function _attachCableEditHandler(line) {
+    line.setStyle({ cursor: 'pointer', weight: 4, opacity: 1 });
+    line.on('click', e => {
+        L.DomEvent.stopPropagation(e);
+        _showCableContextMenu(e.latlng, line._cableRow);
+    });
+}
+```
+
+**`_showCableContextMenu(latlng, row)`:**
+```javascript
+// Dùng L.popup() có HTML 2 nút: Xóa + Đổi điểm gốc
+// Xóa: row[14]=''; row[15]=''; syncRowToGAS(row,{silent:true}); _rebuildCables()
+// Đổi điểm gốc: đóng popup, vào pickParentMode(row)
+```
+
+**`pickParentMode(row)` — chọn trụ cha mới:**
+```javascript
+// Hiện toast: "Click vào trụ/tủ để đặt làm điểm gốc cáp. [Hủy]"
+// map.on('click') một lần → tìm marker gần nhất trong bán kính 30px
+// Nếu tìm thấy: row[14] = markerName; row[15] = haversineM(...); syncRowToGAS; _rebuildCables()
+```
+
+**`_rebuildCables()`** — redraw cáp sau mỗi thao tác edit:
+```javascript
+function _rebuildCables() {
+    _buildCableLines(_filterRowsByTuSet(_selectedTus));
+    if (_cableEditMode) {
+        _cableLayerGroup.eachLayer(l => { if (l._cableRow) _attachCableEditHandler(l); });
     }
 }
 ```
@@ -598,9 +682,10 @@ Nếu phát hiện cycle → `displayError('Phát hiện vòng lặp cáp — ki
 
 | Việc cần làm | Lý do | Ưu tiên |
 |---|---|---|
-| **Bump sw.js v5 → v6** | Nhiều tính năng mới đã thêm, người dùng khác chưa thấy | 🔴 Cao |
+| ~~Bump sw.js v5 → v6~~ | ✅ Đã bump lên v6 | — |
 | **Redeploy GAS New version** | Header sheet DanhSachTru mở rộng VN2000 từ session trước | 🔴 Cao |
-| **Sync banve-mau.html** | File preview lệch so với overlay thực | 🟡 Trung bình |
+| ~~Sync banve-mau.html~~ | ✅ Đã rewrite đồng bộ với `_showPrintOverlay()` | — |
+| **Implement 4.4.1 + 4.4.2** | Sơ đồ cáp chọn tủ + chỉnh sửa trực tiếp | 🟡 Trung bình |
 
 ---
 

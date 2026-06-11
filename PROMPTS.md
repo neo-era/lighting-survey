@@ -1242,6 +1242,448 @@ Không thay đổi gì khác.
 
 ---
 
+### PROMPT 5.1 — Dropdown chọn tủ khi bật Sơ đồ cáp (multi-select)
+
+```
+Dự án: PWA khảo sát chiếu sáng — index.html.
+
+Ngữ cảnh:
+- Nút "Sơ đồ cáp": id="btnToggleCable", onclick="toggleCableLayer()", line ~942
+- toggleCableLayer() hiện tại gọi _buildCableLines(_filterRowsByTu(null)) — vẽ tất cả ngay
+- Yêu cầu: khi click nút lần đầu (cables OFF) → mở dropdown chọn tủ trước khi vẽ
+  Khi cables ON → click nút = tắt cáp ngay (không mở dropdown)
+
+Nhiệm vụ:
+
+**1. Thêm HTML dropdown** — đặt ngay sau thẻ `</div>` đóng controls panel cuối (trước `</div><!--/controlsModal-->`),
+   hoặc đặt vào cuối `<body>` như modal (dùng `position:fixed`):
+```html
+<div id="cableDropdown" style="display:none;position:fixed;z-index:9500;
+    background:white;border:1.5px solid #1e293b;border-radius:8px;
+    padding:12px;min-width:220px;box-shadow:0 6px 24px rgba(0,0,0,.25);">
+  <div style="font-size:11px;font-weight:800;color:#0f172a;margin-bottom:8px;text-transform:uppercase;letter-spacing:.4px;">
+    Chọn tủ điều khiển
+  </div>
+  <div id="cableTuList" style="max-height:180px;overflow-y:auto;margin-bottom:10px;"></div>
+  <div style="display:flex;gap:8px;">
+    <button onclick="drawSelectedCables()" class="ctrl-btn" style="flex:1;font-size:12px;">
+      <i class="fa fa-share-alt"></i> Vẽ sơ đồ cáp
+    </button>
+    <button onclick="document.getElementById('cableDropdown').style.display='none'"
+            class="ctrl-btn outline" style="font-size:12px;padding:0 10px;">Đóng</button>
+  </div>
+</div>
+```
+
+**2. Thêm biến state** ngay sau `let _cableVisible = false;`:
+```javascript
+let _selectedTus = null; // null = tất cả; Set<string> = tủ đã chọn
+```
+
+**3. Thay thế `toggleCableLayer()`** bằng:
+```javascript
+function toggleCableLayer() {
+    if (_cableVisible) {
+        _cableVisible = false;
+        _removeCableLines();
+        const btn = document.getElementById('btnToggleCable');
+        if (btn) btn.classList.remove('active');
+        const editBtn = document.getElementById('btnCableEdit');
+        if (editBtn) editBtn.style.display = 'none';
+        return;
+    }
+    // Cables đang OFF → mở dropdown chọn tủ
+    const dd = document.getElementById('cableDropdown');
+    // Populate danh sách tủ
+    const tus = [...new Set(
+        (loadedData || []).slice(1)
+            .map(r => String(r[7] || '').trim())
+            .filter(Boolean)
+    )].sort();
+    const list = document.getElementById('cableTuList');
+    list.innerHTML = `
+        <label style="display:flex;align-items:center;gap:7px;font-size:11px;padding:3px 0;cursor:pointer;font-weight:700;">
+          <input type="checkbox" id="cbAllTus" onchange="toggleAllTuCbs(this.checked)" checked>
+          Tất cả tủ
+        </label>
+        <hr style="margin:4px 0;border:none;border-top:1px solid #e2e8f0;">
+        ${tus.map(t => `
+          <label style="display:flex;align-items:center;gap:7px;font-size:11px;padding:2px 0;cursor:pointer;">
+            <input type="checkbox" class="cb-tu" value="${t.replace(/"/g,'&quot;')}" checked
+                   onchange="onTuCbChange()"> ${t}
+          </label>`).join('')}
+        ${tus.length === 0 ? '<div style="font-size:11px;color:#94a3b8;">Không có dữ liệu tủ</div>' : ''}
+    `;
+    // Vị trí dropdown theo nút bấm
+    const btn = document.getElementById('btnToggleCable');
+    const rect = btn.getBoundingClientRect();
+    dd.style.top  = (rect.bottom + 6) + 'px';
+    dd.style.left = rect.left + 'px';
+    dd.style.display = 'block';
+    setTimeout(() => {
+        document.addEventListener('click', _onOutsideCableDropdown, { capture: true, once: true });
+    }, 0);
+}
+
+function _onOutsideCableDropdown(e) {
+    const dd = document.getElementById('cableDropdown');
+    if (!dd) return;
+    if (!dd.contains(e.target) && e.target.id !== 'btnToggleCable') {
+        dd.style.display = 'none';
+    } else if (dd.contains(e.target)) {
+        // click bên trong → đăng ký lại lần sau
+        document.addEventListener('click', _onOutsideCableDropdown, { capture: true, once: true });
+    }
+}
+
+function toggleAllTuCbs(checked) {
+    document.querySelectorAll('.cb-tu').forEach(cb => cb.checked = checked);
+}
+
+function onTuCbChange() {
+    const all = [...document.querySelectorAll('.cb-tu')].every(cb => cb.checked);
+    const cbAll = document.getElementById('cbAllTus');
+    if (cbAll) cbAll.checked = all;
+}
+
+function drawSelectedCables() {
+    document.getElementById('cableDropdown').style.display = 'none';
+    const cbAll = document.getElementById('cbAllTus');
+    const allChecked = cbAll && cbAll.checked;
+    if (allChecked) {
+        _selectedTus = null;
+    } else {
+        _selectedTus = new Set(
+            [...document.querySelectorAll('.cb-tu:checked')].map(cb => cb.value)
+        );
+    }
+    const rows = _selectedTus
+        ? (loadedData || []).slice(1).filter(r => _selectedTus.has(String(r[7] || '').trim()))
+        : (loadedData || []).slice(1);
+    _buildCableLines(rows);
+    _cableVisible = true;
+    const btn = document.getElementById('btnToggleCable');
+    if (btn) btn.classList.add('active');
+    const editBtn = document.getElementById('btnCableEdit');
+    if (editBtn) editBtn.style.display = '';
+}
+```
+
+**4. Thêm nút "Sửa cáp"** vào HTML, ngay sau `btnToggleCable` button (ẩn mặc định):
+```html
+<button id="btnCableEdit" onclick="toggleCableEditMode()" class="ctrl-btn outline"
+        style="margin-top:4px;display:none;">
+    <i class="fa fa-pencil"></i> Sửa cáp
+</button>
+```
+
+Không thay đổi gì khác.
+```
+
+---
+
+### PROMPT 5.2 — Chế độ chỉnh sửa cáp trực tiếp trên bản đồ
+
+```
+Dự án: PWA khảo sát chiếu sáng — index.html.
+
+Ngữ cảnh:
+- Sau PROMPT 5.1: `btnCableEdit` đã có trong HTML (display:none)
+- _buildCableLines() đã có, mỗi L.polyline vẽ 1 đoạn cáp từ row[14]→row[1]
+- Yêu cầu: chế độ "Sửa cáp" cho phép click vào đường cáp → xóa hoặc đổi trụ cha
+  Thay đổi phải sync về GAS (syncRowToGAS đã có)
+
+Nhiệm vụ:
+
+**1. Thêm state** ngay sau `let _selectedTus = null;`:
+```javascript
+let _cableEditMode = false;
+let _pickParentActive = false; // đang chờ user click trụ cha mới
+```
+
+**2. Thêm hàm `toggleCableEditMode()`** ngay sau `drawSelectedCables()`:
+```javascript
+function toggleCableEditMode() {
+    _cableEditMode = !_cableEditMode;
+    const btn = document.getElementById('btnCableEdit');
+    if (btn) {
+        btn.classList.toggle('active', _cableEditMode);
+        btn.innerHTML = _cableEditMode
+            ? '<i class="fa fa-pencil"></i> Đang sửa cáp'
+            : '<i class="fa fa-pencil"></i> Sửa cáp';
+    }
+    // Redraw để attach / detach handlers
+    const rows = _selectedTus
+        ? (loadedData || []).slice(1).filter(r => _selectedTus.has(String(r[7] || '').trim()))
+        : (loadedData || []).slice(1);
+    _buildCableLines(rows);
+}
+```
+
+**3. Sửa `_buildCableLines()`** — sau dòng `L.polyline([from, to], {...}).addTo(_cableLayerGroup)`:
+Hiện tại:
+```javascript
+                L.polyline([from, to], {
+                    color: '#1e40af', weight: 2.5, dashArray: '7 5', opacity: 0.8
+                }).addTo(_cableLayerGroup);
+                cableCount++;
+```
+Thay bằng:
+```javascript
+                const line = L.polyline([from, to], {
+                    color: '#1e40af', weight: 2.5, dashArray: '7 5', opacity: 0.8
+                });
+                line._cableRow = r;
+                line.addTo(_cableLayerGroup);
+                if (_cableEditMode) _attachCableEditHandler(line);
+                cableCount++;
+```
+
+**4. Thêm các hàm edit** ngay sau `_removeCableLines()`:
+```javascript
+function _attachCableEditHandler(line) {
+    line.setStyle({ weight: 4, opacity: 1, cursor: 'pointer' });
+    line.on('click', function(e) {
+        L.DomEvent.stopPropagation(e);
+        _showCableContextMenu(e.latlng, line._cableRow);
+    });
+}
+
+function _showCableContextMenu(latlng, row) {
+    const childName  = String(row[1]  || '').trim();
+    const parentName = String(row[14] || '').trim();
+    const dist       = String(row[15] || '').trim();
+    const popup = L.popup({ closeButton: true, className: 'cable-ctx-popup' })
+        .setLatLng(latlng)
+        .setContent(`
+            <div style="font-size:12px;font-weight:700;color:#0f172a;margin-bottom:8px;">
+                Cáp: <span style="color:#1e40af;">${childName}</span>
+                ← ${parentName}${dist ? ' <span style="color:#64748b;">('+dist+'m)</span>' : ''}
+            </div>
+            <div style="display:flex;flex-direction:column;gap:6px;">
+                <button onclick="_deleteCableSegment(${JSON.stringify(childName)}); map.closePopup();"
+                    style="background:#ef4444;color:white;border:none;border-radius:5px;
+                           padding:5px 10px;font-size:11px;font-weight:700;cursor:pointer;">
+                    🗑 Xóa đoạn cáp này
+                </button>
+                <button onclick="map.closePopup(); _pickParentMode(${JSON.stringify(childName)});"
+                    style="background:#1e40af;color:white;border:none;border-radius:5px;
+                           padding:5px 10px;font-size:11px;font-weight:700;cursor:pointer;">
+                    ↩ Đổi điểm gốc (trụ cha)
+                </button>
+            </div>
+        `)
+        .openOn(map);
+}
+
+function _deleteCableSegment(childName) {
+    if (!Array.isArray(loadedData)) return;
+    const row = loadedData.slice(1).find(r => String(r[1] || '').trim() === childName);
+    if (!row) return;
+    row[14] = '';
+    row[15] = '';
+    syncRowToGAS(row, { silent: true });
+    _rebuildCableLines();
+    displaySuccess('Đã xóa đoạn cáp: ' + childName);
+}
+
+function _pickParentMode(childName) {
+    if (_pickParentActive) return;
+    _pickParentActive = true;
+    displayInfo('Click vào trụ/tủ để đặt làm điểm gốc cáp cho ' + childName + '. Nhấn ESC để hủy.');
+    map.getContainer().style.cursor = 'crosshair';
+    const onMapClick = function(e) {
+        // Tìm marker gần nhất trong bán kính 40px
+        let nearest = null, nearestDist = Infinity;
+        map.eachLayer(function(layer) {
+            if (layer instanceof L.Marker && layer._rowRef) {
+                const p = map.latLngToContainerPoint(layer.getLatLng());
+                const q = map.latLngToContainerPoint(e.latlng);
+                const d = Math.hypot(p.x - q.x, p.y - q.y);
+                if (d < 40 && d < nearestDist) { nearest = layer; nearestDist = d; }
+            }
+        });
+        map.off('click', onMapClick);
+        document.removeEventListener('keydown', onEsc);
+        _pickParentActive = false;
+        map.getContainer().style.cursor = '';
+        if (!nearest) { displayError('Không tìm thấy trụ/tủ tại vị trí đó.'); return; }
+        const newParentName = String(nearest._rowRef[1] || '').trim();
+        if (!newParentName || newParentName === childName) return;
+        const row = (loadedData || []).slice(1).find(r => String(r[1] || '').trim() === childName);
+        if (!row) return;
+        const pLat = parseCoord(nearest._rowRef[2]), pLon = parseCoord(nearest._rowRef[3]);
+        const cLat = parseCoord(row[2]), cLon = parseCoord(row[3]);
+        row[14] = newParentName;
+        row[15] = (Number.isFinite(pLat) && Number.isFinite(cLat))
+            ? haversineM(cLat, cLon, pLat, pLon) : '';
+        syncRowToGAS(row, { silent: true });
+        _rebuildCableLines();
+        displaySuccess('Đã đổi điểm gốc: ' + childName + ' ← ' + newParentName);
+    };
+    const onEsc = function(e) {
+        if (e.key !== 'Escape') return;
+        map.off('click', onMapClick);
+        document.removeEventListener('keydown', onEsc);
+        _pickParentActive = false;
+        map.getContainer().style.cursor = '';
+    };
+    map.on('click', onMapClick);
+    document.addEventListener('keydown', onEsc);
+}
+
+function _rebuildCableLines() {
+    const rows = _selectedTus
+        ? (loadedData || []).slice(1).filter(r => _selectedTus.has(String(r[7] || '').trim()))
+        : (loadedData || []).slice(1);
+    _buildCableLines(rows);
+}
+```
+
+**5. Thêm CSS** cho popup context cáp, vào phần `<style>`:
+```css
+.cable-ctx-popup .leaflet-popup-content-wrapper {
+    border-radius: 8px; border: 1.5px solid #1e293b; padding: 0;
+}
+.cable-ctx-popup .leaflet-popup-content { margin: 12px; }
+```
+
+Lưu ý:
+- `syncRowToGAS(row, {silent:true})` đã tồn tại trong codebase
+- `displaySuccess()` / `displayError()` / `displayInfo()` đã tồn tại
+- `layer._rowRef` cần được gán khi tạo marker trong `addMarkerRowToMap()` — kiểm tra xem đã có chưa;
+  nếu chưa thì tìm nơi tạo `L.marker(...)` trong `addMarkerRowToMap()` và thêm `marker._rowRef = row;`
+- `parseCoord()` và `haversineM()` đã tồn tại
+
+Không thay đổi gì khác.
+```
+
+---
+
+### PROMPT 5.3 — Xoay bản đồ khi xuất PDF
+
+```
+Dự án: PWA khảo sát chiếu sáng — index.html.
+
+Ngữ cảnh:
+- exportDrawingPDF() dùng html2canvas để chụp #map rồi đưa vào jsPDF
+- Người dùng cần xoay góc nhìn bản đồ để đường phố chạy ngang tờ giấy
+- Yêu cầu: xoay chỉ phần nội dung bản đồ (tile + marker + cáp), KHÔNG xoay title block / legend
+  → Rotate .leaflet-map-pane (chứa toàn bộ Leaflet layer) trước khi capture, restore sau
+- preview mode (openPrintPreview) cũng cần apply rotation
+
+Cấu trúc DOM trong #map:
+  #map
+    ├── .leaflet-pane .leaflet-map-pane   ← ROTATE ĐÂY
+    │      ├── .leaflet-tile-pane
+    │      ├── .leaflet-overlay-pane      (cáp polyline)
+    │      └── .leaflet-marker-pane
+    └── #printOverlay                     ← KHÔNG rotate (title block, legend)
+
+Nhiệm vụ:
+
+**1. Thêm slider vào modal** — sau row Ngày (`pdNgay`), trước row `pdCVPhuTrach`:
+```html
+<div class="pd-row">
+  <div class="pd-item" style="flex:1;">
+    <div class="pd-label">Xoay bản đồ</div>
+    <div style="display:flex;align-items:center;gap:10px;">
+      <input id="pdRotation" type="range" min="-60" max="60" value="0" step="1"
+             style="flex:1;"
+             oninput="document.getElementById('pdRotationVal').textContent=this.value+'°'">
+      <span id="pdRotationVal"
+            style="font-size:12px;font-weight:700;color:#1e293b;min-width:34px;text-align:right;">0°</span>
+    </div>
+  </div>
+</div>
+```
+
+**2. Thêm 2 hàm** ngay trước `_switchToPrintTile()`:
+```javascript
+function _applyMapRotation(angle) {
+    if (!angle) return;
+    const mapEl = document.getElementById('map');
+    const pane  = mapEl && mapEl.querySelector('.leaflet-map-pane');
+    if (!pane) return;
+    // transform-origin = center of #map viewport, relative to pane's top-left
+    const mapRect  = mapEl.getBoundingClientRect();
+    const paneRect = pane.getBoundingClientRect();
+    const ox = mapRect.left + mapRect.width  / 2 - paneRect.left;
+    const oy = mapRect.top  + mapRect.height / 2 - paneRect.top;
+    const base = (pane.style.transform || '').replace(/\s*rotate\([^)]*\)/g, '').trim();
+    pane.style.transformOrigin = `${ox}px ${oy}px`;
+    pane.style.transform = base + ` rotate(${angle}deg)`;
+}
+
+function _clearMapRotation() {
+    const pane = document.querySelector('#map .leaflet-map-pane');
+    if (!pane) return;
+    pane.style.transform = (pane.style.transform || '').replace(/\s*rotate\([^)]*\)/g, '').trim();
+    pane.style.transformOrigin = '';
+}
+```
+
+**3. Trong `exportDrawingPDF()`** — đọc rotation và apply sau `_switchToPrintTile()` / sau `_showPrintOverlay()`:
+
+Tìm đoạn:
+```javascript
+        if (!_previewMode) {
+            _buildCableLines(rows);
+            _switchToPrintTile();
+            _zoomToScale(scale);
+            await new Promise(r => setTimeout(r, 3000));
+            _showPrintOverlay({
+```
+Thêm `const rotation` trước `if (!_previewMode)` và `_applyMapRotation` sau `_showPrintOverlay(...)`:
+```javascript
+        const rotation = parseFloat(document.getElementById('pdRotation')?.value) || 0;
+        if (!_previewMode) {
+            _buildCableLines(rows);
+            _switchToPrintTile();
+            _zoomToScale(scale);
+            await new Promise(r => setTimeout(r, 3000));
+            _showPrintOverlay({ ... });        // (giữ nguyên nội dung)
+            _applyMapRotation(rotation);
+            await new Promise(r => setTimeout(r, 300));
+        }
+```
+
+Trong `finally` block của `exportDrawingPDF()`, thêm `_clearMapRotation()`:
+```javascript
+        } finally {
+            _clearMapRotation();
+            _hidePrintOverlay();
+            // ... (các dòng restore khác giữ nguyên)
+        }
+```
+
+**4. Trong `openPrintPreview()`** — apply rotation sau `_showPrintOverlay(...)`:
+Tìm dòng gọi `_showPrintOverlay(...)` trong `openPrintPreview()` và thêm ngay sau:
+```javascript
+    _applyMapRotation(parseFloat(document.getElementById('pdRotation')?.value) || 0);
+```
+
+Trong `closePrintPreview()`, thêm `_clearMapRotation()` trước `_hidePrintOverlay()`:
+```javascript
+function closePrintPreview() {
+    _previewMode = false;
+    _clearMapRotation();
+    _hidePrintOverlay();
+    // ... giữ nguyên
+}
+```
+
+**5. Reset slider khi mở modal** — trong `openPrintDrawingModal()`, thêm:
+```javascript
+    const rotEl = document.getElementById('pdRotation');
+    if (rotEl) { rotEl.value = 0; document.getElementById('pdRotationVal').textContent = '0°'; }
+```
+
+Không thay đổi gì khác.
+```
+
+---
+
 ## THỨ TỰ CHẠY KHUYẾN NGHỊ
 
 ```
@@ -1262,16 +1704,19 @@ Không thay đổi gì khác.
 3.7 → index.html: stats trụ/cáp trong overlay      ✅ done
 3.8 → index.html: field cvPhuTrach + csKhuVuc       ✅ done
 
-4.1 → index.html: title block 50% chiều rộng
-4.2 → index.html: nút Xem trước + preview bar
-4.3 → index.html: force landscape ratio trước capture
-4.4 → index.html: toggle đường cáp trên bản đồ chính
-4.5 → index.html: tự động tính khoảng cách Haversine khi chọn Marker gốc
-4.6 → index.html: localStorage nhớ field modal
-4.7 → banve-mau.html: sync lại với _showPrintOverlay() thực tế
-4.8 → index.html: cycle detection trước _buildCableLines()
+4.1 → index.html: title block 62.5% chiều rộng                    ✅ done
+4.2 → index.html: nút Xem trước + preview bar                      ✅ done
+4.3 → index.html: force landscape ratio trước capture              ✅ done
+4.4 → index.html: toggle đường cáp trên bản đồ chính              ✅ done
+4.5 → index.html: tự động tính khoảng cách Haversine              ✅ done
+4.6 → index.html: localStorage nhớ field modal                     ✅ done
+4.7 → banve-mau.html: sync lại với _showPrintOverlay()             ✅ done
+4.8 → index.html: cycle detection trước _buildCableLines()         ✅ done
+
+5.1 → index.html: dropdown chọn tủ khi bật sơ đồ cáp (multi-select)    ✅ done
+5.2 → index.html: chế độ sửa cáp — xóa đoạn, đổi điểm gốc trực tiếp
+5.3 → index.html: xoay bản đồ khi xuất PDF (slider -60°→+60°)
 ```
 
-⚠️ Việc cần làm TRƯỚC KHI CHẠY 4.x:
-→ Bump sw.js v5 → v6 (người dùng chưa thấy thay đổi 3.x)
+⚠️ Việc cần làm TRƯỚC KHI CHẠY 5.x:
 → Redeploy GAS New version (header VN2000 từ session trước)
