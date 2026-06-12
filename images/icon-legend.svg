@@ -1,0 +1,114 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 280" width="320" height="280">
+  <defs>
+    <style>
+      .lbl { font-family: 'Segoe UI', Arial, sans-serif; font-size: 13px; fill: #1e293b; alignment-baseline: middle; }
+      .type { font-family: 'Segoe UI', Arial, sans-serif; font-size: 10px; font-weight: 700; fill: #64748b; }
+      .sh { filter: drop-shadow(0 1px 2px rgba(0,0,0,0.3)); }
+    </style>
+    <linearGradient id="sky" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#38bdf8"/><stop offset="100%" stop-color="#0284c7"/></linearGradient>
+    <linearGradient id="pnk" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#f472b6"/><stop offset="100%" stop-color="#db2777"/></linearGradient>
+    <linearGradient id="grn" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#34d399"/><stop offset="100%" stop-color="#059669"/></linearGradient>
+    <linearGradient id="org" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#fb923c"/><stop offset="100%" stop-color="#ea580c"/></linearGradient>
+    <linearGradient id="blu" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#3b82f6"/><stop offset="100%" stop-color="#1d4ed8"/></linearGradient>
+    <linearGradient id="drk" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#475569"/><stop offset="100%" stop-color="#1e293b"/></linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="320" height="280" rx="12" fill="white" stroke="#e2e8f0" stroke-width="1.5"/>
+  <!-- Title -->
+  <text x="16" y="22" font-family="'Segoe UI',Arial,sans-serif" font-size="12" font-weight="700" fill="#0f172a">BẢNG KÝ HIỆU — HỆ THỐNG CHIẾU SÁNG</text>
+  <line x1="16" y1="30" x2="304" y2="30" stroke="#e2e8f0" stroke-width="1"/>
+
+  <!-- === TYPE 1: Trụ STK === -->
+  <g transform="translate(20, 50)">
+    <!-- mini lamp icon -->
+    <rect x="10" y="14" width="4" height="22" rx="2" fill="url(#sky)" class="sh"/>
+    <path d="M12 14 C12 9 14 5 20 4" stroke="#0ea5e9" stroke-width="2.5" stroke-linecap="round" fill="none"/>
+    <rect x="16" y="1" width="13" height="6" rx="3" fill="url(#sky)" class="sh"/>
+    <rect x="17.5" y="2" width="10" height="4" rx="2" fill="white" opacity="0.9"/>
+    <rect x="7" y="36" width="10" height="2" rx="1" fill="#0ea5e9" opacity="0.5"/>
+    <!-- text -->
+    <text x="40" y="15" class="lbl">Trụ chiếu sáng thông thường</text>
+    <text x="40" y="29" class="type">TRỤ STK   |   Màu: #0ea5e9</text>
+    <rect x="40" y="33" width="16" height="5" rx="2.5" fill="#0ea5e9"/>
+  </g>
+
+  <!-- === TYPE 2: Trụ trang trí === -->
+  <g transform="translate(20, 96)">
+    <rect x="10.5" y="14" width="3.5" height="22" rx="1.75" fill="url(#pnk)" class="sh"/>
+    <rect x="9.5" y="20" width="5" height="2" rx="1" fill="#fbcfe8" opacity="0.8"/>
+    <path d="M12 14 C12 9 14 5 20 4" stroke="#ec4899" stroke-width="2.2" stroke-linecap="round" fill="none"/>
+    <rect x="16" y="1" width="13" height="6" rx="3" fill="url(#pnk)" class="sh"/>
+    <rect x="17.5" y="2" width="10" height="4" rx="2" fill="white" opacity="0.9"/>
+    <rect x="7" y="36" width="10" height="2" rx="1" fill="#ec4899" opacity="0.5"/>
+    <text x="40" y="15" class="lbl">Trụ chiếu sáng trang trí</text>
+    <text x="40" y="29" class="type">TRỤ TRANG TRÍ   |   Màu: #ec4899</text>
+    <rect x="40" y="33" width="16" height="5" rx="2.5" fill="#ec4899"/>
+  </g>
+
+  <!-- === TYPE 3: Trụ HTLT === -->
+  <g transform="translate(20, 142)">
+    <rect x="10" y="14" width="4" height="22" rx="2" fill="url(#grn)" class="sh"/>
+    <path d="M12 14 C12 8 15 4 22 3" stroke="#10b981" stroke-width="2.5" stroke-linecap="round" fill="none"/>
+    <rect x="17" y="0.5" width="13" height="6" rx="3" fill="url(#grn)" class="sh"/>
+    <rect x="18.5" y="1.5" width="10" height="4" rx="2" fill="white" opacity="0.9"/>
+    <rect x="7" y="36" width="10" height="2" rx="1" fill="#10b981" opacity="0.5"/>
+    <text x="40" y="15" class="lbl">Trụ hỗ trợ lưới tuyến (HTLT)</text>
+    <text x="40" y="29" class="type">TRỤ HTLT   |   Màu: #10b981</text>
+    <rect x="40" y="33" width="16" height="5" rx="2.5" fill="#10b981"/>
+  </g>
+
+  <!-- === TYPE 4: Trụ TTLT === -->
+  <g transform="translate(20, 188)">
+    <rect x="10" y="17" width="4" height="20" rx="2" fill="url(#org)" class="sh"/>
+    <path d="M12 17 C12 12 14 9 20 8" stroke="#f97316" stroke-width="2.5" stroke-linecap="round" fill="none"/>
+    <path d="M12 17 C12 12 10 9 4 8" stroke="#f97316" stroke-width="2.5" stroke-linecap="round" fill="none"/>
+    <rect x="16" y="4" width="11" height="6" rx="3" fill="url(#org)" class="sh"/>
+    <rect x="17.5" y="5.5" width="8" height="3.5" rx="1.75" fill="white" opacity="0.9"/>
+    <rect x="0" y="4" width="11" height="6" rx="3" fill="url(#org)" class="sh"/>
+    <rect x="1.5" y="5.5" width="8" height="3.5" rx="1.75" fill="white" opacity="0.9"/>
+    <rect x="7" y="37" width="10" height="2" rx="1" fill="#f97316" opacity="0.5"/>
+    <text x="40" y="15" class="lbl">Trụ tuyến trang trí lưới (TTLT)</text>
+    <text x="40" y="29" class="type">TRỤ TTLT   |   Màu: #f97316</text>
+    <rect x="40" y="33" width="16" height="5" rx="2.5" fill="#f97316"/>
+  </g>
+
+  <!-- === TYPE 5: Tủ nổi === -->
+  <g transform="translate(160, 50)">
+    <rect x="5" y="2" width="22" height="28" rx="3" fill="url(#blu)" stroke="white" stroke-width="1" class="sh"/>
+    <line x1="5" y1="12" x2="27" y2="12" stroke="white" stroke-width="1" opacity="0.55"/>
+    <circle cx="16" cy="20" r="3" fill="white" opacity="0.75"/>
+    <rect x="7" y="30" width="4" height="6" rx="1" fill="#1d4ed8" opacity="0.6"/>
+    <rect x="21" y="30" width="4" height="6" rx="1" fill="#1d4ed8" opacity="0.6"/>
+    <text x="40" y="15" class="lbl">Tủ chiếu sáng nổi</text>
+    <text x="40" y="29" class="type">TỦ CS NỔI   |   Màu: #2563eb</text>
+    <rect x="40" y="33" width="16" height="5" rx="2.5" fill="#2563eb"/>
+  </g>
+
+  <!-- === TYPE 6: Tủ ngầm === -->
+  <g transform="translate(160, 108)">
+    <rect x="5" y="2" width="22" height="28" rx="3" fill="url(#drk)" stroke="#94a3b8" stroke-width="1" class="sh"/>
+    <rect x="5" y="2" width="22" height="5" rx="3" fill="#64748b" opacity="0.7"/>
+    <line x1="5" y1="14" x2="27" y2="14" stroke="#94a3b8" stroke-width="1" opacity="0.5"/>
+    <circle cx="16" cy="22" r="3" fill="#94a3b8" opacity="0.7"/>
+    <!-- ground line -->
+    <line x1="2" y1="32" x2="32" y2="32" stroke="#64748b" stroke-width="1.5" opacity="0.7"/>
+    <line x1="4" y1="34" x2="8" y2="38" stroke="#94a3b8" stroke-width="1" opacity="0.5"/>
+    <line x1="12" y1="34" x2="16" y2="38" stroke="#94a3b8" stroke-width="1" opacity="0.5"/>
+    <line x1="20" y1="34" x2="24" y2="38" stroke="#94a3b8" stroke-width="1" opacity="0.5"/>
+    <text x="40" y="15" class="lbl">Tủ chiếu sáng ngầm</text>
+    <text x="40" y="29" class="type">TỦ CS NGẦM   |   Màu: #334155</text>
+    <rect x="40" y="33" width="16" height="5" rx="2.5" fill="#334155"/>
+  </g>
+
+  <!-- === Cable line legend === -->
+  <g transform="translate(160, 166)">
+    <line x1="5" y1="10" x2="33" y2="10" stroke="#1e40af" stroke-width="2.5" stroke-dasharray="6 4"/>
+    <text x="40" y="14" class="lbl">Đường cáp nguồn</text>
+    <text x="40" y="28" class="type">CABLE LINE   |   Màu: #1e40af</text>
+  </g>
+
+  <!-- Footer -->
+  <line x1="16" y1="248" x2="304" y2="248" stroke="#e2e8f0" stroke-width="1"/>
+  <text x="16" y="264" font-family="'Segoe UI',Arial,sans-serif" font-size="10" fill="#94a3b8">Hệ thống chiếu sáng đô thị — neo-era/lighting-survey</text>
+</svg>

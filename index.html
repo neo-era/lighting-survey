@@ -878,6 +878,11 @@
                             <option value="https://neo-era.github.io/lighting-survey/huongdan.html">Hướng dẫn sử dụng</option>
                             <option value="lichsu.html" id="pageOptLichSu" style="display:none">Lịch sử thao tác</option>
                         </select>
+                        <div id="currentDistrictLabel"
+                             style="display:none;margin-top:6px;font-size:11px;font-weight:700;
+                                    color:#2563eb;background:#eff6ff;border:1px solid #bfdbfe;
+                                    border-radius:6px;padding:4px 10px;text-align:center;">
+                        </div>
                     </div>
 
                     <div class="ctrl-divider"></div>
@@ -2100,6 +2105,23 @@
             // Hiện option Lịch sử thao tác chỉ với admin
             const optLichSu = document.getElementById('pageOptLichSu');
             if (optLichSu) optLichSu.style.display = (currentUser && currentUser.role === 'admin') ? '' : 'none';
+            _buildDistrictOptions();
+        }
+
+        function _buildDistrictOptions() {
+            const sel = document.getElementById('pages');
+            if (!sel) return;
+            // Xóa option địa bàn cũ (value bắt đầu bằng "district_")
+            [...sel.options].filter(o => o.value.startsWith('district_')).forEach(o => o.remove());
+            // Thêm optgroup địa bàn vào đầu select (trước option đầu tiên)
+            const firstOpt = sel.options[0];
+            DISTRICT_PAGES.forEach(page => {
+                const opt = document.createElement('option');
+                opt.value = 'district_' + page.sheet;
+                opt.textContent = page.label;
+                if (page.sheet === currentSheet) opt.selected = true;
+                sel.insertBefore(opt, firstOpt);
+            });
         }
 
         // ── LAZY LOAD ExcelJS (chỉ tải khi user xuất Excel/báo cáo) ──────────
@@ -2174,6 +2196,33 @@
         const KHAOSAT_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRjBdN5epr38kL2jLituPUC4wJO_Ohr_AsFpzaZh6Azxxs_gkzGT5s3JiZ1uFkNQFP5epR2U_wYT6wT/pub?output=csv';
         const KHAOSAT_GAS_URL = 'https://script.google.com/macros/s/AKfycbxPFn7lnJZYdjUg5WlVq1P1JGI5O3rvcry_IVE3bhF5foDmbgT6KwBU4xFxHNwKruHRvQ/exec';
 
+        // ── ĐA ĐỊA BÀN — cấu hình CSV URL sau khi publish từng tab trong Google Sheet ──
+        const DISTRICT_PAGES = [
+            { label: 'Tổng quan',        sheet: 'DanhSachTru', csvUrl: KHAOSAT_CSV_URL },
+            { label: 'Quận 1',           sheet: 'Quan1',       csvUrl: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRjBdN5epr38kL2jLituPUC4wJO_Ohr_AsFpzaZh6Azxxs_gkzGT5s3JiZ1uFkNQFP5epR2U_wYT6wT/pub?gid=1271544040&single=true&output=csv' },
+            { label: 'Quận 3',           sheet: 'Quan3',       csvUrl: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRjBdN5epr38kL2jLituPUC4wJO_Ohr_AsFpzaZh6Azxxs_gkzGT5s3JiZ1uFkNQFP5epR2U_wYT6wT/pub?gid=1447329018&single=true&output=csv' },
+            { label: 'Quận 5',           sheet: 'Quan5',       csvUrl: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRjBdN5epr38kL2jLituPUC4wJO_Ohr_AsFpzaZh6Azxxs_gkzGT5s3JiZ1uFkNQFP5epR2U_wYT6wT/pub?gid=1006624157&single=true&output=csv' },
+            { label: 'Quận 8',           sheet: 'Quan8',       csvUrl: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRjBdN5epr38kL2jLituPUC4wJO_Ohr_AsFpzaZh6Azxxs_gkzGT5s3JiZ1uFkNQFP5epR2U_wYT6wT/pub?gid=1954134043&single=true&output=csv' },
+            { label: 'Quận 10',          sheet: 'Quan10',      csvUrl: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRjBdN5epr38kL2jLituPUC4wJO_Ohr_AsFpzaZh6Azxxs_gkzGT5s3JiZ1uFkNQFP5epR2U_wYT6wT/pub?gid=1889500142&single=true&output=csv' },
+            { label: 'Quận 11',          sheet: 'Quan11',      csvUrl: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRjBdN5epr38kL2jLituPUC4wJO_Ohr_AsFpzaZh6Azxxs_gkzGT5s3JiZ1uFkNQFP5epR2U_wYT6wT/pub?gid=1388818107&single=true&output=csv' },
+            { label: 'Phú Nhuận',        sheet: 'PhuNhuan',    csvUrl: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRjBdN5epr38kL2jLituPUC4wJO_Ohr_AsFpzaZh6Azxxs_gkzGT5s3JiZ1uFkNQFP5epR2U_wYT6wT/pub?gid=288578187&single=true&output=csv' },
+            { label: 'Bình Thạnh',       sheet: 'BinhThanh',   csvUrl: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRjBdN5epr38kL2jLituPUC4wJO_Ohr_AsFpzaZh6Azxxs_gkzGT5s3JiZ1uFkNQFP5epR2U_wYT6wT/pub?gid=1150307229&single=true&output=csv' },
+            { label: 'Tân Bình',         sheet: 'TanBinh',     csvUrl: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRjBdN5epr38kL2jLituPUC4wJO_Ohr_AsFpzaZh6Azxxs_gkzGT5s3JiZ1uFkNQFP5epR2U_wYT6wT/pub?gid=1730482763&single=true&output=csv' },
+            { label: 'Tân Phú',          sheet: 'TanPhu',      csvUrl: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRjBdN5epr38kL2jLituPUC4wJO_Ohr_AsFpzaZh6Azxxs_gkzGT5s3JiZ1uFkNQFP5epR2U_wYT6wT/pub?gid=1223298612&single=true&output=csv' },
+            { label: 'Xã Bàu Bàng',      sheet: 'BauBang',     csvUrl: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRjBdN5epr38kL2jLituPUC4wJO_Ohr_AsFpzaZh6Azxxs_gkzGT5s3JiZ1uFkNQFP5epR2U_wYT6wT/pub?gid=784296746&single=true&output=csv' },
+            { label: 'Xã Trừ Văn Thố',   sheet: 'TruVanTho',   csvUrl: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRjBdN5epr38kL2jLituPUC4wJO_Ohr_AsFpzaZh6Azxxs_gkzGT5s3JiZ1uFkNQFP5epR2U_wYT6wT/pub?gid=110776181&single=true&output=csv' },
+            { label: 'Phường Bến Cát',   sheet: 'BenCat',      csvUrl: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRjBdN5epr38kL2jLituPUC4wJO_Ohr_AsFpzaZh6Azxxs_gkzGT5s3JiZ1uFkNQFP5epR2U_wYT6wT/pub?gid=1560529310&single=true&output=csv' },
+        ];
+
+        const SHEET_ID_PREFIX = {
+            DanhSachTru: 'TQ', Quan1: 'Q1', Quan3: 'Q3', Quan5: 'Q5',
+            Quan8: 'Q8', Quan10: 'Q10', Quan11: 'Q11',
+            PhuNhuan: 'PN', BinhThanh: 'BT', TanBinh: 'TB', TanPhu: 'TP',
+            BauBang: 'BB', TruVanTho: 'TVT', BenCat: 'BC'
+        };
+
+        let currentSheet = 'DanhSachTru';
+
         // Nút showMoreBtn — giữ tương thích, không làm gì trong UI mới
         function toggleShowMore() {}
 
@@ -2190,6 +2239,20 @@
         function normalizeMarkerBaseName(name) {
             const base = (name || '').toString().trim().replace(/[_\s\-]*\d+$/, '');
             return normalizeText(base);
+        }
+
+        function generateId() {
+            const prefix = SHEET_ID_PREFIX[currentSheet] || 'XX';
+            const existing = Array.isArray(loadedData)
+                ? loadedData.slice(1).map(r => String(r[0] || ''))
+                : [];
+            let n = existing.length + 1;
+            let candidate = `${prefix}_${String(n).padStart(3, '0')}`;
+            while (existing.includes(candidate)) {
+                n++;
+                candidate = `${prefix}_${String(n).padStart(3, '0')}`;
+            }
+            return candidate;
         }
 
         function parseCoord(val) {
@@ -2427,7 +2490,17 @@
 
             const type = parseInt(row[6]);
             const note = row[4] || '';
-            const icon = customIcons[type] || customIcons.default;
+            const _icCfg = TYPE_CONFIG[type];
+            let icon;
+            if (_icCfg) {
+                const loaiDen = String(row[10] || '').trim();
+                const congSuat = String(row[11] || '').trim();
+                icon = _icCfg.shape === 'cabinet'
+                    ? makeCabinetIcon(_icCfg.color)
+                    : makeLampIcon(_icCfg.color, loaiDen, congSuat);
+            } else {
+                icon = customIcons.default;
+            }
             const marker = L.marker([lat, lon], { icon, draggable: editPositionMode && canEdit() });
             marker._rowRef = row;
 
@@ -2501,7 +2574,7 @@
             6: { color: '#334155', bg: '#e2e8f0', label: 'Tủ chiếu sáng ngầm',emoji: '🗄', shape: 'cabinet' },
         };
 
-        function makeLampIcon(color) {
+        function makeLampIcon(color, loaiDen, congSuat) {
             const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="26" height="42" viewBox="0 0 26 42">
                 <defs>
                   <filter id="ls" x="-40%" y="-20%" width="180%" height="160%">
@@ -2520,9 +2593,13 @@
                 <!-- base plate -->
                 <rect x="8" y="40" width="8" height="2" rx="1" fill="${color}" opacity="0.55"/>
             </svg>`;
+            const labelParts = [loaiDen, congSuat].filter(Boolean);
+            const badge = labelParts.length
+                ? `<div style="position:absolute;top:43px;left:50%;transform:translateX(-50%);white-space:nowrap;font-family:Arial,sans-serif;font-size:8px;font-weight:700;color:#fff;background:${color};border-radius:3px;padding:1px 4px;line-height:1.5;box-shadow:0 1px 2px rgba(0,0,0,.4);pointer-events:none;">${labelParts.join(' ')}</div>`
+                : '';
             return L.divIcon({
                 className: '',
-                html: svg,
+                html: `<div style="position:relative;display:inline-block;overflow:visible;">${svg}${badge}</div>`,
                 iconSize: [26, 42], iconAnchor: [12, 42], popupAnchor: [4, -44]
             });
         }
@@ -3009,6 +3086,7 @@
                     method: 'POST',
                     body: JSON.stringify({
                         action: 'full_update',
+                        sheet: currentSheet,
                         id: String(row[0] || ''), tenTru: row[1] || '',
                         lat: row[2], lon: row[3],
                         ghiChu: row[4] || '', nguoiKS: row[5] || '', loai: row[6],
@@ -3423,7 +3501,10 @@
                 if (!KHAOSAT_GAS_URL) { displayError('Chưa cấu hình GAS URL.'); return; }
                 try { await _loadExcelJS(); } catch(_) { /* fallback sang XLSX.js bên dưới */ }
                 const pathInput = document.getElementById('githubPathInput');
-                const path = pathInput && pathInput.value.trim() ? pathInput.value.trim() : 'data/khaosat.xlsx';
+                const defaultPath = currentSheet === 'DanhSachTru'
+                    ? 'data/khaosat.xlsx'
+                    : `data/khaosat_${currentSheet}.xlsx`;
+                const path = pathInput && pathInput.value.trim() ? pathInput.value.trim() : defaultPath;
 
                 // 1. Tải toàn bộ dữ liệu mới nhất từ Google Sheet
                 displayError('Đang tải dữ liệu từ Google Sheets...');
@@ -3518,10 +3599,11 @@
             return rows;
         }
 
-        async function loadFromCSV() {
+        async function loadFromCSV(url) {
+            const csvUrl = url || KHAOSAT_CSV_URL;
             try {
                 displayError('Đang tải dữ liệu từ Google Sheets...');
-                const res = await fetch(KHAOSAT_CSV_URL);
+                const res = await fetch(csvUrl);
                 if (!res.ok) throw new Error('HTTP ' + res.status);
                 const rows = parseCSVText(await res.text());
                 if (rows.length < 2) throw new Error('Dữ liệu rỗng');
@@ -3531,7 +3613,35 @@
                 displayError('');
             } catch (e) {
                 displayError('Không tải được Google Sheets, dùng file cục bộ.');
-                loadDefaultFile();
+                if (!url) loadDefaultFile(); // chỉ fallback khi tải sheet mặc định
+            }
+        }
+
+        async function switchDistrict(sheetName) {
+            const page = DISTRICT_PAGES.find(p => p.sheet === sheetName);
+            if (!page) return;
+            if (!page.csvUrl) {
+                displayError('Địa bàn "' + page.label + '" chưa có URL dữ liệu. Cần publish tab ' + sheetName + ' thành CSV rồi điền vào DISTRICT_PAGES.csvUrl.');
+                return;
+            }
+            currentSheet = sheetName;
+            addMarkersToMap([]); // xóa markers hiện tại
+            await loadFromCSV(page.csvUrl);
+            // Cập nhật label địa bàn
+            const lbl = document.getElementById('currentDistrictLabel');
+            if (lbl) {
+                lbl.textContent = '📍 ' + page.label;
+                lbl.style.display = sheetName === 'DanhSachTru' ? 'none' : 'block';
+            }
+            // Sync lại dropdown
+            const sel = document.getElementById('pages');
+            if (sel) sel.value = 'district_' + sheetName;
+            // Redraw cable nếu đang bật
+            if (typeof _cableVisible !== 'undefined' && _cableVisible) {
+                _removeCableLines();
+                _cableVisible = false;
+                const btn = document.getElementById('btnToggleCable');
+                if (btn) btn.classList.remove('active');
             }
         }
 
@@ -3544,7 +3654,13 @@
 
         function navigateToPage() {
             const s = document.getElementById('pages');
-            if (s && s.value) window.location.href = s.value;
+            if (!s || !s.value) return;
+            const val = s.value;
+            if (val.startsWith('district_')) {
+                switchDistrict(val.replace('district_', ''));
+                return;
+            }
+            window.location.href = val;
         }
 
         function normalizeText(text) {
@@ -3902,7 +4018,7 @@
             try {
                 const resp = await fetch(KHAOSAT_GAS_URL, {
                     method: 'POST',
-                    body: JSON.stringify({ action: 'delete_row', id, tenTru: name })
+                    body: JSON.stringify({ action: 'delete_row', sheet: currentSheet, id, tenTru: name })
                 });
                 const json = await resp.json();
                 if (json.status === 'ok') {
@@ -4044,6 +4160,7 @@
             if (!currentUser || !KHAOSAT_GAS_URL) return;
             const payload = {
                 action: 'log_action',
+                sheet: currentSheet,
                 loaiThaoTac,
                 id: String(row[0] || ''),
                 tenTru: String(row[1] || ''),

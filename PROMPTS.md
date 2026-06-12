@@ -1863,3 +1863,391 @@ Không thay đổi gì khác.
 
 ⚠️ Việc cần làm TRƯỚC KHI CHẠY 5.x:
 → Redeploy GAS New version (header VN2000 từ session trước)
+
+7.1 → index.html: DISTRICT_PAGES config + currentSheet + _buildDistrictOptions()   ⬜
+7.2 → index.html: switchDistrict() + #pages onchange integration                   ⬜
+7.3 → index.html: syncRowToGAS / deleteMarker / _logAction thêm sheet param        ⬜
+7.4 → gas-khaosat.js: getSheet() helper + findRowNum nhận sheet param              ⬜
+7.5 → index.html: generateId() prefix theo địa bàn + Excel filename theo sheet     ⬜
+7.6 → gas-khaosat.js: setupDistrictSheets() + sw.js bump + hướng dẫn publish CSV  ⬜
+```
+
+---
+
+## TÍNH NĂNG 7: Đa địa bàn — nhiều sheet theo quận/huyện/xã
+
+Mục tiêu: Mỗi địa bàn hành chính (quận, huyện, xã, phường) lưu trên 1 tab sheet riêng trong
+cùng 1 Google Spreadsheet. Người dùng chuyển địa bàn qua dropdown "Chọn trang". Thực hiện
+theo thứ tự 7.1 → 7.2 → 7.3 → 7.4 → 7.5 → 7.6.
+
+---
+
+### PROMPT 7.1 — Config DISTRICT_PAGES + state currentSheet + render dropdown
+
+```
+Dự án: PWA khảo sát chiếu sáng — index.html.
+
+Ngữ cảnh:
+- Toàn bộ app trong 1 file index.html (HTML+CSS+JS).
+- KHAOSAT_CSV_URL và KHAOSAT_GAS_URL đã khai báo ở đầu JS (const).
+- Dropdown #pages (trong controlsModal) hiện có các option tĩnh (index.html, lichsu.html, v.v.).
+- Hàm _applyRoleUI() gọi sau đăng nhập để ẩn/hiện UI theo role.
+- Hiện tại chỉ có 1 sheet DanhSachTru — mọi thao tác đọc/ghi đều hướng về đó.
+
+Nhiệm vụ: 3 thay đổi trong index.html.
+
+**Thay đổi 1 — Thêm config array ngay sau khai báo KHAOSAT_CSV_URL:**
+```javascript
+const DISTRICT_PAGES = [
+    { label: 'Tổng quan',       sheet: 'DanhSachTru', csvUrl: KHAOSAT_CSV_URL },
+    { label: 'Quận 1',          sheet: 'Quan1',       csvUrl: '' },
+    { label: 'Quận 3',          sheet: 'Quan3',       csvUrl: '' },
+    { label: 'Quận 5',          sheet: 'Quan5',       csvUrl: '' },
+    { label: 'Quận 8',          sheet: 'Quan8',       csvUrl: '' },
+    { label: 'Quận 10',         sheet: 'Quan10',      csvUrl: '' },
+    { label: 'Quận 11',         sheet: 'Quan11',      csvUrl: '' },
+    { label: 'Phú Nhuận',       sheet: 'PhuNhuan',    csvUrl: '' },
+    { label: 'Bình Thạnh',      sheet: 'BinhThanh',   csvUrl: '' },
+    { label: 'Tân Bình',        sheet: 'TanBinh',     csvUrl: '' },
+    { label: 'Tân Phú',         sheet: 'TanPhu',      csvUrl: '' },
+    { label: 'Xã Bàu Bàng',     sheet: 'BauBang',     csvUrl: '' },
+    { label: 'Xã Trừ Văn Thố',  sheet: 'TruVanTho',   csvUrl: '' },
+    { label: 'Phường Bến Cát',  sheet: 'BenCat',      csvUrl: '' },
+];
+
+let currentSheet = 'DanhSachTru'; // sheet địa bàn đang hiển thị
+```
+
+Ghi chú: Người dùng sẽ điền csvUrl sau khi publish từng tab trong Google Sheet.
+
+**Thay đổi 2 — Thêm hàm `_buildDistrictOptions()` vào JS (đặt gần _applyRoleUI):**
+```javascript
+function _buildDistrictOptions() {
+    const sel = document.getElementById('pages');
+    if (!sel) return;
+    // Xóa các option địa bàn cũ (value bắt đầu bằng "district_")
+    [...sel.options].filter(o => o.value.startsWith('district_')).forEach(o => o.remove());
+    // Thêm optgroup địa bàn vào đầu select (trước option "Trang khảo sát")
+    const firstOpt = sel.querySelector('option');
+    DISTRICT_PAGES.forEach(page => {
+        const opt = document.createElement('option');
+        opt.value = 'district_' + page.sheet;
+        opt.textContent = page.label;
+        if (page.sheet === currentSheet) opt.selected = true;
+        sel.insertBefore(opt, firstOpt);
+    });
+}
+```
+
+**Thay đổi 3 — Gọi `_buildDistrictOptions()` trong `_applyRoleUI()`:**
+Tìm hàm `_applyRoleUI()`, thêm vào cuối thân hàm:
+```javascript
+_buildDistrictOptions();
+```
+
+Không thay đổi gì khác.
+```
+
+---
+
+### PROMPT 7.2 — Hàm switchDistrict() + hook vào #pages onchange
+
+```
+Dự án: PWA khảo sát chiếu sáng — index.html.
+
+Ngữ cảnh sau PROMPT 7.1:
+- DISTRICT_PAGES array và currentSheet đã khai báo.
+- _buildDistrictOptions() đã tồn tại, render option có value="district_<sheetName>".
+- Dropdown #pages có onchange="navigateToPage()" — hàm hiện tại dùng window.location.href
+  để điều hướng tới URL. Cần mở rộng để xử lý riêng các option địa bàn (không navigate URL).
+- Hàm loadFromCSV(url) đã có: tải CSV, parse, gọi addMarkerRowToMap(), cập nhật map.
+- Hàm clearAllMarkers() đã có: xóa toàn bộ marker khỏi map + reset loadedData.
+  (Nếu chưa có tên này, tìm đoạn code xóa marker tương đương và dùng đó.)
+- displayError(msg, type) đã có — toast notification.
+- Element hiển thị tên địa bàn hiện tại: cần thêm mới (xem bên dưới).
+
+Nhiệm vụ:
+
+**1. Thêm hàm `switchDistrict(sheetName)` vào JS (đặt gần loadFromCSV):**
+```javascript
+async function switchDistrict(sheetName) {
+    const page = DISTRICT_PAGES.find(p => p.sheet === sheetName);
+    if (!page) return;
+    if (!page.csvUrl) {
+        displayError('Địa bàn "' + page.label + '" chưa có URL dữ liệu. Vui lòng cấu hình csvUrl trong DISTRICT_PAGES.');
+        return;
+    }
+    currentSheet = sheetName;
+    // Xóa toàn bộ marker + data hiện tại
+    clearAllMarkers();
+    // Tải CSV của địa bàn mới
+    displayError('Đang tải dữ liệu ' + page.label + '...');
+    await loadFromCSV(page.csvUrl);
+    // Cập nhật nhãn địa bàn hiện tại trong UI
+    const lbl = document.getElementById('currentDistrictLabel');
+    if (lbl) lbl.textContent = page.label;
+    // Sync lại dropdown
+    const sel = document.getElementById('pages');
+    if (sel) sel.value = 'district_' + sheetName;
+}
+```
+
+**2. Sửa hàm `navigateToPage()`** — thêm xử lý option địa bàn TRƯỚC logic navigate URL:
+```javascript
+function navigateToPage() {
+    const sel = document.getElementById('pages');
+    const val = sel ? sel.value : '';
+    if (val.startsWith('district_')) {
+        const sheetName = val.replace('district_', '');
+        switchDistrict(sheetName);
+        return; // không navigate URL
+    }
+    // Logic cũ giữ nguyên (window.location.href = val)
+    if (val && val !== window.location.pathname.split('/').pop()) {
+        window.location.href = val;
+    }
+}
+```
+
+**3. Thêm nhãn địa bàn hiện tại vào HTML** — trong topbar (sau chip user hoặc sau nút hamburger),
+thêm element hiển thị tên địa bàn:
+```html
+<span id="currentDistrictLabel"
+      style="font-size:11px;font-weight:700;color:rgba(255,255,255,.75);
+             background:rgba(255,255,255,.12);border-radius:999px;
+             padding:2px 9px;flex-shrink:0;display:none;">
+</span>
+```
+Trong `switchDistrict()` sau khi set textContent, thêm:
+```javascript
+if (lbl) lbl.style.display = sheetName === 'DanhSachTru' ? 'none' : 'inline';
+```
+
+Không thay đổi gì khác.
+```
+
+---
+
+### PROMPT 7.3 — Client: thêm sheet param vào syncRowToGAS, deleteMarker, _logAction
+
+```
+Dự án: PWA khảo sát chiếu sáng — index.html.
+
+Ngữ cảnh sau PROMPT 7.1–7.2:
+- `currentSheet` là biến global, lưu tên sheet đang hiển thị (mặc định 'DanhSachTru').
+- GAS action `full_update` ghi vào sheet DanhSachTru cứng trong code GAS.
+  → Cần truyền thêm field `sheet` để GAS biết ghi vào tab nào.
+- Tương tự `delete_row` và `log_action`.
+
+Nhiệm vụ: 3 thay đổi nhỏ, chỉ thêm 1 field vào payload.
+
+**1. Hàm `syncRowToGAS(row, opts)` (hoặc tên tương đương gửi action=full_update):**
+Tìm đoạn build payload gửi GAS, thêm field `sheet`:
+```javascript
+// Tìm object payload có action: 'full_update', thêm:
+sheet: currentSheet,
+```
+Ví dụ: nếu payload là `const payload = { action: 'full_update', id: ..., tenTru: ... }`,
+thêm `, sheet: currentSheet` vào sau action.
+
+**2. Hàm `deleteMarker()` (hoặc nơi gửi action=delete_row):**
+Tìm object payload gửi delete_row, thêm:
+```javascript
+sheet: currentSheet,
+```
+
+**3. Hàm `_logAction(loaiThaoTac, row, chiTiet)` (gửi action=log_action):**
+Tìm object payload gửi log_action, thêm:
+```javascript
+sheet: currentSheet,
+```
+
+Lưu ý: Chỉ thêm 1 field vào payload, KHÔNG sửa gì khác. GAS sẽ đọc `data.sheet` để
+chọn đúng tab — implement phía GAS ở PROMPT 7.4.
+
+Không thay đổi gì khác.
+```
+
+---
+
+### PROMPT 7.4 — GAS: getSheet() helper + findRowNum nhận sheet làm tham số
+
+```
+Dự án: PWA khảo sát chiếu sáng — gas-khaosat.js (Google Apps Script).
+
+Ngữ cảnh:
+- Hiện tại doPost() hardcode: `const sheet = ss.getSheetByName('DanhSachTru');`
+- Client sau PROMPT 7.3 gửi thêm field `data.sheet` (tên tab sheet) trong mọi action ghi.
+- Cần GAS route đúng tab theo `data.sheet`, fallback về 'DanhSachTru' nếu rỗng/không tồn tại.
+
+Nhiệm vụ:
+
+**1. Thêm hàm helper `getSheet(name)` vào gas-khaosat.js** (đặt trước doPost()):
+```javascript
+function getSheet(name) {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    return ss.getSheetByName(name || 'DanhSachTru') || ss.getSheetByName('DanhSachTru');
+}
+```
+
+**2. Thay thế tất cả** `ss.getSheetByName('DanhSachTru')` trong doPost() và các hàm được
+doPost() gọi (handleFullUpdate, handleDeleteRow, findRowNum, ensureHeader, v.v.) bằng
+`getSheet(data.sheet)` (hoặc truyền sheet qua tham số).
+
+Pattern tìm-thay:
+- `const sheet = ss.getSheetByName('DanhSachTru');`
+  → `const sheet = getSheet(data.sheet);`
+- Nếu các hàm con (handleFullUpdate(data), handleDeleteRow(data)) nhận `data` làm tham số,
+  chúng đã truy cập được `data.sheet` → chỉ cần đổi dòng getSheetByName bên trong chúng.
+
+**3. Hàm `ensureHeader(sheet)`** hiện tại có thể hardcode header hoặc copy từ DanhSachTru.
+Không thay đổi logic ensureHeader — chỉ đảm bảo nó nhận `sheet` object làm tham số
+(không gọi getSheetByName bên trong nếu đã có sheet object).
+
+**4. Hàm `log_action` (handleLogAction)** ghi vào sheet 'LichSu' — KHÔNG thay đổi,
+log luôn vào LichSu bất kể địa bàn nào.
+
+**5. Hàm `login`** đọc từ sheet 'TaiKhoan' — KHÔNG thay đổi.
+
+Sau khi sửa: Redeploy GAS New version (không tạo deployment mới — URL giữ nguyên).
+
+Không thay đổi gì khác.
+```
+
+---
+
+### PROMPT 7.5 — generateId() prefix theo địa bàn + Excel filename theo sheet
+
+```
+Dự án: PWA khảo sát chiếu sáng — index.html.
+
+Ngữ cảnh sau PROMPT 7.1–7.3:
+- currentSheet lưu tên sheet hiện tại (vd: 'Quan1', 'BauBang', 'DanhSachTru').
+- Khi thêm marker mới, ID được sinh tự động.
+  Hiện tại: ID dạng 'TQ_001', 'TQ_002'... (hoặc format khác tuỳ code hiện tại).
+  Yêu cầu: prefix thay đổi theo currentSheet để tránh trùng ID giữa các địa bàn.
+- updateGitHubExcel() push Excel lên GitHub với tên file cố định 'data/khaosat.xlsx'.
+  Yêu cầu: tên file thay đổi theo currentSheet.
+
+Nhiệm vụ:
+
+**1. Thêm mapping prefix** ngay sau khai báo DISTRICT_PAGES:
+```javascript
+const SHEET_ID_PREFIX = {
+    DanhSachTru: 'TQ',
+    Quan1: 'Q1', Quan3: 'Q3', Quan5: 'Q5', Quan8: 'Q8',
+    Quan10: 'Q10', Quan11: 'Q11',
+    PhuNhuan: 'PN', BinhThanh: 'BT', TanBinh: 'TB', TanPhu: 'TP',
+    BauBang: 'BB', TruVanTho: 'TVT', BenCat: 'BC'
+};
+```
+
+**2. Tìm hàm sinh ID tự động khi thêm marker mới** (tìm đoạn tạo ID dạng 'TQ_001' hay
+'ID_001' hay tương đương trong saveMarkerPopup() hoặc generateId()). Thay thế/bổ sung:
+
+```javascript
+function generateId() {
+    const prefix = SHEET_ID_PREFIX[currentSheet] || 'XX';
+    const existing = Array.isArray(loadedData)
+        ? loadedData.slice(1).map(r => String(r[0] || ''))
+        : [];
+    let n = existing.length + 1;
+    let candidate = `${prefix}_${String(n).padStart(3, '0')}`;
+    while (existing.includes(candidate)) {
+        n++;
+        candidate = `${prefix}_${String(n).padStart(3, '0')}`;
+    }
+    return candidate;
+}
+```
+
+Gọi `generateId()` ở nơi trước đây sinh ID khi thêm marker mới.
+
+**3. Trong `updateGitHubExcel()`** (hoặc hàm sync GitHub), tìm dòng khai báo path file Excel:
+```javascript
+// Hiện tại có thể là:
+const path = 'data/khaosat.xlsx';
+// Thay bằng:
+const path = currentSheet === 'DanhSachTru'
+    ? 'data/khaosat.xlsx'
+    : `data/khaosat_${currentSheet}.xlsx`;
+```
+
+Không thay đổi gì khác.
+```
+
+---
+
+### PROMPT 7.6 — GAS: setupDistrictSheets() + sw.js bump v7 + hướng dẫn publish CSV
+
+```
+Dự án: PWA khảo sát chiếu sáng — 2 file: gas-khaosat.js và sw.js.
+
+Ngữ cảnh:
+- Google Sheet hiện chỉ có sheet DanhSachTru (21 cột).
+- Cần tạo 13 tab sheet mới cùng cấu trúc.
+- sw.js hiện cache name 'lighting-survey-v6' — cần bump lên v7 để xóa cache cũ
+  (do thêm nhiều thay đổi từ PROMPT 7.1–7.5).
+
+Nhiệm vụ:
+
+**File gas-khaosat.js — thêm hàm `setupDistrictSheets()`** (đặt cuối file, sau doPost()):
+```javascript
+/**
+ * Chạy 1 lần từ Apps Script Editor để tạo tất cả sheet địa bàn.
+ * Sau khi chạy: publish từng tab ra CSV và điền URL vào DISTRICT_PAGES trong index.html.
+ */
+function setupDistrictSheets() {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const source = ss.getSheetByName('DanhSachTru');
+    if (!source) { Logger.log('Không tìm thấy sheet DanhSachTru'); return; }
+    const header = source.getRange(1, 1, 1, 21).getValues();
+    const sheetNames = [
+        'Quan1', 'Quan3', 'Quan5', 'Quan8', 'Quan10', 'Quan11',
+        'PhuNhuan', 'BinhThanh', 'TanBinh', 'TanPhu',
+        'BauBang', 'TruVanTho', 'BenCat'
+    ];
+    sheetNames.forEach(name => {
+        let sh = ss.getSheetByName(name);
+        if (!sh) {
+            sh = ss.insertSheet(name);
+            sh.getRange(1, 1, 1, 21).setValues(header);
+            sh.getRange(1, 1, 1, 21).setFontWeight('bold');
+            sh.setFrozenRows(1);
+            Logger.log('Đã tạo sheet: ' + name);
+        } else {
+            Logger.log('Sheet đã tồn tại: ' + name);
+        }
+    });
+    Logger.log('Hoàn tất. Tiếp theo: publish từng tab thành CSV và điền URL vào DISTRICT_PAGES.');
+}
+```
+
+**File sw.js — bump cache name từ v6 → v7:**
+Tìm tất cả chỗ có 'lighting-survey-v6' trong sw.js và thay bằng 'lighting-survey-v7'.
+(Thường có ở: khai báo const CACHE_NAME, mảng CACHE_URLS, và event 'activate' xóa cache cũ.)
+
+Không thay đổi gì khác trong 2 file này.
+
+---
+
+Hướng dẫn hoàn tất sau khi chạy các prompt:
+
+1. Vào Apps Script Editor → chọn hàm `setupDistrictSheets` → Run (chạy 1 lần duy nhất)
+   → 13 tab sheet mới được tạo tự động trong Google Sheet.
+
+2. Publish từng tab thành CSV (lặp lại cho mỗi tab):
+   Google Sheet → tab Quan1 → File → Share → Publish to web
+   → Chọn: "Quan1" / "Comma-separated values (.csv)" → Publish → Copy link
+
+3. Điền URL vào DISTRICT_PAGES trong index.html:
+   ```javascript
+   { label: 'Quận 1', sheet: 'Quan1', csvUrl: '<URL vừa copy>' },
+   ```
+
+4. Redeploy GAS New version (không tạo deployment mới):
+   Apps Script → Deploy → Manage deployments → ✏️ Edit → Version: New version → Deploy
+
+5. Commit + push index.html, gas-khaosat.js, sw.js lên GitHub.
+   → GitHub Pages tự deploy — app cập nhật sau vài phút.
+```

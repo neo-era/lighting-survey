@@ -53,18 +53,21 @@ const FIELD_MAP = {
 
 // ── UTILS ──────────────────────────────────────────────────────────────────
 
-function getSheet() {
+function getSheet(name) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
-  let sheet = ss.getSheetByName(SHEET_NAME);
+  const target = name || SHEET_NAME;
+  let sheet = ss.getSheetByName(target);
   if (!sheet) {
-    sheet = ss.insertSheet(SHEET_NAME);
+    // Fallback về DanhSachTru nếu sheet địa bàn chưa tạo
+    sheet = ss.getSheetByName(SHEET_NAME);
+    if (!sheet) sheet = ss.insertSheet(SHEET_NAME);
   }
   return sheet;
 }
 
 // Tự động tạo header nếu trống, hoặc bổ sung cột còn thiếu ở cuối
-function ensureHeader() {
-  const sheet = getSheet();
+function ensureHeader(sheet) {
+  if (!sheet) sheet = getSheet();
   const lastCol = sheet.getLastColumn();
 
   if (lastCol === 0) {
@@ -235,8 +238,6 @@ function doPost(e) {
       return handleLogAction(data);
     }
 
-    ensureHeader();
-
     if (data.action === 'upload_image') {
       return handleImageUpload(data.imageBase64 || '', data.soTru || '', data.ext || 'jpg');
     }
@@ -246,9 +247,8 @@ function doPost(e) {
     }
 
     if (data.action === 'full_update') {
-      const sheet = getSheet();
-      if (!sheet) throw new Error('Không tìm thấy sheet: ' + SHEET_NAME);
-
+      const sheet = getSheet(data.sheet);
+      ensureHeader(sheet);
       const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
       const hIdx    = buildHeaderIndex(headers);
 
@@ -262,8 +262,7 @@ function doPost(e) {
     }
 
     if (data.action === 'delete_row') {
-      const sheet = getSheet();
-      if (!sheet) throw new Error('Không tìm thấy sheet: ' + SHEET_NAME);
+      const sheet = getSheet(data.sheet);
       const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
       const hIdx    = buildHeaderIndex(headers);
       const rowNum  = findRowNum(sheet, headers, hIdx, data);
@@ -367,6 +366,39 @@ function buildFieldValues(data) {
 // ── HEALTH CHECK ───────────────────────────────────────────────────────────
 
 function doGet(e) {
-  ensureHeader();
+  ensureHeader(getSheet());
   return jsonResponse({ status: 'ok', message: 'KhaoSat GAS v2 — login ready, header ensured' });
+}
+
+/**
+ * Chạy 1 lần từ Apps Script Editor để tạo tất cả sheet địa bàn.
+ * Sau khi chạy: publish từng tab ra CSV và điền URL vào DISTRICT_PAGES trong index.html.
+ * Cách chạy: Apps Script Editor → chọn hàm này → nhấn Run (▶)
+ */
+function setupDistrictSheets() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const source = ss.getSheetByName('DanhSachTru');
+  if (!source) { Logger.log('Không tìm thấy sheet DanhSachTru'); return; }
+  const header = source.getRange(1, 1, 1, 21).getValues();
+  const sheetNames = [
+    'Quan1', 'Quan3', 'Quan5', 'Quan8', 'Quan10', 'Quan11',
+    'PhuNhuan', 'BinhThanh', 'TanBinh', 'TanPhu',
+    'BauBang', 'TruVanTho', 'BenCat'
+  ];
+  sheetNames.forEach(function(name) {
+    var sh = ss.getSheetByName(name);
+    if (!sh) {
+      sh = ss.insertSheet(name);
+      sh.getRange(1, 1, 1, 21).setValues(header);
+      sh.getRange(1, 1, 1, 21).setFontWeight('bold')
+        .setBackground('#cfe2f3')
+        .setHorizontalAlignment('center');
+      sh.setFrozenRows(1);
+      sh.autoResizeColumns(1, 21);
+      Logger.log('Đã tạo sheet: ' + name);
+    } else {
+      Logger.log('Sheet đã tồn tại (bỏ qua): ' + name);
+    }
+  });
+  Logger.log('Hoàn tất. Tiếp theo: publish từng tab thành CSV và điền URL vào DISTRICT_PAGES trong index.html.');
 }

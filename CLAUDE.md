@@ -745,3 +745,247 @@ Cùng hàm này được dùng để tính cột `VN2000-X`, `VN2000-Y` khi lưu
 
 ### Excel xuất báo cáo
 2 sheet: **Chi tiết** (filtered rows) + **Tổng hợp** (count theo loại).
+
+---
+
+## Tính năng 7: Đa địa bàn — nhiều sheet theo quận/huyện/xã
+
+### Mục tiêu
+
+Cho phép app quản lý dữ liệu nhiều địa bàn hành chính (quận, huyện, xã, phường) trên cùng 1 Google Spreadsheet. Mỗi địa bàn là 1 tab sheet riêng, cùng cấu trúc 21 cột như `DanhSachTru`. Người dùng chuyển địa bàn qua dropdown **"Chọn trang"** trong controls panel.
+
+---
+
+### Danh sách địa bàn & tên sheet
+
+| Label hiển thị        | Tên sheet (tab)    | Ghi chú                       |
+|-----------------------|--------------------|-------------------------------|
+| Tổng quan             | `DanhSachTru`      | Sheet gốc, mặc định khi load  |
+| Quận 1                | `Quan1`            | TP. Hồ Chí Minh               |
+| Quận 3                | `Quan3`            |                               |
+| Quận 5                | `Quan5`            |                               |
+| Quận 8                | `Quan8`            |                               |
+| Quận 10               | `Quan10`           |                               |
+| Quận 11               | `Quan11`           |                               |
+| Phú Nhuận             | `PhuNhuan`         |                               |
+| Bình Thạnh            | `BinhThanh`        |                               |
+| Tân Bình              | `TanBinh`          |                               |
+| Tân Phú               | `TanPhu`           |                               |
+| Xã Bàu Bàng           | `BauBang`          | Bình Dương                    |
+| Xã Trừ Văn Thố        | `TruVanTho`        |                               |
+| Phường Bến Cát        | `BenCat`           |                               |
+
+---
+
+### Cấu hình trong `index.html`
+
+```javascript
+// Mỗi địa bàn cần 1 CSV URL riêng (publish từng tab trong Google Sheet)
+const DISTRICT_PAGES = [
+    { label: 'Tổng quan',        sheet: 'DanhSachTru', csvUrl: KHAOSAT_CSV_URL },
+    { label: 'Quận 1',           sheet: 'Quan1',       csvUrl: 'https://docs.google.com/spreadsheets/d/.../gviz/tq?tqx=out:csv&sheet=Quan1' },
+    { label: 'Quận 3',           sheet: 'Quan3',       csvUrl: '...' },
+    { label: 'Quận 5',           sheet: 'Quan5',       csvUrl: '...' },
+    { label: 'Quận 8',           sheet: 'Quan8',       csvUrl: '...' },
+    { label: 'Quận 10',          sheet: 'Quan10',      csvUrl: '...' },
+    { label: 'Quận 11',          sheet: 'Quan11',      csvUrl: '...' },
+    { label: 'Phú Nhuận',        sheet: 'PhuNhuan',    csvUrl: '...' },
+    { label: 'Bình Thạnh',       sheet: 'BinhThanh',   csvUrl: '...' },
+    { label: 'Tân Bình',         sheet: 'TanBinh',     csvUrl: '...' },
+    { label: 'Tân Phú',          sheet: 'TanPhu',      csvUrl: '...' },
+    { label: 'Xã Bàu Bàng',      sheet: 'BauBang',     csvUrl: '...' },
+    { label: 'Xã Trừ Văn Thố',   sheet: 'TruVanTho',   csvUrl: '...' },
+    { label: 'Phường Bến Cát',   sheet: 'BenCat',      csvUrl: '...' },
+];
+
+let currentSheet = 'DanhSachTru'; // sheet đang hiển thị
+```
+
+**Cách lấy CSV URL cho từng tab:**
+Google Sheet → tab `Quan1` → File → Share → Publish to web → chọn tab `Quan1` → Comma-separated values → Copy link
+
+---
+
+### Dropdown "Chọn trang" (`#pages`)
+
+```
+┌────────────────────────────┐
+│ -- Bản đồ --               │
+│ Tổng quan                  │
+│ Quận 1                     │
+│ Quận 3                     │
+│ Quận 5                     │
+│ Quận 8                     │
+│ Quận 10                    │
+│ Quận 11                    │
+│ Phú Nhuận                  │
+│ Bình Thạnh                 │
+│ Tân Bình                   │
+│ Tân Phú                    │
+│ Xã Bàu Bàng                │
+│ Xã Trừ Văn Thố             │
+│ Phường Bến Cát              │
+│ -- Khác --                 │
+│ Lịch sử thao tác (admin)   │
+└────────────────────────────┘
+```
+
+**Render dropdown trong `_applyRoleUI()`:**
+```javascript
+function _buildDistrictOptions() {
+    const sel = document.getElementById('pages');
+    // Xóa options địa bàn cũ (giữ options tĩnh: map, history)
+    // Thêm optgroup "Bản đồ" + loop DISTRICT_PAGES → <option value="district_Quan1">Quận 1</option>
+    // Option value: "district_<sheetName>" để phân biệt với "map" / "history"
+}
+```
+
+---
+
+### Luồng chuyển địa bàn (`switchDistrict(sheetName)`)
+
+```javascript
+async function switchDistrict(sheetName) {
+    const page = DISTRICT_PAGES.find(p => p.sheet === sheetName);
+    if (!page) return;
+    currentSheet = sheetName;
+    // 1. Xóa tất cả marker hiện tại khỏi map
+    clearAllMarkers();
+    // 2. Tải CSV mới
+    await loadFromCSV(page.csvUrl);
+    // 3. Cập nhật title / breadcrumb hiển thị địa bàn hiện tại
+    document.getElementById('currentDistrictLabel').textContent = page.label;
+}
+```
+
+Gọi `switchDistrict` từ `onchange` của `#pages` khi value bắt đầu bằng `district_`.
+
+---
+
+### Cập nhật GAS — thêm tham số `sheet`
+
+Tất cả actions ghi dữ liệu cần nhận thêm field `sheet` để biết ghi vào tab nào:
+
+```javascript
+// Client gửi:
+{ action: 'full_update', sheet: currentSheet, id, tenTru, lat, lon, ... }
+{ action: 'delete_row',  sheet: currentSheet, id, tenTru }
+{ action: 'log_action',  sheet: currentSheet, loaiThaoTac, id, tenTru, ... }
+```
+
+**GAS — `doPost()` — thêm helper `getSheet(name)`:**
+```javascript
+function getSheet(name) {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    return ss.getSheetByName(name || 'DanhSachTru') || ss.getSheetByName('DanhSachTru');
+}
+// Thay thế tất cả ss.getSheetByName('DanhSachTru') bằng getSheet(data.sheet)
+```
+
+**`findRowNum(sheet, id, tenTru)`** — nhận sheet làm tham số thay vì hardcode.
+
+---
+
+### Tạo sheet mới trong Google Sheet
+
+Với mỗi địa bàn mới, cần tạo tab thủ công:
+1. Google Sheet → click `+` (thêm sheet)
+2. Đặt tên đúng theo bảng trên (e.g. `Quan1`)
+3. Copy hàng header từ `DanhSachTru` (hàng 1) sang sheet mới
+4. Publish tab đó ra CSV → copy URL vào `DISTRICT_PAGES[...].csvUrl` trong `index.html`
+
+**Header hàng 1 cần copy (21 cột):**
+```
+ID | Tên trụ | Lat | Lon | Ghi chú | Người KS | Loại | Tủ điều khiển | Loại trụ | Loại cần | Loại đèn | Công suất | Ảnh | Thời gian cập nhật | Marker gốc | Khoảng cách (m) | Mã PE | Đường | Phường/ Xã | VN2000-X | VN2000-Y
+```
+
+---
+
+### Tạo script GAS tự động tạo sheet (`setupDistrictSheets`)
+
+Thêm hàm tiện ích vào `gas-khaosat.js` để tạo tất cả sheet cùng lúc (chạy 1 lần):
+```javascript
+function setupDistrictSheets() {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const source = ss.getSheetByName('DanhSachTru');
+    const header = source.getRange(1, 1, 1, 21).getValues();
+    const sheets = ['Quan1','Quan3','Quan5','Quan8','Quan10','Quan11',
+                    'PhuNhuan','BinhThanh','TanBinh','TanPhu',
+                    'BauBang','TruVanTho','BenCat'];
+    sheets.forEach(name => {
+        if (!ss.getSheetByName(name)) {
+            const sh = ss.insertSheet(name);
+            sh.getRange(1, 1, 1, 21).setValues(header);
+        }
+    });
+}
+```
+
+---
+
+### ID tự động theo địa bàn
+
+Khi thêm marker mới, ID cần prefix theo địa bàn để tránh trùng:
+```
+DanhSachTru → ID: TQ_001, TQ_002, ...
+Quan1       → ID: Q1_001, Q1_002, ...
+Quan3       → ID: Q3_001, ...
+PhuNhuan    → ID: PN_001, ...
+BauBang     → ID: BB_001, ...
+TruVanTho   → ID: TVT_001, ...
+BenCat      → ID: BC_001, ...
+```
+
+**Hàm sinh ID:**
+```javascript
+const SHEET_ID_PREFIX = {
+    DanhSachTru: 'TQ', Quan1: 'Q1', Quan3: 'Q3', Quan5: 'Q5',
+    Quan8: 'Q8', Quan10: 'Q10', Quan11: 'Q11',
+    PhuNhuan: 'PN', BinhThanh: 'BT', TanBinh: 'TB', TanPhu: 'TP',
+    BauBang: 'BB', TruVanTho: 'TVT', BenCat: 'BC'
+};
+function generateId() {
+    const prefix = SHEET_ID_PREFIX[currentSheet] || 'XX';
+    const existing = (loadedData || []).slice(1).map(r => String(r[0]));
+    let n = existing.length + 1;
+    while (existing.includes(`${prefix}_${String(n).padStart(3,'0')}`)) n++;
+    return `${prefix}_${String(n).padStart(3,'0')}`;
+}
+```
+
+---
+
+### Scope tìm kiếm & sơ đồ cáp
+
+- `searchMarkers()` tìm trong `loadedData` của **địa bàn đang chọn** (không tìm chéo địa bàn)
+- `_buildCableLines()` vẽ cáp của địa bàn hiện tại
+- In bản vẽ (`exportDrawingPDF()`) xuất theo địa bàn hiện tại
+
+---
+
+### GitHub sync theo địa bàn
+
+`updateGitHubExcel()` xuất Excel tên `data/khaosat_<sheetName>.xlsx`:
+```javascript
+const filename = currentSheet === 'DanhSachTru'
+    ? 'data/khaosat.xlsx'
+    : `data/khaosat_${currentSheet}.xlsx`;
+```
+
+---
+
+### Checklist implement
+
+- [ ] Thêm `DISTRICT_PAGES` config array vào `index.html`
+- [ ] Thêm `currentSheet` state variable
+- [ ] Hàm `_buildDistrictOptions()` render dropdown
+- [ ] Hàm `switchDistrict(sheetName)` chuyển địa bàn
+- [ ] Cập nhật `syncRowToGAS()` thêm `sheet: currentSheet` vào payload
+- [ ] Cập nhật `deleteMarker()` thêm `sheet: currentSheet`
+- [ ] Cập nhật `_logAction()` thêm `sheet: currentSheet`
+- [ ] Cập nhật GAS `doPost()`: `getSheet(data.sheet)` thay vì hardcode
+- [ ] Thêm hàm `setupDistrictSheets()` vào GAS (chạy 1 lần)
+- [ ] Cập nhật `generateId()` dùng prefix theo `currentSheet`
+- [ ] Publish từng tab CSV → điền URL vào `DISTRICT_PAGES`
+- [ ] Redeploy GAS New version sau khi sửa
+- [ ] Bump sw.js cache name (v6 → v7)

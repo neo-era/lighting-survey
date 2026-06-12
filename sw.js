@@ -1,4 +1,4 @@
-const CACHE = 'lighting-survey-v6';
+const CACHE = 'lighting-survey-v7';
 
 // Assets tĩnh pre-cache khi install (icon + ảnh mẫu)
 const STATIC_ASSETS = [

@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <filter id="sh6" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="2" stdDeviation="2" flood-opacity=".4"/>
+    </filter>
+    <linearGradient id="gl6" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#475569"/>
+      <stop offset="100%" stop-color="#1e293b"/>
+    </linearGradient>
+    <pattern id="hatch" patternUnits="userSpaceOnUse" width="6" height="6" patternTransform="rotate(45)">
+      <line x1="0" y1="0" x2="0" y2="6" stroke="#94a3b8" stroke-width="1.5"/>
+    </pattern>
+  </defs>
+  <!-- underground indicator (mặt đất) -->
+  <rect x="0" y="54" width="64" height="10" rx="0" fill="url(#hatch)" opacity="0.4"/>
+  <line x1="0" y1="54" x2="64" y2="54" stroke="#64748b" stroke-width="2" opacity="0.7"/>
+  <!-- cabinet body (ngầm — chìm xuống đất) -->
+  <rect x="8" y="8" width="48" height="47" rx="5" fill="url(#gl6)" stroke="#94a3b8" stroke-width="1.5" filter="url(#sh6)"/>
+  <!-- top section divider -->
+  <line x1="8" y1="24" x2="56" y2="24" stroke="#94a3b8" stroke-width="1.5" opacity="0.5"/>
+  <!-- lid / cover (ngầm có nắp đậy) -->
+  <rect x="8" y="8" width="48" height="7" rx="5" fill="#64748b" opacity="0.6"/>
+  <rect x="8" y="13" width="48" height="2" rx="0" fill="#94a3b8" opacity="0.3"/>
+  <!-- top control panel -->
+  <rect x="14" y="27" width="36" height="10" rx="3" fill="white" opacity="0.12"/>
+  <!-- indicator lights -->
+  <circle cx="24" cy="32" r="2.5" fill="#86efac" opacity="0.85"/>
+  <circle cx="32" cy="32" r="2.5" fill="#e2e8f0" opacity="0.75"/>
+  <circle cx="40" cy="32" r="2.5" fill="#fca5a5" opacity="0.8"/>
+  <!-- door handle bar -->
+  <rect x="27" y="42" width="10" height="3.5" rx="1.75" fill="#94a3b8" opacity="0.8"/>
+  <!-- lock/bolt indicator -->
+  <circle cx="32" cy="49" r="3" fill="#64748b" stroke="#94a3b8" stroke-width="1.2"/>
+  <!-- label -->
+  <text x="7" y="63" font-family="Arial,sans-serif" font-size="7" font-weight="700" fill="#334155" opacity="0.9">CS NGẦM</text>
+</svg>

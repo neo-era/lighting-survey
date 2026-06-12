@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <filter id="sh4" x="-30%" y="-20%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="1.5" stdDeviation="1.8" flood-opacity=".35"/>
+    </filter>
+    <linearGradient id="gl4" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fb923c"/>
+      <stop offset="100%" stop-color="#ea580c"/>
+    </linearGradient>
+  </defs>
+  <!-- base plate -->
+  <rect x="18" y="59" width="20" height="4" rx="2" fill="#f97316" opacity="0.5"/>
+  <!-- pole (TTLT — thấp trung bình) -->
+  <rect x="24" y="28" width="8" height="32" rx="4" fill="url(#gl4)" filter="url(#sh4)"/>
+  <!-- double arm (2 cần đối xứng, đặc trưng TTLT) -->
+  <path d="M28 28 C28 20 32 15 42 13" stroke="#f97316" stroke-width="5" stroke-linecap="round" fill="none" filter="url(#sh4)"/>
+  <path d="M28 28 C28 20 24 15 14 13" stroke="#f97316" stroke-width="5" stroke-linecap="round" fill="none" filter="url(#sh4)"/>
+  <!-- lamp right -->
+  <rect x="34" y="8" width="18" height="9" rx="4.5" fill="url(#gl4)" filter="url(#sh4)"/>
+  <rect x="36" y="10" width="14" height="5" rx="2.5" fill="white" opacity="0.88"/>
+  <!-- lamp left -->
+  <rect x="12" y="8" width="18" height="9" rx="4.5" fill="url(#gl4)" filter="url(#sh4)"/>
+  <rect x="14" y="10" width="14" height="5" rx="2.5" fill="white" opacity="0.88"/>
+  <!-- glow left + right -->
+  <ellipse cx="21" cy="12" rx="6" ry="2.5" fill="white" opacity="0.4"/>
+  <ellipse cx="43" cy="12" rx="6" ry="2.5" fill="white" opacity="0.4"/>
+  <!-- label -->
+  <text x="2" y="63" font-family="Arial,sans-serif" font-size="8" font-weight="700" fill="#f97316" opacity="0.85">TTLT</text>
+</svg>
