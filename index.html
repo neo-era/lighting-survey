@@ -406,20 +406,20 @@
             user-select: none;
         }
         .marker-popup-card .body {
-            padding: 12px 16px;
+            padding: 10px 14px;
             overflow-y: auto; flex: 1;
             -webkit-overflow-scrolling: touch;
         }
-        .marker-popup-card .body .form-group { margin-bottom: 10px; }
+        .marker-popup-card .body .form-group { margin-bottom: 7px; }
         .marker-popup-card .body label {
             display: block;
-            font-size: 11px; font-weight: 700; color: var(--text-muted);
-            text-transform: uppercase; letter-spacing: .5px; margin-bottom: 4px;
+            font-size: 10px; font-weight: 700; color: var(--text-muted);
+            text-transform: uppercase; letter-spacing: .4px; margin-bottom: 3px;
         }
         .marker-popup-card .body input,
         .marker-popup-card .body textarea,
         .marker-popup-card .body select {
-            width: 100%; padding: 10px 12px;
+            width: 100%; padding: 8px 10px;
             border: 1.5px solid var(--border); border-radius: var(--radius-sm);
             font-size: 16px; font-family: var(--font); color: var(--text); background: var(--surface);
             outline: none; transition: border-color .2s;
@@ -428,7 +428,14 @@
         .marker-popup-card .body input:focus,
         .marker-popup-card .body textarea:focus,
         .marker-popup-card .body select:focus { border-color: var(--primary); }
-        .marker-popup-card .body textarea { resize: vertical; min-height: 64px; }
+        .marker-popup-card .body textarea { resize: vertical; min-height: 52px; }
+        /* Nhóm fields cùng hàng */
+        .form-row { display: flex; gap: 8px; }
+        .form-row .form-group { flex: 1; margin-bottom: 7px; }
+        .form-row .form-group.w2 { flex: 2; }
+        .form-row .form-group.w3 { flex: 3; }
+        /* Đường kẻ phân nhóm */
+        .form-sep { height: 1px; background: var(--border); margin: 8px 0; }
 
         /* Footer cố định dưới form */
         .marker-popup-card .footer {
@@ -439,12 +446,12 @@
         .footer-main-actions { display: grid; grid-template-columns: 1fr 2fr; gap: 8px; }
         .footer-location-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
         .marker-popup-card .footer button {
-            padding: 11px 14px;
+            padding: 9px 12px;
             border: none; border-radius: var(--radius-sm);
             font-size: 14px; font-weight: 600; font-family: var(--font);
             cursor: pointer; display: flex; align-items: center; gap: 6px; justify-content: center;
             transition: opacity .15s, transform .1s; touch-action: manipulation; margin: 0;
-            min-height: 44px;
+            min-height: 42px;
         }
         .marker-popup-card .footer button:active { opacity: .85; transform: scale(.98); }
 
@@ -862,9 +869,11 @@
                             <i class="fa fa-sign-out ulogout"></i>
                         </div>
                         <div id="dataVersionTag"
-                             style="display:none;font-size:10px;font-weight:700;color:rgba(255,255,255,.7);
-                                    background:rgba(255,255,255,.12);border-radius:999px;padding:2px 8px;
-                                    white-space:nowrap;flex-shrink:0;">
+                             style="font-size:10px;font-weight:700;color:#2563eb;
+                                    background:#eff6ff;border:1px solid #bfdbfe;
+                                    border-radius:999px;padding:3px 10px;
+                                    white-space:nowrap;flex-shrink:0;letter-spacing:.3px;">
+                            Dữ liệu v—
                         </div>
                     </div>
 
@@ -1208,52 +1217,66 @@
                     </select>
                     <input id="markerPoleTypeInput" type="text" placeholder="Nhập loại trụ..." autocomplete="off" style="display:none;margin-top:5px">
                 </div>
-                <div class="form-group">
-                    <label for="markerLampTypeSelect">Loại đèn</label>
-                    <select id="markerLampTypeSelect" onchange="onLampTypeSelectChange(this)">
-                        <option value="" disabled selected>-- Chọn loại đèn --</option>
-                        <option value="LED">LED</option>
-                        <option value="HPS">HPS</option>
-                        <option value="0">-- Nhập tay --</option>
-                    </select>
-                    <input id="markerLampTypeInput" type="text" placeholder="Nhập loại đèn..." autocomplete="off" style="display:none;margin-top:5px">
+                <!-- Đèn: loại + số lượng cùng hàng -->
+                <div class="form-row">
+                    <div class="form-group w2">
+                        <label for="markerLampTypeSelect">Loại đèn</label>
+                        <select id="markerLampTypeSelect" onchange="onLampTypeSelectChange(this)">
+                            <option value="" disabled selected>-- Chọn --</option>
+                            <option value="LED">LED</option>
+                            <option value="HPS">HPS</option>
+                            <option value="0">-- Nhập tay --</option>
+                        </select>
+                        <input id="markerLampTypeInput" type="text" placeholder="Nhập loại đèn..." autocomplete="off" style="display:none;margin-top:5px">
+                    </div>
+                    <div class="form-group">
+                        <label for="markerSoLuongDenInput">Số lượng</label>
+                        <input id="markerSoLuongDenInput" type="number" min="1" max="99" placeholder="1, 2...">
+                    </div>
                 </div>
-                <div class="form-group">
-                    <label for="markerCongSuatInput">Công suất</label>
-                    <input id="markerCongSuatInput" type="text" placeholder="VD: 100W, 150W...">
+                <!-- Công suất + Mã PE cùng hàng -->
+                <div class="form-row">
+                    <div class="form-group w2">
+                        <label for="markerCongSuatInput">Công suất</label>
+                        <input id="markerCongSuatInput" type="text" placeholder="100W, 150W...">
+                    </div>
+                    <div class="form-group">
+                        <label for="markerMaPEInput">Mã PE</label>
+                        <input id="markerMaPEInput" type="text" placeholder="Mã PE">
+                    </div>
                 </div>
-                <div class="form-group">
-                    <label for="markerSoLuongDenInput">Số lượng đèn</label>
-                    <input id="markerSoLuongDenInput" type="number" min="1" max="99" placeholder="VD: 1, 2, 4...">
+                <div class="form-sep"></div>
+                <!-- Đường + Phường/Xã cùng hàng -->
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="markerStreetInput">Đường</label>
+                        <input id="markerStreetInput" type="text" placeholder="Tên đường...">
+                    </div>
+                    <div class="form-group">
+                        <label for="markerWardInput">Phường / Xã</label>
+                        <input id="markerWardInput" type="text" placeholder="Phường / Xã" list="wardDatalist">
+                        <datalist id="wardDatalist"></datalist>
+                    </div>
                 </div>
-                <div class="form-group">
-                    <label for="markerMaPEInput">Mã PE</label>
-                    <input id="markerMaPEInput" type="text" placeholder="Nhập mã PE">
-                </div>
-                <div class="form-group">
-                    <label for="markerStreetInput">Đường</label>
-                    <input id="markerStreetInput" type="text" placeholder="Tên đường...">
-                </div>
-                <div class="form-group">
-                    <label for="markerWardInput">Phường / Xã</label>
-                    <input id="markerWardInput" type="text" placeholder="Nhập tên phường hoặc xã" list="wardDatalist">
-                    <datalist id="wardDatalist"></datalist>
+                <div class="form-sep"></div>
+                <!-- Cáp nguồn: marker gốc + khoảng cách cùng hàng -->
+                <div class="form-row">
+                    <div class="form-group w3">
+                        <label for="markerGocInput">Cáp — Trụ/tủ gốc</label>
+                        <input id="markerGocInput" type="text" placeholder="Tên trụ / tủ cha"
+                            onchange="onMarkerGocChange(this.value,
+                                markerPopupLocation?markerPopupLocation[0]:0,
+                                markerPopupLocation?markerPopupLocation[1]:0,
+                                'markerKhoangCachInput')">
+                    </div>
+                    <div class="form-group w2">
+                        <label for="markerKhoangCachInput">Cách (m)</label>
+                        <input id="markerKhoangCachInput" type="number" min="0" placeholder="Tự động">
+                    </div>
                 </div>
                 <div class="form-group">
                     <label for="markerNoteInput">Ghi chú</label>
                     <textarea id="markerNoteInput" placeholder="Ghi chú (tùy chọn)"></textarea>
-                </div>
-                <div class="form-group">
-                    <label for="markerGocInput">Marker gốc (tên cáp nguồn)</label>
-                    <input id="markerGocInput" type="text" placeholder="Tên trụ / tủ cha"
-                        onchange="onMarkerGocChange(this.value,
-                            markerPopupLocation?markerPopupLocation[0]:0,
-                            markerPopupLocation?markerPopupLocation[1]:0,
-                            'markerKhoangCachInput')">
-                </div>
-                <div class="form-group">
-                    <label for="markerKhoangCachInput">Khoảng cách cáp (m)</label>
-                    <input id="markerKhoangCachInput" type="number" min="0" placeholder="Tự động khi chọn Marker gốc">
                 </div>
                 <input id="markerImageInput" type="file" accept="image/*" capture="environment" style="display:none" onchange="handleMarkerImageFile(event)">
                 <div class="marker-image-preview" id="markerImagePreview"></div>
@@ -1930,6 +1953,12 @@
                     await new Promise(r => setTimeout(r, 500));
                     resized = true;
                 }
+
+                // Reset Leaflet pixel origin — bắt buộc trước html2canvas
+                // Leaflet dùng translate3d để offset pane sau zoom/pan,
+                // html2canvas đọc sai tọa độ nếu không reset về gốc.
+                map.setView(map.getCenter(), map.getZoom(), { animate: false, reset: true });
+                await new Promise(r => setTimeout(r, 400));
 
                 const canvas = await window.html2canvas(mapEl, {
                     useCORS: true,
@@ -4222,8 +4251,7 @@
         function _setDataVersion(v) {
             const tag = document.getElementById('dataVersionTag');
             if (!tag) return;
-            tag.textContent = `v${v.major}.${v.minor}.${v.patch}`;
-            tag.style.display = 'block';
+            tag.textContent = `Dữ liệu v${v.major}.${v.minor}.${v.patch}`;
         }
         async function _loadDataVersion() {
             try {
