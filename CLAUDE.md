@@ -66,6 +66,7 @@ const KHAOSAT_CSV_URL = '...';   // URL publish CSV của Google Sheet (DanhSach
 | [18]  | Phường/ Xã         | phuongXa        |                                |
 | [19]  | VN2000-X           | vn2000x         | Tự tính từ Lat/Lon (integer m) |
 | [20]  | VN2000-Y           | vn2000y         | Tự tính từ Lat/Lon (integer m) |
+| [21]  | Số lượng đèn       | soLuongDen      | Số bóng đèn trên 1 trụ (integer) |
 
 **VN2000**: Tọa độ phẳng Gauss-Krüger, múi 6°, ellipsoid GRS80 (hàm `convertLatLonToVn2000(lat,lon)` → `{x, y, zone}`).
 Tự động cập nhật tại 2 điểm: `saveMarkerPopup()` (thêm/sửa marker) và `updateMarkerCoordinatesInData()` (kéo marker).

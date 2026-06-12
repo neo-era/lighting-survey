@@ -1223,6 +1223,10 @@
                     <input id="markerCongSuatInput" type="text" placeholder="VD: 100W, 150W...">
                 </div>
                 <div class="form-group">
+                    <label for="markerSoLuongDenInput">Số lượng đèn</label>
+                    <input id="markerSoLuongDenInput" type="number" min="1" max="99" placeholder="VD: 1, 2, 4...">
+                </div>
+                <div class="form-group">
                     <label for="markerMaPEInput">Mã PE</label>
                     <input id="markerMaPEInput" type="text" placeholder="Nhập mã PE">
                 </div>
@@ -2322,6 +2326,7 @@
             const tudieukhien = row[7] || '', loaitru = row[8] || '', loaican = row[9] || '', loaiden = row[10] || '';
             const congSuat = row[11] || '', imageValue = row[12] || '', updatedAt = row[13] || '';
             const maPE = row[16] || '', duong = row[17] || '', phuongXa = row[18] || '';
+            const soLuongDen = row[21] || '';
             const cfg = TYPE_CONFIG[type] || { color: '#94a3b8', bg: '#f1f5f9', label: 'Không xác định', emoji: '💡' };
 
             const avatarHtml = imageValue
@@ -2334,6 +2339,7 @@
             if (tudieukhien) pcRows.push(`<div class="pc-row"><span class="pi">🗄</span><span class="pk">Tủ</span><span class="pv">${tudieukhien}</span></div>`);
             if (loaitru)     pcRows.push(`<div class="pc-row"><span class="pi">🔌</span><span class="pk">Trụ</span><span class="pv">${loaitru}</span></div>`);
             if (loaican)     pcRows.push(`<div class="pc-row"><span class="pi">📐</span><span class="pk">Cần</span><span class="pv">${loaican}</span></div>`);
+            if (soLuongDen)  pcRows.push(`<div class="pc-row"><span class="pi">🔢</span><span class="pk">Số lượng đèn</span><span class="pv">${soLuongDen}</span></div>`);
             if (loaiden)     pcRows.push(`<div class="pc-row"><span class="pi">💡</span><span class="pk">Đèn</span><span class="pv">${loaiden}</span></div>`);
             if (congSuat)    pcRows.push(`<div class="pc-row"><span class="pi">⚡</span><span class="pk">Công suất</span><span class="pv">${congSuat}</span></div>`);
             if (maPE)        pcRows.push(`<div class="pc-row"><span class="pi">🔑</span><span class="pk">Mã PE</span><span class="pv">${maPE}</span></div>`);
@@ -2495,9 +2501,10 @@
             if (_icCfg) {
                 const loaiDen = String(row[10] || '').trim();
                 const congSuat = String(row[11] || '').trim();
+                const soLuong = String(row[21] || '').trim();
                 icon = _icCfg.shape === 'cabinet'
                     ? makeCabinetIcon(_icCfg.color)
-                    : makeLampIcon(_icCfg.color, loaiDen, congSuat);
+                    : makeLampIcon(_icCfg.color, loaiDen, congSuat, soLuong);
             } else {
                 icon = customIcons.default;
             }
@@ -2537,7 +2544,7 @@
 
             if (name) {
                 labelLayerGroup.addLayer(L.marker([lat, lon], {
-                    icon: L.divIcon({ className: 'custom-label', html: `<div style="font-size:12px;font-weight:bold">${name}</div>`, iconSize: [80,20], iconAnchor: [40,-4] }),
+                    icon: L.divIcon({ className: 'custom-label', html: `<div style="font-size:12px;font-weight:bold">${name}</div>`, iconSize: [80,20], iconAnchor: [40,-20] }),
                     interactive: false,
                     pane: 'shadowPane'
                 }));
@@ -2574,33 +2581,68 @@
             6: { color: '#334155', bg: '#e2e8f0', label: 'Tủ chiếu sáng ngầm',emoji: '🗄', shape: 'cabinet' },
         };
 
-        function makeLampIcon(color, loaiDen, congSuat) {
-            const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="26" height="42" viewBox="0 0 26 42">
-                <defs>
-                  <filter id="ls" x="-40%" y="-20%" width="180%" height="160%">
-                    <feDropShadow dx="0" dy="1" stdDeviation="1.2" flood-opacity=".45"/>
-                  </filter>
-                </defs>
-                <!-- pole -->
-                <rect x="10" y="18" width="4" height="24" rx="2" fill="${color}" filter="url(#ls)"/>
-                <!-- arm: curve up-right from top of pole -->
-                <path d="M12 18 C12 12 15 7 22 5" stroke="${color}" stroke-width="3.2"
-                      stroke-linecap="round" fill="none" filter="url(#ls)"/>
-                <!-- lamp head: horizontal pill -->
-                <rect x="16" y="1.5" width="10" height="7" rx="3.5" fill="${color}" filter="url(#ls)"/>
-                <!-- lamp glass / glow -->
-                <rect x="17.5" y="3" width="7" height="4" rx="2" fill="white" opacity="0.82"/>
-                <!-- base plate -->
-                <rect x="8" y="40" width="8" height="2" rx="1" fill="${color}" opacity="0.55"/>
-            </svg>`;
-            const labelParts = [loaiDen, congSuat].filter(Boolean);
-            const badge = labelParts.length
-                ? `<div style="position:absolute;top:43px;left:50%;transform:translateX(-50%);white-space:nowrap;font-family:Arial,sans-serif;font-size:8px;font-weight:700;color:#fff;background:${color};border-radius:3px;padding:1px 4px;line-height:1.5;box-shadow:0 1px 2px rgba(0,0,0,.4);pointer-events:none;">${labelParts.join(' ')}</div>`
+        function makeLampIcon(color, loaiDen, congSuat, soLuong) {
+            const n = Math.min(Math.max(parseInt(soLuong) || 1, 1), 4);
+
+            // Lamp pill helper: returns SVG rect pair (body + glass)
+            const lamp = (x, y, w, h) => {
+                const r = h / 2;
+                return `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${r}" fill="${color}" filter="url(#ls)"/>` +
+                       `<rect x="${x+1.5}" y="${y+1.5}" width="${w-3}" height="${h-3}" rx="${r-1.5}" fill="white" opacity="0.82"/>`;
+            };
+            const arm = (x1, y1, cx, cy, x2, y2, sw) =>
+                `<path d="M${x1} ${y1} C${cx} ${cy} ${x2} ${y2} ${x2} ${y2}" stroke="${color}" stroke-width="${sw}" stroke-linecap="round" fill="none" filter="url(#ls)"/>`;
+
+            let body, w, ax;
+
+            if (n === 1) {
+                w = 26; ax = 12;
+                body = `<rect x="10" y="18" width="4" height="24" rx="2" fill="${color}" filter="url(#ls)"/>` +
+                       `<path d="M12 18 C12 12 15 7 22 5" stroke="${color}" stroke-width="3.2" stroke-linecap="round" fill="none" filter="url(#ls)"/>` +
+                       lamp(16, 1.5, 10, 7) +
+                       `<rect x="8" y="40" width="8" height="2" rx="1" fill="${color}" opacity="0.55"/>`;
+
+            } else if (n === 2) {
+                w = 32; ax = 15;
+                body = `<rect x="13" y="18" width="4" height="24" rx="2" fill="${color}" filter="url(#ls)"/>` +
+                       arm(15, 18, 13, 10, 5, 6, 3.0) + lamp(0, 3, 10, 6) +
+                       arm(15, 18, 17, 10, 27, 6, 3.0) + lamp(22, 3, 10, 6) +
+                       `<rect x="11" y="40" width="8" height="2" rx="1" fill="${color}" opacity="0.55"/>`;
+
+            } else if (n === 3) {
+                w = 40; ax = 19;
+                body = `<rect x="17" y="18" width="4" height="24" rx="2" fill="${color}" filter="url(#ls)"/>` +
+                       arm(19, 18, 15, 10, 6, 6, 2.8)  + lamp(1, 3, 10, 6) +
+                       `<path d="M19 18 L19 6" stroke="${color}" stroke-width="2.8" stroke-linecap="round" fill="none" filter="url(#ls)"/>` +
+                       lamp(14, 1, 10, 6) +
+                       arm(19, 18, 23, 10, 34, 6, 2.8) + lamp(29, 3, 10, 6) +
+                       `<rect x="15" y="40" width="8" height="2" rx="1" fill="${color}" opacity="0.55"/>`;
+
+            } else { // n === 4
+                w = 46; ax = 22;
+                body = `<rect x="20" y="18" width="4" height="24" rx="2" fill="${color}" filter="url(#ls)"/>` +
+                       arm(22, 18, 18, 10, 5,  5, 2.5)  + lamp(0,  2, 10, 6) +
+                       arm(22, 18, 20, 12, 13, 8, 2.5)  + lamp(9,  5,  9, 5) +
+                       arm(22, 18, 24, 12, 31, 8, 2.5)  + lamp(28, 5,  9, 5) +
+                       arm(22, 18, 26, 10, 39, 5, 2.5)  + lamp(36, 2, 10, 6) +
+                       `<rect x="18" y="40" width="8" height="2" rx="1" fill="${color}" opacity="0.55"/>`;
+            }
+
+            const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="42" viewBox="0 0 ${w} 42">
+                <defs><filter id="ls" x="-40%" y="-20%" width="180%" height="160%">
+                  <feDropShadow dx="0" dy="1" stdDeviation="1.2" flood-opacity=".45"/>
+                </filter></defs>${body}</svg>`;
+
+            const watts = (congSuat || '').replace(/[^\d]/g, '');
+            const tc = loaiDen ? loaiDen.charAt(0).toUpperCase() : (watts ? 'L' : '');
+            const compact = (n > 1 ? String(n) : '') + tc + watts;
+            const badge = compact
+                ? `<div style="position:absolute;top:43px;left:50%;transform:translateX(-50%);white-space:nowrap;font-family:Arial,sans-serif;font-size:8px;font-weight:700;color:#fff;background:${color};border-radius:3px;padding:1px 4px;line-height:1.5;box-shadow:0 1px 2px rgba(0,0,0,.4);pointer-events:none;">${compact}</div>`
                 : '';
             return L.divIcon({
                 className: '',
                 html: `<div style="position:relative;display:inline-block;overflow:visible;">${svg}${badge}</div>`,
-                iconSize: [26, 42], iconAnchor: [12, 42], popupAnchor: [4, -44]
+                iconSize: [w, 42], iconAnchor: [ax, 42], popupAnchor: [0, -44]
             });
         }
         // keep makePoleIcon as alias for legacy/default
@@ -3096,7 +3138,8 @@
                         capNhat: row[13] || '', markerGoc: row[14] || '',
                         khoangCach: row[15] || '', maPE: row[16] || '',
                         duong: row[17] || '', phuongXa: row[18] || '',
-                        vn2000x: row[19] || '', vn2000y: row[20] || ''
+                        vn2000x: row[19] || '', vn2000y: row[20] || '',
+                        soLuongDen: row[21] || ''
                     })
                 });
                 const data = await res.json();
@@ -3141,6 +3184,7 @@
                     : (TYPE_CONFIG[selVal] ? TYPE_CONFIG[selVal].label : '');
                 const lampType = getLampTypeValue();
                 const congSuat = (document.getElementById('markerCongSuatInput') || {}).value?.trim() || '';
+                const soLuongDen = (document.getElementById('markerSoLuongDenInput') || {}).value?.trim() || '';
                 const maPE = (document.getElementById('markerMaPEInput') || {}).value?.trim() || '';
                 const streetEl = document.getElementById('markerStreetInput');
                 const street = streetEl ? streetEl.value.trim() : '';
@@ -3182,7 +3226,7 @@
                     });
 
                     // Cập nhật row in-place (giữ ID, cập nhật tất cả field còn lại)
-                    const updated = ['',name,lat,lon,note,nguoiKS,type,cabinetName,poleType,'',lampType,congSuat,keepImg,updatedAt,baseMarkerName,distanceToBase,maPE,street,ward,Math.round(_vn.x),Math.round(_vn.y)];
+                    const updated = ['',name,lat,lon,note,nguoiKS,type,cabinetName,poleType,'',lampType,congSuat,keepImg,updatedAt,baseMarkerName,distanceToBase,maPE,street,ward,Math.round(_vn.x),Math.round(_vn.y),soLuongDen];
                     updated[0] = existingId;
                     for (let i = 0; i < updated.length; i++) _editingRow[i] = updated[i];
 
@@ -3196,7 +3240,7 @@
                     displayError('Đã cập nhật marker — đang lưu lên Google Sheets...');
                 } else {
                     // ── CHẾ ĐỘ THÊM MỚI ──
-                    const newRow = ['',name,lat,lon,note,nguoiKS,type,cabinetName,poleType,'',lampType,congSuat,markerImageDataUrl||'',updatedAt,baseMarkerName,distanceToBase,maPE,street,ward,Math.round(_vn.x),Math.round(_vn.y)];
+                    const newRow = ['',name,lat,lon,note,nguoiKS,type,cabinetName,poleType,'',lampType,congSuat,markerImageDataUrl||'',updatedAt,baseMarkerName,distanceToBase,maPE,street,ward,Math.round(_vn.x),Math.round(_vn.y),soLuongDen];
                     loadedData.push(newRow); newMarkerRows.push(newRow);
                     markerImageDataUrl = null;
                     const newMarker = addMarkerRowToMap(newRow);
@@ -3923,6 +3967,8 @@
 
                 const congSuatEl = document.getElementById('markerCongSuatInput');
                 if (congSuatEl) congSuatEl.value = row[11] || '';
+                const soLuongDenEl = document.getElementById('markerSoLuongDenInput');
+                if (soLuongDenEl) soLuongDenEl.value = row[21] || '';
                 const maPEEl = document.getElementById('markerMaPEInput');
                 if (maPEEl) maPEEl.value = row[16] || '';
 

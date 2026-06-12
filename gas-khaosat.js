@@ -23,7 +23,7 @@ const HEADER = [
   'ID', 'Tên trụ', 'Lat', 'Lon', 'Ghi chú', 'Người KS',
   'Loại', 'Tủ điều khiển', 'Loại trụ', 'Loại cần', 'Loại đèn',
   'Công suất', 'Ảnh', 'Thời gian cập nhật', 'Marker gốc', 'Khoảng cách (m)', 'Mã PE', 'Đường', 'Phường/ Xã',
-  'VN2000-X', 'VN2000-Y'
+  'VN2000-X', 'VN2000-Y', 'Số lượng đèn'
 ];
 
 // Map key payload JS → tên cột trong Sheet
@@ -49,6 +49,7 @@ const FIELD_MAP = {
   'phuongXa':    'Phường/ Xã',
   'vn2000x':     'VN2000-X',
   'vn2000y':     'VN2000-Y',
+  'soLuongDen':  'Số lượng đèn',
 };
 
 // ── UTILS ──────────────────────────────────────────────────────────────────
@@ -379,7 +380,8 @@ function setupDistrictSheets() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const source = ss.getSheetByName('DanhSachTru');
   if (!source) { Logger.log('Không tìm thấy sheet DanhSachTru'); return; }
-  const header = source.getRange(1, 1, 1, 21).getValues();
+  const numCols = HEADER.length;
+  const header = source.getRange(1, 1, 1, numCols).getValues();
   const sheetNames = [
     'Quan1', 'Quan3', 'Quan5', 'Quan8', 'Quan10', 'Quan11',
     'PhuNhuan', 'BinhThanh', 'TanBinh', 'TanPhu',
@@ -389,12 +391,12 @@ function setupDistrictSheets() {
     var sh = ss.getSheetByName(name);
     if (!sh) {
       sh = ss.insertSheet(name);
-      sh.getRange(1, 1, 1, 21).setValues(header);
-      sh.getRange(1, 1, 1, 21).setFontWeight('bold')
+      sh.getRange(1, 1, 1, numCols).setValues(header);
+      sh.getRange(1, 1, 1, numCols).setFontWeight('bold')
         .setBackground('#cfe2f3')
         .setHorizontalAlignment('center');
       sh.setFrozenRows(1);
-      sh.autoResizeColumns(1, 21);
+      sh.autoResizeColumns(1, numCols);
       Logger.log('Đã tạo sheet: ' + name);
     } else {
       Logger.log('Sheet đã tồn tại (bỏ qua): ' + name);
