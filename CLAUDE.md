@@ -41,7 +41,7 @@ const KHAOSAT_GAS_URL = '...';   // URL Web App đã deploy (doPost endpoint)
 const KHAOSAT_CSV_URL = '...';   // URL publish CSV của Google Sheet (DanhSachTru)
 ```
 
-## Cấu trúc cột Google Sheet (DanhSachTru) — 21 cột
+## Cấu trúc cột Google Sheet (DanhSachTru) — 22 cột
 
 | Index | Tên cột            | Key payload JS  | Ghi chú                        |
 |-------|--------------------|-----------------|--------------------------------|
@@ -85,12 +85,18 @@ Tự động cập nhật tại 2 điểm: `saveMarkerPopup()` (thêm/sửa mark
 ### Hiển thị marker
 - `L.markerClusterGroup({ disableClusteringAtZoom: 15, maxClusterRadius: 60 })`
 - Zoom < 15 → cluster; zoom ≥ 15 → icon riêng lẻ
-- Zoom ≥ 17 → hiện nhãn tên (`labelLayerGroup`, iconAnchor `[40, -4]` = bên dưới icon)
+- Zoom ≥ 17 → hiện nhãn tên (`labelLayerGroup`, iconAnchor `[40, -20]`)
 
 ### Icon SVG (L.divIcon, className: '')
-- `makeLampIcon(color)` — cột + cần + đèn, 26×42px, iconAnchor [12, 42]
+- `makeLampIcon(color, loaiDen, congSuat, soLuong)` — icon **động** theo số bóng đèn:
+  - `soLuong=1` → 1 cần phải, 26×42px, iconAnchor [12, 42]
+  - `soLuong=2` → 2 cần đối xứng, 32×42px, iconAnchor [15, 42]
+  - `soLuong=3` → 3 cần (trái+thẳng+phải), 40×42px, iconAnchor [19, 42]
+  - `soLuong=4` → 4 cần, 46×42px, iconAnchor [22, 42]
+  - Badge compact bên dưới icon: `2L100` = 2 bóng LED 100W
 - `makeCabinetIcon(color)` — hình chữ nhật tủ điện, 24×28px, iconAnchor [12, 28]
 - Anchor đặt ở đáy icon → tọa độ địa lý = chân cột/tủ
+- `addMarkerRowToMap(row)` tạo icon **per-marker** với loaiDen/congSuat/soLuong từ `row[10]/[11]/[21]`
 
 ## GAS — Script Properties
 
@@ -112,6 +118,8 @@ Tự động cập nhật tại 2 điểm: `saveMarkerPopup()` (thêm/sửa mark
 - Mỗi lần sửa `gas-khaosat.js` phải **redeploy New version** (không tạo deployment mới — sẽ đổi URL)
 - `norm()` chuẩn hóa tên cột: lowercase + NFC → khớp header dù có/không dấu
 - `findRowNum()` tìm hàng theo ID trước, fallback tên trụ
+- `buildFieldValues()` **cho phép empty string** (`''`) — để clear cell khi xóa cáp (`row[14]=''`, `row[15]=''`)
+- `updateRowFields()` dùng `setValue('')` khi value là `null` hoặc `''` → xóa nội dung cell
 
 ## Quy trình deploy GAS
 
@@ -137,17 +145,17 @@ Tự động cập nhật tại 2 điểm: `saveMarkerPopup()` (thêm/sửa mark
 }
 ```
 
-### Service Worker (sw.js) — hiện tại v5
+### Service Worker (sw.js) — hiện tại v6
 
 | Cache name      | Chiến lược   | Nội dung                                          |
 |-----------------|--------------|---------------------------------------------------|
-| `lighting-survey-v5` | Network-first | `index.html`, `.html` (luôn lấy code mới)   |
-| `lighting-survey-v5` | Cache-first  | Icon/ảnh tĩnh (pre-cache khi install)             |
+| `lighting-survey-v6` | Network-first | `index.html`, `.html` (luôn lấy code mới)   |
+| `lighting-survey-v6` | Cache-first  | Icon/ảnh tĩnh (pre-cache khi install)             |
 | `map-tiles-v1`  | Cache-first  | Tile bản đồ OSM/Google/CartoDB (tối đa 300 tile)  |
 | `cdn-libs-v1`   | Cache-first  | Toàn bộ CDN JS/CSS/fonts (jQuery, Leaflet, v.v.)  |
 
 - Google Sheets CSV + GAS URL: **luôn fetch mới**, không cache
-- **Bump cache name** (`v5` → `v6`, v.v.) mỗi khi cần xóa cache cũ hoàn toàn
+- **Bump cache name** (`v6` → `v7`, v.v.) mỗi khi cần xóa cache cũ hoàn toàn
 - Đăng ký trong `index.html` (cuối body):
 ```javascript
 if ('serviceWorker' in navigator) {
@@ -387,19 +395,26 @@ R4:   │ [cvPhuTrach]    │    │ [csKhuVuc]       │[nguoiLap]│          
 
 ---
 
-#### Luồng xuất PDF (`exportDrawingPDF()`)
+#### Luồng xuất PDF (`exportDrawingPDF()`) — phiên bản hiện tại
+
+Biến `mapEl`, `origStyleW`, `origStyleH`, `resized` khai báo **ngoài** `try` để `finally` truy cập được.
 
 1. Lazy-load jsPDF + html2canvas (`_loadPrintLibs()`)
 2. `_filterRowsByTu(tuName)` lọc rows theo tủ điều khiển
-3. `_buildCableLines(rows)` vẽ đường cáp lên map
-4. `_switchToPrintTile()` chuyển sang CartoDB
-5. `_zoomToScale(scale)` — zoom map theo tỉ lệ đã chọn (giữ nguyên center)
-6. Đợi 3s để CartoDB tiles tải
-7. `_showPrintOverlay(opts)` inject tiêu đề + legend + stats + title block vào `#map`
+3. `_switchToPrintTile()` + `_zoomToScale(scale)` + đợi 3s (bỏ qua khi `_previewMode`)
+4. **Force aspect ratio**: `targetW = offsetHeight × (mmW/mmH)` — luôn áp dụng (`Math.abs(...) > 5`), không chỉ khi hẹp hơn
+5. `map.invalidateSize` + `setView({reset:true})` sau resize → đợi 600ms
+6. `_buildPrintCableSvg(rows)` — vẽ cáp bằng **SVG trực tiếp trong `#map`** (không qua Leaflet pane)
+7. `_showPrintOverlay(opts)` inject tiêu đề + legend + stats + title block
 8. `html2canvas(#map, { useCORS:true, scale:2, ignoreElements: controls/toast })`
 9. `new jsPDF({ orientation:'landscape', format:'a3'/'a4' })` → `addImage` full trang
 10. `doc.save('tên-ngày.pdf')`
-11. `finally`: `_hidePrintOverlay()`, `_removeCableLines()`, `_restoreOriginalTiles()`
+11. `finally`: `_hidePrintOverlay()`, `_removePrintCableSvg()`, `_removeCableLines()`, `_restoreOriginalTiles()`, restore kích thước map
+
+**Tại sao SVG inline thay cho L.polyline (bước 6):**
+- `L.polyline` nằm trong `leaflet-overlay-pane` có CSS `transform: translate3d()` do Leaflet quản lý
+- html2canvas áp dụng transform sai khi pane bị offset → đường cáp lệch vị trí trong PDF
+- Giải pháp: tạo `<svg id="_printCableSvg">` gắn trực tiếp vào `#map`, dùng `map.latLngToContainerPoint()` → tọa độ pixel trong container space → html2canvas capture chính xác
 
 ---
 
@@ -409,7 +424,9 @@ R4:   │ [cvPhuTrach]    │    │ [csKhuVuc]       │[nguoiLap]│          
 |-----|-------|
 | `openPrintDrawingModal()` | Mở modal, điền tủ/người lập/ngày mặc định |
 | `_filterRowsByTu(tuName)` | Lọc loadedData theo row[7] (tủ điều khiển) |
-| `_buildCableLines(rows)` | Vẽ polyline cáp nét đứt + nhãn m lên `_cableLayerGroup` |
+| `_buildCableLines(rows)` | Vẽ L.polyline cáp nét đứt — dùng cho xem trước trên màn hình |
+| `_buildPrintCableSvg(rows)` | Vẽ cáp bằng SVG inline trong `#map` — dùng cho PDF capture (không lệch) |
+| `_removePrintCableSvg()` | Xóa `#_printCableSvg` khỏi DOM |
 | `_removeCableLines()` | Xóa `_cableLayerGroup` khỏi map |
 | `_switchToPrintTile()` | Lưu tiles gốc, bật CartoDB CORS |
 | `_restoreOriginalTiles()` | Restore tiles gốc sau khi capture |
@@ -442,6 +459,8 @@ map.setZoom(Math.round(zoom));
 - [x] Zoom tự động theo tỉ lệ (`_zoomToScale`)
 - [x] Title block 110px, 4 hàng: hàng 1 = label, hàng 2–3 = trống ký tên, hàng 4 = tên người
 - [x] Modal có đủ field: `pdCVPhuTrach` (chuyên viên), `pdCSKhuVuc` (khu vực)
+- [x] **4.3 Aspect ratio**: force `targetW = height × ratio` luôn áp dụng (không chỉ khi hẹp)
+- [x] **SVG cable fix**: `_buildPrintCableSvg` thay L.polyline cho PDF — không bị lệch pane transform
 
 ---
 
@@ -472,28 +491,9 @@ map.setZoom(Math.round(zoom));
 
 ---
 
-#### 4.3 — Capture đúng tỉ lệ landscape
+#### ~~4.3 — Capture đúng tỉ lệ landscape~~ ✅ Đã implement
 
-**Mục tiêu:** Đảm bảo bản vẽ xuất PDF luôn theo chiều ngang tờ giấy, bất kể orientation màn hình người dùng.
-
-**Vấn đề hiện tại:** `html2canvas` capture `#map` theo kích thước DOM thực tế. Nếu màn hình dọc (mobile), canvas sẽ portrait → jsPDF landscape sẽ scale méo.
-
-**Giải pháp:**
-```javascript
-// Trước capture: force #map sang tỉ lệ landscape
-const mapEl = document.getElementById('map');
-const origW = mapEl.style.width, origH = mapEl.style.height;
-const pw = paper === 'a3' ? 420 : 297; // mm
-const ph = paper === 'a3' ? 297 : 210;
-const targetW = mapEl.offsetHeight * (pw / ph); // width để đạt tỉ lệ landscape
-mapEl.style.width = targetW + 'px';
-map.invalidateSize();
-await new Promise(r => setTimeout(r, 500)); // chờ Leaflet rerender
-// ... capture ...
-// Sau capture: restore
-mapEl.style.width = origW;
-map.invalidateSize();
-```
+Xem mô tả trong phần "Luồng xuất PDF" ở trên (bước 4 — Force aspect ratio).
 
 ---
 
@@ -684,10 +684,12 @@ Nếu phát hiện cycle → `displayError('Phát hiện vòng lặp cáp — ki
 | Việc cần làm | Lý do | Ưu tiên |
 |---|---|---|
 | ~~Bump sw.js v5 → v6~~ | ✅ Đã bump lên v6 | — |
-| **Redeploy GAS New version** | Header sheet DanhSachTru mở rộng VN2000 từ session trước | 🔴 Cao |
+| **Redeploy GAS New version** | Thêm cột `Số lượng đèn` [21] + fix `buildFieldValues` cho phép empty string | 🔴 Cao |
 | ~~Sync banve-mau.html~~ | ✅ Đã rewrite đồng bộ với `_showPrintOverlay()` | — |
-| ~~Implement 4.4.1 + 4.4.2~~ | ✅ Đã implement (PROMPT 5.1 + 5.2) | — |
+| ~~Implement 4.4.1 + 4.4.2~~ | ✅ Đã implement | — |
 | ~~Fix edit marker mode~~ | ✅ `_editingRow` state, double-listener, geocode cancel | — |
+| ~~Fix SVG cable PDF offset~~ | ✅ `_buildPrintCableSvg` thay L.polyline | — |
+| ~~Fix aspect ratio PDF~~ | ✅ Force `targetW` luôn áp dụng | — |
 
 ---
 
@@ -746,6 +748,180 @@ Cùng hàm này được dùng để tính cột `VN2000-X`, `VN2000-Y` khi lưu
 
 ### Excel xuất báo cáo
 2 sheet: **Chi tiết** (filtered rows) + **Tổng hợp** (count theo loại).
+
+### Form nhập liệu marker — layout hiện tại
+
+Input/select/textarea dùng `font-size: 16px` (bắt buộc — iOS auto-zoom nếu < 16px).
+
+```css
+.form-row { display: flex; gap: 8px; }
+.form-row .form-group { flex: 1; }
+.form-row .form-group.w2 { flex: 2; }
+.form-row .form-group.w3 { flex: 3; }
+```
+
+Các nhóm field trong form:
+- Loại đèn (w2) + Số lượng → 1 hàng
+- Công suất (w2) + Mã PE → 1 hàng
+- Đường + Phường / Xã → 1 hàng
+- Cáp Trụ/tủ gốc (w3) + Cách (m) (w2) → 1 hàng
+
+### Version hiển thị
+
+`#dataVersionTag` — luôn visible, style pill xanh `#eff6ff / #2563eb`. Text mặc định `"Dữ liệu v—"`.
+`_setDataVersion({major, minor, patch})` cập nhật text.
+
+---
+
+## Tính năng 8: Tối ưu mobile
+
+### Mục tiêu
+
+App chạy mượt trên thiết bị Android/iOS tầm trung (RAM 3–4 GB, màn hình 360–414px). Giảm DOM node, giảm repaints, giảm JS computation khi render nhiều marker.
+
+---
+
+### 8.1 — Icon tối giản trên mobile
+
+**Vấn đề:** `makeLampIcon` tạo SVG phức tạp (filter drop-shadow, cubic bezier arms) cho **mỗi marker**. Với 500+ marker, đây là bottleneck khi render.
+
+**Giải pháp — Icon mobile đơn giản hơn:**
+
+Detect mobile: `const isMobile = window.innerWidth <= 768 || /Mobi/i.test(navigator.userAgent)`
+
+Khi `isMobile`:
+- Bỏ `filter="url(#ls)"` (drop-shadow) trong SVG — tốn GPU nhất
+- Dùng icon tối giản: chỉ cột thẳng + chấm tròn thay vì cần cong + hộp đèn
+- Kích thước nhỏ hơn: 18×32px (giảm DOM area)
+- Không hiển thị badge `2L100` ở zoom < 16 trên mobile
+
+```javascript
+function makeLampIconMobile(color) {
+    return L.divIcon({
+        className: '',
+        html: `<svg width="14" height="28" viewBox="0 0 14 28">
+            <rect x="5.5" y="8" width="3" height="20" rx="1.5" fill="${color}"/>
+            <circle cx="7" cy="6" r="5" fill="${color}"/>
+            <circle cx="7" cy="6" r="3.5" fill="white" opacity="0.8"/>
+        </svg>`,
+        iconSize: [14, 28], iconAnchor: [7, 28], popupAnchor: [0, -30]
+    });
+}
+```
+
+**Shared icons:** Trên mobile, các marker cùng type + không có badge → dùng **1 icon dùng chung** (`customIcons[type]`) thay vì tạo mới mỗi marker.
+
+```javascript
+// addMarkerRowToMap: nếu mobile và không có soLuong/loaiDen
+if (isMobile && !loaiDen && !congSuat) {
+    icon = customIcons[`mobile_${type}`] || (customIcons[`mobile_${type}`] = makeLampIconMobile(color));
+} else {
+    icon = makeLampIcon(color, loaiDen, congSuat, soLuong);
+}
+```
+
+---
+
+### 8.2 — Cluster aggressively hơn trên mobile
+
+```javascript
+const isMobile = window.innerWidth <= 768;
+const markerCluster = L.markerClusterGroup({
+    disableClusteringAtZoom: isMobile ? 16 : 15,  // mobile: giữ cluster lâu hơn
+    maxClusterRadius: isMobile ? 80 : 60,          // mobile: bán kính cluster lớn hơn
+    chunkedLoading: true,                          // không block main thread khi load 500+ marker
+    chunkInterval: 100,                            // ms giữa mỗi chunk
+    chunkDelay: 50
+});
+```
+
+---
+
+### 8.3 — Nhãn tên chỉ hiện ở zoom cao trên mobile
+
+```javascript
+// Hiện nhãn tên: desktop zoom≥17, mobile zoom≥18
+const labelZoomThreshold = isMobile ? 18 : 17;
+map.on('zoomend', () => {
+    if (map.getZoom() >= labelZoomThreshold) {
+        labelLayerGroup.addTo(map);
+    } else {
+        map.removeLayer(labelLayerGroup);
+    }
+});
+```
+
+---
+
+### 8.4 — Tắt animation Leaflet trên mobile
+
+```javascript
+// Sau khi khởi tạo map
+if (isMobile) {
+    map.options.zoomAnimation = false;
+    map.options.markerZoomAnimation = false;
+    map.options.fadeAnimation = false;
+}
+```
+
+---
+
+### 8.5 — Lazy load ảnh trong popup
+
+Hiện tại popup render `<img src="...">` ngay khi mở. Trên mobile với ảnh 1–3 MB có thể lag.
+
+**Giải pháp:** Thêm `loading="lazy"` + giới hạn kích thước hiển thị:
+```html
+<img src="${imgUrl}" loading="lazy" style="max-width:100%;max-height:200px;object-fit:cover;" crossorigin="anonymous">
+```
+
+---
+
+### 8.6 — Debounce sự kiện map trên mobile
+
+`map.on('moveend')` và `map.on('zoomend')` khi pan/zoom nhanh gây nhiều lần rerender.
+
+```javascript
+function debounce(fn, ms) {
+    let t; return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
+}
+map.on('moveend', debounce(onMapMoveEnd, 150));
+map.on('zoomend', debounce(onMapZoomEnd, 150));
+```
+
+---
+
+### 8.7 — CSS tối ưu mobile
+
+```css
+@media (max-width: 768px) {
+    /* Tắt transition nặng */
+    * { transition: none !important; animation: none !important; }
+
+    /* Popup nhỏ hơn */
+    .marker-popup-card { max-width: 92vw; font-size: 13px; }
+
+    /* Bottom bar full-width, 1 hàng */
+    #bottomActionBar { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+    /* Ẩn các nút ít dùng trên mobile */
+    #btnExportCad, #btnPrintDrawing { display: none; }
+}
+```
+
+---
+
+### Checklist implement mobile (Tính năng 8)
+
+- [ ] `isMobile` detection constant
+- [ ] `makeLampIconMobile(color)` — SVG tối giản không drop-shadow
+- [ ] `addMarkerRowToMap` dùng shared icon trên mobile khi không có badge
+- [ ] `markerCluster` tham số khác nhau theo `isMobile`
+- [ ] `labelZoomThreshold` theo mobile/desktop
+- [ ] `map.options.zoomAnimation = false` trên mobile
+- [ ] `loading="lazy"` cho ảnh trong popup
+- [ ] `debounce` cho moveend/zoomend
+- [ ] CSS media query tắt transitions + ẩn nút print/CAD trên mobile
 
 ---
 

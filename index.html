@@ -751,8 +751,23 @@
         #topbarUser .uhint { display:block; font-size:11px; font-weight:500; opacity:.85; margin-top:1px; }
         #topbarUser .ulogout { opacity:.8; flex-shrink:0; }
 
-        /* Đẩy góc topright của Leaflet xuống giữa màn hình (chứa ZoomDisplay + Layers) */
+        /* Căn giữa dọc cột control bên phải */
         .leaflet-top.leaflet-right { top: 50%; transform: translateY(-50%); }
+        /* Hover effect cho nút xoay */
+        #mapRotLeft:hover, #mapRotRight:hover { background:#dbeafe !important; color:#1d4ed8 !important; }
+        #mapRotReset:hover svg { filter: drop-shadow(0 2px 4px rgba(37,99,235,.3)) !important; }
+
+        /* ═══ MOBILE OPTIMIZATION ═══ */
+        @media (max-width: 768px) {
+            /* Tắt transition nặng */
+            * { transition: none !important; animation: none !important; }
+            /* Popup gọn hơn */
+            .marker-popup-card { max-width: 92vw; font-size: 13px; }
+            /* Bottom action bar: 1 hàng, scroll ngang nếu tràn */
+            #bottomActionBar { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+            /* Ẩn nút ít dùng trên mobile */
+            #btnExportCad, #btnPrintDrawing { display: none !important; }
+        }
     </style>
 </head>
 <body>
@@ -937,12 +952,12 @@
                             <button onclick="showReportModal()" class="ctrl-btn primary">
                                 <i class="fa fa-bar-chart"></i> Báo cáo
                             </button>
-                            <button onclick="showExportCadModal()" class="ctrl-btn dark">
+                            <button id="btnExportCad" onclick="showExportCadModal()" class="ctrl-btn dark">
                                 <i class="fa fa-file-code-o"></i> CAD
                             </button>
                         </div>
                         <div class="ctrl-btn-grid">
-                            <button onclick="openPrintDrawingModal()" class="ctrl-btn outline">
+                            <button id="btnPrintDrawing" onclick="openPrintDrawingModal()" class="ctrl-btn outline">
                                 <i class="fa fa-print"></i> In bản vẽ
                             </button>
                             <button id="btnToggleCable" onclick="toggleCableLayer()" class="ctrl-btn outline">
@@ -1442,6 +1457,68 @@
             if (_cableLayerGroup) { map.removeLayer(_cableLayerGroup); _cableLayerGroup = null; }
         }
 
+        // SVG cable overlay cho PDF export — toạ độ pre-rotated bằng toán học
+        // Không dùng CSS transform trên SVG → tránh mọi lệch vị trí khi html2canvas capture
+        function _buildPrintCableSvg(rows, rotationDeg) {
+            _removePrintCableSvg();
+            const mapEl = document.getElementById('map');
+            if (!mapEl) return;
+            const W = mapEl.offsetWidth, H = mapEl.offsetHeight;
+            const cx = W / 2, cy = H / 2;
+            const θ = (rotationDeg || 0) * Math.PI / 180;
+            const cosθ = Math.cos(θ), sinθ = Math.sin(θ);
+
+            // Xoay điểm container-space quanh tâm map — khớp với CSS rotate(θdeg) trên map pane
+            function rotPt(pt) {
+                if (!rotationDeg) return pt;
+                const dx = pt.x - cx, dy = pt.y - cy;
+                return { x: cx + dx * cosθ - dy * sinθ, y: cy + dx * sinθ + dy * cosθ };
+            }
+
+            const posIdx = {};
+            ((loadedData || []).slice(1)).forEach(r => {
+                const name = String(r[1] || '').trim();
+                const lat = parseCoord(r[2]), lon = parseCoord(r[3]);
+                if (name && Number.isFinite(lat) && Number.isFinite(lon)) posIdx[name] = [lat, lon];
+            });
+
+            let markup = '';
+            rows.forEach(r => {
+                const parentName = String(r[14] || '').trim();
+                if (!parentName) return;
+                const childName = String(r[1] || '').trim();
+                if (!childName || childName === parentName || !posIdx[childName] || !posIdx[parentName]) return;
+
+                const from = rotPt(map.latLngToContainerPoint(posIdx[parentName]));
+                const to   = rotPt(map.latLngToContainerPoint(posIdx[childName]));
+                const distVal = String(r[15] || '').trim() ||
+                    String(haversineM(posIdx[childName][0], posIdx[childName][1], posIdx[parentName][0], posIdx[parentName][1]));
+                const mx = ((from.x + to.x) / 2).toFixed(1);
+                const my = ((from.y + to.y) / 2).toFixed(1);
+
+                markup +=
+                    `<line x1="${from.x.toFixed(1)}" y1="${from.y.toFixed(1)}" x2="${to.x.toFixed(1)}" y2="${to.y.toFixed(1)}"` +
+                    ` stroke="#1e40af" stroke-width="2.5" stroke-dasharray="7 5" opacity="0.85"/>` +
+                    `<text x="${mx}" y="${my}" text-anchor="middle" dominant-baseline="middle"` +
+                    ` font-family="Arial,sans-serif" font-size="10" font-weight="700" fill="#1e40af"` +
+                    ` paint-order="stroke" stroke="white" stroke-width="3" stroke-linejoin="round">${distVal}m</text>`;
+            });
+
+            const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+            svg.id = '_printCableSvg';
+            svg.setAttribute('width', W);
+            svg.setAttribute('height', H);
+            svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+            svg.style.cssText = 'position:absolute;top:0;left:0;pointer-events:none;z-index:450;overflow:visible;';
+            svg.innerHTML = markup;
+            mapEl.appendChild(svg);
+        }
+
+        function _removePrintCableSvg() {
+            const el = document.getElementById('_printCableSvg');
+            if (el) el.remove();
+        }
+
         function _attachCableEditHandler(line) {
             line.setStyle({ weight: 4, opacity: 1 });
             line.getElement && (line.getElement().style.cursor = 'pointer');
@@ -1663,10 +1740,16 @@
         }
 
         function _applyMapRotation(angle) {
-            if (!angle) return;
+            // Chỉ xoay map pane — KHÔNG xoay cable SVG
+            // Cable SVG dùng toạ độ pre-rotated bằng toán học trong _buildPrintCableSvg
             const mapEl = document.getElementById('map');
             const pane  = mapEl && mapEl.querySelector('.leaflet-map-pane');
-            if (!pane) return;
+            if (!angle) {
+                if (pane) { pane.style.transform = (pane.style.transform || '').replace(/\s*rotate\([^)]*\)/g, '').trim(); pane.style.transformOrigin = ''; }
+                _updateCompassUI();
+                return;
+            }
+            if (!pane) { _updateCompassUI(); return; }
             const mapRect  = mapEl.getBoundingClientRect();
             const paneRect = pane.getBoundingClientRect();
             const ox = mapRect.left + mapRect.width  / 2 - paneRect.left;
@@ -1674,13 +1757,46 @@
             const base = (pane.style.transform || '').replace(/\s*rotate\([^)]*\)/g, '').trim();
             pane.style.transformOrigin = `${ox}px ${oy}px`;
             pane.style.transform = base + ` rotate(${angle}deg)`;
+            _updateCompassUI();
         }
 
         function _clearMapRotation() {
+            _currentMapRotation = 0;
             const pane = document.querySelector('#map .leaflet-map-pane');
-            if (!pane) return;
-            pane.style.transform = (pane.style.transform || '').replace(/\s*rotate\([^)]*\)/g, '').trim();
-            pane.style.transformOrigin = '';
+            if (pane) {
+                pane.style.transform = (pane.style.transform || '').replace(/\s*rotate\([^)]*\)/g, '').trim();
+                pane.style.transformOrigin = '';
+            }
+            _updateCompassUI();
+        }
+
+        function _updateCompassUI() {
+            const rotated = _currentMapRotation !== 0;
+            const label = document.getElementById('compassAngleLabel');
+            if (label) {
+                label.textContent = Math.round(_currentMapRotation) + '°';
+                label.style.color = rotated ? '#2563eb' : '#64748b';
+            }
+            const needle = document.getElementById('compassNeedle');
+            if (needle) needle.style.transform = `rotate(${-_currentMapRotation}deg)`;
+            const resetBtn = document.getElementById('mapRotReset');
+            if (resetBtn) {
+                resetBtn.style.background = rotated ? 'rgba(219,234,254,.7)' : 'none';
+                resetBtn.title = rotated ? `Hướng Bắc (${Math.round(_currentMapRotation)}°) — click để reset` : 'Hướng Bắc';
+            }
+            const zoomEl = document.getElementById('mapZoomDisplay');
+            if (zoomEl) zoomEl.style.background = rotated ? '#eff6ff' : '#f8fafc';
+        }
+
+        function _rotateMapFree(delta) {
+            _currentMapRotation = ((_currentMapRotation + delta) % 360 + 360) % 360;
+            if (_currentMapRotation > 180) _currentMapRotation -= 360;
+            _applyMapRotation(_currentMapRotation);
+        }
+
+        function _resetMapRotation() {
+            _currentMapRotation = 0;
+            _clearMapRotation();
         }
 
         function _switchToPrintTile() {
@@ -1782,22 +1898,17 @@
                                 background:white;border-top:2px solid #1e293b;border-left:2px solid #1e293b;overflow:hidden;">
                       <table style="width:100%;height:100%;border-collapse:collapse;table-layout:fixed;font-family:Arial,sans-serif;">
                         <colgroup>
-                          <col style="width:16%"><col style="width:4%"><col style="width:16%"><col style="width:10%">
+                          <col style="width:18%"><col style="width:18%"><col style="width:10%">
                           <col style="width:34%"><col style="width:20%">
                         </colgroup>
-                        <!-- Hàng 1: Tên tổ chức + nhãn vai trò (gộp chung 1 ô) + Người lập label + Tiêu đề BV + SHBV -->
+                        <!-- Hàng 1: Tên tổ chức — col 2+3 gộp -->
                         <tr>
                           <td style="border-right:1px solid #94a3b8;border-bottom:1px solid #94a3b8;padding:2px 5px;text-align:center;vertical-align:middle;">
                             <div style="font-size:7.5px;font-weight:800;color:#0f172a;text-transform:uppercase;line-height:1.4;">TT QUẢN LÝ GIAO THÔNG VÀ HẠ TẦNG KỸ THUẬT TP.HCM</div>
-                            <div style="font-size:6.5px;font-weight:700;color:#475569;text-transform:uppercase;margin-top:3px;letter-spacing:.3px;">CHUYÊN VIÊN PHỤ TRÁCH ĐỊA BÀN</div>
                           </td>
-                          <td rowspan="4" style="border-right:1px solid #94a3b8;text-align:center;vertical-align:middle;font-size:18px;">&#9881;</td>
-                          <td style="border-right:1px solid #94a3b8;border-bottom:1px solid #94a3b8;padding:2px 5px;text-align:center;vertical-align:middle;">
+                          <td colspan="2" style="border-right:1px solid #94a3b8;border-bottom:1px solid #94a3b8;padding:2px 5px;text-align:center;vertical-align:middle;">
                             <div style="font-size:7.5px;font-weight:800;color:#0f172a;text-transform:uppercase;line-height:1.4;">CÔNG TY CỔ PHẦN CHIẾU SÁNG CÔNG CỘNG TP.HCM</div>
-                            <div style="font-size:6.5px;font-weight:700;color:#475569;text-transform:uppercase;margin-top:3px;letter-spacing:.3px;">CHIẾU SÁNG KHU VỰC TRUNG TÂM</div>
-                          </td>
-                          <td style="border-right:1px solid #94a3b8;border-bottom:1px solid #94a3b8;padding:1px 5px;font-size:7.5px;font-weight:700;color:#475569;text-align:center;vertical-align:bottom;text-transform:uppercase;">
-                            NGƯỜI LẬP
+                            <div style="font-size:6.5px;font-weight:700;color:#475569;text-transform:uppercase;margin-top:2px;letter-spacing:.3px;">CHIẾU SÁNG KHU VỰC TRUNG TÂM</div>
                           </td>
                           <td rowspan="2" style="border-right:1px solid #94a3b8;padding:5px 10px;vertical-align:middle;text-align:center;">
                             <div style="font-size:9.5px;font-weight:800;color:#0f172a;text-transform:uppercase;letter-spacing:.3px;">BẢN VẼ SƠ ĐỒ TUYẾN TRẠM ĐÈN</div>
@@ -1807,20 +1918,20 @@
                             <span style="font-size:7.5px;font-weight:700;color:#475569;">SHBV:</span>
                           </td>
                         </tr>
-                        <!-- Hàng 2: Để trống ký tên -->
+                        <!-- Hàng 2: Nhãn chức vụ (bold) -->
                         <tr>
-                          <td style="border-right:1px solid #94a3b8;border-bottom:1px solid #94a3b8;padding:2px 5px;">&nbsp;</td>
-                          <td style="border-right:1px solid #94a3b8;border-bottom:1px solid #94a3b8;padding:2px 5px;">&nbsp;</td>
-                          <td style="border-right:1px solid #94a3b8;border-bottom:1px solid #94a3b8;padding:1px 5px;">&nbsp;</td>
+                          <td style="border-right:1px solid #94a3b8;border-bottom:1px solid #94a3b8;padding:2px 5px;font-size:7px;font-weight:800;text-align:center;vertical-align:middle;color:#0f172a;text-transform:uppercase;">CHUYÊN VIÊN PHỤ TRÁCH ĐỊA BÀN</td>
+                          <td style="border-right:1px solid #94a3b8;border-bottom:1px solid #94a3b8;padding:2px 5px;font-size:7px;font-weight:800;text-align:center;vertical-align:middle;color:#0f172a;text-transform:uppercase;">PHÓ GIÁM ĐỐC</td>
+                          <td style="border-right:1px solid #94a3b8;border-bottom:1px solid #94a3b8;padding:2px 5px;font-size:7px;font-weight:800;text-align:center;vertical-align:middle;color:#0f172a;text-transform:uppercase;">NGƯỜI LẬP</td>
                           <td style="border-bottom:1px solid #94a3b8;padding:2px 7px;vertical-align:middle;">
                             <span style="font-size:7.5px;font-weight:700;color:#475569;">Số soát xét:</span>
                           </td>
                         </tr>
-                        <!-- Hàng 3: BV name/scale + Bản vẽ số -->
+                        <!-- Hàng 3: Ký tên (italic, mờ) -->
                         <tr>
-                          <td style="border-right:1px solid #94a3b8;border-bottom:1px solid #94a3b8;padding:2px 5px;">&nbsp;</td>
-                          <td style="border-right:1px solid #94a3b8;border-bottom:1px solid #94a3b8;padding:2px 5px;">&nbsp;</td>
-                          <td style="border-right:1px solid #94a3b8;border-bottom:1px solid #94a3b8;padding:1px 5px;">&nbsp;</td>
+                          <td style="border-right:1px solid #94a3b8;padding:2px 5px;font-size:7.5px;font-style:italic;text-align:center;vertical-align:middle;color:#94a3b8;">&nbsp;</td>
+                          <td style="border-right:1px solid #94a3b8;padding:2px 5px;font-size:7.5px;font-style:italic;text-align:center;vertical-align:middle;color:#94a3b8;">&nbsp;</td>
+                          <td style="border-right:1px solid #94a3b8;padding:2px 5px;font-size:7.5px;font-style:italic;text-align:center;vertical-align:middle;color:#94a3b8;">&nbsp;</td>
                           <td rowspan="2" style="border-right:1px solid #94a3b8;padding:5px 10px;vertical-align:middle;">
                             <div style="font-size:7.5px;font-weight:700;color:#475569;margin-bottom:2px;">BẢN VẼ:</div>
                             <div style="font-size:13px;font-weight:800;color:#0f172a;line-height:1.2;">${tenTu || ''}</div>
@@ -1831,11 +1942,11 @@
                             <div style="font-size:11px;font-weight:800;color:#0f172a;">${soBanVe || ''}</div>
                           </td>
                         </tr>
-                        <!-- Hàng 4: Tên CV + CS khu vực + Người lập + Ngày -->
+                        <!-- Hàng 4: Tên người ký + Ngày -->
                         <tr>
-                          <td style="border-right:1px solid #94a3b8;padding:2px 5px;font-size:8.5px;font-weight:700;text-align:center;color:#0f172a;vertical-align:bottom;">${cvPhuTrach}</td>
-                          <td style="border-right:1px solid #94a3b8;padding:2px 5px;font-size:8.5px;font-weight:700;text-align:center;color:#0f172a;vertical-align:bottom;">${csKhuVuc}</td>
-                          <td style="border-right:1px solid #94a3b8;padding:2px 5px;font-size:9px;font-weight:700;text-align:center;color:#0f172a;vertical-align:bottom;">${nguoiLap || ''}</td>
+                          <td style="border-right:1px solid #94a3b8;padding:2px 5px 7px;font-size:8.5px;font-weight:700;text-align:center;color:#0f172a;vertical-align:bottom;">${cvPhuTrach}</td>
+                          <td style="border-right:1px solid #94a3b8;padding:2px 5px 7px;font-size:8.5px;font-weight:700;text-align:center;color:#0f172a;vertical-align:bottom;">${csKhuVuc}</td>
+                          <td style="border-right:1px solid #94a3b8;padding:2px 5px 7px;font-size:9px;font-weight:700;text-align:center;color:#0f172a;vertical-align:bottom;">${nguoiLap || ''}</td>
                           <td style="padding:2px 7px;vertical-align:middle;">
                             <div style="font-size:7.5px;color:#475569;">Ngày:</div>
                             <div style="font-size:9px;font-weight:700;color:#0f172a;">${ngay || ''}</div>
@@ -1870,11 +1981,13 @@
             const rows = _filterRowsByTu(tuName);
             if (!rows.length) { displayError('Không có dữ liệu để xem trước.'); return; }
             $('#printDrawingModal').modal('hide');
-            _buildCableLines(rows);
             _switchToPrintTile();
             _zoomToScale(scale);
             displayError('Đang tải bản đồ xem trước...');
             await new Promise(r => setTimeout(r, 2000));
+            map.setView(map.getCenter(), map.getZoom(), { animate: false, reset: true });
+            await new Promise(r => setTimeout(r, 200));
+            _buildCableLines(rows); // L.polyline cho xem trước (không qua html2canvas)
             _showPrintOverlay({ rows, tenTu: tenTu || tuName, scale, ngay, nguoiLap, soBanVe, cvPhuTrach, csKhuVuc });
             _currentMapRotation = parseFloat((document.getElementById('pdRotation') || {}).value) || 0;
             _applyMapRotation(_currentMapRotation);
@@ -1889,6 +2002,7 @@
             _currentMapRotation = 0;
             _clearMapRotation();
             _hidePrintOverlay();
+            _removePrintCableSvg();
             _removeCableLines();
             _restoreOriginalTiles();
             document.getElementById('printPreviewBar').style.display = 'none';
@@ -1898,6 +2012,13 @@
         async function exportDrawingPDF() {
             const exportBtn = document.getElementById('pdExportBtn');
             if (exportBtn) { exportBtn.disabled = true; exportBtn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Đang xử lý...'; }
+
+            // Khai báo ngoài try để finally có thể truy cập
+            const mapEl = document.getElementById('map');
+            let origStyleW = mapEl ? mapEl.style.width : '';
+            let origStyleH = mapEl ? mapEl.style.height : '';
+            let resized = false;
+
             try {
                 displayError('Đang tải thư viện in...');
                 await _loadPrintLibs();
@@ -1916,50 +2037,52 @@
                 if (csKhuVuc)   localStorage.setItem('pd_pdCSKhuVuc',   csKhuVuc);
                 if (nguoiLap)   localStorage.setItem('pd_pdNguoiLap',   nguoiLap);
 
-                const rows = _previewMode ? _filterRowsByTu(tuName) : _filterRowsByTu(tuName);
+                const rows = _filterRowsByTu(tuName);
                 if (rows.length === 0) { displayError('Không có dữ liệu để in.'); return; }
 
                 if (!_previewMode) {
-                    // 1. Vẽ đường cáp
-                    _buildCableLines(rows);
-
-                    // 2. Switch tile sang CartoDB + zoom theo tỉ lệ
+                    // 1. Switch tile sang CartoDB + zoom theo tỉ lệ
                     _switchToPrintTile();
                     _zoomToScale(scale);
-
-                    // 3. Đợi tiles tải (~3s)
                     displayError('Đang chờ bản đồ tải...');
                     await new Promise(r => setTimeout(r, 3000));
+                }
 
+                // 2. Force landscape aspect ratio TRƯỚC khi vẽ cáp SVG
+                //    — luôn áp dụng để tỷ lệ capture khớp với khổ giấy
+                const mmW = paper === 'a3' ? 420 : 297;
+                const mmH = paper === 'a3' ? 297 : 210;
+                const ratio = mmW / mmH;
+                const targetW = Math.round(mapEl.offsetHeight * ratio);
+                if (Math.abs(mapEl.offsetWidth - targetW) > 5) {
+                    mapEl.style.width = targetW + 'px';
+                    map.invalidateSize({ animate: false });
+                    resized = true;
+                }
+                // Reset pixel origin sau resize (quan trọng để tiles + markers đúng vị trí)
+                map.setView(map.getCenter(), map.getZoom(), { animate: false, reset: true });
+                await new Promise(r => setTimeout(r, resized ? 600 : 200));
+
+                // Re-apply rotation SAU setView — vì setView({reset}) ghi đè pane transform,
+                // xóa mất rotation đã áp dụng trong preview
+                if (rotation) {
+                    _applyMapRotation(rotation);
+                    await new Promise(r => setTimeout(r, 150));
+                }
+
+                // 3. Vẽ cáp — toạ độ pre-rotated bằng toán học (không cần CSS rotate SVG)
+                if (_previewMode) _removeCableLines();
+                _buildPrintCableSvg(rows, rotation);
+                await new Promise(r => setTimeout(r, 100));
+
+                if (!_previewMode) {
                     // 4. Hiện overlay legend + title block
                     _showPrintOverlay({ rows, tenTu: tenTu || tuName, scale, ngay, nguoiLap, soBanVe, cvPhuTrach, csKhuVuc });
-                    _applyMapRotation(rotation);
                     await new Promise(r => setTimeout(r, 300));
                 }
 
-                // 5. Capture map (bao gồm overlay bên trong #map)
+                // 5. Capture map (bao gồm SVG cáp + overlay bên trong #map)
                 displayError('Đang chụp bản vẽ...');
-                const mapEl = document.getElementById('map');
-
-                // Force landscape ratio trước khi capture
-                const origStyleW = mapEl.style.width;
-                const mmW = paper === 'a3' ? 420 : 297;
-                const mmH = paper === 'a3' ? 297 : 210;
-                const targetW = Math.round(mapEl.offsetHeight * mmW / mmH);
-                let resized = false;
-                if (mapEl.offsetWidth < targetW) {
-                    mapEl.style.width = targetW + 'px';
-                    map.invalidateSize({ animate: false });
-                    await new Promise(r => setTimeout(r, 500));
-                    resized = true;
-                }
-
-                // Reset Leaflet pixel origin — bắt buộc trước html2canvas
-                // Leaflet dùng translate3d để offset pane sau zoom/pan,
-                // html2canvas đọc sai tọa độ nếu không reset về gốc.
-                map.setView(map.getCenter(), map.getZoom(), { animate: false, reset: true });
-                await new Promise(r => setTimeout(r, 400));
-
                 const canvas = await window.html2canvas(mapEl, {
                     useCORS: true,
                     allowTaint: false,
@@ -1975,7 +2098,7 @@
                         )
                 });
 
-                // 6. Tạo PDF
+                // 6. Tạo PDF — canvas đã có đúng tỷ lệ landscape
                 displayError('Đang tạo file PDF...');
                 const { jsPDF } = window.jspdf;
                 const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: paper });
@@ -1996,10 +2119,12 @@
             } finally {
                 _clearMapRotation();
                 _hidePrintOverlay();
+                _removePrintCableSvg();
                 _removeCableLines();
                 _restoreOriginalTiles();
-                if (resized) {
+                if (resized && mapEl) {
                     mapEl.style.width = origStyleW;
+                    mapEl.style.height = origStyleH;
                     map.invalidateSize({ animate: false });
                 }
                 _previewMode = false;
@@ -2192,8 +2317,17 @@
         }
 
         // ─── Biến toàn cục ───
+        const isMobile = window.innerWidth <= 768 || /Mobi|Android/i.test(navigator.userAgent);
+        const labelZoomThreshold = isMobile ? 18 : 17;
         let map;
-        let markersCluster = L.markerClusterGroup({ disableClusteringAtZoom: 15, maxClusterRadius: 60, spiderfyOnMaxZoom: true });
+        let markersCluster = L.markerClusterGroup({
+            disableClusteringAtZoom: isMobile ? 16 : 15,
+            maxClusterRadius: isMobile ? 80 : 60,
+            spiderfyOnMaxZoom: true,
+            chunkedLoading: true,
+            chunkInterval: 100,
+            chunkDelay: 50
+        });
         let labelLayerGroup = L.layerGroup();
         let markers = [];
         let loadedData = [];
@@ -2286,6 +2420,11 @@
                 candidate = `${prefix}_${String(n).padStart(3, '0')}`;
             }
             return candidate;
+        }
+
+        function debounce(fn, ms) {
+            let t;
+            return function(...args) { clearTimeout(t); t = setTimeout(() => fn.apply(this, args), ms); };
         }
 
         function parseCoord(val) {
@@ -2531,9 +2670,15 @@
                 const loaiDen = String(row[10] || '').trim();
                 const congSuat = String(row[11] || '').trim();
                 const soLuong = String(row[21] || '').trim();
-                icon = _icCfg.shape === 'cabinet'
-                    ? makeCabinetIcon(_icCfg.color)
-                    : makeLampIcon(_icCfg.color, loaiDen, congSuat, soLuong);
+                if (_icCfg.shape === 'cabinet') {
+                    icon = makeCabinetIcon(_icCfg.color);
+                } else if (isMobile && !loaiDen && !congSuat) {
+                    const mobileKey = 'mobile_' + type;
+                    if (!customIcons[mobileKey]) customIcons[mobileKey] = makeLampIconMobile(_icCfg.color);
+                    icon = customIcons[mobileKey];
+                } else {
+                    icon = makeLampIcon(_icCfg.color, loaiDen, congSuat, soLuong);
+                }
             } else {
                 icon = customIcons.default;
             }
@@ -2677,6 +2822,18 @@
         // keep makePoleIcon as alias for legacy/default
         function makePoleIcon(color) { return makeLampIcon(color); }
 
+        function makeLampIconMobile(color) {
+            return L.divIcon({
+                className: '',
+                html: `<svg width="14" height="28" viewBox="0 0 14 28" xmlns="http://www.w3.org/2000/svg">
+                    <rect x="5.5" y="8" width="3" height="20" rx="1.5" fill="${color}"/>
+                    <circle cx="7" cy="6" r="5" fill="${color}"/>
+                    <circle cx="7" cy="6" r="3.5" fill="white" opacity="0.8"/>
+                </svg>`,
+                iconSize: [14, 28], iconAnchor: [7, 28], popupAnchor: [0, -30]
+            });
+        }
+
         function makeCabinetIcon(color) {
             return L.divIcon({
                 className: '',
@@ -2812,21 +2969,65 @@
             const streetLabels = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager_only_labels/{z}/{x}/{y}{r}.png', { maxZoom:33, attribution:'© CartoDB', pane:'shadowPane' });
 
             map = L.map('map', { center:[10.762622,106.660172], zoom:13, maxZoom:33, layers:[googleMap] });
+            if (isMobile) {
+                map.options.zoomAnimation = false;
+                map.options.markerZoomAnimation = false;
+                map.options.fadeAnimation = false;
+            }
             map.zoomControl.setPosition('topright');
 
-            L.Control.ZoomDisplay = L.Control.extend({
+            // Zoom + Compass gộp 1 control — compact, nhất quán
+            L.Control.MapTools = L.Control.extend({
                 options: { position: 'topright' },
                 onAdd: function(m) {
-                    this._container = L.DomUtil.create('div', 'leaflet-control-zoom-display');
-                    Object.assign(this._container.style, { background:'white', padding:'5px 10px', border:'2px solid rgba(0,0,0,.2)', borderRadius:'4px', fontSize:'14px', fontWeight:'bold', color:'#333', boxShadow:'0 1px 5px rgba(0,0,0,.4)' });
-                    this._updateZoom();
-                    m.on('zoomend', this._updateZoom, this);
-                    return this._container;
-                },
-                onRemove: function(m) { m.off('zoomend', this._updateZoom, this); },
-                _updateZoom: function() { if (this._container) this._container.innerHTML = 'Zoom: ' + this._map.getZoom(); }
+                    const c = L.DomUtil.create('div');
+                    L.DomEvent.disableClickPropagation(c);
+                    L.DomEvent.disableScrollPropagation(c);
+                    c.style.cssText = 'background:white;border:2px solid rgba(0,0,0,.2);border-radius:8px;box-shadow:0 2px 6px rgba(0,0,0,.3);overflow:hidden;text-align:center;min-width:72px;';
+                    c.innerHTML = `
+                        <div id="mapZoomDisplay"
+                            style="padding:5px 8px 4px;font-size:12px;font-weight:700;color:#1e293b;font-family:monospace;
+                                   border-bottom:1px solid #e2e8f0;background:#f8fafc;letter-spacing:.5px;">
+                            Z&thinsp;${m.getZoom()}
+                        </div>
+                        <div style="padding:5px 6px 5px;">
+                            <button id="mapRotReset" onclick="_resetMapRotation()" title="Hướng Bắc — click để reset"
+                                style="display:block;margin:0 auto 4px;background:none;border:none;cursor:pointer;padding:0;border-radius:50%;line-height:0;">
+                                <svg id="compassNeedle" viewBox="0 0 32 32" width="34" height="34"
+                                    style="display:block;transition:transform .2s cubic-bezier(.4,0,.2,1);filter:drop-shadow(0 1px 2px rgba(0,0,0,.15));">
+                                    <circle cx="16" cy="16" r="15" fill="white" stroke="#e2e8f0" stroke-width="1.5"/>
+                                    <line x1="16" y1="2"  x2="16" y2="6"  stroke="#94a3b8" stroke-width="1.5" stroke-linecap="round"/>
+                                    <line x1="16" y1="26" x2="16" y2="30" stroke="#cbd5e1" stroke-width="1"   stroke-linecap="round"/>
+                                    <line x1="2"  y1="16" x2="6"  y2="16" stroke="#cbd5e1" stroke-width="1"   stroke-linecap="round"/>
+                                    <line x1="26" y1="16" x2="30" y2="16" stroke="#cbd5e1" stroke-width="1"   stroke-linecap="round"/>
+                                    <text x="16" y="9.5" text-anchor="middle" font-size="4.5" font-weight="700"
+                                        fill="#ef4444" font-family="Arial,sans-serif">N</text>
+                                    <polygon points="16,3 13.5,15 16,12 18.5,15" fill="#ef4444"/>
+                                    <polygon points="16,29 13.5,17 16,20 18.5,17" fill="#94a3b8"/>
+                                    <circle cx="16" cy="16" r="2.5" fill="#334155"/>
+                                </svg>
+                            </button>
+                            <div style="display:flex;align-items:center;justify-content:center;gap:2px;">
+                                <button id="mapRotLeft" onclick="_rotateMapFree(-5)" title="Xoay trái 5° ([)"
+                                    style="background:#f1f5f9;border:1px solid #e2e8f0;border-radius:5px;cursor:pointer;
+                                           width:22px;height:20px;font-size:13px;line-height:1;padding:0;color:#475569;
+                                           transition:background .15s;">↺</button>
+                                <span id="compassAngleLabel"
+                                    style="font-size:9px;font-weight:700;color:#64748b;font-family:monospace;min-width:24px;text-align:center;">0°</span>
+                                <button id="mapRotRight" onclick="_rotateMapFree(5)" title="Xoay phải 5° (])"
+                                    style="background:#f1f5f9;border:1px solid #e2e8f0;border-radius:5px;cursor:pointer;
+                                           width:22px;height:20px;font-size:13px;line-height:1;padding:0;color:#475569;
+                                           transition:background .15s;">↻</button>
+                            </div>
+                        </div>`;
+                    m.on('zoomend', () => {
+                        const el = document.getElementById('mapZoomDisplay');
+                        if (el) el.innerHTML = 'Z&thinsp;' + m.getZoom();
+                    });
+                    return c;
+                }
             });
-            new L.Control.ZoomDisplay().addTo(map);
+            new L.Control.MapTools().addTo(map);
 
             L.control.layers(
                 {
@@ -2866,9 +3067,41 @@
             });
 
             map.on('zoomend', function() {
-                if (map.getZoom() < 17) map.removeLayer(labelLayerGroup);
+                if (map.getZoom() < labelZoomThreshold) map.removeLayer(labelLayerGroup);
                 else map.addLayer(labelLayerGroup);
             });
+
+            // Two-finger rotation gesture (mobile)
+            let _tfStart = null;
+            function _tfAngle(t0, t1) {
+                return Math.atan2(t1.clientY - t0.clientY, t1.clientX - t0.clientX) * 180 / Math.PI;
+            }
+            function _tfDist(t0, t1) {
+                const dx = t1.clientX - t0.clientX, dy = t1.clientY - t0.clientY;
+                return Math.sqrt(dx*dx + dy*dy);
+            }
+            const mc = map.getContainer();
+            mc.addEventListener('touchstart', e => {
+                if (e.touches.length === 2) {
+                    _tfStart = { angle: _tfAngle(e.touches[0], e.touches[1]), dist: _tfDist(e.touches[0], e.touches[1]), baseRot: _currentMapRotation };
+                } else {
+                    _tfStart = null;
+                }
+            }, { passive: true });
+            mc.addEventListener('touchmove', e => {
+                if (e.touches.length !== 2 || !_tfStart) return;
+                const curDist  = _tfDist(e.touches[0], e.touches[1]);
+                const distDelta = Math.abs(curDist - _tfStart.dist);
+                const curAngle = _tfAngle(e.touches[0], e.touches[1]);
+                const rotDelta = Math.abs(curAngle - _tfStart.angle);
+                // Only rotate when rotation gesture is dominant (not pinch zoom)
+                if (rotDelta < 3 && distDelta > 10) return;
+                _currentMapRotation = _tfStart.baseRot + (curAngle - _tfStart.angle);
+                _applyMapRotation(_currentMapRotation);
+            }, { passive: true });
+            mc.addEventListener('touchend', e => {
+                if (e.touches.length < 2) _tfStart = null;
+            }, { passive: true });
 
             return map;
         }
@@ -2879,7 +3112,7 @@
             markers = [];
             data.forEach(row => addMarkerRowToMap(row));
             if (markers.length > 0) map.fitBounds(markersCluster.getBounds().pad(0.1));
-            if (map.getZoom() < 17) map.removeLayer(labelLayerGroup);
+            if (map.getZoom() < labelZoomThreshold) map.removeLayer(labelLayerGroup);
             else map.addLayer(labelLayerGroup);
         }
 
@@ -4017,7 +4250,7 @@
                 const preview = document.getElementById('markerImagePreview');
                 if (preview) {
                     preview.innerHTML = imgVal
-                        ? `<img src="${imgVal}" style="max-width:100%;max-height:120px;border-radius:6px;margin-top:6px" onerror="this.style.display='none'">`
+                        ? `<img src="${imgVal}" loading="lazy" style="max-width:100%;max-height:120px;border-radius:6px;margin-top:6px" onerror="this.style.display='none'">`
                         : '';
                 }
 
@@ -4458,6 +4691,15 @@
 
             // ESC để hủy chọn vị trí trên bản đồ
             document.addEventListener('keydown', e=>{ if(e.key==='Escape' && pickMarkerMode) cancelPickOnMap(); });
+
+            // [ ] để xoay bản đồ, \ để reset hướng Bắc
+            document.addEventListener('keydown', e=>{
+                const tag = (e.target||{}).tagName||'';
+                if (['INPUT','TEXTAREA','SELECT'].includes(tag)) return;
+                if (e.key === '[' || e.key === 'BracketLeft')  { _rotateMapFree(-5); e.preventDefault(); }
+                if (e.key === ']' || e.key === 'BracketRight') { _rotateMapFree(5);  e.preventDefault(); }
+                if (e.key === '\\' || e.key === 'Backslash')   { _resetMapRotation(); e.preventDefault(); }
+            });
 
             // Đóng report modal khi click backdrop
             const reportModal = document.getElementById('reportModal');

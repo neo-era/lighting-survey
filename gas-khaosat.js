@@ -340,8 +340,8 @@ function updateRow(sheet, hIdx, rowNum, data) {
 function updateRowFields(sheet, hIdx, rowNum, fieldValues) {
   for (const [header, value] of Object.entries(fieldValues)) {
     const col = hIdx[norm(header)];
-    if (col !== undefined && value !== null && value !== undefined) {
-      sheet.getRange(rowNum, col + 1).setValue(value);
+    if (col !== undefined && value !== undefined) {
+      sheet.getRange(rowNum, col + 1).setValue(value === null ? '' : value);
     }
   }
 }
@@ -354,11 +354,12 @@ function appendRow(sheet, headers, hIdx, data) {
 
 function buildFieldValues(data) {
   const result = {};
+  const skip = new Set(['action', 'sheet']);
   for (const [key, value] of Object.entries(data)) {
-    if (key === 'action') continue;
+    if (skip.has(key)) continue;
     const header = FIELD_MAP[key] || key;
-    if (value !== undefined && value !== null && value !== '') {
-      result[header] = value;
+    if (value !== undefined && value !== null) {
+      result[header] = value; // allow '' to clear cells
     }
   }
   return result;

@@ -2251,3 +2251,645 @@ Hướng dẫn hoàn tất sau khi chạy các prompt:
 5. Commit + push index.html, gas-khaosat.js, sw.js lên GitHub.
    → GitHub Pages tự deploy — app cập nhật sau vài phút.
 ```
+
+---
+
+---
+
+## TÍNH NĂNG: Xoay bản đồ tương tác (Compass + MapTools)
+
+Mục tiêu: Cho phép người dùng xoay góc nhìn bản đồ trực tiếp (không chỉ khi xuất PDF) bằng
+nút ↺↻, bàn phím `[` `]` `\`, và cử chỉ hai ngón tay. Cửa sổ hướng la bàn hiển thị góc xoay
+và cho phép reset về hướng Bắc. Đồng thời gộp ZoomDisplay + Compass thành 1 control `L.Control.MapTools`.
+
+---
+
+### PROMPT 5.4 — Control MapTools: gộp ZoomDisplay + Compass + ↺↻ buttons
+
+```
+Dự án: PWA khảo sát chiếu sáng — index.html.
+
+Ngữ cảnh:
+- Hiện tại có 2 custom Leaflet control riêng: L.Control.ZoomDisplay (hiển thị zoom) và
+  L.Control.RotationCompass (la bàn). Cần gộp thành 1 control duy nhất `L.Control.MapTools`
+  đặt ở topright, gồm: dòng zoom ở trên + la bàn + nút ↺↻ + nhãn góc xoay phía dưới.
+- Biến global: `let _currentMapRotation = 0;`
+
+Nhiệm vụ: Thay thế cả 2 control cũ bằng L.Control.MapTools mới.
+
+**1. Thêm biến state** ngay trong phần khai báo biến toàn cục JS:
+```javascript
+let _currentMapRotation = 0;
+```
+
+**2. Thêm hàm `_updateCompassUI()`** (đặt trước hoặc gần `_applyMapRotation`):
+```javascript
+function _updateCompassUI() {
+    const rotated = _currentMapRotation !== 0;
+    const label = document.getElementById('compassAngleLabel');
+    if (label) {
+        label.textContent = Math.round(_currentMapRotation) + '°';
+        label.style.color = rotated ? '#2563eb' : '#64748b';
+    }
+    const needle = document.getElementById('compassNeedle');
+    if (needle) needle.style.transform = `rotate(${-_currentMapRotation}deg)`;
+    const resetBtn = document.getElementById('mapRotReset');
+    if (resetBtn) {
+        resetBtn.style.background = rotated ? 'rgba(219,234,254,.7)' : 'none';
+        resetBtn.title = rotated
+            ? `Hướng Bắc (${Math.round(_currentMapRotation)}°) — click để reset`
+            : 'Hướng Bắc';
+    }
+    const zoomEl = document.getElementById('mapZoomDisplay');
+    if (zoomEl) zoomEl.style.background = rotated ? '#eff6ff' : '#f8fafc';
+}
+```
+
+**3. Thêm 4 hàm rotation** (đặt sau `_updateCompassUI`):
+```javascript
+function _applyMapRotation(angle) {
+    const mapEl = document.getElementById('map');
+    const pane  = mapEl && mapEl.querySelector('.leaflet-map-pane');
+    if (!angle) {
+        if (pane) {
+            pane.style.transform = (pane.style.transform || '').replace(/\s*rotate\([^)]*\)/g, '').trim();
+            pane.style.transformOrigin = '';
+        }
+        _updateCompassUI();
+        return;
+    }
+    if (!pane) { _updateCompassUI(); return; }
+    const mapRect  = mapEl.getBoundingClientRect();
+    const paneRect = pane.getBoundingClientRect();
+    const ox = mapRect.left + mapRect.width  / 2 - paneRect.left;
+    const oy = mapRect.top  + mapRect.height / 2 - paneRect.top;
+    const base = (pane.style.transform || '').replace(/\s*rotate\([^)]*\)/g, '').trim();
+    pane.style.transformOrigin = `${ox}px ${oy}px`;
+    pane.style.transform = base + ` rotate(${angle}deg)`;
+    _updateCompassUI();
+}
+
+function _clearMapRotation() {
+    _currentMapRotation = 0;
+    const pane = document.querySelector('#map .leaflet-map-pane');
+    if (pane) {
+        pane.style.transform = (pane.style.transform || '').replace(/\s*rotate\([^)]*\)/g, '').trim();
+        pane.style.transformOrigin = '';
+    }
+    _updateCompassUI();
+}
+
+function _rotateMapFree(delta) {
+    _currentMapRotation = ((_currentMapRotation + delta) % 360 + 360) % 360;
+    if (_currentMapRotation > 180) _currentMapRotation -= 360;
+    _applyMapRotation(_currentMapRotation);
+}
+
+function _resetMapRotation() {
+    _currentMapRotation = 0;
+    _clearMapRotation();
+}
+```
+
+**4. Thay thế 2 control cũ** bằng L.Control.MapTools mới (tìm nơi `new L.Control.ZoomDisplay().addTo(map)` và tương tự, thay toàn bộ bằng):
+```javascript
+L.Control.MapTools = L.Control.extend({
+    options: { position: 'topright' },
+    onAdd: function(m) {
+        const c = L.DomUtil.create('div');
+        L.DomEvent.disableClickPropagation(c);
+        L.DomEvent.disableScrollPropagation(c);
+        c.style.cssText = 'background:white;border:2px solid rgba(0,0,0,.2);border-radius:8px;' +
+            'box-shadow:0 2px 6px rgba(0,0,0,.3);overflow:hidden;text-align:center;min-width:72px;';
+        c.innerHTML = `
+            <div id="mapZoomDisplay" style="padding:5px 8px 4px;font-size:12px;font-weight:700;
+                color:#1e293b;font-family:monospace;border-bottom:1px solid #e2e8f0;
+                background:#f8fafc;letter-spacing:.5px;">Z&thinsp;${m.getZoom()}</div>
+            <div style="padding:5px 6px 5px;">
+                <button id="mapRotReset" onclick="_resetMapRotation()" title="Hướng Bắc — click để reset"
+                    style="display:block;margin:0 auto 4px;background:none;border:none;cursor:pointer;
+                           padding:2px;border-radius:50%;line-height:0;">
+                    <svg id="compassNeedle" viewBox="0 0 32 32" width="34" height="34"
+                        style="display:block;transition:transform .2s cubic-bezier(.4,0,.2,1);
+                               filter:drop-shadow(0 1px 2px rgba(0,0,0,.15));">
+                        <polygon points="16,3 20,16 16,14 12,16" fill="#dc2626"/>
+                        <polygon points="16,29 20,16 16,18 12,16" fill="#94a3b8"/>
+                        <circle cx="16" cy="16" r="3" fill="white" stroke="#e2e8f0" stroke-width="1"/>
+                        <text x="16" y="8" text-anchor="middle" font-size="5" font-weight="700"
+                            fill="#dc2626" font-family="Arial,sans-serif">N</text>
+                    </svg>
+                </button>
+                <div style="display:flex;align-items:center;justify-content:center;gap:2px;">
+                    <button id="mapRotLeft" onclick="_rotateMapFree(-5)" title="Xoay trái 5° ([)"
+                        style="background:none;border:none;cursor:pointer;padding:2px 5px;
+                               border-radius:4px;font-size:14px;color:#475569;line-height:1;">↺</button>
+                    <span id="compassAngleLabel"
+                        style="font-size:10px;font-weight:700;color:#64748b;min-width:26px;
+                               text-align:center;font-family:monospace;">0°</span>
+                    <button id="mapRotRight" onclick="_rotateMapFree(5)" title="Xoay phải 5° (])"
+                        style="background:none;border:none;cursor:pointer;padding:2px 5px;
+                               border-radius:4px;font-size:14px;color:#475569;line-height:1;">↻</button>
+                </div>
+            </div>`;
+        m.on('zoomend', () => {
+            const el = document.getElementById('mapZoomDisplay');
+            if (el) el.innerHTML = 'Z&thinsp;' + m.getZoom();
+        });
+        return c;
+    }
+});
+new L.Control.MapTools().addTo(map);
+```
+
+**5. Thêm CSS** vào phần `<style>`:
+```css
+#mapRotLeft:hover, #mapRotRight:hover {
+    background: #dbeafe !important; color: #1d4ed8 !important;
+}
+#mapRotReset:hover svg {
+    filter: drop-shadow(0 2px 4px rgba(37,99,235,.3)) !important;
+}
+```
+
+Không thay đổi gì khác. Keyboard shortcuts và touch sẽ thêm ở PROMPT 5.5.
+```
+
+---
+
+### PROMPT 5.5 — Keyboard shortcuts + hai ngón tay xoay bản đồ
+
+```
+Dự án: PWA khảo sát chiếu sáng — index.html.
+
+Ngữ cảnh sau PROMPT 5.4:
+- `_rotateMapFree(delta)` và `_resetMapRotation()` đã tồn tại.
+- Cần: phím `[` xoay trái 5°, `]` xoay phải 5°, `\` reset về Bắc.
+- Cần: hai ngón tay trên màn hình cảm ứng xoay bản đồ (twist gesture).
+  → Phân biệt twist vs pinch-zoom bằng angular delta > 3° vs radial delta > 10px.
+
+Nhiệm vụ:
+
+**1. Thêm keyboard listener** (đặt trong `initializeMap()` hoặc cuối phần init JS):
+```javascript
+document.addEventListener('keydown', function(e) {
+    const tag = (e.target || {}).tagName || '';
+    if (['INPUT', 'TEXTAREA', 'SELECT'].includes(tag)) return;
+    if (e.key === '[' || e.key === 'BracketLeft')  { _rotateMapFree(-5); e.preventDefault(); }
+    if (e.key === ']' || e.key === 'BracketRight') { _rotateMapFree(5);  e.preventDefault(); }
+    if (e.key === '\\' || e.key === 'Backslash')   { _resetMapRotation(); e.preventDefault(); }
+});
+```
+
+**2. Thêm two-finger touch rotation** (đặt trong `initializeMap()`, sau khi `map` được khởi tạo):
+```javascript
+let _tfStart = null;
+
+function _tfAngle(t0, t1) {
+    return Math.atan2(t1.clientY - t0.clientY, t1.clientX - t0.clientX) * 180 / Math.PI;
+}
+function _tfDist(t0, t1) {
+    const dx = t1.clientX - t0.clientX, dy = t1.clientY - t0.clientY;
+    return Math.sqrt(dx * dx + dy * dy);
+}
+
+const mc = map.getContainer();
+mc.addEventListener('touchstart', function(e) {
+    if (e.touches.length === 2) {
+        _tfStart = {
+            angle: _tfAngle(e.touches[0], e.touches[1]),
+            dist:  _tfDist(e.touches[0], e.touches[1]),
+            baseRot: _currentMapRotation
+        };
+    } else {
+        _tfStart = null;
+    }
+}, { passive: true });
+
+mc.addEventListener('touchmove', function(e) {
+    if (e.touches.length !== 2 || !_tfStart) return;
+    const curDist  = _tfDist(e.touches[0], e.touches[1]);
+    const distDelta = Math.abs(curDist - _tfStart.dist);
+    const curAngle = _tfAngle(e.touches[0], e.touches[1]);
+    const rotDelta  = Math.abs(curAngle - _tfStart.angle);
+    // Nếu ngón tay đang zoom (radial >> angular) thì bỏ qua
+    if (rotDelta < 3 && distDelta > 10) return;
+    _currentMapRotation = _tfStart.baseRot + (curAngle - _tfStart.angle);
+    _applyMapRotation(_currentMapRotation);
+}, { passive: true });
+
+mc.addEventListener('touchend', function(e) {
+    if (e.touches.length < 2) _tfStart = null;
+}, { passive: true });
+```
+
+Lưu ý:
+- `{ passive: true }` để không block Leaflet pan/zoom mặc định
+- Slight zoom change khi xoay là chấp nhận được
+- `_currentMapRotation` và `_applyMapRotation` đã có từ PROMPT 5.4
+
+Không thay đổi gì khác.
+```
+
+---
+
+### PROMPT 5.6 — Fix đường cáp PDF khi bản đồ bị xoay (pre-rotated SVG)
+
+```
+Dự án: PWA khảo sát chiếu sáng — index.html.
+
+Vấn đề:
+- `_buildPrintCableSvg(rows)` tạo SVG với tọa độ từ `map.latLngToContainerPoint()` —
+  hàm này trả về tọa độ container CHƯA xoay (unrotated).
+- Khi bản đồ đang xoay, CSS `rotate(θdeg)` trên `.leaflet-map-pane` xoay marker/tile,
+  nhưng SVG cable nằm ngoài pane → không tự xoay theo → đường cáp lệch vị trí trong PDF.
+- Giải pháp: tính toán tọa độ đã xoay bằng ma trận rotation TRƯỚC khi ghi vào SVG (không dùng CSS transform trên SVG).
+
+Công thức pre-rotation (Y-down, khớp với CSS rotate):
+```
+x' = cx + (x-cx)·cos(θ) - (y-cy)·sin(θ)
+y' = cy + (x-cx)·sin(θ) + (y-cy)·cos(θ)
+```
+với `cx = W/2, cy = H/2` (tâm của #map container).
+
+Nhiệm vụ: Thay thế hàm `_buildPrintCableSvg(rows)` bằng phiên bản nhận thêm `rotationDeg`:
+
+```javascript
+function _buildPrintCableSvg(rows, rotationDeg) {
+    _removePrintCableSvg();
+    const mapEl = document.getElementById('map');
+    if (!mapEl) return;
+    const W = mapEl.offsetWidth, H = mapEl.offsetHeight;
+    const cx = W / 2, cy = H / 2;
+    const θ = (rotationDeg || 0) * Math.PI / 180;
+    const cosθ = Math.cos(θ), sinθ = Math.sin(θ);
+
+    function rotPt(pt) {
+        if (!rotationDeg) return pt;
+        const dx = pt.x - cx, dy = pt.y - cy;
+        return { x: cx + dx * cosθ - dy * sinθ, y: cy + dx * sinθ + dy * cosθ };
+    }
+
+    // Build name → [lat, lon] index từ toàn bộ loadedData
+    const posIdx = {};
+    ((loadedData || []).slice(1)).forEach(r => {
+        const name = String(r[1] || '').trim();
+        const lat = parseCoord(r[2]), lon = parseCoord(r[3]);
+        if (name && Number.isFinite(lat) && Number.isFinite(lon)) posIdx[name] = [lat, lon];
+    });
+
+    let markup = '';
+    rows.forEach(r => {
+        const parentName = String(r[14] || '').trim();
+        if (!parentName) return;
+        const childName = String(r[1] || '').trim();
+        if (!childName || childName === parentName || !posIdx[childName] || !posIdx[parentName]) return;
+
+        const from = rotPt(map.latLngToContainerPoint(posIdx[parentName]));
+        const to   = rotPt(map.latLngToContainerPoint(posIdx[childName]));
+        const distVal = String(r[15] || '').trim() ||
+            String(haversineM(posIdx[childName][0], posIdx[childName][1],
+                              posIdx[parentName][0], posIdx[parentName][1]));
+        const mx = ((from.x + to.x) / 2).toFixed(1);
+        const my = ((from.y + to.y) / 2).toFixed(1);
+        markup +=
+            `<line x1="${from.x.toFixed(1)}" y1="${from.y.toFixed(1)}"` +
+            ` x2="${to.x.toFixed(1)}" y2="${to.y.toFixed(1)}"` +
+            ` stroke="#1e40af" stroke-width="2.5" stroke-dasharray="7 5" opacity="0.85"/>` +
+            `<text x="${mx}" y="${my}" text-anchor="middle" dominant-baseline="middle"` +
+            ` font-family="Arial,sans-serif" font-size="10" font-weight="700" fill="#1e40af"` +
+            ` paint-order="stroke" stroke="white" stroke-width="3"` +
+            ` stroke-linejoin="round">${distVal}m</text>`;
+    });
+
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.id = '_printCableSvg';
+    svg.setAttribute('width', W);
+    svg.setAttribute('height', H);
+    svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+    svg.style.cssText = 'position:absolute;top:0;left:0;pointer-events:none;z-index:450;overflow:visible;';
+    // KHÔNG set CSS transform — tọa độ đã pre-rotated
+    svg.innerHTML = markup;
+    mapEl.appendChild(svg);
+}
+```
+
+**Cập nhật nơi gọi** trong `exportDrawingPDF()`:
+Tìm dòng `_buildPrintCableSvg(rows)` và thêm tham số rotation:
+```javascript
+const rotation = parseFloat(document.getElementById('pdRotation')?.value) || _currentMapRotation || 0;
+_buildPrintCableSvg(rows, rotation);
+```
+
+Lưu ý:
+- SVG KHÔNG có CSS transform — tọa độ đã khớp với vị trí pixel của marker trong CSS-rotated pane
+- `parseCoord()` và `haversineM()` đã có trong codebase
+- `_removePrintCableSvg()` đã có trong codebase
+
+Không thay đổi gì khác.
+```
+
+---
+
+**Cập nhật thứ tự chạy (bổ sung 5.4–5.6):**
+```
+5.4 → index.html: L.Control.MapTools (gộp ZoomDisplay + Compass + ↺↻)     ✅ done
+5.5 → index.html: keyboard shortcuts [ ] \ + two-finger touch rotation      ✅ done
+5.6 → index.html: _buildPrintCableSvg(rows, rotationDeg) pre-rotated coords ✅ done
+```
+
+---
+
+---
+
+## TÍNH NĂNG 8: Tối ưu mobile
+
+Mục tiêu: App chạy mượt trên thiết bị Android/iOS tầm trung (RAM 3–4 GB, màn hình 360–414px).
+Thực hiện theo thứ tự 8.1 → 8.2 → 8.3 → 8.4 → 8.5 → 8.6 → 8.7.
+
+---
+
+### PROMPT 8.1 — isMobile detection + icon tối giản + shared icons
+
+```
+Dự án: PWA khảo sát chiếu sáng — index.html.
+
+Vấn đề: `makeLampIcon()` tạo SVG phức tạp (filter drop-shadow, cubic bezier arms) cho MỖI marker.
+Với 500+ marker trên mobile đây là bottleneck render nghiêm trọng.
+
+Nhiệm vụ: 3 thay đổi.
+
+**1. Thêm hằng số `isMobile`** ngay sau khai báo map (sau `const map = L.map(...)`):
+```javascript
+const isMobile = window.innerWidth <= 768 || /Mobi|Android/i.test(navigator.userAgent);
+```
+
+**2. Thêm hàm `makeLampIconMobile(color)`** ngay sau `makeLampIcon()`:
+```javascript
+function makeLampIconMobile(color) {
+    return L.divIcon({
+        className: '',
+        html: `<svg width="14" height="28" viewBox="0 0 14 28" xmlns="http://www.w3.org/2000/svg">
+            <rect x="5.5" y="8" width="3" height="20" rx="1.5" fill="${color}"/>
+            <circle cx="7" cy="6" r="5" fill="${color}"/>
+            <circle cx="7" cy="6" r="3.5" fill="white" opacity="0.8"/>
+        </svg>`,
+        iconSize: [14, 28],
+        iconAnchor: [7, 28],
+        popupAnchor: [0, -30]
+    });
+}
+```
+
+**3. Trong `addMarkerRowToMap(row)`** — khi quyết định icon, thêm nhánh mobile:
+
+Tìm đoạn tạo `icon = makeLampIcon(color, loaiDen, congSuat, soLuong)`, thay bằng:
+```javascript
+let icon;
+if (isMobile && !loaiDen && !congSuat) {
+    // Shared icon theo type — tạo 1 lần, tái dùng cho tất cả marker cùng loại
+    const mobileKey = 'mobile_' + loai;
+    if (!customIcons[mobileKey]) customIcons[mobileKey] = makeLampIconMobile(color);
+    icon = customIcons[mobileKey];
+} else {
+    icon = makeLampIcon(color, loaiDen, congSuat, soLuong);
+}
+```
+
+(Với marker tủ điện, không thay đổi — `makeCabinetIcon()` đã nhẹ.)
+
+Lưu ý:
+- `customIcons` phải đã khai báo trước đó (kiểm tra, nếu chưa có thì thêm `const customIcons = {};`)
+- Shared icon chỉ cho marker không có badge (loaiDen + congSuat đều rỗng)
+- Drop-shadow `filter` trong SVG tốn GPU nhất — icon mobile bỏ hoàn toàn
+
+Không thay đổi gì khác.
+```
+
+---
+
+### PROMPT 8.2 — Cluster aggressively hơn trên mobile
+
+```
+Dự án: PWA khảo sát chiếu sáng — index.html.
+
+Ngữ cảnh sau PROMPT 8.1: `isMobile` đã khai báo.
+
+Vấn đề: Trên mobile với màn hình nhỏ, nhiều marker icon riêng lẻ ở zoom thấp gây lag touch event.
+
+Nhiệm vụ: 1 thay đổi — cập nhật tham số `L.markerClusterGroup`.
+
+Tìm đoạn khởi tạo `markerCluster = L.markerClusterGroup({...})`, sửa thành:
+```javascript
+const markerCluster = L.markerClusterGroup({
+    disableClusteringAtZoom: isMobile ? 16 : 15,  // mobile giữ cluster lâu hơn 1 zoom
+    maxClusterRadius: isMobile ? 80 : 60,          // mobile bán kính cluster lớn hơn
+    chunkedLoading: true,    // không block main thread khi load 500+ marker
+    chunkInterval: 100,      // ms giữa mỗi chunk
+    chunkDelay: 50
+});
+```
+
+Lưu ý:
+- `chunkedLoading: true` quan trọng nhất — tránh freeze UI khi load lần đầu
+- Giá trị desktop giữ nguyên để không ảnh hưởng trải nghiệm desktop
+- Nếu `markerCluster` đã có `disableClusteringAtZoom` hay `maxClusterRadius` thì ghi đè
+
+Không thay đổi gì khác.
+```
+
+---
+
+### PROMPT 8.3 — Ngưỡng zoom hiện nhãn tên theo mobile/desktop
+
+```
+Dự án: PWA khảo sát chiếu sáng — index.html.
+
+Ngữ cảnh sau PROMPT 8.1: `isMobile` đã khai báo.
+
+Vấn đề: Trên mobile zoom ≥ 17 hiện nhãn tên tất cả marker cùng lúc → quá nhiều DOM node.
+
+Nhiệm vụ: Tìm listener `map.on('zoomend')` xử lý `labelLayerGroup`, sửa ngưỡng zoom:
+
+```javascript
+// Desktop: hiện nhãn khi zoom ≥ 17; Mobile: zoom ≥ 18
+const labelZoomThreshold = isMobile ? 18 : 17;
+map.on('zoomend', function() {
+    if (map.getZoom() >= labelZoomThreshold) {
+        if (!map.hasLayer(labelLayerGroup)) labelLayerGroup.addTo(map);
+    } else {
+        if (map.hasLayer(labelLayerGroup)) map.removeLayer(labelLayerGroup);
+    }
+});
+```
+
+Lưu ý: Thay `17` trong điều kiện zoomend bằng `labelZoomThreshold`. Nếu đã có constant cho
+ngưỡng zoom, sửa constant đó thành biểu thức `isMobile ? 18 : 17`.
+
+Không thay đổi gì khác.
+```
+
+---
+
+### PROMPT 8.4 — Tắt animation Leaflet trên mobile
+
+```
+Dự án: PWA khảo sát chiếu sáng — index.html.
+
+Ngữ cảnh sau PROMPT 8.1: `isMobile` đã khai báo, `map` đã khởi tạo.
+
+Vấn đề: Leaflet zoom/marker/fade animation gây jank rõ rệt trên thiết bị tầm trung.
+
+Nhiệm vụ: Thêm đoạn này ngay SAU khi `map` được khởi tạo (sau `const map = L.map(...)`):
+```javascript
+if (isMobile) {
+    map.options.zoomAnimation    = false;
+    map.options.markerZoomAnimation = false;
+    map.options.fadeAnimation    = false;
+}
+```
+
+Lưu ý:
+- Phải đặt SAU khi map được tạo, TRƯỚC khi add layer đầu tiên
+- Không ảnh hưởng desktop vì có guard `isMobile`
+- Tắt animation không ảnh hưởng chức năng, chỉ bỏ hiệu ứng chuyển động
+
+Không thay đổi gì khác.
+```
+
+---
+
+### PROMPT 8.5 — Lazy load ảnh trong popup marker
+
+```
+Dự án: PWA khảo sát chiếu sáng — index.html.
+
+Vấn đề: Popup render `<img src="...">` ngay khi mở. Trên mobile với ảnh 1–3 MB → lag popup.
+
+Nhiệm vụ: Tìm trong `createMarkerPopupContent()` (hoặc hàm tạo HTML popup) đoạn tạo thẻ `<img>`:
+
+Tìm (đại loại):
+```javascript
+`<img src="${imgUrl}" ...>`
+```
+
+Thêm `loading="lazy"` và giới hạn kích thước hiển thị:
+```javascript
+`<img src="${imgUrl}" loading="lazy"
+      style="max-width:100%;max-height:200px;object-fit:cover;border-radius:6px;"
+      crossorigin="anonymous">`
+```
+
+Nếu có nhiều chỗ tạo `<img>` trong popup, sửa tất cả.
+
+Lưu ý:
+- `loading="lazy"` được hỗ trợ trên Chrome/Safari/Firefox hiện đại (Android 8+ và iOS 15.4+)
+- `crossorigin="anonymous"` cần thiết nếu ảnh từ GitHub Pages (khác origin)
+- `max-height:200px` tránh ảnh full HD chiếm hết màn hình
+
+Không thay đổi gì khác.
+```
+
+---
+
+### PROMPT 8.6 — Debounce sự kiện map moveend / zoomend
+
+```
+Dự án: PWA khảo sát chiếu sáng — index.html.
+
+Vấn đề: Pan/zoom nhanh trên mobile kích hoạt moveend/zoomend liên tục → nhiều lần rerender
+không cần thiết (cập nhật nhãn, stats, v.v.).
+
+Nhiệm vụ: Thêm hàm debounce + wrap các listener nặng.
+
+**1. Thêm hàm `debounce`** ngay trong phần JS utilities:
+```javascript
+function debounce(fn, ms) {
+    let t;
+    return function(...args) {
+        clearTimeout(t);
+        t = setTimeout(() => fn.apply(this, args), ms);
+    };
+}
+```
+
+**2. Wrap listener moveend/zoomend** (nếu có xử lý nặng trong đó):
+
+Tìm `map.on('moveend', ...)` hoặc `map.on('zoomend', ...)` xử lý nhiều logic (không phải
+listener nhẹ như cập nhật zoom display) — wrap hàm handler bằng debounce:
+```javascript
+// Thay:
+map.on('moveend', onMapMoveEnd);
+// Thành:
+map.on('moveend', debounce(onMapMoveEnd, 150));
+
+map.on('zoomend', debounce(onMapZoomEnd, 150));
+```
+
+Lưu ý: Chỉ wrap các handler thực sự nặng (render label, tính toán, cập nhật stats).
+Handler nhẹ (cập nhật mapZoomDisplay, updateCompassUI) KHÔNG wrap để vẫn responsive.
+Nếu không có hàm `onMapMoveEnd` / `onMapZoomEnd` riêng, không cần thêm debounce.
+
+Không thay đổi gì khác.
+```
+
+---
+
+### PROMPT 8.7 — CSS media query tối ưu mobile
+
+```
+Dự án: PWA khảo sát chiếu sáng — index.html.
+
+Vấn đề: Transition CSS + animation gây jank trên mobile. Popup quá rộng trên màn hình nhỏ.
+Nút in bản vẽ / CAD không cần thiết trên mobile (chức năng desktop chính).
+
+Nhiệm vụ: Thêm media query vào phần `<style>` (cuối phần CSS):
+```css
+@media (max-width: 768px) {
+    /* Tắt transition nặng */
+    * {
+        transition: none !important;
+        animation: none !important;
+    }
+
+    /* Popup gọn hơn */
+    .marker-popup-card {
+        max-width: 92vw;
+        font-size: 13px;
+    }
+
+    /* Bottom action bar: 1 hàng, scroll ngang nếu tràn */
+    #bottomActionBar {
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    /* Ẩn nút ít dùng trên mobile */
+    #btnExportCad,
+    #btnPrintDrawing {
+        display: none !important;
+    }
+}
+```
+
+Lưu ý:
+- `transition: none !important` ảnh hưởng tất cả element trong viewport — đây là đánh đổi
+  có chủ đích: ưu tiên performance hơn animation
+- Kiểm tra id `btnExportCad` và `btnPrintDrawing` khớp với id thực trong HTML (tìm trước khi thay)
+- `.marker-popup-card` là class của popup card — kiểm tra tên class thực trong codebase
+
+Không thay đổi gì khác.
+```
+
+---
+
+**Thứ tự chạy Tính năng 8:**
+```
+8.1 → index.html: isMobile + makeLampIconMobile() + shared icons     ⬜
+8.2 → index.html: markerCluster chunkedLoading + mobile thresholds   ⬜
+8.3 → index.html: labelZoomThreshold theo mobile/desktop             ⬜
+8.4 → index.html: tắt Leaflet animation trên mobile                  ⬜
+8.5 → index.html: loading="lazy" + max-height cho ảnh popup          ⬜
+8.6 → index.html: debounce moveend/zoomend                           ⬜
+8.7 → index.html: CSS media query tắt transition + ẩn nút desktop    ⬜
+```
