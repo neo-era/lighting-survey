@@ -794,6 +794,10 @@
                 </div>
                 <div id="loginError"></div>
                 <button class="login-btn" id="loginBtn" onclick="doLogin()">Đăng nhập</button>
+                <button id="loginCancelBtn" onclick="cancelLogin()"
+                    style="display:none;margin-top:8px;width:100%;padding:10px;border:1.5px solid #cbd5e1;border-radius:10px;background:#f8fafc;color:#64748b;font-size:15px;cursor:pointer;">
+                    Hủy
+                </button>
             </div>
         </div>
     </div>
@@ -884,6 +888,12 @@
                             </div>
                             <i class="fa fa-sign-out ulogout"></i>
                         </div>
+                        <button onclick="openChangeCredentials()" title="Đổi tên / mật khẩu"
+                                style="background:none;border:1.5px solid var(--border);border-radius:8px;
+                                       padding:6px 10px;cursor:pointer;color:var(--text-muted);font-size:13px;
+                                       flex-shrink:0;touch-action:manipulation;">
+                            <i class="fa fa-key"></i>
+                        </button>
                         <div id="dataVersionTag"
                              style="font-size:10px;font-weight:700;color:#2563eb;
                                     background:#eff6ff;border:1px solid #bfdbfe;
@@ -976,6 +986,47 @@
                     <!-- Nội dung GitHub -->
                     <div id="githubContents"></div>
 
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══ MODAL ĐỔI THÔNG TIN TÀI KHOẢN ═══ -->
+    <div class="modal fade" id="changeCredentialsModal" tabindex="-1" role="dialog">
+        <div class="modal-dialog modal-sm" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="fa fa-key"></i> Đổi thông tin tài khoản</h5>
+                    <button type="button" class="close" data-dismiss="modal"><span>&times;</span></button>
+                </div>
+                <div class="modal-body" style="padding:16px;">
+                    <div id="ccError" style="display:none;color:#dc2626;font-size:13px;margin-bottom:10px;padding:8px 12px;background:#fef2f2;border-radius:6px;border:1px solid #fecaca;"></div>
+                    <div class="form-group" style="margin-bottom:12px;">
+                        <label style="font-size:12px;font-weight:700;color:var(--text-muted);text-transform:uppercase;">Tên đăng nhập mới <small style="font-weight:400;text-transform:none;">(để trống = giữ nguyên)</small></label>
+                        <input type="text" id="ccNewUsername" class="form-control" style="font-size:16px;"
+                               placeholder="Tên đăng nhập mới" autocomplete="username">
+                    </div>
+                    <div class="form-group" style="margin-bottom:12px;">
+                        <label style="font-size:12px;font-weight:700;color:var(--text-muted);text-transform:uppercase;">Mật khẩu hiện tại <span style="color:#dc2626;">*</span></label>
+                        <input type="password" id="ccCurrentPassword" class="form-control" style="font-size:16px;"
+                               placeholder="Nhập mật khẩu hiện tại" autocomplete="current-password">
+                    </div>
+                    <div class="form-group" style="margin-bottom:12px;">
+                        <label style="font-size:12px;font-weight:700;color:var(--text-muted);text-transform:uppercase;">Mật khẩu mới <small style="font-weight:400;text-transform:none;">(để trống = giữ nguyên)</small></label>
+                        <input type="password" id="ccNewPassword" class="form-control" style="font-size:16px;"
+                               placeholder="Mật khẩu mới" autocomplete="new-password">
+                    </div>
+                    <div class="form-group" style="margin-bottom:0;">
+                        <label style="font-size:12px;font-weight:700;color:var(--text-muted);text-transform:uppercase;">Xác nhận mật khẩu mới</label>
+                        <input type="password" id="ccConfirmPassword" class="form-control" style="font-size:16px;"
+                               placeholder="Nhập lại mật khẩu mới" autocomplete="new-password">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Hủy</button>
+                    <button type="button" class="btn btn-primary" onclick="doChangeCredentials()">
+                        <i class="fa fa-save"></i> Lưu thay đổi
+                    </button>
                 </div>
             </div>
         </div>
@@ -2192,7 +2243,19 @@
             }
             _applyRoleUI();
             _loadDataVersion();
-            loadFromCSVWithCache('DanhSachTru', KHAOSAT_CSV_URL);
+            // Nếu địa bàn mặc định không nằm trong vùng được phép → chuyển sang địa bàn đầu tiên được phép
+            const allowed = _allowedPages();
+            const defaultPage = allowed.find(p => p.sheet === 'DanhSachTru') || allowed[0];
+            if (defaultPage) {
+                currentSheet = defaultPage.sheet;
+                loadFromCSVWithCache(defaultPage.sheet, defaultPage.csvUrl);
+            }
+        }
+
+        let _loginCtrl = null;
+
+        function cancelLogin() {
+            if (_loginCtrl) _loginCtrl.abort();
         }
 
         async function doLogin() {
@@ -2200,15 +2263,29 @@
             const password = document.getElementById('lPassword').value || '';
             const errEl = document.getElementById('loginError');
             const btn = document.getElementById('loginBtn');
+            const cancelBtn = document.getElementById('loginCancelBtn');
             errEl.textContent = '';
             if (!username) { errEl.textContent = 'Vui lòng nhập tên đăng nhập'; return; }
             if (!password) { errEl.textContent = 'Vui lòng nhập mật khẩu'; return; }
-            btn.disabled = true; btn.textContent = '⏳ Đang kiểm tra...';
+            btn.disabled = true; btn.textContent = '⏳ Đang đăng nhập...';
+            if (cancelBtn) cancelBtn.style.display = 'none';
+            _loginCtrl = new AbortController();
+            const tid = setTimeout(() => ctrl.abort(), 25000);
+            // Hiện nút Hủy sau 4 giây (GAS cold start có thể mất 10-20 giây)
+            const cancelTid = setTimeout(() => {
+                if (cancelBtn) {
+                    cancelBtn.style.display = 'inline-block';
+                    errEl.textContent = 'Máy chủ đang khởi động, vui lòng chờ...';
+                }
+            }, 4000);
+            const ctrl = _loginCtrl;
             try {
                 const res = await fetch(KHAOSAT_GAS_URL, {
                     method: 'POST',
-                    body: JSON.stringify({ action: 'login', username, password })
+                    body: JSON.stringify({ action: 'login', username, password }),
+                    signal: ctrl.signal
                 });
+                clearTimeout(tid); clearTimeout(cancelTid);
                 if (!res.ok) throw new Error('HTTP ' + res.status);
                 const data = await res.json();
                 if (data.status === 'ok') {
@@ -2219,9 +2296,14 @@
                     errEl.textContent = data.message || 'Sai tên đăng nhập hoặc mật khẩu';
                 }
             } catch(e) {
-                errEl.textContent = 'Lỗi kết nối: ' + e.message;
+                clearTimeout(tid); clearTimeout(cancelTid);
+                errEl.textContent = e.name === 'AbortError'
+                    ? 'Đã hủy hoặc máy chủ quá chậm — vui lòng thử lại.'
+                    : 'Lỗi kết nối: ' + e.message;
             } finally {
+                _loginCtrl = null;
                 btn.disabled = false; btn.textContent = 'Đăng nhập';
+                if (cancelBtn) cancelBtn.style.display = 'none';
             }
         }
 
@@ -2238,6 +2320,65 @@
                 const pw = document.getElementById('lPassword');
                 if (pw) pw.value = '';
             }, 150);
+        }
+
+        function openChangeCredentials() {
+            $('#controlsModal').modal('hide');
+            document.getElementById('ccNewUsername').value = '';
+            document.getElementById('ccCurrentPassword').value = '';
+            document.getElementById('ccNewPassword').value = '';
+            document.getElementById('ccConfirmPassword').value = '';
+            const errEl = document.getElementById('ccError');
+            if (errEl) { errEl.style.display = 'none'; errEl.textContent = ''; }
+            $('#changeCredentialsModal').modal('show');
+            setTimeout(() => { const el = document.getElementById('ccCurrentPassword'); if (el) el.focus(); }, 400);
+        }
+
+        async function doChangeCredentials() {
+            const errEl = document.getElementById('ccError');
+            const showErr = msg => { errEl.textContent = msg; errEl.style.display = 'block'; };
+            errEl.style.display = 'none';
+
+            const newUsername = (document.getElementById('ccNewUsername').value || '').trim();
+            const currentPassword = document.getElementById('ccCurrentPassword').value || '';
+            const newPassword = document.getElementById('ccNewPassword').value || '';
+            const confirmPassword = document.getElementById('ccConfirmPassword').value || '';
+
+            if (!currentPassword) { showErr('Vui lòng nhập mật khẩu hiện tại.'); return; }
+            if (newPassword && newPassword !== confirmPassword) { showErr('Mật khẩu mới không khớp.'); return; }
+            if (!newUsername && !newPassword) { showErr('Chưa có thay đổi nào để lưu.'); return; }
+
+            const btn = document.querySelector('#changeCredentialsModal .btn-primary');
+            if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Đang lưu...'; }
+            const ctrl = new AbortController();
+            const tid = setTimeout(() => ctrl.abort(), 15000);
+            try {
+                const res = await fetch(KHAOSAT_GAS_URL, {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        action: 'change_credentials',
+                        username: currentUser.username,
+                        currentPassword,
+                        newUsername,
+                        newPassword
+                    }),
+                    signal: ctrl.signal
+                });
+                clearTimeout(tid);
+                const data = await res.json();
+                if (data.status !== 'ok') { showErr(data.message || 'Lỗi không xác định.'); return; }
+                if (newUsername) currentUser.username = data.newUsername;
+                localStorage.setItem('ks_user', JSON.stringify(currentUser));
+                const nameEl = document.getElementById('topbarUserName');
+                if (nameEl && newUsername) nameEl.textContent = currentUser.displayName || currentUser.username;
+                $('#changeCredentialsModal').modal('hide');
+                displayError('Đã cập nhật thông tin tài khoản.');
+            } catch (e) {
+                clearTimeout(tid);
+                showErr(e.name === 'AbortError' ? 'Máy chủ phản hồi chậm, vui lòng thử lại.' : 'Lỗi kết nối: ' + e.message);
+            } finally {
+                if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fa fa-save"></i> Lưu thay đổi'; }
+            }
         }
 
         // ── PHÂN QUYỀN ──────────────────────────────────────────────────────
@@ -2267,14 +2408,18 @@
             _buildDistrictOptions();
         }
 
+        function _allowedPages() {
+            const vung = currentUser && currentUser.vung;
+            if (!vung || vung.length === 0) return DISTRICT_PAGES;
+            return DISTRICT_PAGES.filter(p => vung.includes(p.sheet));
+        }
+
         function _buildDistrictOptions() {
             const sel = document.getElementById('pages');
             if (!sel) return;
-            // Xóa option địa bàn cũ (value bắt đầu bằng "district_")
             [...sel.options].filter(o => o.value.startsWith('district_')).forEach(o => o.remove());
-            // Thêm optgroup địa bàn vào đầu select (trước option đầu tiên)
             const firstOpt = sel.options[0];
-            DISTRICT_PAGES.forEach(page => {
+            _allowedPages().forEach(page => {
                 const opt = document.createElement('option');
                 opt.value = 'district_' + page.sheet;
                 opt.textContent = page.label;
@@ -2380,13 +2525,14 @@
             { label: 'Xã Bàu Bàng',      sheet: 'BauBang',     csvUrl: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRjBdN5epr38kL2jLituPUC4wJO_Ohr_AsFpzaZh6Azxxs_gkzGT5s3JiZ1uFkNQFP5epR2U_wYT6wT/pub?gid=784296746&single=true&output=csv' },
             { label: 'Xã Trừ Văn Thố',   sheet: 'TruVanTho',   csvUrl: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRjBdN5epr38kL2jLituPUC4wJO_Ohr_AsFpzaZh6Azxxs_gkzGT5s3JiZ1uFkNQFP5epR2U_wYT6wT/pub?gid=110776181&single=true&output=csv' },
             { label: 'Phường Bến Cát',   sheet: 'BenCat',      csvUrl: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRjBdN5epr38kL2jLituPUC4wJO_Ohr_AsFpzaZh6Azxxs_gkzGT5s3JiZ1uFkNQFP5epR2U_wYT6wT/pub?gid=1560529310&single=true&output=csv' },
+            { label: 'Cần Giuộc',        sheet: 'CanGiuoc',    csvUrl: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRjBdN5epr38kL2jLituPUC4wJO_Ohr_AsFpzaZh6Azxxs_gkzGT5s3JiZ1uFkNQFP5epR2U_wYT6wT/pub?gid=841544903&single=true&output=csv' },
         ];
 
         const SHEET_ID_PREFIX = {
             DanhSachTru: 'TQ', Quan1: 'Q1', Quan3: 'Q3', Quan5: 'Q5',
             Quan8: 'Q8', Quan10: 'Q10', Quan11: 'Q11',
             PhuNhuan: 'PN', BinhThanh: 'BT', TanBinh: 'TB', TanPhu: 'TP',
-            BauBang: 'BB', TruVanTho: 'TVT', BenCat: 'BC'
+            BauBang: 'BB', TruVanTho: 'TVT', BenCat: 'BC', CanGiuoc: 'CG'
         };
 
         let currentSheet = 'DanhSachTru';
@@ -3976,6 +4122,10 @@
         async function switchDistrict(sheetName) {
             const page = DISTRICT_PAGES.find(p => p.sheet === sheetName);
             if (!page) return;
+            if (!_allowedPages().some(p => p.sheet === sheetName)) {
+                displayError('Bạn không có quyền truy cập địa bàn này.');
+                return;
+            }
             if (!page.csvUrl) {
                 displayError('Địa bàn "' + page.label + '" chưa có URL dữ liệu. Cần publish tab ' + sheetName + ' thành CSV rồi điền vào DISTRICT_PAGES.csvUrl.');
                 return;

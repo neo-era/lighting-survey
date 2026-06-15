@@ -108,7 +108,7 @@ Tự động cập nhật tại 2 điểm: `saveMarkerPopup()` (thêm/sửa mark
 
 | action           | Mô tả                                                         |
 |------------------|---------------------------------------------------------------|
-| login            | Xác thực từ sheet `TaiKhoan` (cột A=user, B=pass, C=tên, D=role) |
+| login            | Xác thực từ sheet `TaiKhoan` (cột A=user, B=pass, C=tên, D=role, E=vung) |
 | full_update      | Upsert 1 hàng vào `DanhSachTru` (tìm theo ID rồi Tên trụ)   |
 | delete_row       | Xóa 1 hàng khỏi `DanhSachTru` (tìm theo ID hoặc Tên trụ)    |
 | upload_image     | Upload ảnh base64 → `images/<name>.<ext>` trên GitHub        |
@@ -182,7 +182,7 @@ if ('serviceWorker' in navigator) {
 
 ## Phân quyền người dùng
 
-Dữ liệu tài khoản đọc từ sheet `TaiKhoan` (cột A=tenDangNhap, B=matKhau, C=hoTen, D=vaiTro).
+Dữ liệu tài khoản đọc từ sheet `TaiKhoan` (cột A=tenDangNhap, B=matKhau, C=hoTen, D=vaiTro, **E=vung**).
 Bảng phân quyền định nghĩa ở sheet `PhanQuyen`:
 
 | Vai trò | Xem bản đồ | Thêm/Sửa | Xóa | Kéo marker | GitHub sync |
@@ -192,14 +192,30 @@ Bảng phân quyền định nghĩa ở sheet `PhanQuyen`:
 | `user1` | ✓ | ✓ | ✗ | ✓ | ✓ |
 | `demo`  | ✓ | ✗ | ✗ | ✗ | ✗ |
 
+**Cột E — `vung` (phân vùng địa bàn):**
+
+Danh sách tên sheet được phép, phân tách bằng dấu phẩy. Trống = được phép tất cả.
+
+```
+| tenDangNhap | matKhau | hoTen | vaiTro | vung                    |
+| lamvt       | ***     | Lâm   | user   | Quan1,Quan3             |
+| hungnt      | ***     | Hùng  | user   | Quan5,Quan8,Quan10      |
+| admin       | ***     | Admin | admin  |          ← trống = tất cả |
+```
+
+GAS trả về `vung: ['Quan1','Quan3']` trong login response. Client lưu vào `currentUser.vung`.
+
 **Hàm kiểm tra (index.html):**
 ```javascript
-canEdit()   // true nếu role = admin | user | user1
-canDelete() // true nếu role = admin | user
+canEdit()        // true nếu role = admin | user | user1
+canDelete()      // true nếu role = admin | user
+_allowedPages()  // lọc DISTRICT_PAGES theo currentUser.vung ([] = tất cả)
 ```
 
 **Enforcement:**
-- `_applyRoleUI()` — ẩn nút "Thêm marker" và "GitHub sync" với `demo`, gọi sau đăng nhập
+- `_applyRoleUI()` → `_buildDistrictOptions()` — chỉ render district options trong `_allowedPages()`
+- `_showApp()` — sau login, tự động load địa bàn đầu tiên được phép (nếu default không nằm trong vùng)
+- `switchDistrict()` — guard: từ chối nếu sheet không có trong `_allowedPages()`
 - `createMarkerPopupContent()` — render 1/2/3 nút hành động tùy role
 - `addMarkerRowToMap()` — `draggable: canEdit()`
 - `startAddMarker()` — guard trả về sớm nếu `!canEdit()`
@@ -957,6 +973,7 @@ Cho phép app quản lý dữ liệu nhiều địa bàn hành chính (quận, h
 | Xã Bàu Bàng           | `BauBang`          | Bình Dương                    |
 | Xã Trừ Văn Thố        | `TruVanTho`        |                               |
 | Phường Bến Cát        | `BenCat`           |                               |
+| Cần Giuộc             | `CanGiuoc`         | Long An                       |
 
 ---
 
@@ -979,6 +996,7 @@ const DISTRICT_PAGES = [
     { label: 'Xã Bàu Bàng',      sheet: 'BauBang',     csvUrl: '...' },
     { label: 'Xã Trừ Văn Thố',   sheet: 'TruVanTho',   csvUrl: '...' },
     { label: 'Phường Bến Cát',   sheet: 'BenCat',      csvUrl: '...' },
+    { label: 'Cần Giuộc',        sheet: 'CanGiuoc',    csvUrl: '...' },
 ];
 
 let currentSheet = 'DanhSachTru'; // sheet đang hiển thị
@@ -1008,6 +1026,7 @@ Google Sheet → tab `Quan1` → File → Share → Publish to web → chọn ta
 │ Xã Bàu Bàng                │
 │ Xã Trừ Văn Thố             │
 │ Phường Bến Cát              │
+│ Cần Giuộc                  │
 │ -- Khác --                 │
 │ Lịch sử thao tác (admin)   │
 └────────────────────────────┘
@@ -1117,6 +1136,7 @@ PhuNhuan    → ID: PN_001, ...
 BauBang     → ID: BB_001, ...
 TruVanTho   → ID: TVT_001, ...
 BenCat      → ID: BC_001, ...
+CanGiuoc    → ID: CG_001, ...
 ```
 
 **Hàm sinh ID:**
@@ -1125,7 +1145,7 @@ const SHEET_ID_PREFIX = {
     DanhSachTru: 'TQ', Quan1: 'Q1', Quan3: 'Q3', Quan5: 'Q5',
     Quan8: 'Q8', Quan10: 'Q10', Quan11: 'Q11',
     PhuNhuan: 'PN', BinhThanh: 'BT', TanBinh: 'TB', TanPhu: 'TP',
-    BauBang: 'BB', TruVanTho: 'TVT', BenCat: 'BC'
+    BauBang: 'BB', TruVanTho: 'TVT', BenCat: 'BC', CanGiuoc: 'CG'
 };
 function generateId() {
     const prefix = SHEET_ID_PREFIX[currentSheet] || 'XX';

@@ -198,6 +198,39 @@ function handleGitHubUpload(filePath, contentBase64, message) {
 
 // ── MAIN HANDLER ───────────────────────────────────────────────────────────
 
+// ── ĐỔI THÔNG TIN TÀI KHOẢN ───────────────────────────────────────────────
+
+function handleChangeCredentials(data) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName('TaiKhoan');
+  if (!sheet) return jsonResponse({ status: 'error', message: 'Sheet TaiKhoan chưa được tạo' });
+
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return jsonResponse({ status: 'error', message: 'Không tìm thấy tài khoản' });
+
+  const username = String(data.username || '').trim();
+  const currentPassword = String(data.currentPassword || '');
+  const newUsername = String(data.newUsername || '').trim();
+  const newPassword = String(data.newPassword || '');
+
+  const rows = sheet.getRange(2, 1, lastRow - 1, 2).getValues();
+  for (var i = 0; i < rows.length; i++) {
+    var dn = String(rows[i][0] || '').trim();
+    var mk = String(rows[i][1] || '').trim();
+    if (dn.toLowerCase() === username.toLowerCase() && mk === currentPassword) {
+      var rowNum = i + 2;
+      if (newUsername && newUsername !== dn) {
+        sheet.getRange(rowNum, 1).setValue(newUsername);
+      }
+      if (newPassword) {
+        sheet.getRange(rowNum, 2).setValue(newPassword);
+      }
+      return jsonResponse({ status: 'ok', newUsername: newUsername || dn });
+    }
+  }
+  return jsonResponse({ status: 'error', message: 'Mật khẩu hiện tại không đúng' });
+}
+
 // ── ĐĂNG NHẬP ──────────────────────────────────────────────────────────────
 
 function handleLogin(username, password) {
@@ -208,18 +241,21 @@ function handleLogin(username, password) {
   const lastRow = sheet.getLastRow();
   if (lastRow < 2) return jsonResponse({ status: 'error', message: 'Sai tên đăng nhập hoặc mật khẩu' });
 
-  const rows = sheet.getRange(2, 1, lastRow - 1, 4).getValues();
-  // Cột: A=tenDangNhap, B=matKhau, C=hoTen, D=vaiTro
+  const rows = sheet.getRange(2, 1, lastRow - 1, 5).getValues();
+  // Cột: A=tenDangNhap, B=matKhau, C=hoTen, D=vaiTro, E=vung (phân tách bằng dấu phẩy)
   for (const row of rows) {
     const dn = String(row[0] || '').trim();
     const mk = String(row[1] || '').trim();
     if (dn.toLowerCase() === username.toLowerCase() && mk === password) {
+      const vungRaw = String(row[4] || '').trim();
+      const vung = vungRaw ? vungRaw.split(',').map(function(s){ return s.trim(); }).filter(Boolean) : [];
       return jsonResponse({
         status: 'ok',
         user: {
           username:    dn,
           displayName: String(row[2] || dn).trim(),
-          role:        String(row[3] || 'user').trim()
+          role:        String(row[3] || 'user').trim(),
+          vung:        vung   // [] = được phép tất cả địa bàn
         }
       });
     }
@@ -233,6 +269,10 @@ function doPost(e) {
 
     if (data.action === 'login') {
       return handleLogin((data.username || '').trim(), data.password || '');
+    }
+
+    if (data.action === 'change_credentials') {
+      return handleChangeCredentials(data);
     }
 
     if (data.action === 'log_action') {
@@ -386,7 +426,7 @@ function setupDistrictSheets() {
   const sheetNames = [
     'Quan1', 'Quan3', 'Quan5', 'Quan8', 'Quan10', 'Quan11',
     'PhuNhuan', 'BinhThanh', 'TanBinh', 'TanPhu',
-    'BauBang', 'TruVanTho', 'BenCat'
+    'BauBang', 'TruVanTho', 'BenCat', 'CanGiuoc'
   ];
   sheetNames.forEach(function(name) {
     var sh = ss.getSheetByName(name);
