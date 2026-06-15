@@ -669,6 +669,7 @@
         @media (max-width: 390px) {
             .ptc-grid { grid-template-columns: 1fr 1fr; }
             .pc-actions.three { grid-template-columns: 1fr 1fr 1fr; gap: 5px; }
+            .pc-actions.four  { grid-template-columns: 1fr 1fr; gap: 5px; }
             .pc-btn { font-size: 11px; padding: 10px 3px; gap: 3px; }
             #addMarkerBtn { min-width: 100px; font-size: 13px; padding: 0 12px; }
             .bab-btn { font-size: 9px; }
@@ -710,12 +711,14 @@
         .pc-actions.one   { grid-template-columns: 1fr; }
         .pc-actions.two   { grid-template-columns: 1fr 1fr; }
         .pc-actions.three { grid-template-columns: 1fr 1fr 1fr; }
+        .pc-actions.four  { grid-template-columns: 1fr 1fr 1fr 1fr; }
         .pc-btn { padding: 11px 6px; border-radius: 11px; border: none; font-size: 12px; font-weight: 700; cursor: pointer; font-family: 'Inter', system-ui, sans-serif; transition: opacity .15s, transform .1s; display: flex; align-items: center; justify-content: center; gap: 5px; touch-action: manipulation; min-height: 44px; white-space: nowrap; }
         .pc-btn:active { opacity: .82; transform: scale(.97); }
         .pc-btn.route  { background: #0ea5e9; color: #fff; }
         .pc-btn.edit   { background: #f1f5f9; color: #1e293b; }
         .pc-btn.delete { background: #fee2e2; color: #dc2626; }
         .pc-btn.delete.confirm { background: #dc2626; color: #fff; }
+        .pc-btn.street { background: #f0fdf4; color: #16a34a; }
 
         /* ── Thumbnail icon on map ── */
         .img-marker-icon img { width:44px;height:44px;object-fit:cover;border-radius:8px;border:2.5px solid #fff;box-shadow:0 2px 10px rgba(0,0,0,.45);display:block; }
@@ -908,8 +911,8 @@
                         <div class="ctrl-title">Điều hướng</div>
                         <select id="pages" class="ctrl-input" onchange="navigateToPage()" style="margin-bottom:0;">
                             <option value="index.html">Trang khảo sát</option>
-                            <option value="https://neo-era.github.io/camera/">Quản lý camera</option>
-                            <option value="https://neo-era.github.io/dentat/dentat.html">Quản lý đèn tắt/sự cố</option>
+                            <option value="https://neo-era.github.io/camera/" id="pageOptCamera" style="display:none">Quản lý camera</option>
+                            <option value="https://neo-era.github.io/dentat/dentat.html" id="pageOptDenTat" style="display:none">Quản lý đèn tắt/sự cố</option>
                             <option value="https://neo-era.github.io/lighting-survey/huongdan.html">Hướng dẫn sử dụng</option>
                             <option value="lichsu.html" id="pageOptLichSu" style="display:none">Lịch sử thao tác</option>
                         </select>
@@ -992,6 +995,31 @@
     </div>
 
     <!-- ═══ MODAL ĐỔI THÔNG TIN TÀI KHOẢN ═══ -->
+    <!-- ═══ MODAL MAPILLARY STREET VIEW ═══ -->
+    <div class="modal fade" id="mapillaryModal" tabindex="-1" role="dialog">
+        <div class="modal-dialog modal-xl" role="document" style="max-width:900px;">
+            <div class="modal-content">
+                <div class="modal-header" style="padding:10px 16px;">
+                    <h5 class="modal-title" id="mapillaryTitle" style="font-size:14px;font-weight:700;">
+                        <i class="fa fa-street-view"></i> Xem phố
+                    </h5>
+                    <button type="button" class="close" data-dismiss="modal" onclick="_cleanupMapillary()">&times;</button>
+                </div>
+                <div class="modal-body p-0" style="position:relative;">
+                    <div id="mapillaryViewer" style="width:100%;height:480px;background:#0f172a;"></div>
+                    <div id="mapillaryStatus" style="display:none;position:absolute;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:12px;background:#0f172a;color:#94a3b8;font-size:14px;text-align:center;padding:24px;">
+                        <div id="mapillaryStatusIcon" style="font-size:36px;">⏳</div>
+                        <div id="mapillaryStatusText">Đang tải...</div>
+                    </div>
+                </div>
+                <div class="modal-footer" style="padding:8px 16px;justify-content:space-between;align-items:center;">
+                    <small style="color:#94a3b8;">Ảnh đường phố: <a href="https://www.mapillary.com" target="_blank" style="color:#2563eb;">Mapillary</a> — cộng đồng đóng góp</small>
+                    <button type="button" class="btn btn-secondary btn-sm" data-dismiss="modal" onclick="_cleanupMapillary()">Đóng</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div class="modal fade" id="changeCredentialsModal" tabindex="-1" role="dialog">
         <div class="modal-dialog modal-sm" role="document">
             <div class="modal-content">
@@ -2402,9 +2430,14 @@
                 const labels = { admin: 'Quản trị', user: 'Đầy đủ', user1: 'Khảo sát viên', demo: 'Xem' };
                 chip.title = `${currentUser.displayName || currentUser.username} — ${labels[currentUser.role] || currentUser.role} (nhấn để đăng xuất)`;
             }
-            // Hiện option Lịch sử thao tác chỉ với admin
+            // Các trang chỉ dành cho admin
+            const isAdmin = currentUser && currentUser.role === 'admin';
             const optLichSu = document.getElementById('pageOptLichSu');
-            if (optLichSu) optLichSu.style.display = (currentUser && currentUser.role === 'admin') ? '' : 'none';
+            if (optLichSu) optLichSu.style.display = isAdmin ? '' : 'none';
+            const optCamera = document.getElementById('pageOptCamera');
+            if (optCamera) optCamera.style.display = isAdmin ? '' : 'none';
+            const optDenTat = document.getElementById('pageOptDenTat');
+            if (optDenTat) optDenTat.style.display = isAdmin ? '' : 'none';
             _buildDistrictOptions();
         }
 
@@ -2462,6 +2495,88 @@
             return _printLibsPromise;
         }
 
+        // ── MAPILLARY STREET VIEW ──────────────────────────────────────────────
+        let _mapillaryViewer = null;
+        let _mapillaryPromise = null;
+
+        function _loadMapillaryJS() {
+            if (typeof mapillary !== 'undefined') return Promise.resolve();
+            if (_mapillaryPromise) return _mapillaryPromise;
+            _mapillaryPromise = new Promise((resolve, reject) => {
+                const link = document.createElement('link');
+                link.rel = 'stylesheet';
+                link.href = 'https://unpkg.com/mapillary-js@4.1.2/dist/mapillary.min.css';
+                document.head.appendChild(link);
+                const s = document.createElement('script');
+                s.src = 'https://unpkg.com/mapillary-js@4.1.2/dist/mapillary.min.js';
+                s.onload = resolve;
+                s.onerror = () => { _mapillaryPromise = null; reject(new Error('Không tải được Mapillary')); };
+                document.head.appendChild(s);
+            });
+            return _mapillaryPromise;
+        }
+
+        function _setMapillaryStatus(icon, text, visible) {
+            const el = document.getElementById('mapillaryStatus');
+            if (!el) return;
+            el.style.display = visible ? 'flex' : 'none';
+            const iconEl = document.getElementById('mapillaryStatusIcon');
+            const textEl = document.getElementById('mapillaryStatusText');
+            if (iconEl) iconEl.textContent = icon;
+            if (textEl) textEl.textContent = text;
+        }
+
+        async function openStreetView(lat, lon, tenTru) {
+            if (!MAPILLARY_TOKEN) {
+                displayError('Chưa cấu hình MAPILLARY_TOKEN. Đăng ký tài khoản tại mapillary.com và điền token vào index.html.');
+                return;
+            }
+            document.getElementById('mapillaryTitle').innerHTML = '<i class="fa fa-street-view"></i> Xem phố' + (tenTru ? ' — ' + tenTru : '');
+            _setMapillaryStatus('⏳', 'Đang tải thư viện...', true);
+            $('#mapillaryModal').modal('show');
+
+            try {
+                await _loadMapillaryJS();
+                _setMapillaryStatus('🔍', 'Đang tìm ảnh gần nhất...', true);
+
+                // Mapillary Graph API: closeto = lon,lat (GeoJSON order)
+                const apiRes = await fetch(
+                    `https://graph.mapillary.com/images?fields=id,geometry&closeto=${lon},${lat}&radius=100&limit=1&access_token=${MAPILLARY_TOKEN}`
+                );
+                if (!apiRes.ok) throw new Error('API lỗi ' + apiRes.status);
+                const apiData = await apiRes.json();
+
+                if (!apiData.data || apiData.data.length === 0) {
+                    _setMapillaryStatus('📷', 'Không có ảnh đường phố tại vị trí này.\nThử tìm kiếm trên mapillary.com', true);
+                    return;
+                }
+
+                const imageId = apiData.data[0].id;
+                _setMapillaryStatus('', '', false);
+
+                const container = document.getElementById('mapillaryViewer');
+                if (_mapillaryViewer) {
+                    await _mapillaryViewer.moveTo(imageId);
+                } else {
+                    _mapillaryViewer = new mapillary.Viewer({
+                        accessToken: MAPILLARY_TOKEN,
+                        container,
+                        imageId,
+                        component: { cover: false, sequence: { visible: false } }
+                    });
+                }
+            } catch(e) {
+                _setMapillaryStatus('⚠️', 'Lỗi: ' + e.message, true);
+            }
+        }
+
+        function _cleanupMapillary() {
+            if (_mapillaryViewer) {
+                _mapillaryViewer.remove();
+                _mapillaryViewer = null;
+            }
+        }
+
         // ─── Biến toàn cục ───
         const isMobile = window.innerWidth <= 768 || /Mobi|Android/i.test(navigator.userAgent);
         const labelZoomThreshold = isMobile ? 18 : 17;
@@ -2508,6 +2623,7 @@
         const MAX_EXCEL_TEXT_LENGTH = 32767;
         const KHAOSAT_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRjBdN5epr38kL2jLituPUC4wJO_Ohr_AsFpzaZh6Azxxs_gkzGT5s3JiZ1uFkNQFP5epR2U_wYT6wT/pub?output=csv';
         const KHAOSAT_GAS_URL = 'https://script.google.com/macros/s/AKfycbxPFn7lnJZYdjUg5WlVq1P1JGI5O3rvcry_IVE3bhF5foDmbgT6KwBU4xFxHNwKruHRvQ/exec';
+        const MAPILLARY_TOKEN = '36684115377868575';
 
         // ── ĐA ĐỊA BÀN — cấu hình CSV URL sau khi publish từng tab trong Google Sheet ──
         const DISTRICT_PAGES = [
@@ -2719,19 +2835,23 @@
                 pcRows.push(`<div class="pc-row"><span class="pi">📏</span><span class="pk">Khoảng cách</span><span class="pv">${Math.round(totalDistance)} m</span><select size="3" class="pc-dist-list">${segments.join('')}</select></div>`);
             }
 
+            const streetBtn = `<button class="pc-btn street" onclick="openStreetView(${lat},${lon},'${(name||'').replace(/'/g,'\\\'')}')" title="Xem ảnh đường phố Mapillary">🌐 Phố</button>`;
             let actionBtns, actionClass;
             if (canDelete()) {
                 actionBtns = `<button class="pc-btn route" onclick="routeToMarkerLatLon(${lat},${lon})">🧭 Đi đến</button>
                 <button class="pc-btn edit" onclick="openEditMarker()">✏️ Sửa</button>
-                <button class="pc-btn delete" onclick="confirmDeleteMarker(this)">🗑 Xóa</button>`;
-                actionClass = 'three';
+                <button class="pc-btn delete" onclick="confirmDeleteMarker(this)">🗑 Xóa</button>
+                ${streetBtn}`;
+                actionClass = 'four';
             } else if (canEdit()) {
                 actionBtns = `<button class="pc-btn route" onclick="routeToMarkerLatLon(${lat},${lon})">🧭 Đi đến</button>
-                <button class="pc-btn edit" onclick="openEditMarker()">✏️ Sửa</button>`;
-                actionClass = 'two';
+                <button class="pc-btn edit" onclick="openEditMarker()">✏️ Sửa</button>
+                ${streetBtn}`;
+                actionClass = 'three';
             } else {
-                actionBtns = `<button class="pc-btn route" onclick="routeToMarkerLatLon(${lat},${lon})">🧭 Đi đến</button>`;
-                actionClass = 'one';
+                actionBtns = `<button class="pc-btn route" onclick="routeToMarkerLatLon(${lat},${lon})">🧭 Đi đến</button>
+                ${streetBtn}`;
+                actionClass = 'two';
             }
 
             return `<div class="pc">
