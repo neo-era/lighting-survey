@@ -117,8 +117,8 @@ Tự động cập nhật tại 2 điểm: `saveMarkerPopup()` (thêm/sửa mark
 ### Lưu ý GAS
 - Mỗi lần sửa `gas-khaosat.js` phải **redeploy New version** (không tạo deployment mới — sẽ đổi URL)
 - `norm()` chuẩn hóa tên cột: lowercase + NFC → khớp header dù có/không dấu
-- `findRowNum()` tìm hàng theo ID trước, fallback tên trụ
-- `buildFieldValues()` **cho phép empty string** (`''`) — để clear cell khi xóa cáp (`row[14]=''`, `row[15]=''`)
+- `findRowNum()` tìm hàng theo ID trước, fallback `oldTenTru` (tên cũ trước khi edit), fallback `tenTru` — đảm bảo sửa tên trụ không tạo row mới
+- `buildFieldValues()` **cho phép empty string** (`''`) — để clear cell khi xóa cáp (`row[14]=''`, `row[15]=''`); skip `oldTenTru` (không ghi vào sheet)
 - `updateRowFields()` dùng `setValue('')` khi value là `null` hoặc `''` → xóa nội dung cell
 
 ## Quy trình deploy GAS
@@ -684,7 +684,7 @@ Nếu phát hiện cycle → `displayError('Phát hiện vòng lặp cáp — ki
 | Việc cần làm | Lý do | Ưu tiên |
 |---|---|---|
 | ~~Bump sw.js v5 → v6~~ | ✅ Đã bump lên v6 | — |
-| **Redeploy GAS New version** | Thêm cột `Số lượng đèn` [21] + fix `buildFieldValues` cho phép empty string | 🔴 Cao |
+| **Redeploy GAS New version** | Fix `findRowNum` dùng `oldTenTru` + `buildFieldValues` skip `oldTenTru` — bắt buộc để sửa tên trụ không tạo row mới | 🔴 Cao |
 | ~~Sync banve-mau.html~~ | ✅ Đã rewrite đồng bộ với `_showPrintOverlay()` | — |
 | ~~Implement 4.4.1 + 4.4.2~~ | ✅ Đã implement | — |
 | ~~Fix edit marker mode~~ | ✅ `_editingRow` state, double-listener, geocode cancel | — |
@@ -706,7 +706,13 @@ Nếu phát hiện cycle → `displayError('Phát hiện vòng lặp cáp — ki
 2. Hủy geocoding ngay (`_pendingGeocodePromise = Promise.resolve(null)`) — dùng dữ liệu row
 3. setTimeout 80ms: điền toàn bộ field từ row, khôi phục ảnh cũ, pre-select baseSelect khớp `row[14]`
 
-`hideMarkerPopup()` reset `_editingRow = null`. Capture `const rowRef = _editingRow` trước khi gọi `hideMarkerPopup()` để tránh null reference khi gọi `syncRowToGAS`.
+`hideMarkerPopup()` reset `_editingRow = null`. Capture `const rowRef = _editingRow` và `const editOldName = oldName` trước khi gọi `hideMarkerPopup()`, rồi gọi `syncRowToGAS(rowRef, { oldTenTru: editOldName })`.
+
+**Bug fix — sửa tên trụ tạo row mới:** Marker vừa thêm (chưa reload CSV) có `row[0] = ''`. Nếu sửa tên, GAS không tìm được bằng ID lẫn tên mới → `appendRow`. Fix: client gửi `oldTenTru` (tên cũ), GAS dùng `data.oldTenTru || data.tenTru` cho name-fallback. `oldTenTru` được skip trong `buildFieldValues` (không ghi vào sheet).
+
+`syncRowToGAS(row, opts)` nhận:
+- `opts.silent` — tắt toast khi batch
+- `opts.oldTenTru` — tên cũ trước khi sửa, để GAS tìm đúng hàng khi ID chưa có
 
 ### Dropdown Marker gốc — `markerBaseSelect`
 
@@ -1410,3 +1416,185 @@ Nhưng L.canvas chỉ hỗ trợ `L.circleMarker` / `L.circle`, không hỗ tr�
 | + 9.3     | ~2–3s     | ~2–3s       | Không freeze |
 | + 9.1     | ~2–3s     | **< 0.3s**  | Tức thì |
 | + 9.1+9.2+9.3 | ~1.5s | **< 0.3s** | Mượt |
+
+---
+
+## Tính năng 10: Filter theo tủ điều khiển khi xem địa bàn
+
+### Mục tiêu
+
+Mỗi địa bàn (sheet) có 10–30 tủ điều khiển, mỗi tủ quản lý 30–80 trụ. Khi user đang khảo sát
+1 tủ cụ thể, không cần thấy 1,000 trụ của toàn địa bàn. Cho phép lọc theo 1 hoặc nhiều tủ →
+chỉ hiển thị marker có `row[7]` (Tủ điều khiển) trùng với tủ đã chọn.
+
+---
+
+### Phương án được chọn — C + shortcut dropdown
+
+**Phương án C**: Tích hợp vào filter panel hiện có (`filterOverlay`), thêm section "Tủ điều khiển"
+với multi-select checkbox. Ngoài ra thêm 1 **shortcut dropdown** nhỏ nằm trên bản đồ để chọn tủ
+nhanh mà không cần mở filter panel.
+
+```
+┌─────────────────────────────────────┐
+│ 🔍 Bộ lọc đối tượng                  │
+├─────────────────────────────────────┤
+│ Loại marker: [☑1][☑2][☑3][☑4][☑5][☑6]│
+│ Người KS: [________________]        │
+│ Phường/Xã: [________________]       │
+│ Đường: [________________]           │
+│ ── Tủ điều khiển ──                 │  ← MỚI
+│ ☑ Tất cả (N tủ)                     │
+│ ☑ VTS_H232VTS  (52 trụ)             │
+│ ☑ VTS_H23VTS_2 (41 trụ)             │
+│ ☐ P12_TTC_01   (38 trụ)             │
+│ [Bỏ chọn tất cả]                   │
+│ [Xóa lọc] [Áp dụng (N)]            │
+└─────────────────────────────────────┘
+```
+
+**Shortcut trên bản đồ** (chỉ hiện khi đang ở địa bàn có ≥ 2 tủ):
+```
+[ Tủ: Tất cả ▾ ]   ← nằm trong controlsPanel hoặc floating button
+```
+
+---
+
+### Thiết kế kỹ thuật
+
+#### State
+
+```javascript
+// Mảng tên tủ đang chọn để hiển thị. null/[] = tất cả.
+// Độc lập với _selectedTus (chỉ dùng cho sơ đồ cáp)
+let _activeFilterCabinets = [];   // [] = tất cả
+```
+
+**Phân biệt với `_selectedTus`:**
+- `_selectedTus` (Set): dùng để lọc rows cho `_buildCableLines()` (vẽ sơ đồ cáp)
+- `_activeFilterCabinets` (Array): dùng để lọc marker hiển thị trên bản đồ (tính năng 10)
+- Hai state này **độc lập** — có thể sơ đồ cáp đang lọc 1 tủ, nhưng bản đồ hiển thị 3 tủ
+
+#### Lấy danh sách tủ duy nhất
+
+```javascript
+function _getUniqueCabinets() {
+    if (!Array.isArray(loadedData) || loadedData.length < 2) return [];
+    const seen = new Set();
+    const result = [];
+    loadedData.slice(1).forEach(r => {
+        const name = String(r[7] || '').trim();
+        if (name && !seen.has(name)) { seen.add(name); result.push(name); }
+    });
+    return result.sort();
+}
+```
+
+#### Tích hợp vào `_getFilteredRows()`
+
+```javascript
+function _getFilteredRows() {
+    // ... existing filters ...
+    if (_activeFilterCabinets.length > 0) {
+        filtered = filtered.filter(r =>
+            _activeFilterCabinets.includes(String(r[7] || '').trim())
+        );
+    }
+    return filtered;
+}
+```
+
+#### Render section trong filter panel
+
+```javascript
+function _renderCabinetFilterSection() {
+    const cabinets = _getUniqueCabinets();
+    if (cabinets.length === 0) return '';
+    const allChecked = _activeFilterCabinets.length === 0;
+    const countByTu = {}; // row count per cabinet
+    (loadedData || []).slice(1).forEach(r => {
+        const t = String(r[7]||'').trim();
+        if (t) countByTu[t] = (countByTu[t] || 0) + 1;
+    });
+    return `<div class="filter-section">
+        <div class="filter-section-title">Tủ điều khiển</div>
+        <label class="filter-checkbox-item">
+            <input type="checkbox" id="fcAllCabinets" ${allChecked ? 'checked' : ''}>
+            <span>Tất cả (${cabinets.length} tủ)</span>
+        </label>
+        ${cabinets.map(c => `
+        <label class="filter-checkbox-item">
+            <input type="checkbox" class="fcCabinetItem" value="${c}"
+                   ${allChecked || _activeFilterCabinets.includes(c) ? 'checked' : ''}>
+            <span>${c} (${countByTu[c] || 0})</span>
+        </label>`).join('')}
+    </div>`;
+}
+```
+
+#### Reset khi chuyển địa bàn
+
+```javascript
+async function switchDistrict(sheetName) {
+    _activeFilterCabinets = [];          // reset filter tủ
+    currentSheet = sheetName;
+    addMarkersToMap([]);
+    await loadFromCSVWithCache(sheetName, page.csvUrl);
+    _rebuildCabinetFilterUI();           // rebuild UI với tủ của địa bàn mới
+}
+```
+
+---
+
+### UI: Shortcut dropdown trên bản đồ
+
+Nằm trong `controlsPanel` (row nút bên dưới bản đồ), hoặc 1 floating button nhỏ:
+
+```html
+<div id="cabinetFilterWrap" style="display:none">
+    <button id="btnCabinetFilter" class="ctrl-btn outline" onclick="_toggleCabinetDropdown()">
+        Tủ: <span id="cabinetFilterLabel">Tất cả</span> ▾
+    </button>
+    <div id="cabinetFilterDropdown" style="display:none;...">
+        <!-- Sinh động giống cableDropdown -->
+    </div>
+</div>
+```
+
+Label cập nhật theo selection:
+- Không chọn gì / chọn tất cả → **"Tất cả"**
+- Chọn 1 tủ → **"VTS_H232VTS"**
+- Chọn N tủ → **"N tủ đã chọn"**
+
+---
+
+### Liên kết với tính năng 7 (đa địa bàn)
+
+- Khi đang ở `DanhSachTru` (tổng quan): `cabinetFilterWrap` hiện (nhiều tủ)
+- Khi đang ở địa bàn 1 tủ duy nhất: ẩn dropdown (không cần chọn)
+- Khi không có tủ nào (`row[7]` trống hết): ẩn dropdown
+
+---
+
+### Liên kết với tính năng 9.5 (zoom-level progressive loading)
+
+Nếu implement 9.5: `_refreshViewportMarkers()` cũng cần áp dụng `_activeFilters.tuDieuKhien`
+khi quyết định add/skip 1 marker.
+
+---
+
+### Thiết kế đã implement ✅
+
+**State:** `_activeFilters.tuDieuKhien: []` — array tên tủ đang lọc ([] = tất cả), nằm trong `_activeFilters` cùng với `types/nguoiKS/phuongXa/duong`.
+
+**UI trong filter panel:**
+- Ô tìm kiếm `<input id="fTuSearch">` — không phân biệt dấu/hoa thường (`normalizeText`)
+- `<select multiple id="fTuDieuKhien">` (height 150px, scroll) — Ctrl/⌘+click chọn nhiều
+- Tự động ẩn section này nếu chỉ có ≤ 1 tủ trong dữ liệu
+
+**Hàm:**
+- `_getUniqueCabinets()` — unique sorted values của `row[7]` từ `loadedData`
+- `_filterTuOptions()` — lọc options theo ô tìm kiếm, giữ nguyên selection hiện tại
+- `_getFilteredRows()` — thêm điều kiện `tuDieuKhien` vào pipeline filter
+
+**Reset:** `_activeFilters.tuDieuKhien = []` khi `switchDistrict()` và `clearFilters()`.

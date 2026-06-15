@@ -269,6 +269,7 @@
             padding-right: 32px; transition: border-color .2s;
         }
         .fs-select:focus { border-color: var(--primary); }
+        .fs-select[multiple] { height: 150px; background-image: none; padding-right: 12px; }
         .fs-footer {
             padding: 12px 16px calc(12px + var(--safe-bottom));
             background: var(--surface-2); border-top: 1px solid var(--border);
@@ -3384,6 +3385,7 @@
 
         async function syncRowToGAS(row, opts) {
             const silent = !!(opts && opts.silent);
+            const oldTenTru = (opts && opts.oldTenTru) || '';
             if (!KHAOSAT_GAS_URL) return false;
             try {
                 let imagePath = row[12] || '';
@@ -3401,7 +3403,7 @@
                     body: JSON.stringify({
                         action: 'full_update',
                         sheet: currentSheet,
-                        id: String(row[0] || ''), tenTru: row[1] || '',
+                        id: String(row[0] || ''), tenTru: row[1] || '', oldTenTru: oldTenTru,
                         lat: row[2], lon: row[3],
                         ghiChu: row[4] || '', nguoiKS: row[5] || '', loai: row[6],
                         tuDieuKhien: row[7] || '', loaiTru: row[8] || '',
@@ -3507,7 +3509,7 @@
                     if (updMarker) { map.setView([updMarker.getLatLng().lat, updMarker.getLatLng().lng], map.getZoom()); updMarker.openPopup(); }
                     const rowRef = _editingRow; // lưu trước khi hideMarkerPopup() reset _editingRow = null
                     hideMarkerPopup();
-                    syncRowToGAS(rowRef);
+                    syncRowToGAS(rowRef, { oldTenTru: oldName });
                     _logAction('edit', rowRef, { nguoiKS: rowRef[5], loai: rowRef[6] });
                     displayError('Đã cập nhật marker — đang lưu lên Google Sheets...');
                 } else {
@@ -3978,6 +3980,7 @@
                 displayError('Địa bàn "' + page.label + '" chưa có URL dữ liệu. Cần publish tab ' + sheetName + ' thành CSV rồi điền vào DISTRICT_PAGES.csvUrl.');
                 return;
             }
+            _activeFilters.tuDieuKhien = [];
             currentSheet = sheetName;
             addMarkersToMap([]); // xóa markers hiện tại
             await loadFromCSVWithCache(sheetName, page.csvUrl);
@@ -4389,7 +4392,32 @@
         }
 
         // ── FILTER ────────────────────────────────────────────────────────────
-        let _activeFilters = { types: [], nguoiKS: '', phuongXa: '', duong: '' };
+        let _activeFilters = { types: [], nguoiKS: '', phuongXa: '', duong: '', tuDieuKhien: [] };
+
+        function _getUniqueCabinets() {
+            if (!Array.isArray(loadedData) || loadedData.length < 2) return [];
+            const seen = new Set();
+            const result = [];
+            loadedData.slice(1).forEach(r => {
+                const name = String(r[7] || '').trim();
+                if (name && !seen.has(name)) { seen.add(name); result.push(name); }
+            });
+            return result.sort();
+        }
+
+        function _filterTuOptions() {
+            const q = normalizeText((document.getElementById('fTuSearch') || {}).value || '');
+            const sel = document.getElementById('fTuDieuKhien');
+            if (!sel) return;
+            const cur = new Set([...sel.selectedOptions].map(o => o.value));
+            const filtered = q
+                ? _getUniqueCabinets().filter(c => normalizeText(c).includes(q))
+                : _getUniqueCabinets();
+            sel.innerHTML = filtered
+                .map(c => `<option value="${c}"${cur.has(c) ? ' selected' : ''}>${c}</option>`)
+                .join('');
+            _updateFilterCount();
+        }
 
         function openFilterPanel() {
             _buildFilterPanel();
@@ -4423,6 +4451,20 @@
                 `<option value="">Tất cả</option>` +
                 [...set].sort().map(v => `<option value="${v}"${v===sel?' selected':''}>${v}</option>`).join('');
 
+            const cabinets = _getUniqueCabinets();
+            const tuSet = new Set(cabinets);
+            const cabinetOptsHtml = cabinets
+                .map(c => `<option value="${c}"${_activeFilters.tuDieuKhien.includes(c) ? ' selected' : ''}>${c}</option>`)
+                .join('');
+            const cabinetHtml = cabinets.length > 1
+                ? `<p class="fs-label" style="margin-top:4px;">Tủ điều khiển <small style="font-weight:400;text-transform:none;">(giữ Ctrl/⌘ để chọn nhiều)</small></p>
+                   <input type="text" id="fTuSearch" class="fs-select"
+                          placeholder="Tìm tủ điều khiển..."
+                          style="margin-bottom:6px;background-image:none;padding-right:12px;"
+                          oninput="_filterTuOptions()">
+                   <select multiple class="fs-select" id="fTuDieuKhien" onchange="_updateFilterCount()">${cabinetOptsHtml}</select>`
+                : '';
+
             body.innerHTML = `
                 <p class="fs-label">Loại đối tượng</p>
                 <div class="fs-type-chips">${chipsHtml}</div>
@@ -4431,7 +4473,8 @@
                 <p class="fs-label">Phường / Xã</p>
                 <select class="fs-select" id="fPhuongXa" onchange="_updateFilterCount()">${mkOpts(phuongXaSet, _activeFilters.phuongXa)}</select>
                 <p class="fs-label">Đường</p>
-                <select class="fs-select" id="fDuong" onchange="_updateFilterCount()">${mkOpts(duongSet, _activeFilters.duong)}</select>`;
+                <select class="fs-select" id="fDuong" onchange="_updateFilterCount()">${mkOpts(duongSet, _activeFilters.duong)}</select>
+                ${cabinetHtml}`;
 
             body.querySelectorAll('.fs-chip').forEach(chip => {
                 chip.addEventListener('click', () => {
@@ -4464,11 +4507,16 @@
             const nguoiKS = (document.getElementById('fNguoiKS') || {}).value || '';
             const phuongXa = (document.getElementById('fPhuongXa') || {}).value || '';
             const duong = (document.getElementById('fDuong') || {}).value || '';
+            const selTu = document.getElementById('fTuDieuKhien');
+            const tuArr = selTu
+                ? [...selTu.selectedOptions].map(o => o.value).filter(Boolean)
+                : _activeFilters.tuDieuKhien;
             return dataRows.filter(row => {
                 if (typeFilter.length && !typeFilter.includes(Number(row[6]))) return false;
                 if (nguoiKS && String(row[5] || '').trim() !== nguoiKS) return false;
                 if (phuongXa && String(row[18] || '').trim() !== phuongXa) return false;
                 if (duong && String(row[17] || '').trim() !== duong) return false;
+                if (tuArr.length > 0 && !tuArr.includes(String(row[7] || '').trim())) return false;
                 return true;
             });
         }
@@ -4485,7 +4533,8 @@
                 types: selTypes.length === allCount ? [] : selTypes,
                 nguoiKS: (document.getElementById('fNguoiKS') || {}).value || '',
                 phuongXa: (document.getElementById('fPhuongXa') || {}).value || '',
-                duong: (document.getElementById('fDuong') || {}).value || ''
+                duong: (document.getElementById('fDuong') || {}).value || '',
+                tuDieuKhien: (() => { const s = document.getElementById('fTuDieuKhien'); return s ? [...s.selectedOptions].map(o => o.value).filter(Boolean) : []; })()
             };
             addMarkersToMap(_getFilteredRows());
             closeFilterPanel();
@@ -4493,7 +4542,7 @@
         }
 
         function clearFilters() {
-            _activeFilters = { types: [], nguoiKS: '', phuongXa: '', duong: '' };
+            _activeFilters = { types: [], nguoiKS: '', phuongXa: '', duong: '', tuDieuKhien: [] };
             const dataRows = Array.isArray(loadedData) ? loadedData.slice(1) : [];
             addMarkersToMap(dataRows);
             closeFilterPanel();
@@ -4504,7 +4553,8 @@
             const cnt = (_activeFilters.types.length ? 1 : 0) +
                         (_activeFilters.nguoiKS ? 1 : 0) +
                         (_activeFilters.phuongXa ? 1 : 0) +
-                        (_activeFilters.duong ? 1 : 0);
+                        (_activeFilters.duong ? 1 : 0) +
+                        (_activeFilters.tuDieuKhien.length ? 1 : 0);
             const badge = document.getElementById('filterBadge');
             const btn = document.getElementById('filterBtn');
             if (badge) { badge.textContent = cnt; badge.classList.toggle('show', cnt > 0); }

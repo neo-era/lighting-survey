@@ -318,7 +318,7 @@ function findRowNum(sheet, headers, hIdx, data) {
   const idCol    = hIdx[norm('ID')];
   const nameCol  = hIdx[norm('Tên trụ')];
   const searchId = norm(data.id || '');
-  const searchNm = norm(data.tenTru || '');
+  const searchNm = norm(data.oldTenTru || data.tenTru || '');
   if (!searchId && !searchNm) return -1;
 
   const allData = sheet.getRange(2, 1, lastRow - 1, headers.length).getValues();
@@ -354,7 +354,7 @@ function appendRow(sheet, headers, hIdx, data) {
 
 function buildFieldValues(data) {
   const result = {};
-  const skip = new Set(['action', 'sheet']);
+  const skip = new Set(['action', 'sheet', 'oldTenTru']);
   for (const [key, value] of Object.entries(data)) {
     if (skip.has(key)) continue;
     const header = FIELD_MAP[key] || key;
