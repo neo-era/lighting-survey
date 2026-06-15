@@ -766,7 +766,7 @@
             /* Bottom action bar: 1 hàng, scroll ngang nếu tràn */
             #bottomActionBar { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; }
             /* Ẩn nút ít dùng trên mobile */
-            #btnExportCad, #btnPrintDrawing { display: none !important; }
+            #btnExportCad { display: none !important; }
         }
     </style>
 </head>
@@ -3060,37 +3060,6 @@
                 else map.addLayer(labelLayerGroup);
             });
 
-            // Two-finger rotation gesture (mobile)
-            let _tfStart = null;
-            function _tfAngle(t0, t1) {
-                return Math.atan2(t1.clientY - t0.clientY, t1.clientX - t0.clientX) * 180 / Math.PI;
-            }
-            function _tfDist(t0, t1) {
-                const dx = t1.clientX - t0.clientX, dy = t1.clientY - t0.clientY;
-                return Math.sqrt(dx*dx + dy*dy);
-            }
-            const mc = map.getContainer();
-            mc.addEventListener('touchstart', e => {
-                if (e.touches.length === 2) {
-                    _tfStart = { angle: _tfAngle(e.touches[0], e.touches[1]), dist: _tfDist(e.touches[0], e.touches[1]), baseRot: _currentMapRotation };
-                } else {
-                    _tfStart = null;
-                }
-            }, { passive: true });
-            mc.addEventListener('touchmove', e => {
-                if (e.touches.length !== 2 || !_tfStart) return;
-                const curDist  = _tfDist(e.touches[0], e.touches[1]);
-                const distDelta = Math.abs(curDist - _tfStart.dist);
-                const curAngle = _tfAngle(e.touches[0], e.touches[1]);
-                const rotDelta = Math.abs(curAngle - _tfStart.angle);
-                // Only rotate when rotation gesture is dominant (not pinch zoom)
-                if (rotDelta < 3 && distDelta > 10) return;
-                _currentMapRotation = _tfStart.baseRot + (curAngle - _tfStart.angle);
-                _applyMapRotation(_currentMapRotation);
-            }, { passive: true });
-            mc.addEventListener('touchend', e => {
-                if (e.touches.length < 2) _tfStart = null;
-            }, { passive: true });
 
             return map;
         }
