@@ -2885,11 +2885,391 @@ Không thay đổi gì khác.
 
 **Thứ tự chạy Tính năng 8:**
 ```
-8.1 → index.html: isMobile + makeLampIconMobile() + shared icons     ⬜
-8.2 → index.html: markerCluster chunkedLoading + mobile thresholds   ⬜
-8.3 → index.html: labelZoomThreshold theo mobile/desktop             ⬜
-8.4 → index.html: tắt Leaflet animation trên mobile                  ⬜
-8.5 → index.html: loading="lazy" + max-height cho ảnh popup          ⬜
-8.6 → index.html: debounce moveend/zoomend                           ⬜
-8.7 → index.html: CSS media query tắt transition + ẩn nút desktop    ⬜
+8.1 → index.html: isMobile + makeLampIconMobile() + shared icons     ✅ done
+8.2 → index.html: markerCluster chunkedLoading + mobile thresholds   ✅ done
+8.3 → index.html: labelZoomThreshold theo mobile/desktop             ✅ done
+8.4 → index.html: tắt Leaflet animation trên mobile                  ✅ done
+8.5 → index.html: loading="lazy" + max-height cho ảnh popup          ✅ done
+8.6 → index.html: debounce moveend/zoomend                           ✅ done
+8.7 → index.html: CSS media query tắt transition + ẩn nút desktop    ✅ done
+```
+
+---
+
+---
+
+## TÍNH NĂNG 9: Tối ưu load dữ liệu lớn
+
+Bối cảnh: Mỗi sheet địa bàn có ~1,000–1,200 hàng (đo thực tế từ sheet Quận 1). Với 14 địa bàn,
+tổng dữ liệu có thể lên đến 14,000+ marker. Thực hiện theo thứ tự 9.1 → 9.2 → 9.3 → 9.4.
+
+---
+
+### PROMPT 9.1 — IndexedDB cache CSV (stale-while-revalidate)
+
+```
+Dự án: PWA khảo sát chiếu sáng — index.html.
+
+Bối cảnh:
+- `loadFromCSV(url)` hiện tại fetch CSV từ Google Sheets mỗi lần load app (~150–300 KB, 1,000+ hàng).
+- Không có cache nào → load lần 2 vẫn mất 3–5s như lần 1.
+- Mục tiêu: Load lần 2 < 0.3s bằng cách cache vào IndexedDB, fetch mới ở background.
+
+Chiến lược "stale-while-revalidate":
+1. Mở app → đọc cache từ IndexedDB ngay lập tức → render marker (gần như tức thì)
+2. Đồng thời fetch CSV mới ở background
+3. Nếu dữ liệu mới khác cache → cập nhật cache + reload markers
+
+Nhiệm vụ: 3 thay đổi trong index.html.
+
+**1. Thêm 3 hàm IndexedDB helper** ngay sau hàm `debounce()`:
+```javascript
+function _idbOpen() {
+    return new Promise((res, rej) => {
+        const r = indexedDB.open('lighting-survey-db', 1);
+        r.onupgradeneeded = e => e.target.result.createObjectStore('csv-cache');
+        r.onsuccess = e => res(e.target.result);
+        r.onerror = rej;
+    });
+}
+async function _idbGet(key) {
+    try {
+        const db = await _idbOpen();
+        return await new Promise((res, rej) => {
+            const r = db.transaction('csv-cache', 'readonly').objectStore('csv-cache').get(key);
+            r.onsuccess = () => res(r.result);
+            r.onerror = rej;
+        });
+    } catch { return null; }
+}
+async function _idbSet(key, val) {
+    try {
+        const db = await _idbOpen();
+        await new Promise((res, rej) => {
+            const tx = db.transaction('csv-cache', 'readwrite');
+            tx.objectStore('csv-cache').put(val, key);
+            tx.oncomplete = res; tx.onerror = rej;
+        });
+    } catch { /* ignore IDB errors silently */ }
+}
+```
+
+**2. Thêm hàm `loadFromCSVWithCache(sheetName, csvUrl)`** ngay sau `loadFromCSV()`:
+```javascript
+async function loadFromCSVWithCache(sheetName, csvUrl) {
+    // 1. Render từ cache ngay lập tức (nếu có)
+    const cached = await _idbGet(sheetName);
+    let renderedFromCache = false;
+    if (cached && Array.isArray(cached.data) && cached.data.length > 1) {
+        loadedData = cached.data;
+        dirtyMovedRows.clear();
+        updateDirtyMovedBadge();
+        addMarkersToMap(loadedData.slice(1));
+        renderedFromCache = true;
+    }
+    // 2. Fetch mới ở background
+    try {
+        const res = await fetch(csvUrl, { cache: 'no-store' });
+        if (!res.ok) return;
+        const text = await res.text();
+        // Parse CSV (dùng hàm parse đã có trong loadFromCSV)
+        const lines = text.split('\n').filter(l => l.trim());
+        const parsed = lines.map(line => {
+            const arr = []; let cur = '', inQ = false;
+            for (const ch of line) {
+                if (ch === '"') { inQ = !inQ; }
+                else if (ch === ',' && !inQ) { arr.push(cur.trim()); cur = ''; }
+                else { cur += ch; }
+            }
+            arr.push(cur.trim());
+            return arr;
+        });
+        // So sánh với cache
+        const newHash = parsed.length + '|' + (parsed[1] ? parsed[1][0] : '');
+        const oldHash = cached ? (cached.data.length + '|' + (cached.data[1] ? cached.data[1][0] : '')) : '';
+        if (!renderedFromCache || newHash !== oldHash) {
+            loadedData = parsed;
+            dirtyMovedRows.clear();
+            updateDirtyMovedBadge();
+            addMarkersToMap(loadedData.slice(1));
+        }
+        // Cập nhật cache
+        await _idbSet(sheetName, { data: parsed, fetchedAt: new Date().toISOString() });
+    } catch (err) {
+        if (!renderedFromCache) displayError('Lỗi tải dữ liệu: ' + err.message);
+    }
+}
+```
+
+**3. Trong `switchDistrict(sheetName)` và nơi gọi `loadFromCSV()` ban đầu khi app khởi động:**
+Thay `loadFromCSV(page.csvUrl)` bằng `loadFromCSVWithCache(sheetName, page.csvUrl)`.
+
+Tìm nơi app gọi `loadFromCSV(KHAOSAT_CSV_URL)` lúc khởi động (thường ở cuối script hoặc
+trong `initializeApp()`), thay bằng:
+```javascript
+loadFromCSVWithCache('DanhSachTru', KHAOSAT_CSV_URL);
+```
+
+Lưu ý:
+- `addMarkersToMap()`, `dirtyMovedRows`, `updateDirtyMovedBadge()` đã có trong codebase
+- `loadFromCSV()` giữ nguyên — dùng làm fallback khi không cần cache
+- IndexedDB không cần xóa thủ công — dữ liệu tự ghi đè mỗi lần fetch thành công
+
+Không thay đổi gì khác.
+```
+
+---
+
+### PROMPT 9.2 — Lazy popup content
+
+```
+Dự án: PWA khảo sát chiếu sáng — index.html.
+
+Bối cảnh:
+- `addMarkerRowToMap(row)` gọi `marker.bindPopup(createMarkerPopupContent(row))` cho mỗi marker.
+- Với 1,000+ marker, `createMarkerPopupContent()` được gọi 1,000+ lần khi load dù popup chưa mở.
+- Hàm này sinh HTML phức tạp (ảnh, nút, bảng) → bottleneck khi load.
+- Mục tiêu: chỉ gọi `createMarkerPopupContent()` khi user thực sự click mở popup.
+
+Nhiệm vụ: Sửa `addMarkerRowToMap()` — 1 thay đổi duy nhất.
+
+Tìm đoạn trong `addMarkerRowToMap(row)`:
+```javascript
+marker.bindPopup(createMarkerPopupContent(row));
+marker.on('popupopen', function() {
+    _currentPopupRow = row;
+    marker.setPopupContent(createMarkerPopupContent(row));
+    setTimeout(function() {
+        // ... attach avatar click handler
+    }, 0);
+});
+```
+
+Thay bằng:
+```javascript
+// Bind popup rỗng — nội dung chỉ sinh khi user mở
+marker.bindPopup('', { minWidth: 280 });
+marker.on('popupopen', function() {
+    _currentPopupRow = row;
+    // Sinh content lần đầu, hoặc refresh khi đã có (sau drag/edit)
+    marker.setPopupContent(createMarkerPopupContent(row));
+    setTimeout(function() {
+        const popup = marker.getPopup();
+        if (!popup) return;
+        const el = popup.getElement();
+        if (!el) return;
+        const avatar = el.querySelector('.pc-avatar');
+        if (avatar) avatar.addEventListener('click', function() { openImageLightbox(avatar.src); });
+    }, 0);
+});
+```
+
+Lưu ý:
+- `minWidth: 280` trong bindPopup options để popup không bị quá hẹp khi mới mở lần đầu
+- `marker.setPopupContent()` trong `popupopen` vẫn giữ nguyên — refresh content mỗi lần mở
+  (cần thiết sau khi edit hoặc drag marker)
+- Bỏ dòng `marker.setPopupContent(createMarkerPopupContent(row))` thứ 2 trong setTimeout nếu có
+
+Không thay đổi gì khác.
+```
+
+---
+
+### PROMPT 9.3 — Chunked marker insertion + progress bar
+
+```
+Dự án: PWA khảo sát chiếu sáng — index.html.
+
+Bối cảnh:
+- `addMarkersToMap(data)` gọi `data.forEach(row => addMarkerRowToMap(row))` đồng bộ.
+- Với 1,000+ marker, vòng lặp này block main thread 2–4s → UI freeze trên mobile.
+- `chunkedLoading: true` trong markerCluster chỉ chia khi VẼ cluster, không chia khi INSERT.
+- Mục tiêu: chia nhỏ vòng lặp, yield cho main thread, hiển thị progress bar.
+
+Nhiệm vụ: 2 thay đổi.
+
+**1. Thêm progress bar HTML** vào cuối `<body>` (trước `</body>`):
+```html
+<div id="loadProgressBar"
+     style="display:none;position:fixed;top:0;left:0;height:3px;background:#2563eb;
+            width:0;z-index:99999;pointer-events:none;border-radius:0 2px 2px 0;
+            transition:width .08s linear;"></div>
+```
+
+**2. Thêm hàm `_setLoadProgress(pct)`** ngay sau `debounce()`:
+```javascript
+function _setLoadProgress(pct) {
+    const el = document.getElementById('loadProgressBar');
+    if (!el) return;
+    if (pct === null) {
+        el.style.transition = 'none';
+        setTimeout(() => { el.style.display = 'none'; el.style.width = '0'; }, 300);
+        return;
+    }
+    el.style.display = 'block';
+    el.style.transition = 'width .08s linear';
+    el.style.width = Math.min(pct, 98) + '%'; // dừng ở 98% cho đến khi done
+}
+```
+
+**3. Thay thế `addMarkersToMap(data)`** bằng phiên bản async chunked:
+```javascript
+async function addMarkersToMap(data) {
+    markersCluster.clearLayers();
+    labelLayerGroup.clearLayers();
+    markers = [];
+    const rows = data.slice(1); // bỏ header
+    const total = rows.length;
+    if (total === 0) return;
+
+    const CHUNK = isMobile ? 80 : 150; // chunk nhỏ hơn trên mobile
+    for (let i = 0; i < total; i += CHUNK) {
+        rows.slice(i, i + CHUNK).forEach(row => addMarkerRowToMap(row));
+        _setLoadProgress(Math.round((i + CHUNK) / total * 100));
+        await new Promise(r => setTimeout(r, 0)); // yield main thread
+    }
+    _setLoadProgress(null);
+    if (markers.length > 0) {
+        try { map.fitBounds(markersCluster.getBounds().pad(0.1)); } catch {}
+    }
+    if (map.getZoom() < labelZoomThreshold) map.removeLayer(labelLayerGroup);
+    else map.addLayer(labelLayerGroup);
+}
+```
+
+Lưu ý:
+- Hàm trở thành `async` — các nơi `await loadFromCSV()` hoặc `await loadFromCSVWithCache()`
+  đã await đúng nếu `addMarkersToMap` được await bên trong.
+- `isMobile` và `labelZoomThreshold` đã khai báo từ PROMPT 8.1 + 8.3.
+- `markers`, `markersCluster`, `labelLayerGroup` là biến global đã có.
+- Dòng gọi `addMarkersToMap(loadedData.slice(1))` ở nơi khác: cần đổi thành
+  `addMarkersToMap(loadedData)` (hàm mới tự slice(1) bên trong).
+
+Không thay đổi gì khác.
+```
+
+---
+
+### PROMPT 9.4 — Xác nhận VN2000 không gọi khi render
+
+```
+Dự án: PWA khảo sát chiếu sáng — index.html.
+
+Bối cảnh:
+- `convertLatLonToVn2000(lat, lon)` là phép toán Gauss-Krüger tốn CPU, chứa nhiều trig.
+- Nếu hàm này được gọi trong `addMarkerRowToMap()` hoặc vòng lặp render → bottleneck nặng
+  với 1,000+ marker.
+- Theo thiết kế trong CLAUDE.md, VN2000 chỉ được tính tại 2 điểm:
+  1. `saveMarkerPopup()` — khi lưu marker mới/sửa
+  2. `updateMarkerCoordinatesInData()` — khi kéo marker
+
+Nhiệm vụ: Kiểm tra và sửa (nếu cần).
+
+**Tìm kiếm trong codebase:**
+Grep `convertLatLonToVn2000` trong index.html. Kiểm tra từng nơi gọi:
+- Nếu nằm trong `addMarkerRowToMap()` → XÓA
+- Nếu nằm trong `addMarkersToMap()` hoặc vòng `forEach(row => ...)` khi load → XÓA
+- Nếu chỉ ở `saveMarkerPopup()` và `updateMarkerCoordinatesInData()` → KHÔNG thay đổi (đúng thiết kế)
+
+Không thêm gì mới, chỉ xác nhận hoặc xóa các lời gọi sai chỗ.
+
+Không thay đổi gì khác.
+```
+
+---
+
+**Thứ tự chạy Tính năng 9:**
+```
+9.1 → index.html: IndexedDB helper + loadFromCSVWithCache()              ✅ done
+9.2 → index.html: lazy popup — bindPopup('') + generate on popupopen     ✅ done
+9.3 → index.html: async chunked addMarkersToMap() + progress bar         ✅ done
+9.4 → index.html: xác nhận convertLatLonToVn2000 không gọi khi render    ✅ done
+9.5 → index.html: zoom-level progressive loading (cabinet-only ở zoom thấp) ⬜
+```
+
+---
+
+### PROMPT 9.5 — Zoom-level progressive loading
+
+```
+Dự án: PWA khảo sát chiếu sáng — index.html.
+
+Bối cảnh:
+- Khi có dữ liệu nhiều địa bàn ("Tổng quan" gộp nhiều quận), tổng marker có thể lên đến
+  14,000+. Dù đã có chunked loading (9.3), việc giữ 14,000 marker trong markerCluster
+  vẫn tốn RAM và CPU khi pan/zoom.
+- Ở zoom tổng quan (< 12), các marker trụ đèn riêng lẻ không có giá trị nhìn — chỉ cần
+  thấy vị trí các tủ điều khiển (~50–200 điểm) là đủ để định hướng.
+- Khi user zoom vào (≥ 12), mới cần render toàn bộ marker của khu vực đó.
+- Phương án này không gây UX confusing vì: tủ hiển thị liên tục, trụ chỉ xuất hiện khi
+  zoom đủ gần — hành vi tự nhiên, giống Google Maps.
+
+Định nghĩa zoom tier:
+- tier "cabinet": zoom < 12 → chỉ render loại 5, 6 (tủ chiếu sáng nổi + ngầm)
+- tier "all":     zoom ≥ 12 → render tất cả loại 1–6
+
+Nhiệm vụ: 3 thay đổi trong index.html.
+
+**1. Thêm biến state** ngay sau khai báo `let loadedData = []`:
+```javascript
+let _zoomTier = 'all'; // 'cabinet' | 'all'
+```
+
+**2. Thêm hàm `_applyZoomTier()`** (đặt gần các hàm filter, sau `_getFilteredRows`):
+```javascript
+function _applyZoomTier() {
+    const z = map.getZoom();
+    const newTier = z < 12 ? 'cabinet' : 'all';
+    if (newTier === _zoomTier) return; // không đổi tier → không re-render
+    _zoomTier = newTier;
+
+    const baseRows = _activeFilters && (
+        _activeFilters.types.length || _activeFilters.nguoiKS ||
+        _activeFilters.phuongXa || _activeFilters.duong
+    ) ? _getFilteredRows() : (Array.isArray(loadedData) ? loadedData.slice(1) : []);
+
+    if (_zoomTier === 'cabinet') {
+        // Chỉ giữ lại tủ điều khiển (loại 5 và 6)
+        addMarkersToMap(baseRows.filter(r => [5, 6].includes(Number(r[6]))));
+    } else {
+        addMarkersToMap(baseRows);
+    }
+}
+```
+
+**3. Đăng ký `_applyZoomTier` vào zoomend listener** — tìm `map.on('zoomend', function() {`
+trong `initializeMap()` và thêm lời gọi vào cuối handler:
+
+```javascript
+map.on('zoomend', function() {
+    // ... (code cũ: add/remove labelLayerGroup)
+    if (map.getZoom() < labelZoomThreshold) map.removeLayer(labelLayerGroup);
+    else map.addLayer(labelLayerGroup);
+    // Thêm dòng này:
+    _applyZoomTier();
+});
+```
+
+Lưu ý quan trọng:
+- `_applyZoomTier()` chỉ re-render khi tier THỰC SỰ thay đổi (`_zoomTier !== newTier`).
+  Pan trong cùng tier không trigger re-render.
+- `_activeFilters` đã tồn tại trong codebase (`{ types, nguoiKS, phuongXa, duong }`).
+  Nếu chưa tồn tại, thay condition bằng `false`.
+- Khi `loadFromCSVWithCache()` hoặc `loadFromCSV()` hoàn thành và gọi `addMarkersToMap()`,
+  cần reset `_zoomTier` về `'all'` trước để tier được tính lại đúng:
+  ```javascript
+  // Thêm 1 dòng trước mỗi lần gọi addMarkersToMap trong loadFromCSV/loadFromCSVWithCache:
+  _zoomTier = 'all';
+  ```
+  Sau đó `_applyZoomTier()` sẽ tự điều chỉnh dựa trên zoom hiện tại của map.
+
+- Ngưỡng zoom 12 có thể điều chỉnh tùy mật độ dữ liệu:
+  - Dữ liệu 1 quận (~1,000 marker): không cần bật tính năng này (overhead lớn hơn lợi ích)
+  - Dữ liệu đa quận (> 5,000 marker): ngưỡng 12 hợp lý
+  - Cân nhắc thêm hằng số: `const ZOOM_TIER_THRESHOLD = 12;` cho dễ chỉnh
+
+- `_applyZoomTier()` KHÔNG gọi khi init — chỉ gọi khi zoom thay đổi. Lần load đầu
+  `addMarkersToMap()` render bình thường, sau đó zoom tier mới bắt đầu quản lý.
+
+Không thay đổi gì khác.
 ```

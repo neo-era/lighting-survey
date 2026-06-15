@@ -1166,3 +1166,247 @@ const filename = currentSheet === 'DanhSachTru'
 - [ ] Publish từng tab CSV → điền URL vào `DISTRICT_PAGES`
 - [ ] Redeploy GAS New version sau khi sửa
 - [ ] Bump sw.js cache name (v6 → v7)
+
+---
+
+## Tính năng 9: Tối ưu load dữ liệu lớn
+
+### Bối cảnh thực tế (đo từ sheet Quận 1)
+
+Mỗi sheet địa bàn có khoảng **1,000–1,200 hàng** dữ liệu (đo thực tế từ sheet `Quan1`).
+Cấu trúc 22 cột. Các trường thường đầy: `Tên trụ, Lat, Lon, Loại, Loại trụ, Loại đèn, Đường, Phường/Xã`.
+Các trường thường rỗng: `Ghi chú, Ảnh, Mã PE, VN2000-X/Y, Số lượng đèn, Công suất`.
+
+**Vấn đề hiện tại với 1,000+ marker:**
+- DOM nặng: mỗi marker tạo 1 `<div>` divIcon SVG riêng → 1,000+ div kể cả khi cluster
+- CSV parse đồng bộ: block main thread khi xử lý 1,000+ hàng
+- `labelLayerGroup`: ở zoom cao có thể thêm 1,000+ label markers vào DOM cùng lúc
+- VN2000 tính toán: `convertLatLonToVn2000()` gọi cho mỗi hàng khi lưu → nặng khi batch
+- `createMarkerPopupContent()` sinh HTML tại `bindPopup()` dù popup chưa mở
+- Không có cache: mỗi lần refresh tải lại toàn bộ CSV từ Google Sheets
+
+---
+
+### Giải pháp đề xuất — thứ tự ưu tiên
+
+#### 9.1 — IndexedDB cache CSV (ưu tiên cao ✦✦✦)
+
+**Vấn đề:** Mỗi lần load app phải fetch lại CSV 1,000+ hàng từ Google Sheets (~150–300 KB).
+
+**Giải pháp:** Cache parsed data vào IndexedDB với timestamp. Khi load app:
+1. Đọc cache từ IndexedDB → render ngay (< 50ms)
+2. Fetch CSV mới ở background → so sánh với cache
+3. Nếu có thay đổi → cập nhật cache + re-render chỉ các marker thay đổi
+
+```javascript
+// Schema IndexedDB
+// DB: 'lighting-survey-db', version: 1
+// ObjectStore: 'csv-cache'
+// Key: sheetName (vd: 'Quan1')
+// Value: { data: [...rows], fetchedAt: ISO timestamp, etag: string }
+
+async function loadFromCSVWithCache(sheetName, csvUrl) {
+    const cached = await idbGet('csv-cache', sheetName);
+    if (cached) {
+        // Render ngay từ cache
+        loadedData = cached.data;
+        addMarkersToMap(loadedData.slice(1));
+    }
+    // Fetch mới ở background (HEAD request để check ETag trước)
+    const res = await fetch(csvUrl, { cache: 'no-store' });
+    const etag = res.headers.get('etag') || res.headers.get('last-modified');
+    if (cached && etag && etag === cached.etag) return; // không đổi
+    const text = await res.text();
+    const parsed = parseCSVText(text);
+    await idbSet('csv-cache', sheetName, { data: parsed, fetchedAt: new Date().toISOString(), etag });
+    // Re-render nếu data mới khác cache
+    loadedData = parsed;
+    addMarkersToMap(loadedData.slice(1));
+}
+```
+
+**IndexedDB helper đơn giản:**
+```javascript
+function idbOpen() {
+    return new Promise((res, rej) => {
+        const r = indexedDB.open('lighting-survey-db', 1);
+        r.onupgradeneeded = e => e.target.result.createObjectStore('csv-cache');
+        r.onsuccess = e => res(e.target.result);
+        r.onerror = rej;
+    });
+}
+async function idbGet(store, key) {
+    const db = await idbOpen();
+    return new Promise((res, rej) => {
+        const tx = db.transaction(store, 'readonly');
+        const r = tx.objectStore(store).get(key);
+        r.onsuccess = () => res(r.result);
+        r.onerror = rej;
+    });
+}
+async function idbSet(store, key, val) {
+    const db = await idbOpen();
+    return new Promise((res, rej) => {
+        const tx = db.transaction(store, 'readwrite');
+        tx.objectStore(store).put(val, key);
+        tx.oncomplete = res; tx.onerror = rej;
+    });
+}
+```
+
+**Lợi ích:** Load lần 2 gần như tức thì (< 100ms vs 2–5s), hoạt động offline.
+
+---
+
+#### 9.2 — Lazy popup content (ưu tiên cao ✦✦✦)
+
+**Vấn đề:** `marker.bindPopup(createMarkerPopupContent(row))` gọi `createMarkerPopupContent()`
+cho TẤT CẢ 1,000+ marker khi load — dù phần lớn popup không bao giờ được mở.
+
+**Giải pháp:** Bind popup rỗng, chỉ sinh HTML khi user thực sự mở popup:
+```javascript
+// Thay vì:
+marker.bindPopup(createMarkerPopupContent(row));
+
+// Dùng:
+marker.bindPopup(''); // placeholder rỗng
+marker.on('popupopen', function() {
+    const popup = marker.getPopup();
+    if (popup && !popup._contentLoaded) {
+        popup.setContent(createMarkerPopupContent(row));
+        popup._contentLoaded = true;
+    }
+    // ... rest of popupopen handler
+});
+```
+
+**Lợi ích:** Tiết kiệm ~1,000 lần gọi `createMarkerPopupContent()` khi load. Tổng thời gian
+load giảm đáng kể vì hàm này tạo HTML phức tạp (ảnh, nút, bảng thông tin).
+
+---
+
+#### 9.3 — Chunked DOM insertion + progress indicator (ưu tiên trung bình ✦✦)
+
+**Vấn đề:** `addMarkersToMap()` gọi `addMarkerRowToMap()` 1,000+ lần đồng bộ → UI freeze
+vài giây trên mobile.
+
+**Giải pháp:** Chia thành batch 100 marker, yield cho main thread giữa mỗi batch:
+```javascript
+async function addMarkersToMapChunked(rows, chunkSize = 100) {
+    markersCluster.clearLayers();
+    labelLayerGroup.clearLayers();
+    markers = [];
+    const total = rows.length;
+    for (let i = 0; i < total; i += chunkSize) {
+        const chunk = rows.slice(i, i + chunkSize);
+        chunk.forEach(row => addMarkerRowToMap(row));
+        // Cập nhật progress
+        _setLoadProgress(Math.round((i + chunk.length) / total * 100));
+        // Yield cho main thread
+        await new Promise(r => setTimeout(r, 0));
+    }
+    _setLoadProgress(null); // ẩn progress bar
+    if (markers.length > 0) map.fitBounds(markersCluster.getBounds().pad(0.1));
+    if (map.getZoom() < labelZoomThreshold) map.removeLayer(labelLayerGroup);
+    else map.addLayer(labelLayerGroup);
+}
+```
+
+**Progress bar đơn giản** (thêm vào topbar):
+```html
+<div id="loadProgressBar"
+     style="display:none;position:fixed;top:0;left:0;height:3px;background:#2563eb;
+            transition:width .1s;z-index:9999;pointer-events:none;"></div>
+```
+```javascript
+function _setLoadProgress(pct) {
+    const el = document.getElementById('loadProgressBar');
+    if (!el) return;
+    if (pct === null) { el.style.display = 'none'; el.style.width = '0'; return; }
+    el.style.display = 'block';
+    el.style.width = pct + '%';
+}
+```
+
+---
+
+#### 9.4 — Bỏ tính VN2000 khi load (ưu tiên trung bình ✦✦)
+
+**Vấn đề:** Nếu `convertLatLonToVn2000()` được gọi trong vòng lặp render 1,000+ marker → nặng.
+
+**Giải pháp:** VN2000 chỉ tính tại 2 điểm cụ thể (đã ghi trong CLAUDE.md):
+- `saveMarkerPopup()` khi lưu
+- `updateMarkerCoordinatesInData()` khi kéo marker
+
+→ **Không gọi trong `addMarkerRowToMap()` hay `addMarkersToMap()`**.
+Xác nhận trong code không có vòng lặp nào gọi VN2000 khi render.
+
+---
+
+#### 9.5 — Viewport culling (ưu tiên thấp ✦ — nếu > 2,000 marker)
+
+**Bối cảnh:** markerCluster đã xử lý phần lớn vấn đề DOM với `chunkedLoading: true`.
+Viewport culling chỉ cần thiết nếu tổng marker vượt 2,000+.
+
+**Ý tưởng:** Chỉ thêm marker trong bounds hiện tại của map vào markerCluster, lắng nghe
+`moveend` để add/remove marker khi người dùng pan.
+
+```javascript
+// State
+let _allRows = []; // toàn bộ dữ liệu
+let _visibleSet = new Set(); // index của marker đang hiển thị
+
+function _refreshViewportMarkers() {
+    const bounds = map.getBounds().pad(0.2); // pad 20% để tránh nhấp nháy
+    _allRows.forEach((row, i) => {
+        const lat = parseCoord(row[2]), lon = parseCoord(row[3]);
+        const inView = bounds.contains([lat, lon]);
+        const wasVisible = _visibleSet.has(i);
+        if (inView && !wasVisible) {
+            addMarkerRowToMap(row);
+            _visibleSet.add(i);
+        } else if (!inView && wasVisible) {
+            removeMarkerFromMap(row[1]); // xóa theo tên
+            _visibleSet.delete(i);
+        }
+    });
+}
+map.on('moveend', debounce(_refreshViewportMarkers, 200));
+```
+
+**Lưu ý:** Cách này phức tạp và có thể gây bug edge case. Chỉ implement nếu 9.1+9.2+9.3 chưa đủ.
+
+---
+
+#### 9.6 — Canvas renderer thay SVG divIcon (ưu tiên thấp ✦ — refactor lớn)
+
+**Vấn đề:** 1,000+ SVG divIcon = 1,000+ DOM node, mỗi node có shadow filter.
+
+**Giải pháp:** Dùng `L.canvas()` renderer — vẽ tất cả marker trên 1 canvas element duy nhất.
+Nhưng L.canvas chỉ hỗ trợ `L.circleMarker` / `L.circle`, không hỗ trợ SVG tùy chỉnh.
+
+→ Cần thư viện bên ngoài như **Leaflet.VirtualGrid** hoặc tự implement với HTML Canvas.
+→ **Refactor rất lớn**, không khuyến nghị trừ khi performance vẫn không đạt sau 9.1–9.3.
+
+---
+
+### Checklist implement (theo thứ tự ưu tiên)
+
+```
+9.1 → index.html: IndexedDB cache CSV + stale-while-revalidate         ⬜
+9.2 → index.html: Lazy popup content (bind '' + generate on popupopen) ⬜
+9.3 → index.html: chunked addMarkersToMap + progress bar               ⬜
+9.4 → index.html: xác nhận VN2000 không gọi khi render                ⬜
+9.5 → index.html: viewport culling (chỉ nếu > 2,000 marker)           ⬜
+9.6 → index.html: Canvas renderer (refactor lớn, defer)                ⬜
+```
+
+### Ước tính cải thiện
+
+| Giải pháp | Load lần 1 | Load lần 2+ | Mobile UX |
+|-----------|-----------|-------------|-----------|
+| Hiện tại  | ~3–5s     | ~3–5s       | Freeze 2–3s |
+| + 9.2     | ~2–3s     | ~2–3s       | Freeze 1–2s |
+| + 9.3     | ~2–3s     | ~2–3s       | Không freeze |
+| + 9.1     | ~2–3s     | **< 0.3s**  | Tức thì |
+| + 9.1+9.2+9.3 | ~1.5s | **< 0.3s** | Mượt |

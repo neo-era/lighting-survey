@@ -2191,7 +2191,7 @@
             }
             _applyRoleUI();
             _loadDataVersion();
-            loadFromCSV();
+            loadFromCSVWithCache('DanhSachTru', KHAOSAT_CSV_URL);
         }
 
         async function doLogin() {
@@ -2425,6 +2425,47 @@
         function debounce(fn, ms) {
             let t;
             return function(...args) { clearTimeout(t); t = setTimeout(() => fn.apply(this, args), ms); };
+        }
+
+        function _setLoadProgress(pct) {
+            const el = document.getElementById('loadProgressBar');
+            if (!el) return;
+            if (pct === null) {
+                setTimeout(() => { el.style.display = 'none'; el.style.width = '0'; }, 300);
+                return;
+            }
+            el.style.display = 'block';
+            el.style.width = Math.min(pct, 98) + '%';
+        }
+
+        // ─── IndexedDB helpers (cache CSV) ───
+        function _idbOpen() {
+            return new Promise((res, rej) => {
+                const r = indexedDB.open('lighting-survey-db', 1);
+                r.onupgradeneeded = e => e.target.result.createObjectStore('csv-cache');
+                r.onsuccess = e => res(e.target.result);
+                r.onerror = rej;
+            });
+        }
+        async function _idbGet(key) {
+            try {
+                const db = await _idbOpen();
+                return await new Promise((res, rej) => {
+                    const r = db.transaction('csv-cache', 'readonly').objectStore('csv-cache').get(key);
+                    r.onsuccess = () => res(r.result);
+                    r.onerror = rej;
+                });
+            } catch { return null; }
+        }
+        async function _idbSet(key, val) {
+            try {
+                const db = await _idbOpen();
+                await new Promise((res, rej) => {
+                    const tx = db.transaction('csv-cache', 'readwrite');
+                    tx.objectStore('csv-cache').put(val, key);
+                    tx.oncomplete = res; tx.onerror = rej;
+                });
+            } catch { /* ignore */ }
         }
 
         function parseCoord(val) {
@@ -2685,7 +2726,7 @@
             const marker = L.marker([lat, lon], { icon, draggable: editPositionMode && canEdit() });
             marker._rowRef = row;
 
-            marker.bindPopup(createMarkerPopupContent(row));
+            marker.bindPopup('', { minWidth: 280 });
             marker.on('popupopen', function() {
                 _currentPopupRow = row;
                 marker.setPopupContent(createMarkerPopupContent(row));
@@ -3064,12 +3105,23 @@
             return map;
         }
 
-        function addMarkersToMap(data) {
+        async function addMarkersToMap(data) {
             markersCluster.clearLayers();
             labelLayerGroup.clearLayers();
             markers = [];
-            data.forEach(row => addMarkerRowToMap(row));
-            if (markers.length > 0) map.fitBounds(markersCluster.getBounds().pad(0.1));
+            const rows = Array.isArray(data) ? data : [];
+            const total = rows.length;
+            if (total === 0) return;
+            const CHUNK = isMobile ? 80 : 150;
+            for (let i = 0; i < total; i += CHUNK) {
+                rows.slice(i, i + CHUNK).forEach(row => addMarkerRowToMap(row));
+                _setLoadProgress(Math.round((i + CHUNK) / total * 100));
+                await new Promise(r => setTimeout(r, 0));
+            }
+            _setLoadProgress(null);
+            if (markers.length > 0) {
+                try { map.fitBounds(markersCluster.getBounds().pad(0.1)); } catch {}
+            }
             if (map.getZoom() < labelZoomThreshold) map.removeLayer(labelLayerGroup);
             else map.addLayer(labelLayerGroup);
         }
@@ -3881,6 +3933,44 @@
             }
         }
 
+        async function loadFromCSVWithCache(sheetName, csvUrl) {
+            // 1. Render từ cache ngay lập tức nếu có
+            const cached = await _idbGet(sheetName);
+            let renderedFromCache = false;
+            if (cached && Array.isArray(cached.data) && cached.data.length > 1) {
+                loadedData = cached.data;
+                dirtyMovedRows.clear(); updateDirtyMovedBadge();
+                addMarkersToMap(loadedData.slice(1));
+                displayError('');
+                renderedFromCache = true;
+            } else {
+                displayError('Đang tải dữ liệu...');
+            }
+            // 2. Fetch mới ở background (stale-while-revalidate)
+            try {
+                const res = await fetch(csvUrl, { cache: 'no-store' });
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                const parsed = parseCSVText(await res.text());
+                if (parsed.length < 2) throw new Error('Dữ liệu rỗng');
+                // So sánh hash đơn giản: số hàng + ID đầu tiên
+                const newHash = parsed.length + '|' + (parsed[1] ? parsed[1][0] : '');
+                const oldHash = cached ? (cached.data.length + '|' + (cached.data[1] ? cached.data[1][0] : '')) : '';
+                if (!renderedFromCache || newHash !== oldHash) {
+                    loadedData = parsed;
+                    dirtyMovedRows.clear(); updateDirtyMovedBadge();
+                    addMarkersToMap(loadedData.slice(1));
+                }
+                displayError('');
+                // Cập nhật cache
+                await _idbSet(sheetName, { data: parsed, fetchedAt: new Date().toISOString() });
+            } catch (err) {
+                if (!renderedFromCache) {
+                    displayError('Không tải được dữ liệu: ' + err.message);
+                    if (sheetName === 'DanhSachTru') loadDefaultFile();
+                }
+            }
+        }
+
         async function switchDistrict(sheetName) {
             const page = DISTRICT_PAGES.find(p => p.sheet === sheetName);
             if (!page) return;
@@ -3890,7 +3980,7 @@
             }
             currentSheet = sheetName;
             addMarkersToMap([]); // xóa markers hiện tại
-            await loadFromCSV(page.csvUrl);
+            await loadFromCSVWithCache(sheetName, page.csvUrl);
             // Cập nhật label địa bàn
             const lbl = document.getElementById('currentDistrictLabel');
             if (lbl) {
@@ -4985,5 +5075,9 @@
                 class="ctrl-btn outline" style="font-size:12px;padding:0 12px;">Đóng</button>
       </div>
     </div>
+    <div id="loadProgressBar"
+         style="display:none;position:fixed;top:0;left:0;height:3px;background:#2563eb;
+                width:0;z-index:99999;pointer-events:none;border-radius:0 2px 2px 0;
+                transition:width .08s linear;"></div>
 </body>
 </html>
