@@ -54,14 +54,36 @@ const FIELD_MAP = {
 
 // ── UTILS ──────────────────────────────────────────────────────────────────
 
+// Map sheet name → Spreadsheet ID (cho các địa bàn nằm ở file Google Sheet khác).
+// Để trống cho các địa bàn nằm cùng file với GAS này.
+// Cách lấy ID: mở file đó → URL có dạng /spreadsheets/d/<ID>/edit → copy <ID>.
+// ⚠️ Tài khoản deploy GAS phải có quyền EDIT trên file ngoài.
+const EXTERNAL_SPREADSHEET_IDS = {
+  CanGiuoc: '',  // ← TODO: dán Spreadsheet ID của file CanGiuoc vào đây
+};
+
 function getSheet(name) {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
   const target = name || SHEET_NAME;
+  let ss;
+  // Sheet ở file ngoài → mở bằng openById
+  const extId = EXTERNAL_SPREADSHEET_IDS[target];
+  if (extId) {
+    try {
+      ss = SpreadsheetApp.openById(extId);
+    } catch (e) {
+      // Không mở được file ngoài → fallback active để không crash
+      Logger.log('openById failed for ' + target + ': ' + e.message);
+      ss = SpreadsheetApp.getActiveSpreadsheet();
+    }
+  } else {
+    ss = SpreadsheetApp.getActiveSpreadsheet();
+  }
   let sheet = ss.getSheetByName(target);
   if (!sheet) {
-    // Fallback về DanhSachTru nếu sheet địa bàn chưa tạo
-    sheet = ss.getSheetByName(SHEET_NAME);
-    if (!sheet) sheet = ss.insertSheet(SHEET_NAME);
+    // Sheet chưa tồn tại → fallback về DanhSachTru ở active spreadsheet
+    const active = SpreadsheetApp.getActiveSpreadsheet();
+    sheet = active.getSheetByName(SHEET_NAME);
+    if (!sheet) sheet = active.insertSheet(SHEET_NAME);
   }
   return sheet;
 }

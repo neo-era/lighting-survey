@@ -512,6 +512,7 @@
         #error.toast-success { background: var(--success); }
         #error.toast-warning { background: var(--secondary); }
         #error.toast-error   { background: var(--danger); }
+        #error.toast-info    { background: var(--primary); }
 
         /* ══ FLOATING CONTROLS (Leaflet) ══ */
         .leaflet-control-custom {
@@ -881,28 +882,27 @@
                 <div class="modal-body" style="padding:14px 16px;">
 
                     <!-- User + version -->
-                    <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
-                        <div id="topbarUser" onclick="logout()" title="Nhấn để đăng xuất"
-                             style="flex:1;margin-bottom:0;">
-                            <div class="av">👤</div>
-                            <div class="uinfo">
-                                <span id="topbarUserName"></span>
-                                <span class="uhint">Nhấn để đăng xuất</span>
+                    <div style="margin-bottom:14px;">
+                        <div style="display:flex;align-items:stretch;gap:6px;">
+                            <div id="topbarUser" onclick="logout()" title="Nhấn để đăng xuất"
+                                 style="flex:1;margin-bottom:0;padding:8px 12px;gap:10px;">
+                                <div class="av" style="width:30px;height:30px;font-size:15px;">👤</div>
+                                <div class="uinfo">
+                                    <span id="topbarUserName"></span>
+                                    <span class="uhint">Nhấn để đăng xuất</span>
+                                </div>
+                                <i class="fa fa-sign-out ulogout"></i>
                             </div>
-                            <i class="fa fa-sign-out ulogout"></i>
-                        </div>
-                        <button onclick="openChangeCredentials()" title="Đổi tên / mật khẩu"
-                                style="background:none;border:1.5px solid var(--border);border-radius:8px;
-                                       padding:6px 10px;cursor:pointer;color:var(--text-muted);font-size:13px;
-                                       flex-shrink:0;touch-action:manipulation;">
-                            <i class="fa fa-key"></i>
-                        </button>
-                        <div id="dataVersionTag"
-                             style="font-size:10px;font-weight:700;color:#2563eb;
-                                    background:#eff6ff;border:1px solid #bfdbfe;
-                                    border-radius:999px;padding:3px 10px;
-                                    white-space:nowrap;flex-shrink:0;letter-spacing:.3px;">
-                            Dữ liệu v—
+                            <button onclick="event.stopPropagation(); openChangeCredentials();"
+                                    title="Đổi tên / mật khẩu"
+                                    style="background:#f9fafb;border:1.5px solid var(--border);border-radius:10px;
+                                           padding:0 12px;cursor:pointer;color:var(--text-muted);font-size:14px;
+                                           flex-shrink:0;touch-action:manipulation;display:flex;align-items:center;
+                                           transition:background .15s, border-color .15s;"
+                                    onmouseover="this.style.background='#eff6ff';this.style.borderColor='#bfdbfe';this.style.color='#2563eb';"
+                                    onmouseout="this.style.background='#f9fafb';this.style.borderColor='var(--border)';this.style.color='var(--text-muted)';">
+                                <i class="fa fa-key"></i>
+                            </button>
                         </div>
                     </div>
 
@@ -910,7 +910,7 @@
                     <div class="ctrl-section">
                         <div class="ctrl-title">Điều hướng</div>
                         <select id="pages" class="ctrl-input" onchange="navigateToPage()" style="margin-bottom:0;">
-                            <option value="index.html">Trang khảo sát</option>
+                            <option value="" selected>-- Chọn trang --</option>
                             <option value="https://neo-era.github.io/camera/" id="pageOptCamera" style="display:none">Quản lý camera</option>
                             <option value="https://neo-era.github.io/dentat/dentat.html" id="pageOptDenTat" style="display:none">Quản lý đèn tắt/sự cố</option>
                             <option value="https://neo-era.github.io/lighting-survey/huongdan.html">Hướng dẫn sử dụng</option>
@@ -1297,7 +1297,7 @@
                     <input id="markerNameInput" type="text" placeholder="Nhập tên trụ">
                 </div>
                 <div class="form-group">
-                    <label for="markerBaseSelect">Marker gốc (cùng basename)</label>
+                    <label for="markerBaseSelect">Marker gốc (cùng basename / cùng tủ)</label>
                     <select id="markerBaseSelect">
                         <option value="">(Mặc định: marker trước đó)</option>
                     </select>
@@ -1449,6 +1449,37 @@
         }
 
         // ─── In bản vẽ sơ đồ tuyến ───
+        // ── PERSIST FORM FIELD CỦA MODAL "IN BẢN VẼ" ───────────────────
+        // Lưu/khôi phục các tùy chọn user đã chọn lần trước (trừ pdNgay — luôn lấy hôm nay)
+        const _PD_FIELDS = ['pdTuSelect','pdScale','pdPaper','pdRotation','pdTenTu','pdSoBanVe','pdNguoiLap','pdCVPhuTrach','pdCSKhuVuc'];
+        function _savePdFields() {
+            _PD_FIELDS.forEach(id => {
+                const el = document.getElementById(id);
+                if (!el) return;
+                const v = (el.value || '').trim();
+                if (v) localStorage.setItem('pd_' + id, v);
+            });
+        }
+        function _restorePdFields() {
+            _PD_FIELDS.forEach(id => {
+                const el = document.getElementById(id);
+                if (!el || el.value) return; // không ghi đè giá trị đang có
+                const v = localStorage.getItem('pd_' + id);
+                if (!v) return;
+                // Với <select>: chỉ restore nếu option còn tồn tại
+                if (el.tagName === 'SELECT') {
+                    const opt = [...el.options].find(o => o.value === v);
+                    if (opt) el.value = v;
+                } else {
+                    el.value = v;
+                }
+            });
+            // Sync UI cho pdRotation (label đi kèm)
+            const rotEl = document.getElementById('pdRotation');
+            const rotLabel = document.getElementById('pdRotationVal');
+            if (rotEl && rotLabel) rotLabel.textContent = (rotEl.value || 0) + '°';
+        }
+
         function openPrintDrawingModal() {
             // Hiện mô tả bộ lọc đang áp dụng
             const descEl = document.getElementById('pdFilterDesc');
@@ -1464,17 +1495,12 @@
                     ? parts.join(' — ') + ' (' + filtered.length + ' đối tượng)'
                     : 'Tất cả dữ liệu hiện tại (' + filtered.length + ' đối tượng)';
             }
+            // Restore tất cả pd* field từ localStorage trước (không ghi đè value đang có)
+            _restorePdFields();
             const nguoiEl = document.getElementById('pdNguoiLap');
             if (nguoiEl && !nguoiEl.value && currentUser) nguoiEl.value = currentUser.displayName || currentUser.username || '';
             const ngayEl = document.getElementById('pdNgay');
-            if (ngayEl && !ngayEl.value) ngayEl.value = new Date().toISOString().slice(0,10);
-            ['pdCVPhuTrach','pdCSKhuVuc','pdNguoiLap'].forEach(id => {
-                const el = document.getElementById(id);
-                const key = 'pd_' + id;
-                if (el && !el.value) el.value = localStorage.getItem(key) || '';
-            });
-            const rotEl = document.getElementById('pdRotation');
-            if (rotEl) { rotEl.value = 0; document.getElementById('pdRotationVal').textContent = '0°'; }
+            if (ngayEl) ngayEl.value = new Date().toISOString().slice(0,10); // luôn lấy hôm nay
             $('#printDrawingModal').modal('show');
         }
 
@@ -1837,6 +1863,31 @@
             _rebuildCableLines();
         }
 
+        // ── PRINT CONFIG — constants tập trung cho luồng in bản vẽ ───────
+        const PRINT_CONFIG = {
+            // Kích thước giấy in (mm), dùng để tính aspect ratio + jsPDF format
+            paper: {
+                a3: { mmW: 420, mmH: 297 },
+                a4: { mmW: 297, mmH: 210 }
+            },
+            // Ngưỡng chênh lệch px giữa width hiện tại vs targetW để quyết định có resize map không
+            aspectRatioThresholdPx: 5,
+            // Wait sau setView({reset}) — 600 khi vừa resize (Leaflet cần tính lại pixel origin),
+            // 200 khi không resize (chỉ cần next frame)
+            resyncDelayMs:   { afterResize: 600, normal: 200 },
+            // Wait sau khi rotate map (CSS transform mất ~1 frame để repaint)
+            rotationDelayMs: 150,
+            // Wait sau khi build SVG cable (đảm bảo DOM commit)
+            svgCableDelayMs: 100,
+            // Wait sau khi append overlay (legend + title block) — chờ font/layout settle
+            overlayDelayMs:  300,
+            // html2canvas: scale 2 = sharp HiDPI; 0.93 JPEG = cân giữa size & chất lượng
+            captureScale: 2,
+            jpegQuality:  0.93,
+            // Timeout chờ tile layer load (fallback nếu network treo)
+            tileLoadTimeoutMs: 5000
+        };
+
         // ── TILE SWITCHING (khi in) ───────────────────────────────────────
         let _savedBaseLayers = [];
         let _printCartoLayer = null;
@@ -1933,6 +1984,18 @@
             _savedBaseLayers = [];
         }
 
+        // Đợi tile layer load xong (event 'load' fire khi tất cả tile trong viewport ready).
+        // Fallback maxMs nếu network treo — tránh block UI vĩnh viễn.
+        function _waitForTileLoad(layer, maxMs) {
+            return new Promise(resolve => {
+                if (!layer) { resolve(); return; }
+                let done = false;
+                const finish = () => { if (!done) { done = true; resolve(); } };
+                layer.once('load', finish);
+                setTimeout(finish, maxMs || PRINT_CONFIG.tileLoadTimeoutMs);
+            });
+        }
+
         function _fitMapToRows(rows) {
             const pts = rows
                 .map(r => [parseCoord(r[2]), parseCoord(r[3])])
@@ -1940,11 +2003,49 @@
             if (pts.length > 0) map.fitBounds(L.latLngBounds(pts), { padding: [80, 80], maxZoom: 17 });
         }
 
-        function _zoomToScale(scale) {
+        // Đổi zoom map theo tỷ lệ chọn từ widget — giả định in A3 landscape.
+        // Dùng cho preview thông thường (không vào flow in PDF), bật fractional zoom tạm thời.
+        function _applyMapScale(scaleStr) {
+            const scale = parseInt(scaleStr);
+            if (!scale || !isFinite(scale)) return;
+            const a3 = PRINT_CONFIG.paper.a3;
+            const prevSnap = map.options.zoomSnap;
+            _applyMapScale._inProgress = true;
+            map.options.zoomSnap = 0;
+            _zoomToScale(scale, a3.mmW, a3.mmH);
+            // Restore zoomSnap + flag sau 1 tick để setZoom finish trước
+            setTimeout(() => {
+                map.options.zoomSnap = prevSnap;
+                _applyMapScale._inProgress = false;
+            }, 200);
+        }
+
+        // Tính Leaflet zoom để tỷ lệ in trên giấy đúng = 1:scale.
+        // Pipeline: map screen → html2canvas → addImage stretch lên (paperMmW × paperMmH).
+        // Vì image bị STRETCH lên kích thước giấy, không phụ thuộc DPI screen.
+        //
+        // Math: ground_paper_mm = (1 mm trên giấy = scale mm trên thực địa)
+        //   paper W (mm) bao phủ paper_width × scale / 1000 m thực địa
+        //   screen H (px) cũng bao phủ paperMmH × scale / 1000 m (sau resize aspect ratio)
+        //   → ground_per_screen_px = (paperMmH × scale) / (1000 × H_screen)
+        //   Leaflet: ground_per_px = earthCirc × cos(lat) / (256 × 2^Z)
+        //   → 2^Z = earthCirc × cos × 1000 × H_screen / (256 × paperMmH × scale)
+        //
+        // Dùng H_screen + paperMmH vì height không đổi qua resize aspect ratio.
+        // Cần zoomSnap=0 để Leaflet chấp nhận fractional zoom (bật trong _preparePrintLayout).
+        function _zoomToScale(scale, paperMmW, paperMmH) {
+            const earthCirc = 40075016.686;
             const lat = map.getCenter().lat;
-            const latRad = lat * Math.PI / 180;
-            const zoom = Math.log2(40075016.686 * Math.cos(latRad) * 96 / (25.4 * scale));
-            map.setZoom(Math.round(zoom));
+            const cosLat = Math.cos(lat * Math.PI / 180);
+            const H = document.getElementById('map').offsetHeight;
+            if (!H || !paperMmH) {
+                // Fallback (legacy formula) nếu thiếu paper info — không chính xác nhưng không crash
+                const zoom = Math.log2(earthCirc * cosLat * 96 / (25.4 * scale));
+                map.setZoom(Math.round(zoom));
+                return;
+            }
+            const zoomExact = Math.log2(earthCirc * cosLat * 1000 * H / (256 * paperMmH * scale));
+            map.setZoom(zoomExact);
         }
 
         // ── PRINT OVERLAY (legend + title block) ─────────────────────────
@@ -1952,29 +2053,92 @@
             _hidePrintOverlay();
             const { rows, tenTu, scale, ngay, nguoiLap, soBanVe, cvPhuTrach = '', csKhuVuc = '' } = opts;
             const usedTypes = [...new Set(rows.map(r => parseInt(r[6])).filter(t => TYPE_CONFIG[t]))];
+            // Đếm số trụ/tủ theo từng loại trong filtered rows
+            const countByType = {};
+            rows.forEach(r => {
+                const t = Number(r[6]);
+                if (t) countByType[t] = (countByType[t] || 0) + 1;
+            });
+            // Tổng chiều dài cáp đã được tính ở totalCap bên dưới
+            // Mỗi row: ký hiệu (icon + label) | số lượng | đơn vị | border-bottom phân tách
+            const _rowStyle = 'border-bottom:1px solid #94a3b8;';
+            const _cellLeft = 'padding:3px 8px;border-right:1px solid #94a3b8;vertical-align:middle;';
+            const _cellMid  = 'padding:3px 6px;border-right:1px solid #94a3b8;vertical-align:middle;text-align:center;font-weight:800;font-size:11px;color:#0f172a;';
+            const _cellRight= 'padding:3px 6px;vertical-align:middle;text-align:center;font-size:10px;color:#1e293b;';
             const legendItems = usedTypes.map(t => {
                 const cfg = TYPE_CONFIG[t];
                 const svgHtml = cfg.shape === 'cabinet' ? _makeCabinetIconSvg(cfg.color) : _makeLampIconSvg(cfg.color);
-                return `<div style="display:flex;align-items:center;gap:6px;margin-bottom:5px;">
-                    <div style="width:20px;text-align:center;flex-shrink:0;">${svgHtml}</div>
-                    <span style="font-size:11px;color:#1e293b;">${cfg.label}</span>
-                </div>`;
+                const unit = cfg.shape === 'cabinet' ? 'tủ' : 'trụ';
+                return `<tr style="${_rowStyle}">
+                    <td style="${_cellLeft}">
+                        <div style="display:flex;align-items:center;gap:6px;">
+                            <div style="width:26px;text-align:center;flex-shrink:0;line-height:0;">${svgHtml}</div>
+                            <span style="font-size:10px;color:#1e293b;">${cfg.label}</span>
+                        </div>
+                    </td>
+                    <td style="${_cellMid}">${countByType[t] || 0}</td>
+                    <td style="${_cellRight}">${unit}</td>
+                </tr>`;
             }).join('');
-            const cableLegend = `<div style="display:flex;align-items:center;gap:6px;margin-bottom:5px;margin-top:4px;">
-                <svg width="20" height="8"><line x1="0" y1="4" x2="20" y2="4" stroke="#1e40af" stroke-width="2" stroke-dasharray="5 3"/></svg>
-                <span style="font-size:11px;color:#1e293b;">Cáp nguồn</span>
-            </div>`;
-            const totalTru = rows.length;
+            // Tổng cáp: cùng logic _buildCableLines — chỉ đếm row có Marker gốc (r[14]),
+            // dùng r[15] (Khoảng cách) nếu hợp lệ, fallback Haversine từ posIdx tất cả marker.
+            const posIdx = {};
+            ((loadedData || []).slice(1)).forEach(r => {
+                const name = String(r[1] || '').trim();
+                const lat = parseCoord(r[2]), lon = parseCoord(r[3]);
+                if (name && Number.isFinite(lat) && Number.isFinite(lon)) posIdx[name] = [lat, lon];
+            });
             const totalCap = rows.reduce((s, r) => {
-                const v = parseFloat(String(r[15]).replace(',', '.'));
-                return s + (Number.isFinite(v) ? v : 0);
+                const parent = String(r[14] || '').trim();
+                if (!parent) return s; // không có cha → không có cáp
+                const child = String(r[1] || '').trim();
+                if (!posIdx[parent] || !posIdx[child] || child === parent) return s;
+                const v = parseFloat(String(r[15] || '').replace(',', '.'));
+                if (Number.isFinite(v) && v > 0) return s + v;
+                // Fallback Haversine
+                return s + haversineM(posIdx[parent][0], posIdx[parent][1], posIdx[child][0], posIdx[child][1]);
             }, 0);
-            const statsHtml = `<div style="position:absolute;right:calc(62.5% + 12px);bottom:122px;
-                background:rgba(255,255,255,.92);border:1.5px solid #1e293b;border-radius:3px;
-                padding:5px 10px;font-size:9px;font-weight:700;color:#0f172a;font-family:Arial,sans-serif;
-                text-align:right;white-space:nowrap;">
-                Tổng: ${totalTru} trụ<br>
-                Tổng cáp: ${totalCap.toFixed(0)} m
+            // Footer bottom-left (37.5% × 110px) — đối xứng với khung tên (62.5%, bottom-right).
+            // Chứa Bảng ký hiệu dạng bảng 3 cột (ký hiệu | số lượng | đơn vị), mỗi hàng có line gạch dưới.
+            const cableRow = `<tr style="${_rowStyle}">
+                <td style="${_cellLeft}">
+                    <div style="display:flex;align-items:center;gap:6px;">
+                        <div style="width:26px;text-align:center;flex-shrink:0;line-height:0;">
+                            <svg width="22" height="8"><line x1="0" y1="4" x2="22" y2="4" stroke="#1e40af" stroke-width="2.2" stroke-dasharray="4 2"/></svg>
+                        </div>
+                        <span style="font-size:10px;color:#1e293b;">Cáp nguồn</span>
+                    </div>
+                </td>
+                <td style="${_cellMid}">${totalCap.toFixed(0)}</td>
+                <td style="${_cellRight}">m</td>
+            </tr>`;
+            const footerHtml = `<div style="position:absolute;left:0;bottom:0;width:37.5%;height:110px;
+                background:white;border-top:2px solid #1e293b;border-right:2px solid #1e293b;
+                overflow:hidden;font-family:Arial,sans-serif;">
+                <table style="width:100%;height:100%;border-collapse:collapse;table-layout:fixed;">
+                    <colgroup>
+                        <col style="width:60%">
+                        <col style="width:22%">
+                        <col style="width:18%">
+                    </colgroup>
+                    <!-- Header row -->
+                    <thead>
+                        <tr style="background:#f1f5f9;">
+                            <th style="padding:4px 8px;border-bottom:1.5px solid #1e293b;border-right:1px solid #94a3b8;
+                                       font-size:9px;font-weight:800;color:#0f172a;text-transform:uppercase;
+                                       letter-spacing:.5px;text-align:left;">Bảng ký hiệu</th>
+                            <th style="padding:4px 6px;border-bottom:1.5px solid #1e293b;border-right:1px solid #94a3b8;
+                                       font-size:8.5px;font-weight:700;color:#475569;text-transform:uppercase;
+                                       letter-spacing:.3px;text-align:center;">Số lượng</th>
+                            <th style="padding:4px 6px;border-bottom:1.5px solid #1e293b;
+                                       font-size:8.5px;font-weight:700;color:#475569;text-transform:uppercase;
+                                       letter-spacing:.3px;text-align:center;">Đơn vị</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${legendItems}${cableRow}
+                    </tbody>
+                </table>
             </div>`;
             const overlay = document.createElement('div');
             overlay.id = 'printOverlay';
@@ -1994,25 +2158,14 @@
                             <span style="margin-left:24px;">TL: 1 : ${parseInt(scale).toLocaleString()}</span>
                         </div>
                     </div>
-                    <!-- Bảng ký hiệu (floating inside map, top-left) -->
-                    <div style="position:absolute;top:12px;left:12px;z-index:10;
-                                background:rgba(255,255,255,.94);border:1.5px solid #1e293b;
-                                border-radius:3px;padding:7px 10px 7px 10px;min-width:130px;">
-                        <div style="font-size:9px;font-weight:800;color:#0f172a;text-transform:uppercase;
-                                    letter-spacing:.5px;margin-bottom:6px;border-bottom:1px solid #cbd5e1;
-                                    padding-bottom:4px;">
-                            Bảng ký hiệu
-                        </div>
-                        ${legendItems}${cableLegend}
-                    </div>
-                    ${statsHtml}
+                    ${footerHtml}
                     <!-- Khung tên (title block) -->
                     <div style="position:absolute;right:0;bottom:0;width:62.5%;height:110px;
                                 background:white;border-top:2px solid #1e293b;border-left:2px solid #1e293b;overflow:hidden;">
                       <table style="width:100%;height:100%;border-collapse:collapse;table-layout:fixed;font-family:Arial,sans-serif;">
                         <colgroup>
-                          <col style="width:18%"><col style="width:18%"><col style="width:10%">
-                          <col style="width:34%"><col style="width:20%">
+                          <col style="width:18%"><col style="width:18%"><col style="width:18%">
+                          <col style="width:34%"><col style="width:12%">
                         </colgroup>
                         <!-- Hàng 1: Tên tổ chức — col 2+3 gộp -->
                         <tr>
@@ -2079,26 +2232,70 @@
         // ── PREVIEW MODE ──────────────────────────────────────────────────
         let _previewMode = false;
 
+        // Helper dùng chung cho openPrintPreview + exportDrawingPDF.
+        // opts: { scale, paper='a3', displayMsg, skipTileSetup }
+        // Returns: { rows, cleanup }
+        // cleanup() bao gồm tất cả undo: overlay, cable, tile, rotation, zoomSnap.
+        async function _preparePrintLayout(opts) {
+            opts = opts || {};
+            const paperKey = opts.paper || 'a3';
+            const paperDim = PRINT_CONFIG.paper[paperKey] || PRINT_CONFIG.paper.a3;
+
+            _savePdFields();
+            const rows = _getFilteredRows();
+            if (!opts.skipTileSetup && rows.length > 0) {
+                // Bật fractional zoom để Leaflet không round zoom (cần thiết cho tỷ lệ chính xác).
+                // Lưu zoomSnap gốc để cleanup restore lại.
+                if (map._origZoomSnap === undefined) map._origZoomSnap = map.options.zoomSnap;
+                map.options.zoomSnap = 0;
+
+                _switchToPrintTile();
+                _zoomToScale(opts.scale, paperDim.mmW, paperDim.mmH);
+                if (opts.displayMsg) displayInfo(opts.displayMsg);
+                await _waitForTileLoad(_printCartoLayer, PRINT_CONFIG.tileLoadTimeoutMs);
+            }
+            return {
+                rows,
+                cleanup: () => {
+                    const _safe = fn => { try { fn(); } catch(_) {} };
+                    _safe(_hidePrintOverlay);
+                    _safe(_removePrintCableSvg);
+                    _safe(_removeCableLines);
+                    _safe(_restoreOriginalTiles);
+                    _safe(_clearMapRotation);
+                    _safe(() => {
+                        // Restore zoomSnap gốc
+                        if (map._origZoomSnap !== undefined) {
+                            map.options.zoomSnap = map._origZoomSnap;
+                            delete map._origZoomSnap;
+                        }
+                    });
+                }
+            };
+        }
+
         async function openPrintPreview() {
             const scale      = parseInt((document.getElementById('pdScale')      || {}).value) || 1000;
+            const paper      = (document.getElementById('pdPaper')     || {}).value || 'a3';
             const tenTu      = (document.getElementById('pdTenTu')      || {}).value?.trim() || '';
             const soBanVe    = (document.getElementById('pdSoBanVe')    || {}).value?.trim() || '';
             const nguoiLap   = (document.getElementById('pdNguoiLap')   || {}).value?.trim() || '';
             const ngay       = (document.getElementById('pdNgay')       || {}).value;
             const cvPhuTrach = (document.getElementById('pdCVPhuTrach') || {}).value?.trim() || '';
             const csKhuVuc   = (document.getElementById('pdCSKhuVuc')   || {}).value?.trim() || '';
-            if (cvPhuTrach) localStorage.setItem('pd_pdCVPhuTrach', cvPhuTrach);
-            if (csKhuVuc)   localStorage.setItem('pd_pdCSKhuVuc',   csKhuVuc);
-            if (nguoiLap)   localStorage.setItem('pd_pdNguoiLap',   nguoiLap);
-            const rows = _getFilteredRows();
-            if (!rows.length) { displayError('Không có dữ liệu để xem trước.'); return; }
+
+            // Fail-fast nếu không có dữ liệu (trước khi hide modal)
+            if (!_getFilteredRows().length) { displayError('Không có dữ liệu để xem trước.'); return; }
             $('#printDrawingModal').modal('hide');
-            _switchToPrintTile();
-            _zoomToScale(scale);
-            displayError('Đang tải bản đồ xem trước...');
-            await new Promise(r => setTimeout(r, 2000));
+
+            const { rows } = await _preparePrintLayout({
+                scale,
+                paper,
+                displayMsg: 'Đang tải bản đồ xem trước...'
+            });
+
             map.setView(map.getCenter(), map.getZoom(), { animate: false, reset: true });
-            await new Promise(r => setTimeout(r, 200));
+            await new Promise(r => setTimeout(r, PRINT_CONFIG.resyncDelayMs.normal));
             _buildCableLines(rows); // L.polyline cho xem trước (không qua html2canvas)
             _showPrintOverlay({ rows, tenTu, scale, ngay, nguoiLap, soBanVe, cvPhuTrach, csKhuVuc });
             _currentMapRotation = parseFloat((document.getElementById('pdRotation') || {}).value) || 0;
@@ -2117,6 +2314,11 @@
             _removePrintCableSvg();
             _removeCableLines();
             _restoreOriginalTiles();
+            // Restore zoomSnap nếu đã bật fractional zoom trong preview
+            if (map._origZoomSnap !== undefined) {
+                map.options.zoomSnap = map._origZoomSnap;
+                delete map._origZoomSnap;
+            }
             document.getElementById('printPreviewBar').style.display = 'none';
         }
 
@@ -2132,7 +2334,7 @@
             let resized = false;
 
             try {
-                displayError('Đang tải thư viện in...');
+                displayInfo('Đang tải thư viện in...');
                 await _loadPrintLibs();
 
                 const scale    = parseInt((document.getElementById('pdScale')   || {}).value) || 1000;
@@ -2144,60 +2346,60 @@
                 const cvPhuTrach = (document.getElementById('pdCVPhuTrach') || {}).value?.trim() || '';
                 const csKhuVuc   = (document.getElementById('pdCSKhuVuc')   || {}).value?.trim() || '';
                 const rotation   = parseFloat((document.getElementById('pdRotation') || {}).value) || 0;
-                if (cvPhuTrach) localStorage.setItem('pd_pdCVPhuTrach', cvPhuTrach);
-                if (csKhuVuc)   localStorage.setItem('pd_pdCSKhuVuc',   csKhuVuc);
-                if (nguoiLap)   localStorage.setItem('pd_pdNguoiLap',   nguoiLap);
 
-                const rows = _getFilteredRows();
+                // Derive fallback name từ active tu filter (chỉ dùng khi user lọc đúng 1 tủ)
+                const _selTu = document.getElementById('fTuDieuKhien');
+                const _tuArr = _selTu ? [...(_selTu.selectedOptions || [])].map(o => o.value).filter(Boolean) : [];
+                const activeTu = _tuArr.length === 1 ? _tuArr[0] : '';
+
+                // Setup tile + zoom + chờ tile load (skip nếu đang ở preview mode — đã setup từ openPrintPreview)
+                const { rows } = await _preparePrintLayout({
+                    scale,
+                    paper,
+                    displayMsg: 'Đang chờ bản đồ tải...',
+                    skipTileSetup: _previewMode
+                });
                 if (rows.length === 0) { displayError('Không có dữ liệu để in.'); return; }
-
-                if (!_previewMode) {
-                    // 1. Switch tile sang CartoDB + zoom theo tỉ lệ
-                    _switchToPrintTile();
-                    _zoomToScale(scale);
-                    displayError('Đang chờ bản đồ tải...');
-                    await new Promise(r => setTimeout(r, 3000));
-                }
 
                 // 2. Force landscape aspect ratio TRƯỚC khi vẽ cáp SVG
                 //    — luôn áp dụng để tỷ lệ capture khớp với khổ giấy
-                const mmW = paper === 'a3' ? 420 : 297;
-                const mmH = paper === 'a3' ? 297 : 210;
-                const ratio = mmW / mmH;
+                const paperDim = PRINT_CONFIG.paper[paper] || PRINT_CONFIG.paper.a3;
+                const ratio = paperDim.mmW / paperDim.mmH;
                 const targetW = Math.round(mapEl.offsetHeight * ratio);
-                if (Math.abs(mapEl.offsetWidth - targetW) > 5) {
+                if (Math.abs(mapEl.offsetWidth - targetW) > PRINT_CONFIG.aspectRatioThresholdPx) {
                     mapEl.style.width = targetW + 'px';
                     map.invalidateSize({ animate: false });
                     resized = true;
                 }
                 // Reset pixel origin sau resize (quan trọng để tiles + markers đúng vị trí)
                 map.setView(map.getCenter(), map.getZoom(), { animate: false, reset: true });
-                await new Promise(r => setTimeout(r, resized ? 600 : 200));
+                await new Promise(r => setTimeout(r,
+                    resized ? PRINT_CONFIG.resyncDelayMs.afterResize : PRINT_CONFIG.resyncDelayMs.normal));
 
                 // Re-apply rotation SAU setView — vì setView({reset}) ghi đè pane transform,
                 // xóa mất rotation đã áp dụng trong preview
                 if (rotation) {
                     _applyMapRotation(rotation);
-                    await new Promise(r => setTimeout(r, 150));
+                    await new Promise(r => setTimeout(r, PRINT_CONFIG.rotationDelayMs));
                 }
 
                 // 3. Vẽ cáp — toạ độ pre-rotated bằng toán học (không cần CSS rotate SVG)
                 if (_previewMode) _removeCableLines();
                 _buildPrintCableSvg(rows, rotation);
-                await new Promise(r => setTimeout(r, 100));
+                await new Promise(r => setTimeout(r, PRINT_CONFIG.svgCableDelayMs));
 
                 if (!_previewMode) {
                     // 4. Hiện overlay legend + title block
-                    _showPrintOverlay({ rows, tenTu: tenTu || tuName, scale, ngay, nguoiLap, soBanVe, cvPhuTrach, csKhuVuc });
-                    await new Promise(r => setTimeout(r, 300));
+                    _showPrintOverlay({ rows, tenTu: tenTu || activeTu || 'Sơ đồ tuyến', scale, ngay, nguoiLap, soBanVe, cvPhuTrach, csKhuVuc });
+                    await new Promise(r => setTimeout(r, PRINT_CONFIG.overlayDelayMs));
                 }
 
                 // 5. Capture map (bao gồm SVG cáp + overlay bên trong #map)
-                displayError('Đang chụp bản vẽ...');
+                displayInfo('Đang chụp bản vẽ...');
                 const canvas = await window.html2canvas(mapEl, {
                     useCORS: true,
                     allowTaint: false,
-                    scale: 2,
+                    scale: PRINT_CONFIG.captureScale,
                     logging: false,
                     ignoreElements: el =>
                         el.classList && (
@@ -2210,16 +2412,16 @@
                 });
 
                 // 6. Tạo PDF — canvas đã có đúng tỷ lệ landscape
-                displayError('Đang tạo file PDF...');
+                displayInfo('Đang tạo file PDF...');
                 const { jsPDF } = window.jspdf;
                 const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: paper });
                 const pw = doc.internal.pageSize.getWidth();
                 const ph = doc.internal.pageSize.getHeight();
-                const imgData = canvas.toDataURL('image/jpeg', 0.93);
+                const imgData = canvas.toDataURL('image/jpeg', PRINT_CONFIG.jpegQuality);
                 doc.addImage(imgData, 'JPEG', 0, 0, pw, ph);
 
                 // 7. Lưu file
-                const safeName = (tenTu || tuName || 'banve').replace(/[^a-zA-Z0-9À-ɏḀ-ỿ\s_-]/g,'').trim().replace(/\s+/g,'-') || 'banve';
+                const safeName = (tenTu || activeTu || 'sodotuyen').replace(/[^a-zA-Z0-9À-ɏḀ-ỿ\s_-]/g,'').trim().replace(/\s+/g,'-') || 'sodotuyen';
                 const fileName = `${safeName}-${ngay || new Date().toISOString().slice(0,10)}.pdf`;
                 doc.save(fileName);
                 displayError(`Đã xuất: ${fileName}`, 'success');
@@ -2228,20 +2430,55 @@
                 console.error('exportDrawingPDF:', err);
                 displayError('Lỗi xuất PDF: ' + (err.message || err));
             } finally {
-                _clearMapRotation();
-                _hidePrintOverlay();
-                _removePrintCableSvg();
-                _removeCableLines();
-                _restoreOriginalTiles();
-                if (resized && mapEl) {
-                    mapEl.style.width = origStyleW;
-                    mapEl.style.height = origStyleH;
-                    map.invalidateSize({ animate: false });
-                }
-                _previewMode = false;
-                const bar = document.getElementById('printPreviewBar');
-                if (bar) bar.style.display = 'none';
-                if (exportBtn) { exportBtn.disabled = false; exportBtn.innerHTML = '<i class="fa fa-file-pdf-o"></i> Xuất PDF'; }
+                // Cleanup — mỗi step độc lập, 1 fail không chặn các step khác
+                const _safe = (fn, label) => { try { fn(); } catch(e) { console.warn('cleanup ' + label + ':', e); } };
+
+                // Force close modal nếu vẫn còn open (vd user bấm Xuất PDF nhanh, error xảy ra trước modal hide)
+                _safe(() => {
+                    if (window.jQuery && jQuery('#printDrawingModal').hasClass('show')) {
+                        jQuery('#printDrawingModal').modal('hide');
+                    }
+                }, 'modal-hide');
+
+                _safe(() => _clearMapRotation(), 'clearMapRotation');
+                _safe(() => _hidePrintOverlay(), 'hidePrintOverlay');
+                _safe(() => _removePrintCableSvg(), 'removePrintCableSvg');
+                _safe(() => _removeCableLines(), 'removeCableLines');
+                _safe(() => _restoreOriginalTiles(), 'restoreOriginalTiles');
+                // Restore zoomSnap nếu đã bật fractional zoom (kể cả khi đến từ preview mode)
+                _safe(() => {
+                    if (map && map._origZoomSnap !== undefined) {
+                        map.options.zoomSnap = map._origZoomSnap;
+                        delete map._origZoomSnap;
+                    }
+                }, 'restoreZoomSnap');
+
+                // Restore map size nếu đã resize
+                _safe(() => {
+                    if (resized && mapEl) {
+                        mapEl.style.width = origStyleW;
+                        mapEl.style.height = origStyleH;
+                        if (map) map.invalidateSize({ animate: false });
+                    }
+                }, 'restoreMapSize');
+
+                // Reset preview state + UI
+                _safe(() => {
+                    _previewMode = false;
+                    _currentMapRotation = 0;
+                    const bar = document.getElementById('printPreviewBar');
+                    if (bar) bar.style.display = 'none';
+                    const rotVal = document.getElementById('previewRotVal');
+                    if (rotVal) rotVal.textContent = '0°';
+                }, 'resetPreviewUI');
+
+                // Re-enable nút Xuất PDF — luôn chạy cuối để user retry được
+                _safe(() => {
+                    if (exportBtn) {
+                        exportBtn.disabled = false;
+                        exportBtn.innerHTML = '<i class="fa fa-file-pdf-o"></i> Xuất PDF';
+                    }
+                }, 'resetExportBtn');
             }
         }
 
@@ -2510,19 +2747,39 @@
         // ── LAZY LOAD jsPDF + html2canvas (chỉ tải khi user in bản vẽ) ──────────
         let _printLibsPromise = null;
         function _loadPrintLibs() {
-            if (typeof window.jspdf !== 'undefined' && typeof window.html2canvas !== 'undefined') return Promise.resolve();
+            const hasJsPdf = typeof window.jspdf !== 'undefined';
+            const hasH2c   = typeof window.html2canvas !== 'undefined';
+            if (hasJsPdf && hasH2c) return Promise.resolve();
             if (_printLibsPromise) return _printLibsPromise;
-            _printLibsPromise = new Promise((resolve, reject) => {
-                let loaded = 0;
-                const check = () => { if (++loaded === 2) resolve(); };
-                const fail  = () => { _printLibsPromise = null; reject(new Error('Không tải được thư viện in')); };
-                const s1 = document.createElement('script');
-                s1.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
-                s1.onload = check; s1.onerror = fail; document.head.appendChild(s1);
-                const s2 = document.createElement('script');
-                s2.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
-                s2.onload = check; s2.onerror = fail; document.head.appendChild(s2);
+
+            const pending = []; // script element đang chờ load — dùng cho timeout cleanup
+            const loadOne = (src) => new Promise((resolve, reject) => {
+                const s = document.createElement('script');
+                s.src = src;
+                const remove = () => { if (s.parentNode) s.parentNode.removeChild(s); };
+                s.onload  = () => { pending.splice(pending.indexOf(s), 1); resolve(); };
+                s.onerror = () => { remove(); pending.splice(pending.indexOf(s), 1); reject(new Error('Không tải được ' + src)); };
+                s._remove = remove;
+                pending.push(s);
+                document.head.appendChild(s);
             });
+
+            const tasks = [];
+            if (!hasJsPdf) tasks.push(loadOne('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js'));
+            if (!hasH2c)   tasks.push(loadOne('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js'));
+
+            _printLibsPromise = Promise.race([
+                Promise.all(tasks),
+                new Promise((_, reject) => setTimeout(() => {
+                    // Timeout 15s — gỡ những script CHƯA load xong (`pending` đã loại bỏ những script onload thành công)
+                    pending.slice().forEach(s => { try { s._remove(); } catch(_) {} });
+                    reject(new Error('Timeout 15s khi tải thư viện in'));
+                }, 15000))
+            ]).catch(err => {
+                _printLibsPromise = null;
+                throw err;
+            });
+
             return _printLibsPromise;
         }
 
@@ -2684,7 +2941,7 @@
             { label: 'Xã Bàu Bàng',      sheet: 'BauBang',     csvUrl: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRjBdN5epr38kL2jLituPUC4wJO_Ohr_AsFpzaZh6Azxxs_gkzGT5s3JiZ1uFkNQFP5epR2U_wYT6wT/pub?gid=784296746&single=true&output=csv' },
             { label: 'Xã Trừ Văn Thố',   sheet: 'TruVanTho',   csvUrl: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRjBdN5epr38kL2jLituPUC4wJO_Ohr_AsFpzaZh6Azxxs_gkzGT5s3JiZ1uFkNQFP5epR2U_wYT6wT/pub?gid=110776181&single=true&output=csv' },
             { label: 'Phường Bến Cát',   sheet: 'BenCat',      csvUrl: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRjBdN5epr38kL2jLituPUC4wJO_Ohr_AsFpzaZh6Azxxs_gkzGT5s3JiZ1uFkNQFP5epR2U_wYT6wT/pub?gid=1560529310&single=true&output=csv' },
-            { label: 'Cần Giuộc',        sheet: 'CanGiuoc',    csvUrl: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRjBdN5epr38kL2jLituPUC4wJO_Ohr_AsFpzaZh6Azxxs_gkzGT5s3JiZ1uFkNQFP5epR2U_wYT6wT/pub?gid=841544903&single=true&output=csv' },
+            { label: 'Cần Giuộc',        sheet: 'CanGiuoc',    csvUrl: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRzNnhFDaoZgyX-jqCUuVkq0NsdqasekQd53CoaI3racianUs--NgA1ZWjkz1wKRoFrhmUuOaO2_7xA/pub?gid=1149202043&single=true&output=csv' },
         ];
 
         const SHEET_ID_PREFIX = {
@@ -3240,14 +3497,17 @@
                 <rect x="17.5" y="3" width="7" height="4" rx="2" fill="white" opacity="0.85"/>
             </svg>`;
         }
+        // Legend SVGs — kích thước khớp với icon hiển thị trên bản đồ (sau html2canvas)
+        // Map icon thực: cabinet 24×28, lamp 26×18 (variant 1 đèn)
         function _makeCabinetIconSvg(color) {
-            return `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="16" viewBox="0 0 24 28">
+            return `<svg xmlns="http://www.w3.org/2000/svg" width="22" height="26" viewBox="0 0 24 28">
                 <rect x="2" y="1" width="20" height="24" rx="3" fill="${color}" stroke="white" stroke-width="2"/>
                 <line x1="2" y1="11" x2="22" y2="11" stroke="white" stroke-width="1.5" opacity="0.7"/>
                 <circle cx="12" cy="18" r="3" fill="white" opacity="0.85"/></svg>`;
         }
         function _makeLampIconSvg(color) {
-            return `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="9" viewBox="0 0 26 18">
+            return `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="38" viewBox="0 0 26 42">
+                <rect x="10" y="18" width="4" height="24" rx="2" fill="${color}"/>
                 <path d="M12 18 C12 12 15 7 22 5" stroke="${color}" stroke-width="3.2" stroke-linecap="round" fill="none"/>
                 <rect x="16" y="1.5" width="10" height="7" rx="3.5" fill="${color}"/>
                 <rect x="17.5" y="3" width="7" height="4" rx="2" fill="white" opacity="0.82"/>
@@ -3379,10 +3639,31 @@
                                            width:22px;height:20px;font-size:13px;line-height:1;padding:0;color:#475569;
                                            transition:background .15s;">↻</button>
                             </div>
+                            <div style="margin-top:6px;padding-top:5px;border-top:1px solid #e2e8f0;">
+                                <div style="font-size:8.5px;font-weight:700;color:#64748b;letter-spacing:.4px;margin-bottom:3px;text-transform:uppercase;">Tỷ lệ (A3)</div>
+                                <select id="mapScaleSelect" onchange="_applyMapScale(this.value)" title="Set zoom map theo tỷ lệ in A3"
+                                    style="width:100%;font-size:11px;font-weight:700;font-family:monospace;color:#1e293b;
+                                           border:1px solid #cbd5e1;border-radius:5px;padding:3px 4px;background:#f8fafc;
+                                           cursor:pointer;touch-action:manipulation;">
+                                    <option value="">— Chọn —</option>
+                                    <option value="200">1:200</option>
+                                    <option value="500">1:500</option>
+                                    <option value="1000">1:1000</option>
+                                    <option value="2000">1:2000</option>
+                                    <option value="5000">1:5000</option>
+                                    <option value="10000">1:10000</option>
+                                    <option value="25000">1:25000</option>
+                                </select>
+                            </div>
                         </div>`;
                     m.on('zoomend', () => {
                         const el = document.getElementById('mapZoomDisplay');
                         if (el) el.innerHTML = 'Z&thinsp;' + m.getZoom();
+                        // Reset scale dropdown nếu user zoom thủ công (không qua _applyMapScale)
+                        if (!_applyMapScale._inProgress) {
+                            const sel = document.getElementById('mapScaleSelect');
+                            if (sel) sel.value = '';
+                        }
                     });
                     return c;
                 }
@@ -3481,7 +3762,7 @@
             enableAddMarkerMode();
             // Tự lấy GPS ngay — không cần tap vào bản đồ
             if (navigator.geolocation) {
-                displayError('Đang lấy vị trí GPS...');
+                displayInfo('Đang lấy vị trí GPS...');
                 navigator.geolocation.getCurrentPosition(
                     pos => {
                         if (addMarkerMode) showMarkerPopupAt(pos.coords.latitude, pos.coords.longitude);
@@ -3571,23 +3852,37 @@
                     const cabinetName = cabinetInput ? cabinetInput.value.trim() : '';
                     baseSelect.innerHTML = '';
                     const addedIdx = new Set();
-                    // Luôn thêm tủ điều khiển trước
+                    // Build map: marker name → cabinet name (từ loadedData[*][7])
+                    const cabinetByName = {};
+                    ((loadedData || []).slice(1)).forEach(r => {
+                        const nm = String(r[1] || '').trim();
+                        const cb = String(r[7] || '').trim();
+                        if (nm && cb) cabinetByName[nm] = cb;
+                    });
+                    const addOpt = (idx, suffix) => {
+                        if (addedIdx.has(idx)) return;
+                        const opt = document.createElement('option');
+                        opt.value = idx;
+                        opt.textContent = (markers[idx].name || 'Không tên') + (suffix || '');
+                        baseSelect.appendChild(opt);
+                        addedIdx.add(idx);
+                    };
+                    // 1. Luôn thêm tủ điều khiển trước
                     if (cabinetName) {
                         const ci = markers.findIndex(m => String(m.name||'').trim() === cabinetName);
-                        if (ci >= 0) {
-                            const opt = document.createElement('option');
-                            opt.value = ci; opt.textContent = markers[ci].name + ' [tủ]';
-                            baseSelect.appendChild(opt);
-                            addedIdx.add(ci);
-                        }
+                        if (ci >= 0) addOpt(ci, ' [tủ]');
                     }
+                    // 2. Marker cùng basename
                     markers.forEach((m, idx) => {
-                        if (!addedIdx.has(idx) && normalizeMarkerBaseName(m.name||'') === bn) {
-                            const opt = document.createElement('option');
-                            opt.value = idx; opt.textContent = m.name || 'Không tên';
-                            baseSelect.appendChild(opt);
-                        }
+                        if (bn && normalizeMarkerBaseName(m.name||'') === bn) addOpt(idx);
                     });
+                    // 3. Marker cùng tủ điều khiển (khác basename) — đặt cuối, có suffix [cùng tủ]
+                    if (cabinetName) {
+                        markers.forEach((m, idx) => {
+                            const mn = String(m.name||'').trim();
+                            if (mn && cabinetByName[mn] === cabinetName) addOpt(idx, ' [cùng tủ]');
+                        });
+                    }
                     updateBaseDistanceInfo();
                 }
                 nameInput.oninput = _fillBaseSelect;
@@ -3759,7 +4054,7 @@
         async function saveMarkerPopup() {
             // đợi geocoding hoàn tất nếu đang chạy
             if (_pendingGeocodePromise) {
-                displayError('Đang tra cứu địa chỉ...');
+                displayInfo('Đang tra cứu địa chỉ...');
                 try { await _pendingGeocodePromise; } catch(e) {}
             }
             try {
@@ -4035,7 +4330,7 @@
         async function saveMarkerData() {
             try {
                 if (!newMarkerRows || newMarkerRows.length===0) { displayError('Không có marker mới để lưu.'); return; }
-                displayError('Đang chuẩn bị file...');
+                displayInfo('Đang chuẩn bị file...');
                 try { await _loadExcelJS(); } catch(_) { /* fallback sang XLSX.js bên dưới */ }
                 prepareImagePathsForSave(newMarkerRows);
                 let downloadBlob = null;
@@ -4154,7 +4449,7 @@
                 const path = pathInput && pathInput.value.trim() ? pathInput.value.trim() : defaultPath;
 
                 // 1. Tải toàn bộ dữ liệu mới nhất từ Google Sheet
-                displayError('Đang tải dữ liệu từ Google Sheets...');
+                displayInfo('Đang tải dữ liệu từ Google Sheets...');
                 let csvRows;
                 try {
                     const res = await fetch(KHAOSAT_CSV_URL + '&t=' + Date.now());
@@ -4168,7 +4463,7 @@
                 const bodyRows = csvRows.slice(1);
 
                 // 2. Tạo file Excel
-                displayError('Đang tạo file Excel...');
+                displayInfo('Đang tạo file Excel...');
                 let contentBase64 = '';
                 const ExcelJSGlobal = typeof ExcelJS!=='undefined' ? ExcelJS : (typeof window!=='undefined' ? window.ExcelJS : undefined);
                 if (ExcelJSGlobal) {
@@ -4187,7 +4482,7 @@
                 }
 
                 // 3. Gửi qua GAS — GAS dùng GITHUB_TOKEN trong Script Properties để upload
-                displayError('Đang đồng bộ lên GitHub...');
+                displayInfo('Đang đồng bộ lên GitHub...');
                 const gasRes = await fetch(KHAOSAT_GAS_URL, {
                     method: 'POST',
                     body: JSON.stringify({
@@ -4200,31 +4495,11 @@
                 const gasData = await gasRes.json();
                 if (gasData.status !== 'ok') throw new Error(gasData.message || 'Upload thất bại');
 
-                // 4. Tăng version và push data/version.json
-                let verObj = { major: 1, minor: 0, patch: 0 };
-                try {
-                    const rawVer = await fetch(
-                        'https://raw.githubusercontent.com/neo-era/lighting-survey/main/data/version.json?t=' + Date.now()
-                    );
-                    if (rawVer.ok) {
-                        const parsed = await rawVer.json();
-                        verObj = { major: parseInt(parsed.major)||1, minor: parseInt(parsed.minor)||0, patch: (parseInt(parsed.patch)||0) + 1 };
-                    }
-                } catch (_) { verObj.patch = 1; }
-                verObj.updated = new Date().toISOString();
-                verObj.by = currentUser ? currentUser.username : '';
-                const verContent = btoa(unescape(encodeURIComponent(JSON.stringify(verObj, null, 2))));
-                await fetch(KHAOSAT_GAS_URL, {
-                    method: 'POST',
-                    body: JSON.stringify({
-                        action: 'upload_to_github',
-                        path: 'data/version.json',
-                        content: verContent,
-                        message: `Cập nhật dữ liệu v${verObj.major}.${verObj.minor}.${verObj.patch}`
-                    })
-                });
-                _setDataVersion(verObj);
-                displayError(`Đồng bộ thành công: ${bodyRows.length} dòng → GitHub (${path}) — v${verObj.major}.${verObj.minor}.${verObj.patch}.`);
+                // Version tự động tăng qua GitHub Actions (.github/workflows/bump-version.yml)
+                // khi commit được push lên main — không bump trong app.
+                displayError(`Đồng bộ thành công: ${bodyRows.length} dòng → GitHub (${path}).`);
+                // Refresh version sau vài giây để bắt kịp workflow
+                setTimeout(_loadDataVersion, 15000);
             } catch(e) { console.error('updateGitHubExcel error:', e); displayError('Lỗi GitHub: ' + (e.message || e)); }
         }
 
@@ -4249,7 +4524,7 @@
         async function loadFromCSV(url) {
             const csvUrl = url || KHAOSAT_CSV_URL;
             try {
-                displayError('Đang tải dữ liệu từ Google Sheets...');
+                displayInfo('Đang tải dữ liệu từ Google Sheets...');
                 const res = await fetch(csvUrl);
                 if (!res.ok) throw new Error('HTTP ' + res.status);
                 const rows = parseCSVText(await res.text());
@@ -4275,7 +4550,7 @@
                 displayError('');
                 renderedFromCache = true;
             } else {
-                displayError('Đang tải dữ liệu...');
+                displayInfo('Đang tải dữ liệu...');
             }
             // 2. Fetch mới ở background (stale-while-revalidate)
             try {
@@ -4433,15 +4708,19 @@
         function displayError(message, type) {
             const div = document.getElementById('error');
             div.textContent = message;
-            div.classList.remove('toast-success','toast-warning','toast-error');
+            div.classList.remove('toast-success','toast-warning','toast-error','toast-info');
             if (type === 'success') div.classList.add('toast-success');
             else if (type === 'warning') div.classList.add('toast-warning');
             else if (type === 'error') div.classList.add('toast-error');
+            else if (type === 'info') div.classList.add('toast-info');
             if (!message) { div.style.display = 'none'; return; }
             div.style.display = 'block';
             if (_toastTimer) clearTimeout(_toastTimer);
             _toastTimer = setTimeout(() => { div.style.display = 'none'; }, 4000);
         }
+
+        // Toast xanh dương cho thông báo tiến độ ("Đang...", "Đang tải..."). Tránh nhầm với lỗi.
+        function displayInfo(message) { displayError(message, 'info'); }
 
         // ─── Tracking vị trí ───
         let currentLocationWatchId = null;
@@ -4455,7 +4734,7 @@
                 err => displayError('Không thể lấy vị trí: ' + err.message),
                 { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 }
             );
-            displayError('Đang theo dõi vị trí...');
+            displayInfo('Đang theo dõi vị trí...');
         }
 
         function stopTrackingCurrentLocation() {
@@ -4913,9 +5192,10 @@
 
         // ── VERSION DỮ LIỆU ──────────────────────────────────────────────────
         function _setDataVersion(v) {
+            const versionStr = `${v.major}.${v.minor}.${v.patch}`;
+            document.title = `Lighting System V${versionStr}`;
             const tag = document.getElementById('dataVersionTag');
-            if (!tag) return;
-            tag.textContent = `Dữ liệu v${v.major}.${v.minor}.${v.patch}`;
+            if (tag) tag.textContent = `Dữ liệu v${versionStr}`;
         }
         async function _loadDataVersion() {
             try {
@@ -5302,7 +5582,7 @@
         async function exportReport() {
             const rows = getReportFilteredRows();
             if (!rows.length) { displayError('Không có dữ liệu để xuất.'); return; }
-            displayError('Đang tải thư viện Excel...');
+            displayInfo('Đang tải thư viện Excel...');
             try { await _loadExcelJS(); } catch(_) { /* fallback sang XLSX.js bên dưới */ }
 
             const fromVal = document.getElementById('rptDateFrom').value;

@@ -3273,3 +3273,280 @@ Lưu ý quan trọng:
 
 Không thay đổi gì khác.
 ```
+
+---
+
+# 📐 Bộ Prompt — Tối ưu "In bản vẽ sơ đồ tuyến trạm đèn" (audit 2026-06-16)
+
+Thứ tự ưu tiên: 🔴 Cao → 🟡 Trung bình → 🟢 Thấp.
+
+---
+
+## 🔴 PROMPT P1 — Fix bug `tuName` undefined
+
+```
+Trong file index.html, hàm exportDrawingPDF() (khoảng line 2123-2244)
+có 2 chỗ dùng biến `tuName` chưa khai báo (line ~2190 và ~2221),
+dẫn đến tên file PDF có thể là "banve-undefined-...pdf" khi
+pdTenTu trống.
+
+Đọc kỹ scope của hàm, tìm xem `tuName` đáng lẽ phải là biến nào
+(có thể là `tuFilter` hoặc `pdTuSelect.value`). Sửa lại 2 chỗ
+fallback cho đúng, kèm default value an toàn nếu cả 2 đều trống
+(vd: 'sodotuyen').
+
+Sau khi sửa, verify không còn reference đến `tuName` chưa khai báo
+bằng grep.
+```
+
+---
+
+## 🔴 PROMPT P2 — Force cleanup state khi export fail
+
+```
+Trong file index.html, hàm exportDrawingPDF() có khối finally
+(khoảng line 2229-2244) reset _previewMode = false nhưng chưa đảm
+bảo:
+1. Modal #printDrawingModal đóng nếu vẫn open
+2. Overlay #printOverlay được hide
+3. SVG cable #_printCableSvg removed
+4. Tiles gốc đã restore (nếu CartoDB switch fail giữa chừng)
+5. Map size restore (origStyleW/origStyleH)
+6. Nút "Xuất PDF" enable lại để user retry
+
+Bao tất cả cleanup trong finally bằng try/catch riêng cho mỗi step
+(nếu 1 step fail, các step khác vẫn chạy). Thêm guard: nếu
+_previewMode đang true thì gọi closePrintPreview() trước.
+
+Test: throw Error giả ở giữa exportDrawingPDF (vd ngay sau
+_switchToPrintTile) → kiểm tra UI có về trạng thái sạch không.
+```
+
+---
+
+## 🔴 PROMPT P3 — Cleanup script tag leak trong `_loadPrintLibs`
+
+```
+Trong file index.html, _loadPrintLibs() (khoảng line 2511-2525)
+append 2 <script> tag (jsPDF + html2canvas) vào <head> nhưng không
+remove khi load fail/cancel. Mỗi lần retry sẽ append trùng.
+
+Sửa lại:
+1. Kiểm tra typeof window.jspdf/jsPDF/html2canvas trước khi append
+   — nếu đã load thì resolve ngay (giống _loadExcelJS).
+2. Trong onerror: remove script tag, reject promise, reset
+   _printLibsPromise = null để retry sạch.
+3. Thêm timeout 15s — nếu chưa load xong thì abort + cleanup.
+
+Tham khảo pattern của _loadExcelJS() (khoảng line 1300-1320) — đã
+có guard `_excelJsPromise` cached, làm theo style đó.
+```
+
+---
+
+## 🟡 PROMPT P4 — Thay hard-coded sleep bằng tile `load` event
+
+````
+Trong file index.html, exportDrawingPDF() có nhiều setTimeout chờ
+tile/map sẵn sàng:
+- Line ~2158: setTimeout 3000ms sau _switchToPrintTile()
+- Line ~2174, 2180, 2186: setTimeout 200/600/2000ms khác
+
+Thay 3000ms (chờ CartoDB tile) bằng tile layer load event:
+```js
+await new Promise(resolve => {
+    const layer = _printCartoLayer; // tile layer vừa thêm
+    let resolved = false;
+    layer.once('load', () => { if (!resolved) { resolved = true; resolve(); } });
+    setTimeout(() => { if (!resolved) { resolved = true; resolve(); } }, 5000); // fallback
+});
+```
+
+Các setTimeout 200/600ms khác — đánh giá có thể bỏ không, hoặc
+giảm xuống <100ms (chỉ chờ next frame:
+`await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))`).
+
+Test với mạng chậm: throttling Slow 3G trong DevTools, đảm bảo PDF
+vẫn capture đầy đủ tile.
+````
+
+---
+
+## 🟡 PROMPT P5 — Extract `_preparePrintLayout()` chung
+
+```
+Trong file index.html, hàm openPrintPreview() (~line 2085-2105) và
+exportDrawingPDF() (~line 2123-2244) có duplicate logic:
+1. _filterRowsByTu(tuFilter)
+2. _switchToPrintTile()
+3. _zoomToScale(scale)
+4. _buildCableLines(rows) hoặc _buildPrintCableSvg(rows, rotation)
+5. _showPrintOverlay({...})
+
+Extract thành async function _preparePrintLayout(opts) trong đó
+opts = { tuFilter, scale, rotation, modeSvgCable, overlayOpts }.
+Return { rows, cleanup } — cleanup là function gọi
+_hidePrintOverlay + _removePrintCableSvg + _removeCableLines +
+_restoreOriginalTiles.
+
+Cả openPrintPreview và exportDrawingPDF đều gọi
+_preparePrintLayout, rồi:
+- preview: lưu cleanup vào _previewCleanup, gắn vào nút "Đóng xem trước"
+- export: gọi cleanup() trong finally
+
+Đảm bảo logic capture html2canvas trong exportDrawingPDF không bị
+ảnh hưởng. Test cả 2 flow.
+```
+
+---
+
+## 🟡 PROMPT P6 — Persist toàn bộ form field qua localStorage
+
+````
+Trong file index.html, modal #printDrawingModal có các field:
+- pdTuSelect, pdScale, pdPaper, pdRotation
+- pdTenTu, pdSoBanVe
+- pdNguoiLap, pdNgay
+- pdCVPhuTrach, pdCSKhuVuc
+
+Hiện chỉ pdNguoiLap/pdCVPhuTrach/pdCSKhuVuc được save vào
+localStorage (key 'pd_nl', 'pd_cv', 'pd_ks'). pdTenTu, pdSoBanVe,
+pdScale, pdPaper, pdRotation chưa save.
+
+Tạo helper:
+```js
+const _PD_FIELDS = ['pdTuSelect','pdScale','pdPaper','pdRotation','pdTenTu','pdSoBanVe','pdNguoiLap','pdCVPhuTrach','pdCSKhuVuc'];
+function _savePdFields() {
+    _PD_FIELDS.forEach(id => {
+        const el = document.getElementById(id);
+        if (el && el.value) localStorage.setItem('pd_' + id, el.value);
+    });
+}
+function _restorePdFields() {
+    _PD_FIELDS.forEach(id => {
+        const el = document.getElementById(id);
+        const v = localStorage.getItem('pd_' + id);
+        if (el && v && !el.value) el.value = v;
+    });
+}
+```
+
+Gọi _restorePdFields() trong openPrintDrawingModal() sau khi
+populate defaults, và _savePdFields() ở đầu exportDrawingPDF() +
+openPrintPreview() trước khi đọc value.
+
+pdNgay không persist (luôn lấy ngày hôm nay). pdTuSelect có thể
+không restore được nếu data đã đổi → bọc try/catch verify option
+còn tồn tại.
+````
+
+---
+
+## 🟢 PROMPT P7 — Tách `displayInfo()` cho progress
+
+```
+Trong file index.html, hàm displayError() (tìm vị trí bằng grep)
+được dùng cho cả thông báo lỗi (đỏ) lẫn progress ("Đang tải...",
+"Đang capture..."). Toast màu đỏ làm user nhầm progress = lỗi.
+
+Tạo hàm displayInfo(msg) tương tự displayError nhưng style xanh
+dương (#2563eb hoặc #1e40af). Có thể reuse element #error với
+class .toast-info vs .toast-error.
+
+Refactor mọi chỗ trong exportDrawingPDF(), openPrintPreview(),
+_loadPrintLibs(), updateGitHubExcel() đang dùng displayError cho
+progress message → chuyển sang displayInfo. Giữ displayError chỉ
+cho lỗi thật.
+
+Grep keyword 'displayError(\'Đang ' và 'displayError(\'Đã ' để tìm
+candidates.
+```
+
+---
+
+## 🟢 PROMPT P8 — Constants cho paper size + magic numbers
+
+````
+Trong file index.html, code in bản vẽ có nhiều magic numbers:
+- 110px (title block height) — line ~2009
+- 14px (print frame inset) — line ~1983
+- 420/297 (A3 mm), 297/210 (A4 mm) — line ~2163-2164
+- 80px (search results offset), 26x42 (lamp icon size) — rải rác
+
+Tạo block constants ở đầu script:
+```js
+const PRINT_CONFIG = {
+    paper: {
+        a3: { mmW: 420, mmH: 297 },
+        a4: { mmW: 297, mmH: 210 }
+    },
+    titleBlockHeight: 110,
+    frameInset: 14,
+    legend: { top: 12, left: 12 },
+    stats: { right: 12, bottomOffset: 122 },
+    captureScale: 2,
+    jpegQuality: 0.93
+};
+```
+
+Refactor mọi nơi dùng số literal → PRINT_CONFIG.<field>. Lý do
+mỗi constant (vd "120 = 110 title block + 12 padding") nên ghi
+comment ngay tại object definition.
+````
+
+---
+
+## 🎯 PROMPT P9 — TỔNG (chạy 1-shot 6 việc ưu tiên)
+
+```
+Theo audit chức năng "In bản vẽ sơ đồ tuyến trạm đèn" trong file
+index.html, thực hiện tuần tự 3 fix ưu tiên cao + 3 cải thiện
+trung bình:
+
+🔴 Cao (làm trước):
+1. Sửa bug biến `tuName` undefined ở exportDrawingPDF (line
+   ~2190, 2221) — tìm scope đúng hoặc default 'sodotuyen'.
+2. Bao toàn bộ cleanup trong finally{} của exportDrawingPDF bằng
+   try/catch riêng cho mỗi step (modal close, overlay hide, SVG
+   remove, tiles restore, map size restore, button enable). Thêm
+   guard _previewMode → closePrintPreview() trước.
+3. _loadPrintLibs (line ~2511-2525): check `typeof window.jspdf`
+   trước append, onerror remove script tag + reject + reset
+   promise cache, timeout 15s fallback.
+
+🟡 Trung bình:
+4. Thay setTimeout 3000ms ở line ~2158 bằng tile layer 'load'
+   event với fallback 5s timeout.
+5. Extract _preparePrintLayout(opts) → return {rows, cleanup},
+   dùng trong cả openPrintPreview + exportDrawingPDF.
+6. Persist toàn bộ field pd* qua localStorage (helper
+   _savePdFields + _restorePdFields), gọi restore trong
+   openPrintDrawingModal, save trong export/preview.
+
+Sau mỗi fix, hard reload local test golden path (bấm "Xuất PDF"
+→ verify PDF tải xuống đúng tên + nội dung). Nếu fail bất kỳ
+bước nào, dừng và báo cáo trước khi tiếp.
+```
+
+---
+
+## Tóm tắt audit (cho reference)
+
+**Vấn đề nghiêm trọng:**
+- Bug biến `tuName` không khai báo → tên file PDF có thể là `banve-undefined-...pdf`
+- Script tag CDN bị leak (append vào `<head>` nhưng không remove khi cancel)
+- State không cleanup khi export fail (race condition trong `_switchToPrintTile`)
+
+**Performance:**
+- Hard-coded sleep 3000ms chờ CartoDB tile — chậm và không đảm bảo
+- SVG cable rebuild dùng string concat thay DOM API (chậm với >500 trụ)
+
+**UX:**
+- Form không nhớ `pdTenTu`/`pdSoBanVe`/`pdScale`/`pdPaper`/`pdRotation` — user gõ lại mỗi lần
+- Toast `displayError` dùng cho cả progress lẫn lỗi → màu đỏ gây nhầm
+- Không có canvas preview trước khi export
+
+**Code smell:**
+- Magic numbers rải rác (110px, 14px, 420/297mm…)
+- Duplicate logic giữa `openPrintPreview()` ↔ `exportDrawingPDF()`
+- HTML inline style >120 dòng string trong `_showPrintOverlay()`

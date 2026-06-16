@@ -257,28 +257,28 @@ _allowedPages()  // lọc DISTRICT_PAGES theo currentUser.vung ([] = tất cả)
 
 ---
 
-### 2. Version tự động tăng khi push GitHub ✅ đã implement
+### 2. Version tự động tăng mỗi commit push ✅ đã implement
 
-**Mục tiêu:** Mỗi lần `updateGitHubExcel()` đồng bộ dữ liệu lên GitHub thành công, số version của data tăng lên, hiển thị trong app để biết dữ liệu đang ở bản nào.
+**Mục tiêu:** `data/version.json` tự bump `patch` mỗi khi có commit push lên `main` (kể cả push code thường lẫn upload từ app qua GAS) — không bump trong JS app nữa.
+
+**Cơ chế:** GitHub Action `.github/workflows/bump-version.yml`
+- Trigger: `on: push` to `main`, **`paths-ignore: data/version.json`** (tránh loop vô hạn)
+- Đọc `data/version.json` → `patch + 1` → ghi lại với `updated` (UTC ISO) + `by` (github.actor)
+- Commit message: `chore: bump version to vX.Y.Z [skip ci]`
+- Dùng `GITHUB_TOKEN` mặc định, không cần PAT
 
 **Thiết kế:**
 - Hằng số trong `index.html`: `const DATA_VERSION = { major: 1, minor: 0, patch: 0 };`
-- Mỗi lần sync thành công: `patch++` (hoặc tăng theo ngày: `YYYY.MM.DD.n`)
-- Version lưu vào file `data/version.json` trên GitHub repo (cùng lúc push Excel)
-- Hiển thị ở topbar hoặc trong controls modal: **"Dữ liệu v1.0.42"**
+- Title tab + pill (nếu có) hiển thị `Lighting System V<major>.<minor>.<patch>`
+- App không tự tăng version. `updateGitHubExcel()` chỉ upload Excel — workflow lo phần version
+- Sau khi user bấm "GitHub" trong app, `setTimeout(_loadDataVersion, 15000)` refresh version sau 15s để bắt kịp workflow
 
 **File `data/version.json`:**
 ```json
-{ "version": "1.0.42", "updated": "2026-06-11T08:30:00Z", "by": "admin" }
+{ "major": 1, "minor": 0, "patch": 42, "updated": "2026-06-11T08:30:00Z", "by": "lavipco" }
 ```
 
-**Luồng:**
-1. `updateGitHubExcel()` tải xong dữ liệu → đọc `data/version.json` từ GitHub API để lấy số hiện tại
-2. Tăng patch: `patch + 1`
-3. Gửi 2 file lên GitHub cùng một commit: `data/khaosat.xlsx` + `data/version.json`
-4. Cập nhật UI hiển thị version mới
-
-**Lưu ý:** Dùng GAS action `upload_to_github` hai lần liên tiếp (xlsx rồi version.json), hoặc mở rộng GAS để nhận mảng file.
+**Major/minor**: sửa tay file `data/version.json` rồi commit — workflow chỉ tự bump `patch`.
 
 ---
 
@@ -1085,6 +1085,21 @@ function getSheet(name) {
 ```
 
 **`findRowNum(sheet, id, tenTru)`** — nhận sheet làm tham số thay vì hardcode.
+
+### Sheet ở Google Sheet KHÁC (external spreadsheet)
+
+Nếu 1 địa bàn (vd `CanGiuoc`) nằm ở **file Google Sheet riêng** (không phải tab trong file chứa GAS):
+
+**index.html — `DISTRICT_PAGES`**: `csvUrl` đã trỏ thẳng tới file riêng (Publish to web từ file đó).
+
+**gas-khaosat.js — `EXTERNAL_SPREADSHEET_IDS`**: map `sheetName → spreadsheetId`. `getSheet(name)` sẽ `openById()` thay vì `getActiveSpreadsheet()`.
+```javascript
+const EXTERNAL_SPREADSHEET_IDS = {
+  CanGiuoc: '1xxxxx...',  // copy từ URL file CanGiuoc /spreadsheets/d/<ID>/edit
+};
+```
+
+**Yêu cầu**: tài khoản deploy GAS phải có quyền **edit** trên file ngoài. Redeploy GAS New version sau khi điền ID.
 
 ---
 

@@ -1,0 +1,61 @@
+name: Bump data version
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - 'data/version.json'
+
+# Hủy run cũ nếu push liên tiếp nhanh
+concurrency:
+  group: bump-version-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: true
+
+      - name: Bump patch
+        id: bump
+        run: |
+          set -e
+          mkdir -p data
+          if [ -f data/version.json ]; then
+            major=$(jq -r '.major // 1' data/version.json)
+            minor=$(jq -r '.minor // 0' data/version.json)
+            patch=$(jq -r '.patch // 0' data/version.json)
+          else
+            major=1; minor=0; patch=0
+          fi
+          patch=$((patch + 1))
+          updated=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          actor="${{ github.actor }}"
+          cat > data/version.json <<EOF
+          {
+            "major": ${major},
+            "minor": ${minor},
+            "patch": ${patch},
+            "updated": "${updated}",
+            "by": "${actor}"
+          }
+          EOF
+          echo "version=${major}.${minor}.${patch}" >> "$GITHUB_OUTPUT"
+
+      - name: Commit & push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/version.json
+          if git diff --cached --quiet; then
+            echo "version.json không thay đổi — bỏ qua commit"
+            exit 0
+          fi
+          git commit -m "chore: bump version to v${{ steps.bump.outputs.version }} [skip ci]"
+          git push
