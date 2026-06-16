@@ -978,10 +978,14 @@
                                 <i class="fa fa-share-alt"></i> Sơ đồ cáp
                             </button>
                         </div>
-                        <button id="btnCableEdit" onclick="toggleCableEditMode()" class="ctrl-btn outline"
-                                style="display:none;margin-bottom:0;">
-                            <i class="fa fa-pencil"></i> Sửa cáp
-                        </button>
+                        <div id="cableToolbar" style="display:none;gap:6px;margin-bottom:0;" class="ctrl-btn-grid">
+                            <button id="btnCableEdit" onclick="toggleCableEditMode()" class="ctrl-btn outline">
+                                <i class="fa fa-pencil"></i> Sửa cáp
+                            </button>
+                            <button id="btnDrawCable" onclick="toggleDrawCableMode()" class="ctrl-btn outline">
+                                <i class="fa fa-plus-circle"></i> Vẽ cáp
+                            </button>
+                        </div>
                     </div>
 
                     <div class="ctrl-divider"></div>
@@ -1071,8 +1075,12 @@
           <div class="modal-body">
             <div class="pd-row">
               <div class="pd-item" style="flex:2">
-                <div class="pd-label">Tủ điều khiển</div>
-                <select id="pdTuSelect" class="pd-ctrl"></select>
+                <div class="pd-label">Dữ liệu in</div>
+                <div class="pd-ctrl" style="background:#f1f5f9;color:#475569;font-size:13px;display:flex;align-items:center;gap:6px;">
+                  <i class="fa fa-filter" style="color:#2563eb;"></i>
+                  <span id="pdFilterDesc">Theo bộ lọc hiện tại</span>
+                </div>
+                <select id="pdTuSelect" class="pd-ctrl" style="display:none"></select>
               </div>
               <div class="pd-item">
                 <div class="pd-label">Tỉ lệ</div>
@@ -1442,12 +1450,19 @@
 
         // ─── In bản vẽ sơ đồ tuyến ───
         function openPrintDrawingModal() {
-            const sel = document.getElementById('pdTuSelect');
-            if (sel && Array.isArray(loadedData) && loadedData.length > 1) {
-                const tuSet = new Set();
-                loadedData.slice(1).forEach(r => { if (r[7]) tuSet.add(String(r[7])); });
-                sel.innerHTML = '<option value="">-- Tất cả --</option>' +
-                    [...tuSet].sort().map(t => `<option value="${t}">${t}</option>`).join('');
+            // Hiện mô tả bộ lọc đang áp dụng
+            const descEl = document.getElementById('pdFilterDesc');
+            if (descEl) {
+                const filtered = _getFilteredRows();
+                const parts = [];
+                if (_activeFilters.tuDieuKhien && _activeFilters.tuDieuKhien.length)
+                    parts.push('Tủ: ' + _activeFilters.tuDieuKhien.join(', '));
+                if (_activeFilters.duong)   parts.push('Đường: ' + _activeFilters.duong);
+                if (_activeFilters.phuongXa) parts.push(_activeFilters.phuongXa);
+                if (_activeFilters.nguoiKS) parts.push('KS: ' + _activeFilters.nguoiKS);
+                descEl.textContent = parts.length
+                    ? parts.join(' — ') + ' (' + filtered.length + ' đối tượng)'
+                    : 'Tất cả dữ liệu hiện tại (' + filtered.length + ' đối tượng)';
             }
             const nguoiEl = document.getElementById('pdNguoiLap');
             if (nguoiEl && !nguoiEl.value && currentUser) nguoiEl.value = currentUser.displayName || currentUser.username || '';
@@ -1704,16 +1719,64 @@
         }
 
         function _rebuildCableLines() {
-            const rows = _selectedTus
-                ? (loadedData || []).slice(1).filter(r => _selectedTus.has(String(r[7] || '').trim()))
-                : (loadedData || []).slice(1);
-            _buildCableLines(rows);
+            _buildCableLines(_getFilteredRows());
         }
 
         let _cableVisible = false;
-        let _selectedTus = null; // null = tất cả; Set<string> = tủ đã chọn
+        let _selectedTus = null;
         let _cableEditMode = false;
         let _pickParentActive = false;
+        let _drawCableMode = false;
+        let _cableDrawChild = null; // { name, lat, lon, row }
+
+        function toggleDrawCableMode() {
+            _drawCableMode = !_drawCableMode;
+            _cableDrawChild = null;
+            const btn = document.getElementById('btnDrawCable');
+            if (btn) {
+                btn.classList.toggle('active', _drawCableMode);
+                btn.innerHTML = _drawCableMode
+                    ? '<i class="fa fa-times-circle"></i> Hủy vẽ'
+                    : '<i class="fa fa-plus-circle"></i> Vẽ cáp';
+            }
+            if (_drawCableMode) {
+                displayError('Chế độ vẽ cáp: click vào trụ CON trước, sau đó click vào trụ/tủ GỐC');
+            }
+        }
+
+        function setCableChild() {
+            const row = _currentPopupRow;
+            if (!row) return;
+            const lat = parseCoord(row[2]), lon = parseCoord(row[3]);
+            _cableDrawChild = { name: String(row[1] || ''), lat, lon, row };
+            map.closePopup();
+            displayError('Đã chọn trụ con: ' + _cableDrawChild.name + ' — click vào trụ/tủ GỐC để nối cáp');
+        }
+
+        async function setCableParent() {
+            if (!_cableDrawChild) return;
+            const row = _currentPopupRow;
+            if (!row) return;
+            const parentName = String(row[1] || '');
+            if (parentName === _cableDrawChild.name) { displayError('Không thể nối trụ vào chính nó.'); return; }
+            const parentLat = parseCoord(row[2]), parentLon = parseCoord(row[3]);
+            const dist = haversineM(_cableDrawChild.lat, _cableDrawChild.lon, parentLat, parentLon);
+            const childRow = _cableDrawChild.row;
+            childRow[14] = parentName;
+            childRow[15] = String(dist);
+            map.closePopup();
+            const ok = await syncRowToGAS(childRow, { silent: false });
+            if (ok !== false && _cableVisible) _rebuildCableLines();
+            displayError('✓ Nối cáp: ' + _cableDrawChild.name + ' → ' + parentName + ' (' + dist + 'm)');
+            _cableDrawChild = null;
+            // Giữ chế độ để vẽ tiếp, không tự thoát
+        }
+
+        function _setCableToolbar(visible) {
+            const tb = document.getElementById('cableToolbar');
+            if (tb) tb.style.display = visible ? 'grid' : 'none';
+            if (!visible && _drawCableMode) toggleDrawCableMode();
+        }
 
         function toggleCableLayer() {
             if (_cableVisible) {
@@ -1721,37 +1784,17 @@
                 _removeCableLines();
                 const btn = document.getElementById('btnToggleCable');
                 if (btn) btn.classList.remove('active');
-                const editBtn = document.getElementById('btnCableEdit');
-                if (editBtn) editBtn.style.display = 'none';
+                _setCableToolbar(false);
                 return;
             }
-            // Cables OFF → mở dropdown chọn tủ
-            const dd = document.getElementById('cableDropdown');
-            const tus = [...new Set(
-                (loadedData || []).slice(1).map(r => String(r[7] || '').trim()).filter(Boolean)
-            )].sort();
-            const list = document.getElementById('cableTuList');
-            list.innerHTML = `
-                <label style="display:flex;align-items:center;gap:7px;font-size:11px;padding:3px 0;cursor:pointer;font-weight:700;">
-                  <input type="checkbox" id="cbAllTus" onchange="toggleAllTuCbs(this.checked)" checked>
-                  Tất cả tủ
-                </label>
-                <hr style="margin:4px 0;border:none;border-top:1px solid #e2e8f0;">
-                ${tus.map(t => `
-                  <label style="display:flex;align-items:center;gap:7px;font-size:11px;padding:2px 0;cursor:pointer;">
-                    <input type="checkbox" class="cb-tu" value="${t.replace(/"/g,'&quot;')}" checked
-                           onchange="onTuCbChange()"> ${t}
-                  </label>`).join('')}
-                ${tus.length === 0 ? '<div style="font-size:11px;color:#94a3b8;padding:4px 0;">Không có dữ liệu tủ</div>' : ''}
-            `;
+            // Cables OFF → vẽ ngay theo bộ lọc hiện tại
+            const rows = _getFilteredRows();
+            if (!rows.length) { displayError('Bộ lọc hiện tại không có dữ liệu để vẽ sơ đồ cáp.'); return; }
+            _buildCableLines(rows);
+            _cableVisible = true;
             const btn = document.getElementById('btnToggleCable');
-            const rect = btn.getBoundingClientRect();
-            dd.style.top  = (rect.bottom + 6) + 'px';
-            dd.style.left = rect.left + 'px';
-            dd.style.display = 'block';
-            setTimeout(() => {
-                document.addEventListener('click', _onOutsideCableDropdown, { capture: true, once: true });
-            }, 0);
+            if (btn) btn.classList.add('active');
+            _setCableToolbar(true);
         }
 
         function _onOutsideCableDropdown(e) {
@@ -1775,21 +1818,11 @@
         }
 
         function drawSelectedCables() {
-            document.getElementById('cableDropdown').style.display = 'none';
-            const cbAll = document.getElementById('cbAllTus');
-            const allChecked = cbAll && cbAll.checked;
-            _selectedTus = allChecked ? null : new Set(
-                [...document.querySelectorAll('.cb-tu:checked')].map(cb => cb.value)
-            );
-            const rows = _selectedTus
-                ? (loadedData || []).slice(1).filter(r => _selectedTus.has(String(r[7] || '').trim()))
-                : (loadedData || []).slice(1);
-            _buildCableLines(rows);
+            _buildCableLines(_getFilteredRows());
             _cableVisible = true;
             const btn = document.getElementById('btnToggleCable');
             if (btn) btn.classList.add('active');
-            const editBtn = document.getElementById('btnCableEdit');
-            if (editBtn) editBtn.style.display = '';
+            _setCableToolbar(true);
         }
 
         function toggleCableEditMode() {
@@ -2047,7 +2080,6 @@
         let _previewMode = false;
 
         async function openPrintPreview() {
-            const tuName     = (document.getElementById('pdTuSelect')   || {}).value || '';
             const scale      = parseInt((document.getElementById('pdScale')      || {}).value) || 1000;
             const tenTu      = (document.getElementById('pdTenTu')      || {}).value?.trim() || '';
             const soBanVe    = (document.getElementById('pdSoBanVe')    || {}).value?.trim() || '';
@@ -2058,7 +2090,7 @@
             if (cvPhuTrach) localStorage.setItem('pd_pdCVPhuTrach', cvPhuTrach);
             if (csKhuVuc)   localStorage.setItem('pd_pdCSKhuVuc',   csKhuVuc);
             if (nguoiLap)   localStorage.setItem('pd_pdNguoiLap',   nguoiLap);
-            const rows = _filterRowsByTu(tuName);
+            const rows = _getFilteredRows();
             if (!rows.length) { displayError('Không có dữ liệu để xem trước.'); return; }
             $('#printDrawingModal').modal('hide');
             _switchToPrintTile();
@@ -2068,7 +2100,7 @@
             map.setView(map.getCenter(), map.getZoom(), { animate: false, reset: true });
             await new Promise(r => setTimeout(r, 200));
             _buildCableLines(rows); // L.polyline cho xem trước (không qua html2canvas)
-            _showPrintOverlay({ rows, tenTu: tenTu || tuName, scale, ngay, nguoiLap, soBanVe, cvPhuTrach, csKhuVuc });
+            _showPrintOverlay({ rows, tenTu, scale, ngay, nguoiLap, soBanVe, cvPhuTrach, csKhuVuc });
             _currentMapRotation = parseFloat((document.getElementById('pdRotation') || {}).value) || 0;
             _applyMapRotation(_currentMapRotation);
             const prevRotEl = document.getElementById('previewRotVal');
@@ -2103,7 +2135,6 @@
                 displayError('Đang tải thư viện in...');
                 await _loadPrintLibs();
 
-                const tuName   = (document.getElementById('pdTuSelect')  || {}).value || '';
                 const scale    = parseInt((document.getElementById('pdScale')   || {}).value) || 1000;
                 const paper    = (document.getElementById('pdPaper')     || {}).value || 'a3';
                 const tenTu    = (document.getElementById('pdTenTu')     || {}).value.trim();
@@ -2117,7 +2148,7 @@
                 if (csKhuVuc)   localStorage.setItem('pd_pdCSKhuVuc',   csKhuVuc);
                 if (nguoiLap)   localStorage.setItem('pd_pdNguoiLap',   nguoiLap);
 
-                const rows = _filterRowsByTu(tuName);
+                const rows = _getFilteredRows();
                 if (rows.length === 0) { displayError('Không có dữ liệu để in.'); return; }
 
                 if (!_previewMode) {
@@ -2881,6 +2912,26 @@
               <div class="pc-actions ${actionClass}">
                 ${actionBtns}
               </div>
+              ${_drawCableMode && canEdit() ? `
+              <div style="padding:0 16px 12px;">
+                ${!_cableDrawChild
+                    ? `<button onclick="setCableChild()"
+                         style="width:100%;padding:9px;border-radius:10px;border:1.5px dashed #2563eb;
+                                background:#eff6ff;color:#1d4ed8;font-size:12px;font-weight:700;cursor:pointer;">
+                           📍 Chọn làm trụ CON (điểm nguồn cáp)
+                         </button>`
+                    : (_cableDrawChild.name !== name
+                        ? `<button onclick="setCableParent()"
+                             style="width:100%;padding:9px;border-radius:10px;border:1.5px dashed #15803d;
+                                    background:#f0fdf4;color:#15803d;font-size:12px;font-weight:700;cursor:pointer;">
+                               🔗 Nối cáp: ${_cableDrawChild.name} → ${name || '?'}
+                             </button>`
+                        : `<div style="text-align:center;font-size:11px;color:#94a3b8;padding:6px;">
+                             Đây là trụ con đang chọn
+                           </div>`
+                      )
+                }
+              </div>` : ''}
             </div>`;
         }
 
