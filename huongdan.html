@@ -21,7 +21,6 @@
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: 'Inter', sans-serif; color: var(--text); background: #f3f4f6; }
 
-    /* NAV */
     nav {
       position: sticky; top: 0; z-index: 100;
       background: var(--primary); color: #fff;
@@ -34,10 +33,8 @@
             background: rgba(255,255,255,.18); padding: 7px 16px; border-radius: 20px; }
     nav a:hover { background: rgba(255,255,255,.3); }
 
-    /* LAYOUT */
     .container { max-width: 860px; margin: 0 auto; padding: 32px 20px 60px; }
 
-    /* TOC */
     .toc { background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
            padding: 20px 24px; margin-bottom: 32px; }
     .toc h2 { font-size: 15px; font-weight: 700; margin-bottom: 12px; color: var(--primary); }
@@ -46,7 +43,6 @@
     .toc a { color: var(--primary); text-decoration: none; font-size: 14px; font-weight: 500; }
     .toc a:hover { text-decoration: underline; }
 
-    /* SECTION */
     section { background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
               padding: 28px 28px 24px; margin-bottom: 24px; }
     section h2 { font-size: 18px; font-weight: 700; margin-bottom: 16px;
@@ -59,7 +55,6 @@
     ul, ol { padding-left: 20px; margin-bottom: 10px; }
     li { font-size: 14px; line-height: 1.7; margin-bottom: 4px; }
 
-    /* STEP CARDS */
     .steps { display: flex; flex-direction: column; gap: 12px; margin: 12px 0; }
     .step  { display: flex; gap: 14px; align-items: flex-start;
              background: var(--surface-2); border: 1px solid var(--border);
@@ -70,7 +65,6 @@
     .step .sc { font-size: 14px; line-height: 1.6; }
     .step .sc strong { display: block; font-weight: 600; margin-bottom: 2px; }
 
-    /* BADGES */
     .badge { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 700;
              padding: 3px 10px; border-radius: 20px; white-space: nowrap; }
     .badge-blue   { background: #dbeafe; color: #1d4ed8; }
@@ -79,41 +73,44 @@
     .badge-pink   { background: #fce7f3; color: #be185d; }
     .badge-gray   { background: #e2e8f0; color: #334155; }
     .badge-yellow { background: #fef9c3; color: #854d0e; }
+    .badge-red    { background: #fee2e2; color: #dc2626; }
 
-    /* TYPE TABLE */
+    .role-table { width: 100%; border-collapse: collapse; font-size: 13px; margin: 12px 0; }
+    .role-table th { background: #f1f5f9; padding: 8px 12px; text-align: left; font-weight: 700; border: 1px solid var(--border); }
+    .role-table td { padding: 8px 12px; border: 1px solid var(--border); text-align: center; }
+    .role-table td:first-child { text-align: left; font-weight: 600; }
+    .yes { color: #16a34a; font-weight: 700; }
+    .no  { color: #dc2626; }
+
     .type-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; margin: 12px 0; }
     .type-card { border-radius: 10px; padding: 12px 14px; border: 1.5px solid transparent; }
     .type-card .tc-icon { font-size: 22px; margin-bottom: 6px; }
     .type-card .tc-label { font-size: 13px; font-weight: 700; }
     .type-card .tc-desc  { font-size: 12px; margin-top: 3px; opacity: .75; }
 
-    /* NOTE BOX */
     .note { border-radius: 10px; padding: 14px 16px; font-size: 13px; line-height: 1.6; margin: 12px 0; display: flex; gap: 10px; }
     .note-info    { background: #eff6ff; border: 1px solid #bfdbfe; color: #1e40af; }
     .note-success { background: #ecfdf5; border: 1px solid #a7f3d0; color: #065f46; }
     .note-warn    { background: #fffbeb; border: 1px solid #fcd34d; color: #92400e; }
     .note-icon    { font-size: 18px; flex-shrink: 0; }
 
-    /* CODE */
     code { background: #f1f5f9; color: #0f172a; font-size: 12.5px; padding: 2px 7px;
            border-radius: 5px; font-family: 'Courier New', monospace; }
+    kbd  { display: inline-block; background: #f8fafc; border: 1px solid #cbd5e1;
+           border-bottom: 2px solid #94a3b8; border-radius: 5px; font-size: 12px;
+           padding: 2px 8px; font-family: monospace; }
 
-    /* KEYBOARD */
-    kbd { display: inline-block; background: #f8fafc; border: 1px solid #cbd5e1;
-          border-bottom: 2px solid #94a3b8; border-radius: 5px; font-size: 12px;
-          padding: 2px 8px; font-family: monospace; }
-
-    /* SCREENSHOT PLACEHOLDER */
     .img-box { background: var(--surface-2); border: 2px dashed var(--border);
                border-radius: 10px; padding: 24px; text-align: center;
                color: var(--text-muted); font-size: 13px; margin: 12px 0; }
 
-    /* FOOTER */
     footer { text-align: center; font-size: 12px; color: var(--text-muted); padding: 20px; }
 
     @media (max-width: 600px) {
       section { padding: 20px 16px; }
       .type-grid { grid-template-columns: 1fr 1fr; }
+      .role-table { font-size: 12px; }
+      .role-table th, .role-table td { padding: 6px 8px; }
     }
   </style>
 </head>
@@ -134,16 +131,19 @@
     <h2>📋 Mục lục</h2>
     <ol>
       <li><a href="#s1">Giới thiệu</a></li>
-      <li><a href="#s2">Đăng nhập</a></li>
+      <li><a href="#s2">Đăng nhập &amp; Phân quyền</a></li>
       <li><a href="#s3">Giao diện bản đồ</a></li>
       <li><a href="#s4">Thêm marker mới</a></li>
       <li><a href="#s5">Xem và chỉnh sửa marker</a></li>
-      <li><a href="#s6">Tìm kiếm</a></li>
-      <li><a href="#s7">Loại marker</a></li>
-      <li><a href="#s8">Xuất báo cáo Excel</a></li>
-      <li><a href="#s9">Xuất CAD (DXF)</a></li>
-      <li><a href="#s10">Đồng bộ GitHub</a></li>
-      <li><a href="#s11">Cài app trên điện thoại / máy tính</a></li>
+      <li><a href="#s6">Tìm kiếm &amp; Bộ lọc</a></li>
+      <li><a href="#s7">Sơ đồ cáp &amp; Vẽ cáp</a></li>
+      <li><a href="#s8">In bản vẽ kỹ thuật</a></li>
+      <li><a href="#s9">Xem phố (Mapillary)</a></li>
+      <li><a href="#s10">Loại marker</a></li>
+      <li><a href="#s11">Xuất báo cáo Excel</a></li>
+      <li><a href="#s12">Xuất CAD (DXF)</a></li>
+      <li><a href="#s13">Đồng bộ GitHub</a></li>
+      <li><a href="#s14">Cài app trên điện thoại / máy tính</a></li>
     </ol>
   </div>
 
@@ -152,7 +152,7 @@
     <h2><span class="num">1</span> Giới thiệu</h2>
     <p>
       <strong>Lighting Survey</strong> là ứng dụng web bản đồ dùng để khảo sát và quản lý hệ thống chiếu sáng công cộng.
-      Ứng dụng hoạt động trực tiếp trên trình duyệt, không cần cài đặt, có thể dùng offline sau lần tải đầu tiên.
+      Hoạt động trực tiếp trên trình duyệt, không cần cài đặt, có thể dùng offline sau lần tải đầu tiên.
     </p>
     <div class="note note-info">
       <span class="note-icon">ℹ️</span>
@@ -166,10 +166,11 @@
     </ul>
   </section>
 
-  <!-- 2. ĐĂNG NHẬP -->
+  <!-- 2. ĐĂNG NHẬP & PHÂN QUYỀN -->
   <section id="s2">
-    <h2><span class="num">2</span> Đăng nhập</h2>
-    <p>Khi mở ứng dụng lần đầu, màn hình đăng nhập sẽ hiện ra.</p>
+    <h2><span class="num">2</span> Đăng nhập &amp; Phân quyền</h2>
+
+    <h3>Đăng nhập</h3>
     <div class="steps">
       <div class="step">
         <div class="sn">1</div>
@@ -178,18 +179,39 @@
       </div>
       <div class="step">
         <div class="sn">2</div>
-        <div class="sc"><strong>Nhấn Đăng nhập</strong>
-          Sau khi xác thực thành công, bản đồ sẽ tải. Tên người dùng hiển thị trong <strong>Bảng điều khiển bản đồ</strong> (nhấn nút <kbd>☰</kbd>).</div>
+        <div class="sc"><strong>Nhấn "Đăng nhập"</strong>
+          Máy chủ có thể mất 10–20 giây lần đầu (cold start). Nếu quá lâu, nút <strong>"Hủy"</strong> xuất hiện để thử lại.</div>
       </div>
       <div class="step">
         <div class="sn">3</div>
-        <div class="sc"><strong>Đăng xuất</strong>
-          Mở <kbd>☰</kbd> → nhấn vào thẻ tên người dùng (màu xanh dương trên cùng) để đăng xuất.</div>
+        <div class="sc"><strong>Sau đăng nhập</strong>
+          Bản đồ tải tự động. Tên người dùng hiển thị ở góc phải trên cùng. Nhấn vào thẻ tên để đăng xuất.</div>
       </div>
     </div>
+
+    <h3>Đổi tên đăng nhập / mật khẩu</h3>
+    <p>Nhấn <kbd>☰</kbd> → nhấn biểu tượng <kbd>🔑</kbd> bên cạnh tên người dùng → nhập mật khẩu hiện tại và thông tin mới → nhấn <strong>Lưu thay đổi</strong>.</p>
     <div class="note note-warn">
       <span class="note-icon">⚠️</span>
-      <div>Phiên đăng nhập được lưu trong trình duyệt. Xóa cache trình duyệt sẽ yêu cầu đăng nhập lại.</div>
+      <div>Sau khi đổi tên đăng nhập, phiên hiện tại sẽ kết thúc và yêu cầu đăng nhập lại bằng tên mới.</div>
+    </div>
+
+    <h3>Vai trò &amp; Quyền truy cập</h3>
+    <table class="role-table">
+      <tr>
+        <th>Vai trò</th><th>Xem bản đồ</th><th>Thêm / Sửa</th><th>Xóa</th><th>Kéo marker</th><th>GitHub sync</th><th>Camera / Đèn tắt</th>
+      </tr>
+      <tr><td><span class="badge badge-red">admin</span></td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td></tr>
+      <tr><td><span class="badge badge-blue">user</span></td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="no">✗</td></tr>
+      <tr><td><span class="badge badge-green">user1</span></td><td class="yes">✓</td><td class="yes">✓</td><td class="no">✗</td><td class="yes">✓</td><td class="yes">✓</td><td class="no">✗</td></tr>
+      <tr><td><span class="badge badge-gray">demo</span></td><td class="yes">✓</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td></tr>
+    </table>
+
+    <h3>Phân vùng địa bàn</h3>
+    <p>Mỗi tài khoản có thể được giới hạn chỉ xem một số địa bàn nhất định (cột <strong>Vùng</strong> trong sheet TaiKhoan). Tài khoản <em>không có vùng</em> được truy cập tất cả địa bàn.</p>
+    <div class="note note-info">
+      <span class="note-icon">🗺️</span>
+      <div>Danh sách địa bàn trong dropdown "Chọn trang" chỉ hiển thị những vùng tài khoản được phép. Truy cập vùng không được phép sẽ bị từ chối.</div>
     </div>
   </section>
 
@@ -199,32 +221,40 @@
 
     <h3>Thanh trên (Top Bar)</h3>
     <ul>
-      <li><kbd>☰</kbd> — Mở bảng điều khiển (thông tin tài khoản, đồng bộ, GitHub, xuất dữ liệu...)</li>
+      <li><kbd>☰</kbd> — Mở bảng điều khiển (tài khoản, đồng bộ, GitHub, xuất dữ liệu...)</li>
       <li>Ô tìm kiếm — Tìm theo tên trụ, ID hoặc tọa độ</li>
+      <li>Nhãn phiên bản dữ liệu — Hiện version file đang xem (VD: <code>Dữ liệu v1.0.42</code>)</li>
     </ul>
 
     <h3>Bảng điều khiển (☰)</h3>
     <ul>
-      <li><strong>Thẻ tài khoản</strong> (trên cùng, màu xanh dương) — Hiển thị tên user, nhấn để đăng xuất</li>
-      <li><strong>Điều hướng</strong> — Chuyển sang các trang khác (camera, đèn tắt, hướng dẫn)</li>
-      <li><strong>Chỉnh vị trí &amp; Đồng bộ</strong> — Bật/khóa kéo marker và đẩy các marker đã kéo lên Sheet (xem mục 5)</li>
-      <li><strong>GitHub</strong> — Lưu file Excel cục bộ hoặc đồng bộ lên repo</li>
-      <li><strong>Xuất dữ liệu</strong> — Xuất báo cáo Excel hoặc DXF (CAD)</li>
+      <li><strong>Thẻ tài khoản</strong> — Tên user + vai trò; nhấn để đăng xuất. Nút <kbd>🔑</kbd> đổi thông tin đăng nhập.</li>
+      <li><strong>Điều hướng</strong> — Dropdown "Chọn trang" chuyển giữa các địa bàn (quận/huyện/xã), lịch sử thao tác (admin), hướng dẫn. Các trang quản lý camera và đèn tắt/sự cố chỉ hiện với tài khoản admin.</li>
+      <li><strong>Chỉnh vị trí &amp; Đồng bộ</strong> — Bật/tắt kéo marker; nút Cập nhật đẩy vị trí lên Sheet.</li>
+      <li><strong>Sơ đồ cáp</strong> — Hiển thị đường cáp nối các trụ; thêm nút <strong>Sửa cáp</strong> và <strong>Vẽ cáp</strong>.</li>
+      <li><strong>In bản vẽ</strong> — Xuất PDF bản vẽ kỹ thuật theo bộ lọc hiện tại.</li>
+      <li><strong>GitHub / Xuất dữ liệu</strong> — Lưu Excel, đồng bộ GitHub, xuất báo cáo, xuất DXF.</li>
     </ul>
+
+    <h3>Chuyển địa bàn</h3>
+    <p>Dropdown <strong>"Chọn trang"</strong> trong bảng điều khiển liệt kê tất cả địa bàn được phép. Chọn một địa bàn → bản đồ xóa marker cũ và tải dữ liệu mới của địa bàn đó.</p>
+    <div class="note note-info">
+      <span class="note-icon">💾</span>
+      <div>Dữ liệu mỗi địa bàn được cache trên trình duyệt (IndexedDB). Lần tải thứ hai gần như tức thì; nền app tự kiểm tra cập nhật mới.</div>
+    </div>
 
     <h3>Thanh dưới (Bottom Bar)</h3>
     <ul>
-      <li><strong>Vị trí</strong> — Căn giữa bản đồ về vị trí GPS hiện tại</li>
-      <li><strong>+ Thêm marker</strong> — Bắt đầu thêm trụ / tủ mới</li>
-      <li><strong>Lưu</strong> — Tải xuống file Excel dữ liệu mới nhất</li>
+      <li><strong>Vị trí</strong> — Căn giữa bản đồ về GPS hiện tại</li>
+      <li><strong>+ Thêm marker</strong> — Bắt đầu thêm trụ/tủ mới</li>
+      <li><strong>Lọc</strong> — Mở bộ lọc marker trên bản đồ</li>
+      <li><strong>Lưu</strong> — Tải xuống file Excel</li>
     </ul>
 
     <h3>Bản đồ</h3>
     <ul>
-      <li>Lớp nền mặc định: <strong>Google Maps</strong>. Có thể chuyển sang OpenStreetMap, Vệ tinh (Google) hoặc Vệ tinh + tên đường bằng nút chuyển lớp (giữa bên phải)</li>
-      <li>Zoom &lt; 15: các marker gộp thành cluster (hiển thị số lượng)</li>
-      <li>Zoom ≥ 15: hiển thị icon từng trụ riêng lẻ</li>
-      <li>Zoom ≥ 17: hiện nhãn tên trụ bên dưới icon</li>
+      <li>Lớp nền mặc định: <strong>Google Maps</strong>. Nút chuyển lớp (giữa bên phải) cho phép chuyển sang OpenStreetMap, Vệ tinh...</li>
+      <li>Zoom &lt; 15: marker gộp cluster; Zoom ≥ 15: icon riêng lẻ; Zoom ≥ 17: nhãn tên trụ</li>
     </ul>
   </section>
 
@@ -235,137 +265,287 @@
       <div class="step">
         <div class="sn">1</div>
         <div class="sc"><strong>Nhấn "+ Thêm marker"</strong>
-          Nút chuyển sang màu đỏ, con trỏ bản đồ thay đổi — ứng dụng đang chờ chọn vị trí.</div>
+          Nút chuyển đỏ, con trỏ thay đổi — ứng dụng chờ chọn vị trí.</div>
       </div>
       <div class="step">
         <div class="sn">2</div>
         <div class="sc"><strong>Chọn vị trí</strong>
-          Có 3 cách:<br>
-          • <strong>Nhấn vào bản đồ</strong> tại vị trí cần đặt marker<br>
-          • Nhấn <kbd>Vị trí hiện tại</kbd> để dùng GPS điện thoại/máy tính<br>
-          • Nhấn <kbd>Chọn trên bản đồ</kbd> để kéo ghim đến vị trí</div>
+          • Nhấn vào bản đồ tại vị trí cần đặt<br>
+          • Hoặc nhấn <kbd>Vị trí hiện tại</kbd> để dùng GPS<br>
+          • Hoặc nhấn <kbd>Chọn trên bản đồ</kbd> để kéo ghim</div>
       </div>
       <div class="step">
         <div class="sn">3</div>
-        <div class="sc"><strong>Điền thông tin</strong>
-          Form nhập liệu hiện ra. Các trường cần điền:</div>
+        <div class="sc"><strong>Điền thông tin trong form</strong> — xem bảng các trường bên dưới.</div>
+      </div>
+      <div class="step">
+        <div class="sn">4</div>
+        <div class="sc"><strong>Chụp / chọn ảnh (tùy chọn)</strong>
+          Nhấn nút camera để chụp ảnh hiện trường. Ảnh upload lên GitHub.</div>
+      </div>
+      <div class="step">
+        <div class="sn">5</div>
+        <div class="sc"><strong>Nhấn "Lưu marker"</strong>
+          Dữ liệu ghi vào Google Sheets ngay qua Apps Script.</div>
       </div>
     </div>
 
     <h3>Các trường thông tin</h3>
     <ul>
       <li><strong>Tên trụ</strong> — Tên định danh (bắt buộc)</li>
-      <li><strong>Marker gốc</strong> — Trụ đầu chuỗi cùng basename (tự động gợi ý)</li>
       <li><strong>Tủ điều khiển</strong> — Tên tủ điện quản lý trụ này</li>
-      <li><strong>Loại trụ</strong> — Chọn từ danh sách 6 loại (xem mục 7)</li>
-      <li><strong>Loại đèn</strong> — LED hoặc HPS (hoặc nhập tay)</li>
+      <li><strong>Cáp trụ/tủ gốc</strong> — Trụ hoặc tủ đầu chuỗi cáp; chọn từ dropdown để tự tính khoảng cách (Haversine)</li>
+      <li><strong>Khoảng cách (m)</strong> — Tự động tính khi chọn trụ gốc; hoặc nhập tay</li>
+      <li><strong>Loại trụ / Loại cần / Loại đèn</strong> — Chọn từ danh sách</li>
+      <li><strong>Số lượng đèn</strong> — Số bóng đèn trên 1 trụ (1–4); ảnh hưởng đến hình dạng icon</li>
       <li><strong>Công suất</strong> — VD: 100W, 150W</li>
       <li><strong>Mã PE</strong> — Mã thiết bị PE</li>
-      <li><strong>Đường</strong> — Tự động điền từ tọa độ (Nominatim)</li>
-      <li><strong>Phường / Xã</strong> — Tự động điền từ tọa độ</li>
+      <li><strong>Đường / Phường Xã</strong> — Tự động tra từ tọa độ (OpenStreetMap Nominatim)</li>
       <li><strong>Ghi chú</strong> — Ghi chú bổ sung (tùy chọn)</li>
     </ul>
-
     <div class="note note-info">
-      <span class="note-icon">📍</span>
-      <div>Trường <strong>Đường</strong> và <strong>Phường / Xã</strong> được tra tự động từ tọa độ bằng OpenStreetMap. Chờ vài giây sau khi đặt marker.</div>
-    </div>
-
-    <div class="steps" style="margin-top:12px">
-      <div class="step">
-        <div class="sn">4</div>
-        <div class="sc"><strong>Chụp / chọn ảnh (tùy chọn)</strong>
-          Nhấn nút camera để chụp ảnh hiện trường hoặc chọn ảnh từ thư viện. Ảnh sẽ được upload lên GitHub.</div>
-      </div>
-      <div class="step">
-        <div class="sn">5</div>
-        <div class="sc"><strong>Nhấn "Lưu marker"</strong>
-          Dữ liệu được ghi vào Google Sheets ngay lập tức qua Apps Script.</div>
-      </div>
+      <span class="note-icon">📐</span>
+      <div>Tọa độ <strong>VN2000-X/Y</strong> tự động tính từ lat/lon khi lưu (Gauss-Krüger, múi 6°, GRS80). Không cần nhập tay.</div>
     </div>
   </section>
 
   <!-- 5. XEM / CHỈNH SỬA -->
   <section id="s5">
     <h2><span class="num">5</span> Xem và chỉnh sửa marker</h2>
-    <p>Nhấn vào bất kỳ icon trụ nào trên bản đồ để mở popup thông tin.</p>
+    <p>Nhấn vào icon bất kỳ trụ nào trên bản đồ để mở popup thông tin.</p>
+
     <h3>Popup hiển thị</h3>
     <ul>
-      <li>Tên trụ, loại, tủ điều khiển, loại trụ/cần/đèn, công suất, mã PE</li>
-      <li>Khoảng cách đến marker gốc và từng đoạn trong chuỗi</li>
-      <li>Tọa độ GPS</li>
-      <li>Đường / Phường Xã</li>
+      <li>Tên, ID, loại, tủ điều khiển, loại trụ/cần/đèn, số lượng đèn, công suất, mã PE</li>
+      <li>Đường, phường/xã; tọa độ GPS; thời gian cập nhật; người khảo sát</li>
       <li>Ảnh hiện trường (nếu có)</li>
-      <li>Thời gian cập nhật, người khảo sát</li>
+      <li>Khoảng cách đến marker gốc và từng đoạn trong chuỗi</li>
     </ul>
-    <h3>Chỉnh sửa</h3>
+
+    <h3>Các nút hành động trong popup</h3>
+    <ul>
+      <li><strong>🧭 Đi đến</strong> — Chỉ đường xe máy từ vị trí hiện tại (OSRM)</li>
+      <li><strong>✏️ Sửa</strong> — Mở form chỉnh sửa (cần quyền canEdit)</li>
+      <li><strong>🗑 Xóa</strong> — Xóa marker (cần quyền canDelete)</li>
+      <li><strong>🌐 Phố</strong> — Xem ảnh đường phố Mapillary tại tọa độ marker (xem mục 9)</li>
+    </ul>
+
+    <h3>Chỉnh sửa marker</h3>
     <div class="steps">
       <div class="step">
         <div class="sn">1</div>
-        <div class="sc"><strong>Nhấn "✏️ Sửa"</strong> trong popup — form mở với toàn bộ thông tin hiện tại của marker (tên, loại, tủ điều khiển, đường/phường, ảnh…).</div>
+        <div class="sc"><strong>Nhấn "✏️ Sửa"</strong> — Form mở với toàn bộ thông tin hiện tại.</div>
       </div>
       <div class="step">
         <div class="sn">2</div>
-        <div class="sc"><strong>Trường "Marker gốc (cùng basename)"</strong> — dropdown tự động gợi ý tủ điều khiển (đầu tiên, gắn nhãn <em>[tủ]</em>) và các trụ cùng basename. Chọn từ dropdown sẽ tự tính khoảng cách cáp (Haversine) vào ô Khoảng cách.</div>
+        <div class="sc"><strong>Sửa trường cần thiết</strong> — Khi đổi tên trụ, app tự nhận biết và cập nhật đúng hàng trên Sheet (không tạo hàng mới).</div>
       </div>
       <div class="step">
         <div class="sn">3</div>
-        <div class="sc"><strong>Nhấn "Lưu marker"</strong> — dữ liệu cập nhật đúng hàng trên Google Sheets (nhận dạng theo ID, giữ nguyên dù đổi tên). Ảnh cũ được giữ lại nếu không upload ảnh mới.</div>
+        <div class="sc"><strong>Nhấn "Lưu marker"</strong> — Dữ liệu cập nhật ngay. Ảnh cũ giữ nguyên nếu không upload ảnh mới.</div>
       </div>
-    </div>
-    <div class="note note-info">
-      <span class="note-icon">💡</span>
-      <div>Khi mở form sửa, app <strong>không tra cứu lại địa chỉ</strong> (geocoding) để tránh ghi đè dữ liệu Đường/Phường đã có. Nếu cần tra cứu lại, nhấn "Vị trí hiện tại" hoặc "Chọn trên bản đồ" trong form.</div>
     </div>
 
-    <h3>Đồng bộ vị trí marker đã kéo</h3>
-    <p>Mặc định <strong>marker bị khóa</strong> — không thể kéo trên bản đồ để tránh dời nhầm. Khi cần chỉnh vị trí:</p>
+    <h3>Di chuyển vị trí marker (kéo)</h3>
     <div class="steps">
       <div class="step">
         <div class="sn">1</div>
-        <div class="sc"><strong>Mở bảng điều khiển</strong> <kbd>☰</kbd> → mục <strong>Chỉnh vị trí &amp; Đồng bộ</strong> → nhấn nút <strong>"Bật chỉnh vị trí"</strong>. Nút đổi thành cam ("Đang cho phép kéo") — marker giờ có thể kéo được.</div>
+        <div class="sc"><strong>Mở bảng điều khiển</strong> <kbd>☰</kbd> → mục <strong>Chỉnh vị trí &amp; Đồng bộ</strong> → nhấn <strong>"Bật chỉnh vị trí"</strong>.</div>
       </div>
       <div class="step">
         <div class="sn">2</div>
-        <div class="sc"><strong>Kéo marker</strong> trên bản đồ đến vị trí mới — mỗi marker được kéo sẽ được đánh dấu chờ đồng bộ (badge số bên cạnh nút Cập nhật).</div>
+        <div class="sc"><strong>Kéo marker</strong> đến vị trí mới — badge số bên cạnh nút Cập nhật tăng lên.</div>
       </div>
       <div class="step">
         <div class="sn">3</div>
-        <div class="sc"><strong>Nhấn "Cập nhật"</strong> — ứng dụng đẩy lần lượt từng marker lên Google Sheet, hiện tiến độ "Đang cập nhật i/N…".</div>
+        <div class="sc"><strong>Nhấn "Cập nhật"</strong> — Đẩy tất cả marker đã kéo lên Google Sheet, hiện tiến độ "Đang cập nhật i/N…"</div>
       </div>
       <div class="step">
         <div class="sn">4</div>
-        <div class="sc"><strong>Tắt chỉnh vị trí</strong> sau khi xong — nhấn lại nút (giờ là "Đang cho phép kéo") để khóa marker, tránh kéo nhầm.</div>
+        <div class="sc"><strong>Tắt chỉnh vị trí</strong> sau khi xong để tránh kéo nhầm.</div>
       </div>
-    </div>
-    <div class="note note-info">
-      <span class="note-icon">💡</span>
-      <div>Nút <strong>Cập nhật</strong> bị mờ (disabled) khi không có marker nào cần đồng bộ. Sau khi đồng bộ xong hoặc reload dữ liệu từ Google Sheet, danh sách chờ tự reset.</div>
     </div>
     <div class="note note-warn">
       <span class="note-icon">🔒</span>
-      <div>Chỉ tài khoản có quyền chỉnh sửa (admin / user / user1) mới bật được chế độ kéo marker. Tài khoản <code>demo</code> không thể kéo dù có bấm nút.</div>
+      <div>Chỉ tài khoản admin / user / user1 mới kéo được marker. Tài khoản <code>demo</code> không thể kéo.</div>
     </div>
-    <h3>Chỉ đường</h3>
-    <p>Nhấn <strong>"Chỉ đường"</strong> trong popup để mở tuyến đường xe máy từ vị trí hiện tại đến trụ (sử dụng OSRM).</p>
   </section>
 
-  <!-- 6. TÌM KIẾM -->
+  <!-- 6. TÌM KIẾM & BỘ LỌC -->
   <section id="s6">
-    <h2><span class="num">6</span> Tìm kiếm</h2>
-    <p>Nhập từ khóa vào ô tìm kiếm trên thanh trên, rồi nhấn <kbd>Enter</kbd> hoặc nút <strong>Tìm</strong>.</p>
-    <h3>Hỗ trợ tìm kiếm theo</h3>
+    <h2><span class="num">6</span> Tìm kiếm &amp; Bộ lọc</h2>
+
+    <h3>Tìm kiếm nhanh</h3>
+    <p>Nhập từ khóa vào ô tìm kiếm trên thanh trên, nhấn <kbd>Enter</kbd> hoặc nút <strong>Tìm</strong>.</p>
     <ul>
-      <li><strong>Tên trụ</strong> — tìm khớp một phần, không phân biệt dấu</li>
+      <li><strong>Tên trụ</strong> — khớp một phần, không phân biệt dấu</li>
       <li><strong>ID</strong> — tìm chính xác hoặc một phần</li>
-      <li><strong>Tọa độ</strong> — nhập dạng <code>lat,lon</code> (VD: <code>11.123, 106.456</code>), bản đồ sẽ zoom đến vị trí đó</li>
+      <li><strong>Tọa độ</strong> — nhập dạng <code>lat,lon</code> (VD: <code>10.776, 106.700</code>) để zoom đến vị trí</li>
     </ul>
-    <p>Nhấn vào kết quả để bản đồ căn giữa và mở popup thông tin của trụ đó.</p>
+
+    <h3>Bộ lọc marker</h3>
+    <p>Nhấn nút <strong>Lọc</strong> ở thanh dưới để mở bộ lọc. Áp dụng bộ lọc ảnh hưởng đến:</p>
+    <ul>
+      <li>Marker hiển thị trên bản đồ</li>
+      <li>Sơ đồ cáp (vẽ theo dữ liệu đã lọc)</li>
+      <li>In bản vẽ PDF (chỉ in dữ liệu đã lọc)</li>
+      <li>Xuất báo cáo Excel</li>
+    </ul>
+
+    <h3>Các tiêu chí lọc</h3>
+    <ul>
+      <li><strong>Loại marker</strong> — checkbox từng loại (trụ STK, trang trí, HTLT, TTLT, tủ nổi, tủ ngầm)</li>
+      <li><strong>Người khảo sát</strong> — nhập tên (khớp một phần, không phân biệt dấu)</li>
+      <li><strong>Phường / Xã</strong> — nhập tên phường/xã</li>
+      <li><strong>Đường</strong> — nhập tên đường</li>
+      <li><strong>Tủ điều khiển</strong> — ô tìm kiếm tủ + listbox chọn nhiều (<kbd>Ctrl</kbd> / <kbd>⌘</kbd> + click để chọn nhiều tủ)</li>
+    </ul>
+    <div class="note note-info">
+      <span class="note-icon">💡</span>
+      <div>Tìm kiếm trong bộ lọc <strong>không phân biệt dấu và chữ hoa/thường</strong>. Gõ "quan 1" cũng khớp "Quận 1".</div>
+    </div>
+
+    <div class="note note-success">
+      <span class="note-icon">✅</span>
+      <div>Sau khi áp dụng bộ lọc, <strong>Sơ đồ cáp</strong> và <strong>In bản vẽ</strong> tự động dùng đúng dữ liệu đã lọc — không cần chọn lại.</div>
+    </div>
   </section>
 
-  <!-- 7. LOẠI MARKER -->
+  <!-- 7. SƠ ĐỒ CÁP -->
   <section id="s7">
-    <h2><span class="num">7</span> Loại marker</h2>
+    <h2><span class="num">7</span> Sơ đồ cáp &amp; Vẽ cáp</h2>
+
+    <h3>Hiển thị sơ đồ cáp</h3>
+    <p>Nhấn <kbd>☰</kbd> → <strong>Sơ đồ cáp</strong> để bật/tắt lớp đường cáp trên bản đồ.</p>
+    <ul>
+      <li>Cáp vẽ theo dữ liệu <strong>bộ lọc hiện tại</strong> (không cần chọn tủ riêng)</li>
+      <li>Mỗi đoạn cáp là đường nét đứt xanh đậm nối từ trụ con → trụ/tủ gốc</li>
+      <li>Nhãn khoảng cách (m) hiển thị tại điểm giữa đoạn cáp</li>
+    </ul>
+    <div class="note note-info">
+      <span class="note-icon">🔌</span>
+      <div>Dữ liệu cáp lấy từ cột <strong>"Marker gốc"</strong> và <strong>"Khoảng cách (m)"</strong> của mỗi trụ. Trụ có Marker gốc = tên tủ/trụ cha sẽ được nối bằng đường cáp.</div>
+    </div>
+
+    <h3>Sửa cáp hiện có</h3>
+    <p>Khi sơ đồ cáp đang bật, nhấn <strong>"Sửa cáp"</strong> → click vào đường cáp trên bản đồ → popup hiện 2 tùy chọn:</p>
+    <ul>
+      <li><strong>🗑 Xóa đoạn này</strong> — xóa liên kết cáp, đồng bộ GAS ngay</li>
+      <li><strong>↩ Đổi điểm gốc</strong> — click vào trụ/tủ khác để thay điểm nguồn; khoảng cách tự tính lại</li>
+    </ul>
+
+    <h3>Vẽ cáp mới trực tiếp trên bản đồ</h3>
+    <p>Khi sơ đồ cáp đang bật, nhấn <strong>"Vẽ cáp"</strong> để vào chế độ vẽ:</p>
+    <div class="steps">
+      <div class="step">
+        <div class="sn">1</div>
+        <div class="sc"><strong>Nhấn "Vẽ cáp"</strong> — nút đổi thành "Hủy vẽ", thanh trạng thái hướng dẫn xuất hiện.</div>
+      </div>
+      <div class="step">
+        <div class="sn">2</div>
+        <div class="sc"><strong>Click vào trụ CON</strong> (trụ nhận cáp) — popup hiện nút
+          <span style="background:#eff6ff;color:#1d4ed8;padding:2px 8px;border-radius:6px;font-size:12px;font-weight:700;border:1px dashed #2563eb;">📍 Chọn làm trụ CON</span>.
+          Nhấn nút đó.</div>
+      </div>
+      <div class="step">
+        <div class="sn">3</div>
+        <div class="sc"><strong>Click vào trụ/tủ GỐC</strong> (điểm nguồn cáp) — popup hiện nút
+          <span style="background:#f0fdf4;color:#15803d;padding:2px 8px;border-radius:6px;font-size:12px;font-weight:700;border:1px dashed #15803d;">🔗 Nối cáp: [con] → [gốc]</span>.
+          Nhấn nút đó.</div>
+      </div>
+      <div class="step">
+        <div class="sn">4</div>
+        <div class="sc"><strong>Cáp được tạo tự động</strong> — trường "Marker gốc" và "Khoảng cách" của trụ con được cập nhật, đồng bộ Google Sheets ngay, sơ đồ cáp vẽ lại.</div>
+      </div>
+      <div class="step">
+        <div class="sn">5</div>
+        <div class="sc"><strong>Tiếp tục vẽ cáp khác</strong> hoặc nhấn "Hủy vẽ" / tắt sơ đồ cáp để thoát.</div>
+      </div>
+    </div>
+    <div class="note note-success">
+      <span class="note-icon">📏</span>
+      <div>Khoảng cách cáp được tính tự động bằng công thức <strong>Haversine</strong> từ tọa độ hai điểm — không cần nhập tay.</div>
+    </div>
+    <div class="note note-warn">
+      <span class="note-icon">⚠️</span>
+      <div>Chỉ tài khoản có quyền chỉnh sửa mới thấy nút "Vẽ cáp" và "Sửa cáp".</div>
+    </div>
+  </section>
+
+  <!-- 8. IN BẢN VẼ -->
+  <section id="s8">
+    <h2><span class="num">8</span> In bản vẽ kỹ thuật</h2>
+    <p>Nhấn <kbd>☰</kbd> → <strong>In bản vẽ</strong> để xuất PDF bản vẽ sơ đồ tuyến trạm đèn.</p>
+
+    <h3>Dữ liệu in</h3>
+    <p>Bản vẽ dùng <strong>bộ lọc hiện tại</strong> trên bản đồ — không có dropdown chọn tủ riêng. Áp dụng bộ lọc đúng trước khi mở modal in.</p>
+
+    <h3>Các trường trong modal</h3>
+    <ul>
+      <li><strong>Tỉ lệ</strong> — 1:500, 1:1000, 1:2000... Bản đồ tự zoom theo tỉ lệ chọn.</li>
+      <li><strong>Khổ giấy</strong> — A3 hoặc A4 ngang</li>
+      <li><strong>Tên bản vẽ</strong> — Hiển thị trong khung tên (title block)</li>
+      <li><strong>Số bản vẽ</strong></li>
+      <li><strong>Người lập / Ngày</strong></li>
+      <li><strong>Chuyên viên phụ trách ĐB</strong> và <strong>CS khu vực</strong> — Tự nhớ từ lần trước (localStorage)</li>
+    </ul>
+
+    <h3>Xem trước bản vẽ</h3>
+    <p>Nhấn <strong>"Xem trước"</strong> — bản đồ chuyển sang chế độ in với khung viền, legend, cáp nét đứt và khung tên. Thanh nổi xuất hiện với 2 nút: <strong>Xuất PDF</strong> và <strong>Đóng xem trước</strong>.</p>
+
+    <h3>Xuất PDF</h3>
+    <div class="steps">
+      <div class="step">
+        <div class="sn">1</div>
+        <div class="sc">Điền thông tin modal → nhấn <strong>"Xuất PDF"</strong> (hoặc từ thanh xem trước).</div>
+      </div>
+      <div class="step">
+        <div class="sn">2</div>
+        <div class="sc">App chuyển sang bản đồ CartoDB (có CORS), zoom theo tỉ lệ, đợi bản đồ tải (~3 giây).</div>
+      </div>
+      <div class="step">
+        <div class="sn">3</div>
+        <div class="sc">Capture toàn bộ khung bản vẽ → tạo PDF A3/A4 → tải xuống tự động.</div>
+      </div>
+    </div>
+
+    <h3>Bố cục bản vẽ</h3>
+    <ul>
+      <li><strong>Tiêu đề</strong> — Tên bản vẽ + tủ điều khiển + tỉ lệ (trên cùng)</li>
+      <li><strong>Bảng ký hiệu</strong> — Float góc trái bản đồ</li>
+      <li><strong>Thống kê</strong> — Tổng số trụ + tổng chiều dài cáp (góc phải)</li>
+      <li><strong>Khung tên (title block)</strong> — 4 hàng, chiều rộng 62.5% phía dưới phải</li>
+    </ul>
+    <div class="note note-info">
+      <span class="note-icon">🖨</span>
+      <div>Thư viện jsPDF và html2canvas chỉ tải khi cần — không ảnh hưởng tốc độ tải app thông thường.</div>
+    </div>
+  </section>
+
+  <!-- 9. XEM PHỐ MAPILLARY -->
+  <section id="s9">
+    <h2><span class="num">9</span> Xem phố (Mapillary)</h2>
+    <p>Nhấn vào marker → nhấn nút <span style="background:#f0fdf4;color:#16a34a;padding:2px 8px;border-radius:8px;font-size:13px;font-weight:700;">🌐 Phố</span> trong popup để xem ảnh đường phố Mapillary tại tọa độ marker đó.</p>
+
+    <ul>
+      <li>App tìm ảnh gần nhất trong bán kính <strong>50m</strong> quanh vị trí marker</li>
+      <li>Nếu có ảnh: viewer panorama tương tác mở ra (có thể xoay nhìn xung quanh)</li>
+      <li>Nếu không có ảnh: thông báo "Không có ảnh đường phố tại vị trí này"</li>
+    </ul>
+
+    <div class="note note-info">
+      <span class="note-icon">📷</span>
+      <div><strong>Mapillary</strong> là nền tảng ảnh đường phố cộng đồng, miễn phí. Độ phủ tốt tại TP.HCM và các đô thị lớn; có thể thiếu ở khu vực ngoại thành hoặc đường hẻm nhỏ.</div>
+    </div>
+    <div class="note note-warn">
+      <span class="note-icon">⚠️</span>
+      <div>Lần đầu nhấn "🌐 Phố", thư viện Mapillary sẽ được tải (~500KB). Các lần sau trong cùng phiên tải gần như tức thì.</div>
+    </div>
+  </section>
+
+  <!-- 10. LOẠI MARKER -->
+  <section id="s10">
+    <h2><span class="num">10</span> Loại marker</h2>
     <div class="type-grid">
       <div class="type-card" style="background:#e0f2fe;border-color:#0ea5e9">
         <div class="tc-icon">💡</div>
@@ -398,11 +578,15 @@
         <div class="tc-desc">Icon tủ điện — màu xám đen</div>
       </div>
     </div>
+    <div class="note note-info">
+      <span class="note-icon">💡</span>
+      <div>Icon trụ đèn thay đổi hình dạng theo <strong>số lượng đèn</strong> (1–4 bóng). Badge nhỏ bên dưới icon hiện ký hiệu loại đèn và công suất (VD: <code>2L100</code> = 2 bóng LED 100W).</div>
+    </div>
   </section>
 
-  <!-- 8. XUẤT BÁO CÁO -->
-  <section id="s8">
-    <h2><span class="num">8</span> Xuất báo cáo Excel</h2>
+  <!-- 11. XUẤT BÁO CÁO -->
+  <section id="s11">
+    <h2><span class="num">11</span> Xuất báo cáo Excel</h2>
     <p>Nhấn <kbd>☰</kbd> → <strong>Xuất báo cáo</strong>.</p>
     <div class="steps">
       <div class="step">
@@ -411,7 +595,7 @@
       </div>
       <div class="step">
         <div class="sn">2</div>
-        <div class="sc"><strong>Nhấn "Xuất báo cáo"</strong> — File Excel tải xuống ngay, bao gồm sheet chi tiết và sheet tổng hợp theo loại.</div>
+        <div class="sc"><strong>Nhấn "Xuất báo cáo"</strong> — File Excel tải xuống ngay.</div>
       </div>
     </div>
     <div class="note note-success">
@@ -420,115 +604,88 @@
     </div>
   </section>
 
-  <!-- 9. XUẤT CAD -->
-  <section id="s9">
-    <h2><span class="num">9</span> Xuất CAD (DXF)</h2>
+  <!-- 12. XUẤT CAD -->
+  <section id="s12">
+    <h2><span class="num">12</span> Xuất CAD (DXF)</h2>
     <p>Nhấn <kbd>☰</kbd> → <strong>Export to CAD</strong>.</p>
     <ul>
       <li><strong>Chọn loại marker</strong> cần xuất (hoặc tất cả)</li>
       <li><strong>Lọc theo basename</strong> nếu cần xuất một nhóm trụ</li>
-      <li>Nhấn <strong>Xuất DXF</strong> — file DXF tọa độ VN2000 tải về, có thể mở bằng AutoCAD / QGIS / BricsCAD</li>
+      <li>Nhấn <strong>Xuất DXF</strong> — file tọa độ VN2000 tải về, mở được bằng AutoCAD / QGIS / BricsCAD</li>
     </ul>
     <div class="note note-info">
       <span class="note-icon">📐</span>
-      <div>Hệ tọa độ xuất ra: <strong>VN-2000 múi 3° kinh tuyến trục 105°</strong>.</div>
+      <div>Hệ tọa độ xuất ra: <strong>VN-2000, Gauss-Krüger múi 6°, ellipsoid GRS80</strong>.</div>
     </div>
   </section>
 
-  <!-- 10. ĐỒNG BỘ GITHUB -->
-  <section id="s10">
-    <h2><span class="num">10</span> Đồng bộ GitHub</h2>
-    <p>Nhấn <kbd>☰</kbd> → nhập đường dẫn file → nhấn <strong>GitHub</strong>.</p>
+  <!-- 13. ĐỒNG BỘ GITHUB -->
+  <section id="s13">
+    <h2><span class="num">13</span> Đồng bộ GitHub</h2>
+    <p>Nhấn <kbd>☰</kbd> → mục <strong>GitHub</strong> → nhấn nút <strong>GitHub</strong>.</p>
     <div class="steps">
       <div class="step">
         <div class="sn">1</div>
-        <div class="sc"><strong>Nhập đường dẫn file</strong> tại ô "Đường dẫn file", ví dụ: <code>data/khaosat.xlsx</code></div>
+        <div class="sc"><strong>Nhấn "GitHub"</strong> — App tải dữ liệu mới nhất từ Google Sheets, tạo file Excel và upload lên GitHub.</div>
       </div>
       <div class="step">
         <div class="sn">2</div>
-        <div class="sc"><strong>Nhấn "GitHub"</strong> — ứng dụng tải toàn bộ dữ liệu mới nhất từ Google Sheets, tạo file Excel và upload lên GitHub.</div>
-      </div>
-      <div class="step">
-        <div class="sn">3</div>
-        <div class="sc"><strong>Chờ thông báo</strong> "Đồng bộ thành công: N dòng → GitHub" xuất hiện ở phía dưới màn hình.</div>
+        <div class="sc"><strong>Chờ thông báo</strong> "Đồng bộ thành công: N dòng → GitHub". Version dữ liệu tăng lên tự động.</div>
       </div>
     </div>
     <div class="note note-info">
       <span class="note-icon">🔑</span>
-      <div>Token GitHub được lưu an toàn trong Google Apps Script (Script Properties). Người dùng không cần nhập token.</div>
+      <div>Token GitHub lưu trong Google Apps Script (Script Properties). Người dùng không cần nhập token.</div>
     </div>
     <div class="note note-warn">
       <span class="note-icon">⚠️</span>
-      <div>Thao tác này ghi đè file hiện tại trên GitHub. Đảm bảo đường dẫn file chính xác trước khi nhấn.</div>
+      <div>Thao tác này ghi đè file Excel hiện tại trên GitHub. File xuất theo địa bàn đang chọn: <code>data/khaosat_Quan1.xlsx</code>, <code>data/khaosat.xlsx</code> (Tổng quan)...</div>
     </div>
   </section>
 
-  <!-- 11. PWA -->
-  <section id="s11">
-    <h2><span class="num">11</span> Cài app trên điện thoại / máy tính</h2>
-    <p>Ứng dụng hỗ trợ cài đặt như app thật (PWA) trên điện thoại lẫn máy tính.</p>
+  <!-- 14. PWA -->
+  <section id="s14">
+    <h2><span class="num">14</span> Cài app trên điện thoại / máy tính</h2>
+    <p>Ứng dụng hỗ trợ cài đặt như app thật (PWA) trên cả điện thoại lẫn máy tính.</p>
 
-    <h3>Máy tính (Chrome / Edge — Windows, macOS, Linux)</h3>
+    <h3>Máy tính (Chrome / Edge)</h3>
     <div class="steps">
       <div class="step">
         <div class="sn">1</div>
-        <div class="sc">Mở link production bằng Chrome hoặc Edge: <code>https://neo-era.github.io/lighting-survey/</code><br>
-          <em>Lưu ý: không cài từ <code>localhost</code> hoặc <code>file://</code> — manifest cấu hình cho domain GitHub Pages.</em></div>
+        <div class="sc">Mở <code>https://neo-era.github.io/lighting-survey/</code> bằng Chrome hoặc Edge.</div>
       </div>
       <div class="step">
         <div class="sn">2</div>
-        <div class="sc">Nhìn vào <strong>thanh địa chỉ</strong> — có icon hình máy tính kèm dấu <kbd>⊕</kbd> ở góc phải (cạnh ngôi sao bookmark). Nhấn vào icon đó.<br>
-          Nếu không thấy: mở menu <kbd>⋮</kbd> → <strong>Cài đặt Khảo Sát Chiếu Sáng</strong> (hoặc <strong>Install Khảo Sát Chiếu Sáng</strong>).</div>
+        <div class="sc">Nhìn vào <strong>thanh địa chỉ</strong> — có icon hình máy tính kèm <kbd>⊕</kbd>. Nhấn vào đó.<br>
+          Nếu không thấy: mở menu <kbd>⋮</kbd> → <strong>Cài đặt Khảo Sát Chiếu Sáng</strong>.</div>
       </div>
       <div class="step">
         <div class="sn">3</div>
-        <div class="sc">Nhấn <strong>Cài đặt</strong> → App mở trong cửa sổ riêng, không còn thanh địa chỉ. Icon xuất hiện trong Start Menu / Desktop / Launchpad.</div>
+        <div class="sc">Nhấn <strong>Cài đặt</strong> → App mở trong cửa sổ riêng, icon xuất hiện trong Start Menu / Desktop.</div>
       </div>
-      <div class="step">
-        <div class="sn">4</div>
-        <div class="sc"><strong>Gỡ cài đặt</strong> (nếu cần): mở app → bấm <kbd>⋮</kbd> trên cửa sổ app → <strong>Gỡ cài đặt Khảo Sát Chiếu Sáng</strong>.</div>
-      </div>
-    </div>
-    <div class="note note-info">
-      <span class="note-icon">💻</span>
-      <div>Trên máy tính, app cài xong sẽ chạy như phần mềm độc lập (window riêng, có thể ghim taskbar). Vẫn cần Internet để tải dữ liệu mới từ Google Sheets, nhưng bản đồ và CDN libraries đã cache offline.</div>
     </div>
 
     <h3>Android (Chrome)</h3>
     <div class="steps">
-      <div class="step">
-        <div class="sn">1</div>
-        <div class="sc">Mở trang web bằng Chrome → Nhấn menu <kbd>⋮</kbd> góc phải.</div>
-      </div>
-      <div class="step">
-        <div class="sn">2</div>
-        <div class="sc">Chọn <strong>"Thêm vào màn hình chính"</strong> hoặc <strong>"Cài đặt ứng dụng"</strong>.</div>
-      </div>
-      <div class="step">
-        <div class="sn">3</div>
-        <div class="sc">Nhấn <strong>Cài đặt</strong> → App xuất hiện trên màn hình chính.</div>
-      </div>
+      <div class="step"><div class="sn">1</div><div class="sc">Mở trang bằng Chrome → Nhấn menu <kbd>⋮</kbd> → <strong>"Thêm vào màn hình chính"</strong>.</div></div>
+      <div class="step"><div class="sn">2</div><div class="sc">Nhấn <strong>Cài đặt</strong> → App xuất hiện trên màn hình chính.</div></div>
     </div>
+
     <h3>iOS (Safari)</h3>
     <div class="steps">
-      <div class="step">
-        <div class="sn">1</div>
-        <div class="sc">Mở trang bằng Safari → Nhấn nút <strong>Chia sẻ</strong> (hình vuông + mũi tên lên).</div>
-      </div>
-      <div class="step">
-        <div class="sn">2</div>
-        <div class="sc">Chọn <strong>"Thêm vào màn hình chính"</strong> → Nhấn <strong>Thêm</strong>.</div>
-      </div>
+      <div class="step"><div class="sn">1</div><div class="sc">Mở trang bằng Safari → Nhấn nút <strong>Chia sẻ</strong> (hình vuông + mũi tên lên).</div></div>
+      <div class="step"><div class="sn">2</div><div class="sc">Chọn <strong>"Thêm vào màn hình chính"</strong> → Nhấn <strong>Thêm</strong>.</div></div>
     </div>
+
     <div class="note note-success">
       <span class="note-icon">📱</span>
-      <div>Sau khi cài, ứng dụng mở toàn màn hình (không có thanh địa chỉ) và có thể hoạt động offline với dữ liệu đã cache.</div>
+      <div>Sau khi cài, app mở toàn màn hình (không có thanh địa chỉ). Bản đồ, thư viện và dữ liệu địa bàn đã cache offline — vẫn xem được khi mất mạng.</div>
     </div>
   </section>
 
 </div>
 
-<footer>Lighting Survey v1.1 — Mai Vũ Lâm &nbsp;|&nbsp; maivulam2020@gmail.com</footer>
+<footer>Lighting Survey — Mai Vũ Lâm &nbsp;|&nbsp; maivulam2020@gmail.com</footer>
 
 </body>
 </html>
