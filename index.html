@@ -2505,12 +2505,19 @@
             _mapillaryPromise = new Promise((resolve, reject) => {
                 const link = document.createElement('link');
                 link.rel = 'stylesheet';
-                link.href = 'https://unpkg.com/mapillary-js@4.1.2/dist/mapillary.min.css';
+                link.href = 'https://unpkg.com/mapillary-js@4.1.2/dist/mapillary.css';
                 document.head.appendChild(link);
                 const s = document.createElement('script');
-                s.src = 'https://unpkg.com/mapillary-js@4.1.2/dist/mapillary.min.js';
+                s.src = 'https://cdn.jsdelivr.net/npm/mapillary-js@4.1.2/dist/mapillary.js';
                 s.onload = resolve;
-                s.onerror = () => { _mapillaryPromise = null; reject(new Error('Không tải được Mapillary')); };
+                s.onerror = () => {
+                    // Fallback to unpkg
+                    const s2 = document.createElement('script');
+                    s2.src = 'https://unpkg.com/mapillary-js@4.1.2/dist/mapillary.js';
+                    s2.onload = resolve;
+                    s2.onerror = () => { _mapillaryPromise = null; reject(new Error('Không tải được thư viện Mapillary — kiểm tra kết nối mạng')); };
+                    document.head.appendChild(s2);
+                };
                 document.head.appendChild(s);
             });
             return _mapillaryPromise;
@@ -2539,11 +2546,16 @@
                 await _loadMapillaryJS();
                 _setMapillaryStatus('🔍', 'Đang tìm ảnh gần nhất...', true);
 
-                // Mapillary Graph API: closeto = lon,lat (GeoJSON order)
+                // Mapillary Graph API: closeto = lon,lat (GeoJSON order), dùng Authorization header
                 const apiRes = await fetch(
-                    `https://graph.mapillary.com/images?fields=id,geometry&closeto=${lon},${lat}&radius=100&limit=1&access_token=${MAPILLARY_TOKEN}`
+                    `https://graph.mapillary.com/images?fields=id&lat=${lat}&lng=${lon}&radius=50&limit=1`,
+                    { headers: { 'Authorization': 'OAuth ' + MAPILLARY_TOKEN } }
                 );
-                if (!apiRes.ok) throw new Error('API lỗi ' + apiRes.status);
+                if (!apiRes.ok) {
+                    const errBody = await apiRes.text().catch(() => '');
+                    const msg = (() => { try { return JSON.parse(errBody).error?.message || errBody; } catch(e) { return errBody; } })();
+                    throw new Error('API ' + apiRes.status + (msg ? ': ' + msg.slice(0, 120) : ''));
+                }
                 const apiData = await apiRes.json();
 
                 if (!apiData.data || apiData.data.length === 0) {
@@ -2623,7 +2635,7 @@
         const MAX_EXCEL_TEXT_LENGTH = 32767;
         const KHAOSAT_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRjBdN5epr38kL2jLituPUC4wJO_Ohr_AsFpzaZh6Azxxs_gkzGT5s3JiZ1uFkNQFP5epR2U_wYT6wT/pub?output=csv';
         const KHAOSAT_GAS_URL = 'https://script.google.com/macros/s/AKfycbxPFn7lnJZYdjUg5WlVq1P1JGI5O3rvcry_IVE3bhF5foDmbgT6KwBU4xFxHNwKruHRvQ/exec';
-        const MAPILLARY_TOKEN = '36684115377868575';
+        const MAPILLARY_TOKEN = 'MLY|36684115377868575|f79dc382b6bbd9a0f9bdfe79c4eed78e';
 
         // ── ĐA ĐỊA BÀN — cấu hình CSV URL sau khi publish từng tab trong Google Sheet ──
         const DISTRICT_PAGES = [
