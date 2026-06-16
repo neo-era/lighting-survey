@@ -360,18 +360,22 @@ L.divIcon({ className:'cable-label', html:`<span>${dist}m</span>` })
 - Dòng 2 (9px): **TỦ ĐIỀU KHIỂN - [tenTu]** &emsp; **TL: 1 : [scale]**
 - Nền `rgba(255,255,255,.96)`, border-bottom phân tách với bản đồ
 
-**Bảng ký hiệu legend** (floating inside map, `position:absolute; top:12px; left:12px`):
-- `background:rgba(255,255,255,.94); border:1.5px solid #1e293b; border-radius:3px; padding:7px 10px`
-- Chỉ hiện loại marker thực sự xuất hiện trong data + ký hiệu cáp nguồn (nét đứt xanh)
-- Dùng `_makeLampIconSvg(color)` / `_makeCabinetIconSvg(color)` — SVG mini 14×16~20px
+**Footer bottom-left (gộp legend + stats)** — `position:absolute; left:0; bottom:0; width:37.5%; height:110px`:
+- Đối xứng với title block (62.5%, bottom-right) tạo footer thống nhất dưới đáy bản vẽ
+- `<table>` 3 cột: **Bảng ký hiệu** (60%) | **Số lượng** (22%) | **Đơn vị** (18%)
+- Mỗi row có `border-bottom: 1px solid #94a3b8` (line gạch dưới phân tách)
+- Header row nền `#f1f5f9`, border-bottom đậm `1.5px solid #1e293b`
+- Icon size khớp map: lamp 24×38px, cabinet 22×26px (xem `_makeLampIconSvg` / `_makeCabinetIconSvg`)
+- Mỗi loại marker → row với count tương ứng (`countByType[t]`), đơn vị `trụ`/`tủ`
+- Row cáp nguồn ở cuối: tổng `m` cáp (logic Haversine fallback)
 
-**Thống kê** (stats div, `position:absolute; right:12px; bottom:122px`):
-- Tổng số trụ + tổng chiều dài cáp (Σ `row[15]`, bỏ qua rỗng/NaN)
-- `background:rgba(255,255,255,.92); border:1.5px solid #1e293b; font-size:9px; font-weight:700`
+**Tổng cáp** (`totalCap`) — chỉ cộng rows có Marker gốc (`r[14]`):
+- Nếu `r[15]` (Khoảng cách) hợp lệ → dùng
+- Ngược lại → `haversineM(parent_lat, parent_lon, child_lat, child_lon)` từ `posIdx` build từ toàn bộ markers
 
-**Khung tên (title block)** (cao **110px**, table 4 hàng × 6 cột):
+**Khung tên (title block)** (cao **110px**, table 4 hàng × 5 cột):
 ```
-Col:  16%               4%   16%               10%        34%               20%
+Col:  18%               18%   18%        34%               12%
       ┌─────────────────┬────┬──────────────────┬──────────┬─────────────────┬──────────┐
 R1:   │ TT QLGT...      │    │ CTCP CSCC...     │ NGƯỜI LẬP│ BẢN VẼ SƠ ĐỒ   │ SHBV:    │
       │ CHUYÊN VIÊN     │ ⚙  │ CHIẾU SÁNG KHU  │ (nhãn)   │ TUYẾN TRẠM ĐÈN  │          │
@@ -390,10 +394,20 @@ R4:   │ [cvPhuTrach]    │    │ [csKhuVuc]       │[nguoiLap]│          
 - **Hàng 4**: tên thực tế — `cvPhuTrach`, `csKhuVuc`, `nguoiLap` (bottom-align) + Ngày
 
 **Modal fields** (`#printDrawingModal`):
-- `pdTuSelect` — tủ điều khiển, `pdScale` — tỉ lệ, `pdPaper` — khổ giấy
+- `pdTuSelect` — tủ điều khiển, `pdScale` — tỉ lệ, `pdPaper` — khổ giấy, `pdRotation` — xoay map
 - `pdTenTu` — tên bản vẽ, `pdSoBanVe` — số bản vẽ
-- `pdNguoiLap` — người lập, `pdNgay` — ngày
+- `pdNguoiLap` — người lập, `pdNgay` — ngày (luôn lấy hôm nay, không persist)
 - `pdCVPhuTrach` — chuyên viên phụ trách địa bàn, `pdCSKhuVuc` — chiếu sáng khu vực
+
+**Persistence** (`_PD_FIELDS` + `_savePdFields()` / `_restorePdFields()`):
+- Tất cả pd* field (trừ `pdNgay`) lưu vào localStorage key `pd_<id>`
+- `_restorePdFields()` gọi trong `openPrintDrawingModal` (chỉ ghi nếu input đang trống)
+- `_savePdFields()` gọi trong `_preparePrintLayout` (chạy mỗi lần preview hoặc export)
+- `<select>` chỉ restore nếu option còn tồn tại (handle data đổi)
+
+**Fallback tên bản vẽ** trong `exportDrawingPDF`:
+- Ưu tiên `pdTenTu` → fallback `activeTu` (chỉ khi filter overlay đang lọc đúng 1 tủ) → default `'sodotuyen'`
+- File PDF: `<safeName>-<ngay>.pdf`
 
 **File `banve-mau.html`** — preview tĩnh layout bản vẽ (không cần đăng nhập):
 - Cấu trúc: `.paper` (padding:14px) → `.print-frame` (border:2px) → `.map-wrap` + `.title-block`
@@ -406,8 +420,71 @@ R4:   │ [cvPhuTrach]    │    │ [csKhuVuc]       │[nguoiLap]│          
 - `html2canvas` không capture được tile OSM/Google (không có CORS header)
 - **Giải pháp**: `_switchToPrintTile()` dùng `map.eachLayer()` lưu + xóa tất cả `L.TileLayer`, thêm CartoDB Voyager với `crossOrigin: 'anonymous'`
 - `_restoreOriginalTiles()` restore lại sau khi capture
-- Đợi 3 giây sau khi switch để CartoDB load xong
+- **Wait**: `_waitForTileLoad(_printCartoLayer, 5000)` — chờ event `'load'` của layer (fallback 5s timeout)
 - Tile URL CartoDB: `https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png`
+
+---
+
+#### Tỷ lệ in PDF chính xác — `_zoomToScale()` + fractional zoom
+
+**Math đúng** (sau fix 2026-06-16):
+
+Pipeline: map screen → html2canvas (scale 2) → addImage stretch lên (paperMmW × paperMmH).
+Image bị **stretch** lên kích thước giấy, KHÔNG phụ thuộc DPI screen.
+
+```
+ground_per_screen_px = (paperMmH × scale) / (1000 × H_screen) [m/px]
+Leaflet: ground_per_px = earthCirc × cos(lat) / (256 × 2^Z)
+→ 2^Z = earthCirc × cos(lat) × 1000 × H_screen / (256 × paperMmH × scale)
+```
+
+**Implementation `_zoomToScale(scale, paperMmW, paperMmH)`:**
+- Dùng `H_screen` + `mmH` vì height không đổi qua resize aspect ratio
+- Gọi `map.setZoom(zoomExact)` — **fractional zoom** (không round)
+- Cần `map.options.zoomSnap = 0` để Leaflet chấp nhận fractional → set trong `_preparePrintLayout`, restore trong cleanup (3 path: helper cleanup, `closePrintPreview`, export `finally`)
+
+**Bug cũ:** dùng `96 / 25.4` (DPI screen) — sai 2-3× zoom level vì image bị stretch lên paper, không in 1:1 từ pixel screen.
+
+**Widget chọn tỷ lệ** (`_applyMapScale(scale)`) — dropdown trong control box bên phải (`MapTools`):
+- Options 1:200, 500, 1000, 2000, 5000, 10000, 25000 với reference A3
+- onChange → bật zoomSnap=0, gọi `_zoomToScale`, restore zoomSnap sau 200ms
+- `_applyMapScale._inProgress` flag để zoomend listener không reset dropdown
+
+---
+
+#### PRINT_CONFIG — constants tập trung
+
+`PRINT_CONFIG` object ở đầu print section ([index.html:~1867](index.html#L1867)):
+```javascript
+{
+    paper: { a3: {mmW:420, mmH:297}, a4: {mmW:297, mmH:210} },
+    aspectRatioThresholdPx: 5,       // ngưỡng resize map
+    resyncDelayMs: { afterResize:600, normal:200 },
+    rotationDelayMs: 150,
+    svgCableDelayMs: 100,
+    overlayDelayMs:  300,
+    captureScale: 2,
+    jpegQuality:  0.93,
+    tileLoadTimeoutMs: 5000
+}
+```
+Mọi magic number trong luồng in tham chiếu qua object này — dễ tune.
+
+---
+
+#### `_preparePrintLayout(opts)` — helper chung preview + export
+
+opts: `{ scale, paper='a3', displayMsg, skipTileSetup }` → returns `{ rows, cleanup }`
+
+Gom 4 bước common:
+1. `_savePdFields()` — persist form vào localStorage
+2. `_getFilteredRows()`
+3. (nếu `!skipTileSetup`) `_switchToPrintTile` + `_zoomToScale` + `_waitForTileLoad`
+4. Set `zoomSnap = 0` cho fractional zoom
+
+`cleanup` bao trong `_safe()` wrapper → invoke `_hidePrintOverlay`, `_removePrintCableSvg`, `_removeCableLines`, `_restoreOriginalTiles`, `_clearMapRotation`, restore zoomSnap.
+
+`exportDrawingPDF` truyền `skipTileSetup: _previewMode` để không double-setup khi đến từ preview.
 
 ---
 
@@ -438,32 +515,39 @@ Biến `mapEl`, `origStyleW`, `origStyleH`, `resized` khai báo **ngoài** `try`
 
 | Hàm | Mô tả |
 |-----|-------|
-| `openPrintDrawingModal()` | Mở modal, điền tủ/người lập/ngày mặc định |
+| `openPrintDrawingModal()` | Mở modal, restore form từ localStorage qua `_restorePdFields()` |
+| `_savePdFields()` / `_restorePdFields()` | Persist 9 field `pd*` (trừ `pdNgay`) qua localStorage |
+| `_preparePrintLayout(opts)` | Helper chung preview + export: tile setup + zoom + cleanup |
 | `_filterRowsByTu(tuName)` | Lọc loadedData theo row[7] (tủ điều khiển) |
 | `_buildCableLines(rows)` | Vẽ L.polyline cáp nét đứt — dùng cho xem trước trên màn hình |
-| `_buildPrintCableSvg(rows)` | Vẽ cáp bằng SVG inline trong `#map` — dùng cho PDF capture (không lệch) |
+| `_buildPrintCableSvg(rows, rotation)` | Vẽ cáp bằng SVG inline trong `#map` — dùng cho PDF capture (không lệch) |
 | `_removePrintCableSvg()` | Xóa `#_printCableSvg` khỏi DOM |
 | `_removeCableLines()` | Xóa `_cableLayerGroup` khỏi map |
 | `_switchToPrintTile()` | Lưu tiles gốc, bật CartoDB CORS |
 | `_restoreOriginalTiles()` | Restore tiles gốc sau khi capture |
-| `_zoomToScale(scale)` | Tính zoom từ tỉ lệ (công thức DPI 96) → `map.setZoom()` |
-| `_makeLampIconSvg(color)` | SVG đèn đường mini 14×20px cho legend |
-| `_makeCabinetIconSvg(color)` | SVG tủ điện mini 14×16px cho legend |
-| `_showPrintOverlay(opts)` | Inject tiêu đề + legend + stats + title block vào #map |
+| `_waitForTileLoad(layer, maxMs)` | Đợi event `'load'` của tile layer, fallback timeout |
+| `_zoomToScale(scale, mmW, mmH)` | Tính fractional zoom từ tỉ lệ + paper dim → `map.setZoom(zoomExact)` |
+| `_applyMapScale(scaleStr)` | Widget dropdown bên phải: set zoom map theo tỉ lệ chọn (giả định A3) |
+| `_makeLampIconSvg(color)` | SVG đèn đường 24×38px khớp marker thật |
+| `_makeCabinetIconSvg(color)` | SVG tủ điện 22×26px khớp marker thật |
+| `_showPrintOverlay(opts)` | Inject tiêu đề + footer (legend+stats) + title block vào #map |
 | `_hidePrintOverlay()` | Xóa `#printOverlay` |
-| `exportDrawingPDF()` | Hàm chính — orchestrate toàn bộ luồng |
-| `_loadPrintLibs()` | Lazy-load jsPDF 2.5.1 + html2canvas 1.4.1 |
+| `openPrintPreview()` | Preview overlay trên map — không export PDF |
+| `closePrintPreview()` | Cleanup preview state, restore zoomSnap |
+| `exportDrawingPDF()` | Hàm chính — orchestrate toàn bộ luồng, finally bao `_safe(fn, label)` 8 step |
+| `_loadPrintLibs()` | Lazy-load jsPDF 2.5.1 + html2canvas 1.4.1 (timeout 15s, cleanup script tag khi fail) |
 
 **`_showPrintOverlay(opts)` nhận:**
 ```javascript
 { rows, tenTu, scale, ngay, nguoiLap, soBanVe, cvPhuTrach, csKhuVuc }
 ```
 
-**`_zoomToScale(scale)` — công thức:**
+**`_zoomToScale(scale, paperMmW, paperMmH)` — công thức đúng:**
 ```javascript
-const latRad = map.getCenter().lat * Math.PI / 180;
-const zoom = Math.log2(40075016.686 * Math.cos(latRad) * 96 / (25.4 * scale));
-map.setZoom(Math.round(zoom));
+const H = document.getElementById('map').offsetHeight;
+// 2^Z = earthCirc × cos(lat) × 1000 × H / (256 × paperMmH × scale)
+const zoomExact = Math.log2(40075016.686 * Math.cos(latRad) * 1000 * H / (256 * paperMmH * scale));
+map.setZoom(zoomExact); // fractional zoom — cần zoomSnap=0
 ```
 
 #### Tất cả cải tiến đã hoàn thành ✅
@@ -477,6 +561,26 @@ map.setZoom(Math.round(zoom));
 - [x] Modal có đủ field: `pdCVPhuTrach` (chuyên viên), `pdCSKhuVuc` (khu vực)
 - [x] **4.3 Aspect ratio**: force `targetW = height × ratio` luôn áp dụng (không chỉ khi hẹp)
 - [x] **SVG cable fix**: `_buildPrintCableSvg` thay L.polyline cho PDF — không bị lệch pane transform
+
+#### Tối ưu 8 prompt P1-P8 (2026-06-16) — đã apply ✅
+
+- [x] **P1** Fix bug `tuName` undefined → fallback `activeTu` (filter overlay 1 tủ) → `'sodotuyen'`
+- [x] **P2** Robust cleanup trong `finally` của `exportDrawingPDF` — `_safe(fn, label)` bao 8 step
+- [x] **P3** `_loadPrintLibs` cleanup script tag khi fail/timeout 15s, check libs đã load chưa
+- [x] **P4** Thay `setTimeout(3000)` bằng `_waitForTileLoad(layer, 5000)` đợi event `'load'`
+- [x] **P5** Extract `_preparePrintLayout(opts)` chung cho preview + export
+- [x] **P6** Persist toàn bộ pd* field qua localStorage (`_savePdFields`/`_restorePdFields`)
+- [x] **P7** Tách `displayInfo()` toast xanh dương cho progress (vs `displayError` đỏ)
+- [x] **P8** `PRINT_CONFIG` constants cho paper size + magic numbers (delays, scale, quality)
+
+#### Fix tỷ lệ in chính xác (2026-06-16) ✅
+
+- [x] `_zoomToScale` công thức mới — H_screen + mmH thay vì DPI 96 (sai 2-3× zoom)
+- [x] Fractional zoom — `zoomSnap=0` set trong print mode, restore qua 3 cleanup paths
+- [x] Footer bottom-left mới — `<table>` 3 cột (Bảng ký hiệu | Số lượng | Đơn vị), đối xứng title block
+- [x] Icon legend khớp map: lamp 24×38, cabinet 22×26
+- [x] Title block column widths: Người lập 18% (=Phó GĐ), SHBV 12% (was 20%)
+- [x] Widget Tỷ lệ (A3) dropdown trong MapTools control — `_applyMapScale()`
 
 ---
 
@@ -733,7 +837,10 @@ Nếu phát hiện cycle → `displayError('Phát hiện vòng lặp cáp — ki
 ### Dropdown Marker gốc — `markerBaseSelect`
 
 - `normalizeMarkerBaseName(name)`: `replace(/[_\s\-]*\d+$/, '')` — strip `_NNN` ở cuối (kể cả dấu gạch dưới) để `VTS_H232VTS_19` → basename `VTS_H232VTS` khớp với tủ `VTS_H232VTS`
-- `_fillBaseSelect()`: luôn thêm tủ điều khiển (`markerCabinetInput.value`) vào đầu list gắn nhãn `[tủ]`, sau đó các trụ cùng basename
+- `_fillBaseSelect()` thêm 3 nhóm theo thứ tự (Set `addedIdx` chống duplicate):
+  1. **Tủ điều khiển** (`markerCabinetInput.value`) gắn nhãn `[tủ]`
+  2. **Cùng basename** với tên đang nhập
+  3. **Cùng tủ điều khiển** (khác basename) gắn nhãn `[cùng tủ]` — build từ `cabinetByName` map của `loadedData[*][1] → loadedData[*][7]`
 - Khi `baseSelect` thay đổi → tự sync sang `markerGocInput` + tính khoảng cách Haversine vào `markerKhoangCachInput`
 - Gọi `_fillBaseSelect()` từ `oninput` của cả `nameInput` và `cabinetInput`
 

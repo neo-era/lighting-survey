@@ -256,6 +256,15 @@
       <li>Lớp nền mặc định: <strong>Google Maps</strong>. Nút chuyển lớp (giữa bên phải) cho phép chuyển sang OpenStreetMap, Vệ tinh...</li>
       <li>Zoom &lt; 15: marker gộp cluster; Zoom ≥ 15: icon riêng lẻ; Zoom ≥ 17: nhãn tên trụ</li>
     </ul>
+
+    <h3>Cụm điều khiển bản đồ (giữa bên phải)</h3>
+    <ul>
+      <li><strong>+/−</strong> — Phóng to / thu nhỏ map</li>
+      <li><strong>Hộp Z</strong> — Hiển thị mức zoom hiện tại</li>
+      <li><strong>La bàn</strong> — Xoay map (click vào kim chỉ để reset về hướng Bắc; nút ↺↻ xoay ±5°; phím tắt <kbd>[</kbd> / <kbd>]</kbd>)</li>
+      <li><strong>Tỷ lệ (A3)</strong> — Dropdown chọn tỷ lệ in (1:200 → 1:25000) → map zoom tự động đến mức tương ứng cho khổ A3</li>
+      <li><strong>Layer switcher</strong> — Đổi nền: Google Maps / OSM / Vệ tinh / Vệ tinh + tên đường</li>
+    </ul>
   </section>
 
   <!-- 4. THÊM MARKER -->
@@ -294,7 +303,7 @@
     <ul>
       <li><strong>Tên trụ</strong> — Tên định danh (bắt buộc)</li>
       <li><strong>Tủ điều khiển</strong> — Tên tủ điện quản lý trụ này</li>
-      <li><strong>Cáp trụ/tủ gốc</strong> — Trụ hoặc tủ đầu chuỗi cáp; chọn từ dropdown để tự tính khoảng cách (Haversine)</li>
+      <li><strong>Cáp trụ/tủ gốc</strong> — Trụ hoặc tủ đầu chuỗi cáp. Dropdown gợi ý 3 nhóm: <em>[tủ]</em> (tủ điều khiển đã nhập), trụ <em>cùng basename</em>, trụ <em>[cùng tủ]</em> (khác tên nhưng cùng tủ điều khiển). Chọn xong tự tính khoảng cách Haversine.</li>
       <li><strong>Khoảng cách (m)</strong> — Tự động tính khi chọn trụ gốc; hoặc nhập tay</li>
       <li><strong>Loại trụ / Loại cần / Loại đèn</strong> — Chọn từ danh sách</li>
       <li><strong>Số lượng đèn</strong> — Số bóng đèn trên 1 trụ (1–4); ảnh hưởng đến hình dạng icon</li>
@@ -482,12 +491,13 @@
 
     <h3>Các trường trong modal</h3>
     <ul>
-      <li><strong>Tỉ lệ</strong> — 1:500, 1:1000, 1:2000... Bản đồ tự zoom theo tỉ lệ chọn.</li>
+      <li><strong>Tỉ lệ</strong> — 1:500, 1:1000, 1:2000... Bản đồ zoom đúng theo tỉ lệ (có hỗ trợ fractional zoom). Đo bằng thước trên PDF in ra phải khớp với tỷ lệ chọn.</li>
       <li><strong>Khổ giấy</strong> — A3 hoặc A4 ngang</li>
-      <li><strong>Tên bản vẽ</strong> — Hiển thị trong khung tên (title block)</li>
+      <li><strong>Tên bản vẽ</strong> — Hiển thị trong khung tên (title block). Nếu trống → fallback sang tên tủ đang lọc → mặc định "Sơ đồ tuyến"</li>
       <li><strong>Số bản vẽ</strong></li>
-      <li><strong>Người lập / Ngày</strong></li>
-      <li><strong>Chuyên viên phụ trách ĐB</strong> và <strong>CS khu vực</strong> — Tự nhớ từ lần trước (localStorage)</li>
+      <li><strong>Người lập / Ngày</strong> (ngày luôn lấy hôm nay)</li>
+      <li><strong>Chuyên viên phụ trách ĐB</strong> và <strong>CS khu vực</strong></li>
+      <li><strong>Tự nhớ</strong>: tất cả field (trừ Ngày) lưu localStorage — mở modal lần sau tự fill lại</li>
     </ul>
 
     <h3>Xem trước bản vẽ</h3>
@@ -501,7 +511,7 @@
       </div>
       <div class="step">
         <div class="sn">2</div>
-        <div class="sc">App chuyển sang bản đồ CartoDB (có CORS), zoom theo tỉ lệ, đợi bản đồ tải (~3 giây).</div>
+        <div class="sc">App chuyển sang bản đồ CartoDB (có CORS), zoom đúng theo tỉ lệ + khổ giấy, đợi tile load xong (event-based, ≤5s).</div>
       </div>
       <div class="step">
         <div class="sn">3</div>
@@ -509,12 +519,19 @@
       </div>
     </div>
 
+    <h3>Kiểm tra tỷ lệ in</h3>
+    <div class="note note-info">
+      <span class="note-icon">📐</span>
+      <div>Để verify tỷ lệ: in PDF ra giấy (Print actual size — KHÔNG fit-to-page) → dùng thước đo: <strong>1 cm trên giấy = scale × 1 cm trên thực địa</strong>.<br>
+      Ví dụ 1:1000 → 1 cm trên giấy = 10 m trên thực địa. Hoặc đo giữa 2 trụ trong PDF rồi so với khoảng cách Haversine thực.</div>
+    </div>
+
     <h3>Bố cục bản vẽ</h3>
     <ul>
-      <li><strong>Tiêu đề</strong> — Tên bản vẽ + tủ điều khiển + tỉ lệ (trên cùng)</li>
-      <li><strong>Bảng ký hiệu</strong> — Float góc trái bản đồ</li>
-      <li><strong>Thống kê</strong> — Tổng số trụ + tổng chiều dài cáp (góc phải)</li>
-      <li><strong>Khung tên (title block)</strong> — 4 hàng, chiều rộng 62.5% phía dưới phải</li>
+      <li><strong>Tiêu đề</strong> — Tên bản vẽ + tủ điều khiển + tỉ lệ (top header)</li>
+      <li><strong>Bản đồ + cáp</strong> — Vùng giữa, marker icon + đường cáp nét đứt + nhãn khoảng cách</li>
+      <li><strong>Footer bottom-left (37.5%)</strong> — Bảng 3 cột: Bảng ký hiệu | Số lượng | Đơn vị. Mỗi loại marker 1 hàng (icon kích thước thật + tên + count + đơn vị "trụ"/"tủ"), hàng cuối là "Cáp nguồn" (m).</li>
+      <li><strong>Khung tên (title block bottom-right 62.5%)</strong> — 4 hàng: tên tổ chức + ô ký tên trống + tên người (TT QLGT — Phó GĐ — Người lập — Bản vẽ — SHBV)</li>
     </ul>
     <div class="note note-info">
       <span class="note-icon">🖨</span>
