@@ -51,6 +51,7 @@
     section h2 .num { background: var(--primary); color: #fff; font-size: 12px; font-weight: 700;
                        width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
     h3 { font-size: 15px; font-weight: 700; margin: 20px 0 10px; color: #1e40af; }
+    h4 { font-size: 14px; font-weight: 700; margin: 14px 0 6px; color: #1e40af; }
     p  { font-size: 14px; line-height: 1.7; margin-bottom: 10px; color: var(--text); }
     ul, ol { padding-left: 20px; margin-bottom: 10px; }
     li { font-size: 14px; line-height: 1.7; margin-bottom: 4px; }
@@ -153,17 +154,138 @@
     <h2><span class="num">1</span> Giới thiệu</h2>
     <p>
       <strong>Lighting Survey</strong> là ứng dụng web bản đồ dùng để khảo sát và quản lý hệ thống chiếu sáng công cộng.
-      Hoạt động trực tiếp trên trình duyệt, không cần cài đặt, có thể dùng offline sau lần tải đầu tiên.
+      Hoạt động trực tiếp trên trình duyệt, không cần cài đặt, có thể dùng offline sau lần tải đầu tiên, và cài như app native (PWA) trên điện thoại lẫn máy tính.
     </p>
     <div class="note note-info">
       <span class="note-icon">ℹ️</span>
-      <div>Dữ liệu được đồng bộ hai chiều: ghi vào <strong>Google Sheets</strong> qua Apps Script và lưu file Excel trên <strong>GitHub</strong>.</div>
+      <div>Dữ liệu đồng bộ hai chiều: ghi realtime vào <strong>Google Sheets</strong> qua Apps Script và lưu snapshot Excel trên <strong>GitHub</strong>. Hỗ trợ đa địa bàn (14 quận/huyện/xã) với sheet riêng cho từng nơi.</div>
     </div>
-    <h3>Yêu cầu</h3>
+
+    <h3>🚀 Tính năng nổi bật</h3>
+
+    <h4 style="margin-top:14px;color:#1e40af;">🗺 Bản đồ &amp; Marker</h4>
     <ul>
-      <li>Trình duyệt Chrome / Edge / Safari (phiên bản mới nhất)</li>
-      <li>Kết nối Internet để tải bản đồ và đồng bộ dữ liệu</li>
-      <li>Tài khoản được cấp bởi quản trị viên</li>
+      <li><strong>4 lớp bản đồ nền</strong>: Google Maps (default), OpenStreetMap, Vệ tinh Google, Vệ tinh + tên đường</li>
+      <li><strong>6 loại đối tượng</strong>: Trụ STK / Trụ trang trí / Trụ HTLT / Trụ TTLT / Tủ chiếu sáng nổi / Tủ chiếu sáng ngầm</li>
+      <li><strong>Icon động</strong>: hình dáng đổi theo số lượng bóng đèn (1-4 bóng), badge công suất + loại đèn (vd <code>2L100</code> = 2 bóng LED 100W)</li>
+      <li><strong>Cluster thông minh</strong>: gộp marker khi zoom &lt; 15, hiện riêng lẻ khi zoom ≥ 15, hiện nhãn tên khi zoom ≥ 17</li>
+      <li><strong>Xoay bản đồ</strong>: la bàn tương tác + phím tắt <kbd>[</kbd> / <kbd>]</kbd> ± 5°, xoay 2 ngón touch</li>
+      <li><strong>Widget tỷ lệ</strong>: chọn nhanh 1:200 → 1:25000 (chuẩn A3) để map zoom đến mức tương ứng</li>
+    </ul>
+
+    <h4 style="margin-top:14px;color:#1e40af;">📡 Định vị GPS — hỗ trợ RTK Tersus Luka</h4>
+    <ul>
+      <li><strong>2 chế độ</strong>: Phone GPS (±3-10m, mặc định) hoặc RTK qua mock location (±1-2cm khi FIXED)</li>
+      <li><strong>Tracking bar realtime</strong>: accuracy + sample counter + auto-accept countdown 3s</li>
+      <li><strong>Status badge RTK</strong>: 🟢 FIXED / 🟡 FLOAT / 🔵 DGPS / ⚪ SPS</li>
+      <li><strong>Multi-sample averaging</strong> (MAD outlier filter) khi dùng phone GPS — sai số giảm ~√8 ≈ 2.83 lần</li>
+      <li><strong>Precision tự động</strong>: phone lưu tọa độ 6 chữ số, RTK lưu 8 chữ số (mm-level)</li>
+      <li><strong>Auto-detect</strong>: cảnh báo khi chọn RTK nhưng chưa setup mock location</li>
+    </ul>
+
+    <h4 style="margin-top:14px;color:#1e40af;">📝 Quản lý đối tượng — 25 cột data</h4>
+    <ul>
+      <li>Tên trụ, tủ điều khiển, loại trụ/cần/đèn, công suất, mã PE, đường, phường/xã</li>
+      <li>Ảnh chụp tự động upload GitHub, hỗ trợ lazy load</li>
+      <li>Marker gốc (cùng basename / cùng tủ), khoảng cách cáp (auto tính Haversine)</li>
+      <li><strong>Loại cáp</strong> (nổi/ngầm) — vẽ với màu &amp; kiểu nét khác nhau</li>
+      <li>Reverse geocoding tự động điền Đường + Phường/Xã (OpenStreetMap)</li>
+      <li>VN2000-X/Y tự tính từ Lat/Lon (Gauss-Krüger, ellipsoid GRS80)</li>
+      <li>Độ chính xác + chế độ GPS lưu để audit về sau</li>
+      <li>Cho phép kéo marker để chỉnh vị trí (toggle "Bật chỉnh vị trí")</li>
+    </ul>
+
+    <h4 style="margin-top:14px;color:#1e40af;">🔌 Sơ đồ cáp</h4>
+    <ul>
+      <li>Vẽ tự động đường cáp từ trường <strong>Marker gốc</strong> + nhãn khoảng cách</li>
+      <li><strong>2 loại cáp</strong>: nổi (xanh dash <code>10 4</code>) và ngầm (đỏ dash <code>2 3 8 3</code>)</li>
+      <li>Multi-select tủ điều khiển để vẽ riêng tuyến</li>
+      <li>Chế độ sửa cáp trực tiếp trên bản đồ (xóa đoạn / đổi điểm gốc)</li>
+      <li>Phát hiện vòng lặp cáp tự động — hiện chain trụ bị lỗi</li>
+    </ul>
+
+    <h4 style="margin-top:14px;color:#1e40af;">🖨 In bản vẽ kỹ thuật PDF</h4>
+    <ul>
+      <li>Xuất PDF A3 hoặc A4 ngang theo chuẩn bản vẽ kỹ thuật (tiêu đề, bảng ký hiệu, khung tên)</li>
+      <li><strong>Tỷ lệ chính xác</strong> (1:500 → 1:25000) — đo bằng thước trên PDF khớp tỷ lệ chọn</li>
+      <li>Fractional zoom + math chuẩn (H_screen + mmH)</li>
+      <li>Bảng ký hiệu 3 cột (Ký hiệu | Số lượng | Đơn vị) — icon kích thước thật, đếm chính xác</li>
+      <li>Auto-fit chiều cao footer theo số loại marker, fallback compact khi nhiều loại</li>
+      <li>Auto-fill tên bản vẽ từ filter tủ điều khiển</li>
+      <li>Xem trước trước khi xuất, xoay map tùy chỉnh</li>
+      <li>Persist toàn bộ field form qua localStorage (trừ ngày)</li>
+    </ul>
+
+    <h4 style="margin-top:14px;color:#1e40af;">🔍 Tìm kiếm &amp; Lọc</h4>
+    <ul>
+      <li><strong>Tìm trụ</strong>: theo tên / ID / tọa độ <code>lat,lon</code> — match không dấu, không phân biệt hoa thường, bỏ qua khoảng trắng &amp; ký tự đặc biệt (vd gõ <code>duong tran hung dao</code> match <code>Đường Trần Hưng Đạo</code>)</li>
+      <li><strong>Filter overlay</strong>: lọc theo Loại marker, Người KS, Phường/Xã, Đường, Tủ điều khiển (multi-select có search)</li>
+      <li><strong>Bộ lọc apply tự động</strong> vào Sơ đồ cáp, In bản vẽ, Xuất báo cáo</li>
+    </ul>
+
+    <h4 style="margin-top:14px;color:#1e40af;">🌍 Đa địa bàn — 14 sheet</h4>
+    <ul>
+      <li><strong>TP HCM</strong> (10): Q1, Q3, Q5, Q8, Q10, Q11, Phú Nhuận, Bình Thạnh, Tân Bình, Tân Phú</li>
+      <li><strong>Bình Dương</strong> (3): Xã Bàu Bàng, Xã Trừ Văn Thố, Phường Bến Cát</li>
+      <li><strong>Long An</strong> (1): Cần Giuộc (file Google Sheet riêng — qua <code>EXTERNAL_SPREADSHEET_IDS</code>)</li>
+      <li>ID tự sinh theo prefix địa bàn (TQ/Q1/Q3/.../CG)</li>
+      <li>Phân vùng theo tài khoản (cột <code>vung</code> trong sheet TaiKhoan) — user chỉ thấy địa bàn được phép</li>
+    </ul>
+
+    <h4 style="margin-top:14px;color:#1e40af;">☁ Đồng bộ &amp; Export</h4>
+    <ul>
+      <li><strong>Google Sheets realtime</strong> — mỗi thao tác (thêm/sửa/xóa/move) ghi ngay qua GAS Web App</li>
+      <li><strong>Batch sync</strong> cho marker đã kéo — nút "Cập nhật" đẩy hàng loạt khi nhiều marker thay đổi vị trí</li>
+      <li><strong>GitHub Excel</strong> — bấm 1 nút để snapshot toàn bộ data thành <code>data/khaosat_&lt;sheet&gt;.xlsx</code>, push lên repo</li>
+      <li><strong>Version auto-bump</strong> mỗi commit push (GitHub Action) — hiển thị trên tab title</li>
+      <li><strong>Excel báo cáo</strong>: 2 sheet (Chi tiết + Tổng hợp theo loại), lọc theo ngày/phường/loại</li>
+      <li><strong>DXF CAD</strong>: tọa độ VN-2000 múi 3°, mở được AutoCAD / QGIS / BricsCAD</li>
+      <li><strong>Log lịch sử</strong>: ghi mọi thao tác (delete/edit/move) vào sheet <code>LichSu</code> — chỉ admin xem được</li>
+    </ul>
+
+    <h4 style="margin-top:14px;color:#1e40af;">👥 Phân quyền 4 vai trò</h4>
+    <ul>
+      <li><strong>admin</strong>: đầy đủ + xem lịch sử thao tác</li>
+      <li><strong>user</strong>: thêm/sửa/xóa + GitHub sync</li>
+      <li><strong>user1</strong>: thêm/sửa, không được xóa</li>
+      <li><strong>demo</strong>: chỉ xem bản đồ</li>
+      <li>Đổi tên đăng nhập / mật khẩu trực tiếp trong app (nút 🔑)</li>
+    </ul>
+
+    <h4 style="margin-top:14px;color:#1e40af;">📱 PWA + Tối ưu mobile</h4>
+    <ul>
+      <li>Cài như app native trên Android, iOS, Windows, macOS</li>
+      <li>Service Worker cache offline (HTML network-first, map tiles + CDN libs cache-first ≤300 tile)</li>
+      <li>Icon mobile tối giản, shared icons khi không có badge (giảm DOM node ~80%)</li>
+      <li>Cluster aggressive hơn trên mobile, label chỉ hiện zoom ≥ 18</li>
+      <li>Tắt animation Leaflet trên mobile để mượt hơn</li>
+      <li>Lazy load ảnh trong popup, CSS media query ẩn nút ít dùng</li>
+    </ul>
+
+    <h4 style="margin-top:14px;color:#1e40af;">⚡ Tối ưu hiệu năng</h4>
+    <ul>
+      <li><strong>IndexedDB cache CSV</strong> (stale-while-revalidate) — load lần 2 &lt; 0.3s</li>
+      <li><strong>Chunked marker insertion</strong> + progress bar — không freeze UI khi load 1000+ marker</li>
+      <li><strong>Lazy popup content</strong> — chỉ sinh HTML khi user click marker (tiết kiệm 1000+ lần gọi)</li>
+      <li><strong>Zoom-tier progressive</strong> — zoom &lt; 12 chỉ render tủ điều khiển (50-200 marker thay 14000+)</li>
+      <li><strong>Lazy load CDN libs</strong>: ExcelJS, jsPDF, html2canvas — chỉ tải khi cần</li>
+    </ul>
+
+    <h4 style="margin-top:14px;color:#1e40af;">🛣 Bonus tools</h4>
+    <ul>
+      <li><strong>Chỉ đường xe máy</strong> tới marker (OSRM)</li>
+      <li><strong>Mapillary Street View</strong> — xem ảnh đường phố tại vị trí marker</li>
+      <li><strong>Lightbox ảnh</strong>: click ảnh marker để xem full</li>
+      <li><strong>Reverse geocoding</strong> tiếng Việt (Nominatim OSM)</li>
+    </ul>
+
+    <h3 style="margin-top:18px;">Yêu cầu hệ thống</h3>
+    <ul>
+      <li>Trình duyệt Chrome / Edge / Safari (phiên bản mới nhất) — Chrome khuyến nghị cho mobile</li>
+      <li>Kết nối Internet cho lần load đầu + sync data (sau đó dùng offline được phần lớn)</li>
+      <li>Tài khoản được cấp bởi quản trị viên (sheet <code>TaiKhoan</code>)</li>
+      <li>Phone Android có GPS + Location (nếu dùng tính năng định vị)</li>
+      <li><em>Tùy chọn</em>: máy RTK Tersus Luka + Nuwa app + NTRIP correction (cho độ chính xác cm)</li>
     </ul>
   </section>
 

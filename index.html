@@ -59,7 +59,7 @@
             --navy:   #0f172a; --navy2: #1e293b;
             --orange: #f97316; --red:   #ef4444;
             --topbar-h:    60px;
-            --bottombar-h: 72px;
+            --bottombar-h: 0px; /* gỡ bottom action bar — toàn bộ nút đã chuyển vào ☰ panel */
             --safe-top:    env(safe-area-inset-top,    0px);
             --safe-bottom: env(safe-area-inset-bottom, 0px);
         }
@@ -331,8 +331,8 @@
         }
 
         /* Nội dung side panel */
-        .ctrl-section { margin-bottom: 12px; }
-        .ctrl-title { font-size: 10px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: .7px; margin-bottom: 7px; }
+        .ctrl-section { margin-bottom: 8px; }
+        .ctrl-title { font-size: 10px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: .7px; margin-bottom: 4px; }
         .ctrl-label { display: block; font-size: 11px; font-weight: 600; color: var(--text); margin-bottom: 3px; }
         .ctrl-input {
             width: 100%; padding: 8px 10px;
@@ -360,9 +360,9 @@
         .ctrl-btn.outline { background: var(--surface-2); color: var(--text); border: 1.5px solid var(--border); }
         .ctrl-btn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 6px; }
         .ctrl-btn-grid .ctrl-btn { margin-bottom: 0; }
-        .ctrl-divider { height: 1px; background: var(--border); margin: 10px -16px; }
-        .ctrl-radio { display: flex; align-items: center; gap: 8px; padding: 8px 10px;
-                      border-radius: 8px; cursor: pointer; font-size: 14px; color: var(--text);
+        .ctrl-divider { height: 1px; background: var(--border); margin: 6px -16px; }
+        .ctrl-radio { display: flex; align-items: center; gap: 6px; padding: 5px 8px;
+                      border-radius: 7px; cursor: pointer; font-size: 13px; color: var(--text);
                       transition: background .15s; margin-bottom: 4px; }
         .ctrl-radio:hover { background: var(--surface-2); }
         .ctrl-radio input { margin: 0; flex-shrink: 0; }
@@ -816,15 +816,11 @@
     <div id="map"></div>
 
     <!-- ═══ TOP BAR ═══ -->
-    <div id="topBar">
+    <!-- Topbar chỉ còn nút hamburger; thanh tìm kiếm đã chuyển vào ☰ panel -->
+    <div id="topBar" style="right:auto;">
         <button id="controlsBtn" title="Bảng điều khiển">
             <i class="fa fa-bars"></i>
         </button>
-        <div class="topbar-search">
-            <i class="fa fa-search"></i>
-            <input type="text" id="searchInput" placeholder="Tìm theo tên, ID hoặc tọa độ..." autocomplete="off">
-            <button class="ts-btn" onclick="searchMarkers()">Tìm</button>
-        </div>
     </div>
 
     <!-- Dropdown kết quả tìm kiếm -->
@@ -837,27 +833,9 @@
     <div id="pendingSyncBadge"></div>
 
     <!-- ═══ BOTTOM ACTION BAR ═══ -->
-    <div id="bottomActionBar">
-        <button class="bab-btn" onclick="centerOnUserLocation()" title="Vị trí của tôi">
-            <i class="fa fa-location-arrow"></i>
-            <span>Vị trí</span>
-        </button>
+    <!-- (Bottom action bar đã bị gỡ — 3 nút Thêm marker / Lọc / Lưu chuyển vào ☰ panel) -->
+    <!-- Nút Vị trí cũng đã bỏ; user dùng widget bên phải để center map -->
 
-        <button id="addMarkerBtn" class="btn-warning" onclick="startAddMarker()" title="Thêm trụ mới">
-            <i class="fa fa-plus"></i> Thêm marker
-        </button>
-
-        <button id="filterBtn" class="bab-btn" onclick="openFilterPanel()" title="Bộ lọc">
-            <span id="filterBadge"></span>
-            <i class="fa fa-filter"></i>
-            <span>Lọc</span>
-        </button>
-
-        <button class="bab-btn" onclick="saveMarkerData()" title="Lưu dữ liệu">
-            <i class="fa fa-download"></i>
-            <span>Lưu</span>
-        </button>
-    </div>
 
     <!-- ═══ FILTER PANEL ═══ -->
     <div id="filterOverlay" onclick="if(event.target===this)closeFilterPanel()">
@@ -912,6 +890,43 @@
                         </div>
                     </div>
 
+                    <!-- Tìm kiếm -->
+                    <div class="ctrl-section">
+                        <div class="ctrl-title">Tìm kiếm</div>
+                        <div style="display:flex;gap:6px;">
+                            <input type="text" id="searchInput" class="ctrl-input"
+                                   placeholder="Tên trụ, ID hoặc tọa độ lat,lon..."
+                                   autocomplete="off"
+                                   style="flex:1;margin-bottom:0;"
+                                   onkeydown="if(event.key==='Enter'){closeControlsModal();searchMarkers();}">
+                            <button onclick="closeControlsModal();searchMarkers();" class="ctrl-btn primary"
+                                    style="flex:0 0 auto;width:auto;padding:0 14px;">
+                                <i class="fa fa-search"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="ctrl-divider"></div>
+
+                    <!-- Hành động nhanh — 2 cột (Thêm marker chính + Lọc) -->
+                    <div class="ctrl-section">
+                        <div style="display:grid;grid-template-columns:2fr 1fr;gap:6px;">
+                            <button id="addMarkerBtn" class="ctrl-btn warning" onclick="closeControlsModal();startAddMarker()" title="Thêm trụ mới"
+                                    style="padding:11px;font-size:14px;margin-bottom:0;">
+                                <i class="fa fa-plus" style="font-size:15px;"></i>
+                                <span>Thêm marker</span>
+                            </button>
+                            <button id="filterBtn" class="ctrl-btn outline" onclick="closeControlsModal();openFilterPanel()" title="Bộ lọc"
+                                    style="padding:11px;font-size:14px;margin-bottom:0;position:relative;">
+                                <span id="filterBadge" style="position:absolute;top:4px;right:6px;"></span>
+                                <i class="fa fa-filter"></i>
+                                <span>Lọc</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="ctrl-divider"></div>
+
                     <!-- Điều hướng -->
                     <div class="ctrl-section">
                         <div class="ctrl-title">Điều hướng</div>
@@ -931,19 +946,21 @@
 
                     <div class="ctrl-divider"></div>
 
-                    <!-- Thiết bị GPS (Tính năng 11) -->
+                    <!-- Thiết bị GPS (Tính năng 11) — segmented horizontal -->
                     <div class="ctrl-section">
-                        <div class="ctrl-title">Thiết bị GPS</div>
-                        <label class="ctrl-radio">
-                            <input type="radio" name="gpsMode" value="phone" onchange="switchGpsMode('phone')">
-                            <span>📱 Phone GPS <span class="hint">(mặc định, ±3-10m)</span></span>
-                        </label>
-                        <label class="ctrl-radio">
-                            <input type="radio" name="gpsMode" value="rtk" onchange="switchGpsMode('rtk')">
-                            <span>🛰 RTK Tersus Luka <span class="hint">(±cm qua mock location)</span></span>
-                        </label>
-                        <div style="font-size:11px;color:var(--text-muted);margin-top:6px;">
-                            <a href="huongdan.html#s15" target="_blank" style="color:var(--primary);text-decoration:none;">📖 Hướng dẫn setup RTK →</a>
+                        <div class="ctrl-title" style="display:flex;align-items:center;justify-content:space-between;">
+                            <span>Thiết bị GPS</span>
+                            <a href="huongdan.html#s15" target="_blank" style="font-size:10px;font-weight:600;color:var(--primary);text-decoration:none;text-transform:none;letter-spacing:0;">📖 Hướng dẫn RTK</a>
+                        </div>
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+                            <label class="ctrl-radio" style="padding:7px 9px;border:1.5px solid var(--border);justify-content:center;font-size:13px;">
+                                <input type="radio" name="gpsMode" value="phone" onchange="switchGpsMode('phone')">
+                                <span>📱 Phone</span>
+                            </label>
+                            <label class="ctrl-radio" style="padding:7px 9px;border:1.5px solid var(--border);justify-content:center;font-size:13px;">
+                                <input type="radio" name="gpsMode" value="rtk" onchange="switchGpsMode('rtk')">
+                                <span>🛰 RTK</span>
+                            </label>
                         </div>
                     </div>
 
@@ -967,47 +984,45 @@
 
                     <div class="ctrl-divider"></div>
 
-                    <!-- GitHub -->
+                    <!-- Xuất dữ liệu (4 nút trong 2x2 grid compact) -->
                     <div class="ctrl-section">
-                        <div class="ctrl-title">GitHub</div>
-                        <input type="text" id="githubPathInput" class="ctrl-input" placeholder="data/khaosat.xlsx" style="margin-bottom:6px;">
-                        <div class="ctrl-btn-grid">
-                            <button onclick="saveMarkerData()" class="ctrl-btn success">
-                                <i class="fa fa-save"></i> Lưu Excel
+                        <div class="ctrl-title">Xuất dữ liệu</div>
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+                            <button onclick="showReportModal()" class="ctrl-btn primary" style="margin-bottom:0;font-size:12px;padding:8px;">
+                                <i class="fa fa-bar-chart"></i> Báo cáo
                             </button>
-                            <button id="githubSyncBtn" onclick="updateGitHubExcel()" class="ctrl-btn primary">
-                                <i class="fa fa-cloud-upload"></i> GitHub
+                            <button id="btnExportCad" onclick="showExportCadModal()" class="ctrl-btn dark" style="margin-bottom:0;font-size:12px;padding:8px;">
+                                <i class="fa fa-file-code-o"></i> CAD
+                            </button>
+                            <button id="btnPrintDrawing" onclick="openPrintDrawingModal()" class="ctrl-btn outline" style="margin-bottom:0;font-size:12px;padding:8px;">
+                                <i class="fa fa-print"></i> In bản vẽ
+                            </button>
+                            <button id="btnToggleCable" onclick="toggleCableLayer()" class="ctrl-btn outline" style="margin-bottom:0;font-size:12px;padding:8px;">
+                                <i class="fa fa-share-alt"></i> Sơ đồ cáp
+                            </button>
+                        </div>
+                        <div id="cableToolbar" style="display:none;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px;">
+                            <button id="btnCableEdit" onclick="toggleCableEditMode()" class="ctrl-btn outline" style="margin-bottom:0;font-size:12px;padding:8px;">
+                                <i class="fa fa-pencil"></i> Sửa cáp
+                            </button>
+                            <button id="btnDrawCable" onclick="toggleDrawCableMode()" class="ctrl-btn outline" style="margin-bottom:0;font-size:12px;padding:8px;">
+                                <i class="fa fa-plus-circle"></i> Vẽ cáp
                             </button>
                         </div>
                     </div>
 
                     <div class="ctrl-divider"></div>
 
-                    <!-- Xuất dữ liệu -->
+                    <!-- GitHub (input + 2 nút compact) -->
                     <div class="ctrl-section">
-                        <div class="ctrl-title">Xuất dữ liệu</div>
-                        <div class="ctrl-btn-grid">
-                            <button onclick="showReportModal()" class="ctrl-btn primary">
-                                <i class="fa fa-bar-chart"></i> Báo cáo
+                        <div class="ctrl-title">GitHub Sync</div>
+                        <input type="text" id="githubPathInput" class="ctrl-input" placeholder="data/khaosat.xlsx" style="margin-bottom:6px;padding:6px 10px;font-size:13px;">
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+                            <button onclick="saveMarkerData()" class="ctrl-btn success" style="margin-bottom:0;font-size:12px;padding:8px;">
+                                <i class="fa fa-save"></i> Lưu Excel
                             </button>
-                            <button id="btnExportCad" onclick="showExportCadModal()" class="ctrl-btn dark">
-                                <i class="fa fa-file-code-o"></i> CAD
-                            </button>
-                        </div>
-                        <div class="ctrl-btn-grid">
-                            <button id="btnPrintDrawing" onclick="openPrintDrawingModal()" class="ctrl-btn outline">
-                                <i class="fa fa-print"></i> In bản vẽ
-                            </button>
-                            <button id="btnToggleCable" onclick="toggleCableLayer()" class="ctrl-btn outline">
-                                <i class="fa fa-share-alt"></i> Sơ đồ cáp
-                            </button>
-                        </div>
-                        <div id="cableToolbar" style="display:none;gap:6px;margin-bottom:0;" class="ctrl-btn-grid">
-                            <button id="btnCableEdit" onclick="toggleCableEditMode()" class="ctrl-btn outline">
-                                <i class="fa fa-pencil"></i> Sửa cáp
-                            </button>
-                            <button id="btnDrawCable" onclick="toggleDrawCableMode()" class="ctrl-btn outline">
-                                <i class="fa fa-plus-circle"></i> Vẽ cáp
+                            <button id="githubSyncBtn" onclick="updateGitHubExcel()" class="ctrl-btn primary" style="margin-bottom:0;font-size:12px;padding:8px;">
+                                <i class="fa fa-cloud-upload"></i> Đẩy lên
                             </button>
                         </div>
                     </div>
@@ -1219,6 +1234,21 @@
         <div id="gpsWaitBetterWrap" style="display:none; text-align:center; margin-top:6px;">
             <button onclick="_gpsWaitBetter()" style="background:none; border:none; color:#3b82f6;
                 font-size:12px; font-weight:600; cursor:pointer; text-decoration:underline; font-family:inherit;">⏸ Đợi tốt hơn</button>
+        </div>
+        <div id="gpsWarningBox" style="display:none; background:#fef3c7; border:1px solid #f59e0b; border-radius:8px;
+             padding:8px 10px; margin-top:8px; font-size:12px; color:#92400e;">
+            <div id="gpsWarningTitle" style="font-weight:700; margin-bottom:4px;"></div>
+            <div id="gpsWarningBody" style="margin-bottom:6px;"></div>
+            <div style="display:flex; gap:8px;">
+                <button onclick="window.open('huongdan.html#s15', '_blank')"
+                    style="background:white; border:1px solid #d97706; color:#92400e;
+                           border-radius:6px; padding:4px 10px; font-size:11px; font-weight:600; cursor:pointer;
+                           font-family:inherit;">📖 Hướng dẫn</button>
+                <button onclick="_gpsDismissWarning()"
+                    style="background:white; border:1px solid #d97706; color:#92400e;
+                           border-radius:6px; padding:4px 10px; font-size:11px; font-weight:600; cursor:pointer;
+                           font-family:inherit;">Tiếp tục đợi</button>
+            </div>
         </div>
     </div>
 
@@ -3004,6 +3034,10 @@
         let newMarkerRows = [];
         let dirtyMovedRows = new Set();
         let editPositionMode = false;
+        // Zoom-tier progressive loading (Tính năng 9.5):
+        // zoom < ZOOM_TIER_THRESHOLD → chỉ render tủ (type 5,6); zoom >= → render tất cả.
+        const ZOOM_TIER_THRESHOLD = 12;
+        let _zoomTier = 'all'; // 'cabinet' | 'all'
         let currentLocation = null;
         let currentLocationMarker = null;
         let tempMarker = null;
@@ -3012,6 +3046,9 @@
         let pendingMarkerLocation = null;
         let markerPopupLocation = null;
         let markerImageDataUrl = null;
+        // Lưu accuracy + mode của fix gần nhất để gắn vào marker khi save (Tính năng 11 — P13c)
+        let _lastFixAccuracy = '';
+        let _lastFixMode = '';
         let addMarkerMode = false;
         let pickMarkerMode = false;
         let lastMarkerName = '';
@@ -3214,7 +3251,20 @@
                 ? `<img class="pc-avatar" src="${imageValue}" style="cursor:zoom-in" onerror="this.outerHTML='<div class=\\'pc-avatar-ph\\'>${cfg.emoji}</div>'" loading="lazy">`
                 : `<div class="pc-avatar-ph">${cfg.emoji}</div>`;
 
-            const coordStr = Number.isFinite(lat) && Number.isFinite(lon) ? `${lat.toFixed(6)}, ${lon.toFixed(6)}` : '—';
+            // Hiển thị tọa độ + accuracy + mode badge (Tính năng 11 — P13c)
+            const savedMode = String(row[24] || '').trim();
+            const coordMode = (savedMode === 'rtk' || savedMode === 'phone') ? savedMode : '';
+            const coordStr = Number.isFinite(lat) && Number.isFinite(lon)
+                ? `${formatCoord(lat, coordMode)}, ${formatCoord(lon, coordMode)}` : '—';
+            const accNum = parseFloat(row[23]);
+            const accStr = Number.isFinite(accNum) ? formatAccuracy(accNum) : '';
+            const modeIcon = savedMode === 'rtk' ? '🛰' : (savedMode === 'phone' ? '📱' : '');
+            const rtkBadge = (Number.isFinite(accNum) && savedMode === 'rtk')
+                ? `<span style="background:${rtkStatus(accNum).color};color:white;padding:1px 6px;border-radius:999px;font-size:10px;font-weight:700;margin-left:4px;">${rtkStatus(accNum).label}</span>`
+                : '';
+            const gpsInfo = (accStr || modeIcon)
+                ? `<div class="pc-coords" style="margin-top:2px;font-size:11px;">${modeIcon} ${accStr} ${rtkBadge}</div>`
+                : '';
 
             const pcRows = [];
             if (tudieukhien) pcRows.push(`<div class="pc-row"><span class="pi">🗄</span><span class="pk">Tủ</span><span class="pv">${tudieukhien}</span></div>`);
@@ -3274,7 +3324,7 @@
                 </div>
               </div>
               <div class="pc-divider"></div>
-              <div class="pc-body">${pcRows.join('')}<div class="pc-coords">📡 ${coordStr}</div></div>
+              <div class="pc-body">${pcRows.join('')}<div class="pc-coords">📡 ${coordStr}</div>${gpsInfo}</div>
               <div class="pc-actions ${actionClass}">
                 ${actionBtns}
               </div>
@@ -3561,6 +3611,253 @@
             document.querySelectorAll('input[name="gpsMode"]').forEach(r => {
                 r.checked = r.value === currentGpsMode;
             });
+        }
+
+        // ── GPS TRACKING BAR (P13b) ───────────────────────────────────────
+        // State machine: SEARCHING (orange) → REACHED (green, 3s countdown) → accept
+        let _gpsTrackingState = null;
+
+        function _showGpsTrackingBar({ mode }) {
+            const cfg = GPS_MODES[mode];
+            const bar = document.getElementById('gpsTrackingBar');
+            if (!bar) return null;
+            bar.style.display = 'block';
+            bar.style.borderColor = '#94a3b8';
+            document.getElementById('gpsCountdownBar').style.display = 'none';
+            document.getElementById('gpsWaitBetterWrap').style.display = 'none';
+            document.getElementById('gpsStatusIcon').textContent = cfg.emoji;
+            document.getElementById('gpsStatusLabel').textContent = `${cfg.label}: tìm tín hiệu...`;
+            document.getElementById('gpsStatusBadge').style.display = 'none';
+            document.getElementById('gpsAccuracyText').textContent = '— —';
+            document.getElementById('gpsProgressText').textContent = `Mục tiêu: ${formatAccuracy(cfg.targetAccuracy)}`;
+
+            const state = {
+                startTime: Date.now(),
+                cfg,
+                autoAcceptTimer: null,
+                autoAcceptCb: null,
+                onAcceptCb: null,
+                onCancelCb: null
+            };
+            _gpsTrackingState = state;
+
+            document.getElementById('gpsAcceptBtn').onclick = () => state.onAcceptCb && state.onAcceptCb();
+            document.getElementById('gpsCancelBtn').onclick = () => state.onCancelCb && state.onCancelCb();
+
+            return {
+                startTime: state.startTime,
+                update: (info) => _gpsUpdateBar(info),
+                startAutoAccept: (ms, cb) => _gpsStartAutoAccept(ms, cb),
+                onAccept: (cb) => { state.onAcceptCb = cb; },
+                onCancel: (cb) => { state.onCancelCb = cb; },
+                hide: () => _hideGpsTrackingBar()
+            };
+        }
+
+        function _gpsUpdateBar({ accuracy, status, samples, elapsed }) {
+            const s = _gpsTrackingState;
+            if (!s) return;
+            document.getElementById('gpsAccuracyText').textContent = formatAccuracy(accuracy);
+            const elapsedS = (elapsed / 1000).toFixed(1);
+            const maxS = (s.cfg.maxWaitMs / 1000).toFixed(0);
+            let progText = `${elapsedS}s / ${maxS}s`;
+            if (s.cfg.useAveraging) progText += ` · ${samples}/${s.cfg.averageSamples} mẫu`;
+            document.getElementById('gpsProgressText').textContent = progText;
+            const badge = document.getElementById('gpsStatusBadge');
+            if (status) {
+                badge.style.display = 'inline-block';
+                badge.textContent = status.label;
+                badge.style.background = status.color;
+                badge.style.color = 'white';
+            } else {
+                badge.style.display = 'none';
+            }
+            // Đổi border color theo accuracy
+            const bar = document.getElementById('gpsTrackingBar');
+            if (accuracy <= s.cfg.targetAccuracy) bar.style.borderColor = '#10b981';
+            else if (accuracy <= s.cfg.targetAccuracy * 3) bar.style.borderColor = '#f59e0b';
+            else bar.style.borderColor = '#94a3b8';
+        }
+
+        function _gpsStartAutoAccept(ms, cb) {
+            const s = _gpsTrackingState;
+            if (!s) return;
+            if (s.autoAcceptTimer) clearTimeout(s.autoAcceptTimer);
+            s.autoAcceptCb = cb;
+            document.getElementById('gpsCountdownBar').style.display = 'block';
+            document.getElementById('gpsWaitBetterWrap').style.display = 'block';
+            const fill = document.getElementById('gpsCountdownFill');
+            fill.style.transition = 'none';
+            fill.style.width = '100%';
+            void fill.offsetWidth; // force reflow
+            fill.style.transition = `width ${ms}ms linear`;
+            fill.style.width = '0%';
+            s.autoAcceptTimer = setTimeout(() => {
+                if (s.autoAcceptCb) s.autoAcceptCb();
+            }, ms);
+        }
+
+        function _gpsWaitBetter() {
+            const s = _gpsTrackingState;
+            if (!s) return;
+            if (s.autoAcceptTimer) clearTimeout(s.autoAcceptTimer);
+            s.autoAcceptTimer = null;
+            s.autoAcceptCb = null;
+            document.getElementById('gpsCountdownBar').style.display = 'none';
+            document.getElementById('gpsWaitBetterWrap').style.display = 'none';
+        }
+
+        function _hideGpsTrackingBar() {
+            const s = _gpsTrackingState;
+            if (s && s.autoAcceptTimer) clearTimeout(s.autoAcceptTimer);
+            _gpsTrackingState = null;
+            const bar = document.getElementById('gpsTrackingBar');
+            if (bar) bar.style.display = 'none';
+            const warn = document.getElementById('gpsWarningBox');
+            if (warn) warn.style.display = 'none';
+        }
+
+        function _gpsShowWarning(title, body) {
+            document.getElementById('gpsWarningTitle').textContent = title;
+            document.getElementById('gpsWarningBody').textContent = body;
+            document.getElementById('gpsWarningBox').style.display = 'block';
+        }
+
+        function _gpsDismissWarning() {
+            document.getElementById('gpsWarningBox').style.display = 'none';
+        }
+
+        // ── getBestFix(opts) — pipeline thống nhất ─────────────────────────
+        // opts: { forceMode, quickMode }
+        // quickMode=true → silent fast fix (không tracking bar), dùng cho routing
+        async function getBestFix(opts = {}) {
+            const mode = opts.forceMode || currentGpsMode;
+            const cfg  = GPS_MODES[mode];
+
+            // QUICK MODE — silent, fast, không UI
+            if (opts.quickMode) {
+                return new Promise((resolve, reject) => {
+                    navigator.geolocation.getCurrentPosition(
+                        pos => {
+                            _lastFixAccuracy = pos.coords.accuracy;
+                            _lastFixMode = mode;
+                            resolve(pos);
+                        },
+                        reject,
+                        { enableHighAccuracy: true, maximumAge: 0, timeout: 8000 }
+                    );
+                });
+            }
+
+            // INTERACTIVE MODE — có tracking bar
+            const bar = _showGpsTrackingBar({ mode });
+            if (!bar) {
+                // Fallback nếu không có UI
+                return new Promise((resolve, reject) => {
+                    navigator.geolocation.getCurrentPosition(resolve, reject,
+                        { enableHighAccuracy: true, maximumAge: 0, timeout: cfg.maxWaitMs });
+                });
+            }
+
+            let bestFix = null;
+            let samples = [];
+            let warnShown = false;
+
+            return new Promise((resolve, reject) => {
+                let watchId = null;
+                let hardTimeoutId = null;
+
+                const finish = (result) => {
+                    if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+                    if (hardTimeoutId) clearTimeout(hardTimeoutId);
+                    bar.hide();
+                    if (result && result.coords) {
+                        _lastFixAccuracy = result.coords.accuracy;
+                        _lastFixMode = mode;
+                    }
+                    resolve(result);
+                };
+                const fail = (err) => {
+                    if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+                    if (hardTimeoutId) clearTimeout(hardTimeoutId);
+                    bar.hide();
+                    reject(err);
+                };
+
+                watchId = navigator.geolocation.watchPosition(
+                    pos => {
+                        const acc = pos.coords.accuracy;
+                        if (!bestFix || acc < bestFix.coords.accuracy) bestFix = pos;
+                        if (cfg.useAveraging && acc < cfg.targetAccuracy * 3) samples.push(pos);
+
+                        const elapsedMs = Date.now() - bar.startTime;
+                        bar.update({
+                            accuracy: acc,
+                            status: cfg.statusBadge ? rtkStatus(acc) : null,
+                            samples: samples.length,
+                            elapsed: elapsedMs
+                        });
+
+                        // Warn nếu mode RTK nhưng sau 30s vẫn chưa FLOAT (acc > 0.5m)
+                        if (!warnShown && mode === 'rtk' && elapsedMs > 30000 && acc > 0.5) {
+                            warnShown = true;
+                            _gpsShowWarning(
+                                '⚠ RTK chọn nhưng accuracy ' + formatAccuracy(acc),
+                                'Bạn có thể chưa setup mock location. Kiểm tra Nuwa đã connect Luka, NTRIP đang Fixed chưa.'
+                            );
+                        }
+
+                        const reachedTarget = (acc <= cfg.targetAccuracy);
+                        const enoughSamples = cfg.useAveraging && samples.length >= cfg.averageSamples;
+
+                        if (reachedTarget && !cfg.useAveraging) {
+                            bar.startAutoAccept(3000, () => finish(bestFix));
+                        } else if (enoughSamples) {
+                            finish(averageFixes(samples));
+                        } else if (reachedTarget && cfg.useAveraging && samples.length >= 3) {
+                            bar.startAutoAccept(3000, () => finish(averageFixes(samples)));
+                        }
+                    },
+                    err => fail(err),
+                    { enableHighAccuracy: true, maximumAge: 0, timeout: cfg.maxWaitMs }
+                );
+
+                hardTimeoutId = setTimeout(() => {
+                    if (bestFix) finish(cfg.useAveraging && samples.length > 0 ? averageFixes(samples) : bestFix);
+                    else fail(new Error('Không lấy được GPS — quá thời gian chờ'));
+                }, cfg.maxWaitMs);
+
+                bar.onAccept(() => {
+                    if (bestFix) finish(cfg.useAveraging && samples.length > 0 ? averageFixes(samples) : bestFix);
+                    else fail(new Error('Chưa có fix nào'));
+                });
+                bar.onCancel(() => fail(new Error('User đã hủy')));
+            });
+        }
+
+        // Average fixes với MAD outlier rejection
+        function averageFixes(fixes) {
+            if (!fixes.length) return null;
+            if (fixes.length === 1) return fixes[0];
+            const lats = fixes.map(f => f.coords.latitude).sort((a,b)=>a-b);
+            const lons = fixes.map(f => f.coords.longitude).sort((a,b)=>a-b);
+            const medLat = lats[Math.floor(lats.length / 2)];
+            const medLon = lons[Math.floor(lons.length / 2)];
+            const inliers = fixes.filter(f => {
+                const dLat = Math.abs(f.coords.latitude - medLat);
+                const dLon = Math.abs(f.coords.longitude - medLon);
+                return dLat < 0.00005 && dLon < 0.00005; // ~5.5m
+            });
+            const finalSet = inliers.length > 0 ? inliers : fixes;
+            const avgLat = finalSet.reduce((s, f) => s + f.coords.latitude, 0) / finalSet.length;
+            const avgLon = finalSet.reduce((s, f) => s + f.coords.longitude, 0) / finalSet.length;
+            const avgAcc = finalSet.reduce((s, f) => s + f.coords.accuracy, 0) / finalSet.length;
+            return {
+                coords: {
+                    latitude: avgLat, longitude: avgLon,
+                    accuracy: avgAcc / Math.sqrt(finalSet.length)
+                }
+            };
         }
 
         function makeLampIcon(color, loaiDen, congSuat, soLuong) {
@@ -3893,13 +4190,17 @@
             map.on('zoomend', function() {
                 if (map.getZoom() < labelZoomThreshold) map.removeLayer(labelLayerGroup);
                 else map.addLayer(labelLayerGroup);
+                _applyZoomTier(); // 9.5 — re-render khi đổi tier (cabinet ↔ all)
             });
 
 
             return map;
         }
 
-        async function addMarkersToMap(data) {
+        async function addMarkersToMap(data, opts) {
+            // opts: { fitView: bool } — default true cho lần load đầu / reload data.
+            //       _applyZoomTier truyền fitView:false để không reset zoom khi chỉ đổi tier.
+            const fitView = !opts || opts.fitView !== false;
             markersCluster.clearLayers();
             labelLayerGroup.clearLayers();
             markers = [];
@@ -3913,7 +4214,7 @@
                 await new Promise(r => setTimeout(r, 0));
             }
             _setLoadProgress(null);
-            if (markers.length > 0) {
+            if (fitView && markers.length > 0) {
                 try { map.fitBounds(markersCluster.getBounds().pad(0.1)); } catch {}
             }
             if (map.getZoom() < labelZoomThreshold) map.removeLayer(labelLayerGroup);
@@ -3943,16 +4244,11 @@
             if (!canEdit()) { displayError('Bạn không có quyền thêm hoặc sửa đối tượng.', 'warning'); return; }
             if (addMarkerMode) { disableAddMarkerMode(); return; }
             enableAddMarkerMode();
-            // Tự lấy GPS ngay — không cần tap vào bản đồ
+            // Tự lấy GPS ngay qua tracking bar — không cần tap vào bản đồ
             if (navigator.geolocation) {
-                displayInfo('Đang lấy vị trí GPS...');
-                navigator.geolocation.getCurrentPosition(
-                    pos => {
-                        if (addMarkerMode) showMarkerPopupAt(pos.coords.latitude, pos.coords.longitude);
-                    },
-                    () => displayError('Không lấy được GPS — hãy nhấp vào bản đồ để chọn vị trí.'),
-                    { enableHighAccuracy: true, timeout: 8000, maximumAge: 10000 }
-                );
+                getBestFix().then(pos => {
+                    if (addMarkerMode) showMarkerPopupAt(pos.coords.latitude, pos.coords.longitude);
+                }).catch(() => displayError('Không lấy được GPS — hãy nhấp vào bản đồ để chọn vị trí.'));
             } else {
                 displayError('Nhấp vào bản đồ để chọn vị trí trụ mới.');
             }
@@ -4008,7 +4304,7 @@
                 dl.innerHTML = wards.map(w => `<option value="${w}">`).join('');
             }
             preview.innerHTML = ''; fileInput.value = null;
-            coordsText.textContent = `Tọa độ: ${lat.toFixed(6)}, ${lon.toFixed(6)}`;
+            coordsText.textContent = `Tọa độ: ${formatCoord(lat)}, ${formatCoord(lon)}`;
             fillGeoFields(lat, lon);
 
             if (baseSelect) {
@@ -4313,7 +4609,10 @@
                     });
 
                     // Cập nhật row in-place (giữ ID, cập nhật tất cả field còn lại)
-                    const updated = ['',name,lat,lon,note,nguoiKS,type,cabinetName,poleType,'',lampType,congSuat,keepImg,updatedAt,baseMarkerName,distanceToBase,maPE,street,ward,Math.round(_vn.x),Math.round(_vn.y),soLuongDen,loaiCapVal];
+                    // Giữ accuracy/mode cũ nếu không có fix mới (vd: user chỉ edit field, không kéo marker)
+                    const accVal = (_lastFixAccuracy !== '' ? _lastFixAccuracy : (_editingRow[23] || ''));
+                    const modeVal = (_lastFixMode !== '' ? _lastFixMode : (_editingRow[24] || ''));
+                    const updated = ['',name,lat,lon,note,nguoiKS,type,cabinetName,poleType,'',lampType,congSuat,keepImg,updatedAt,baseMarkerName,distanceToBase,maPE,street,ward,Math.round(_vn.x),Math.round(_vn.y),soLuongDen,loaiCapVal,accVal,modeVal];
                     updated[0] = existingId;
                     for (let i = 0; i < updated.length; i++) _editingRow[i] = updated[i];
 
@@ -4327,7 +4626,10 @@
                     displayError('Đã cập nhật marker — đang lưu lên Google Sheets...');
                 } else {
                     // ── CHẾ ĐỘ THÊM MỚI ──
-                    const newRow = ['',name,lat,lon,note,nguoiKS,type,cabinetName,poleType,'',lampType,congSuat,markerImageDataUrl||'',updatedAt,baseMarkerName,distanceToBase,maPE,street,ward,Math.round(_vn.x),Math.round(_vn.y),soLuongDen,loaiCapVal];
+                    // Lưu accuracy + mode của fix gần nhất (mặc định mode hiện tại nếu chưa có fix)
+                    const accVal = _lastFixAccuracy !== '' ? _lastFixAccuracy : '';
+                    const modeVal = _lastFixMode !== '' ? _lastFixMode : currentGpsMode;
+                    const newRow = ['',name,lat,lon,note,nguoiKS,type,cabinetName,poleType,'',lampType,congSuat,markerImageDataUrl||'',updatedAt,baseMarkerName,distanceToBase,maPE,street,ward,Math.round(_vn.x),Math.round(_vn.y),soLuongDen,loaiCapVal,accVal,modeVal];
                     loadedData.push(newRow); newMarkerRows.push(newRow);
                     markerImageDataUrl = null;
                     const newMarker = addMarkerRowToMap(newRow);
@@ -4720,6 +5022,7 @@
                 if (rows.length < 2) throw new Error('Dữ liệu rỗng');
                 loadedData = rows;
                 dirtyMovedRows.clear(); updateDirtyMovedBadge();
+                _zoomTier = 'all'; // reset tier để _applyZoomTier tính lại đúng theo zoom hiện tại
                 addMarkersToMap(rows.slice(1));
                 displayError('');
             } catch (e) {
@@ -4735,6 +5038,7 @@
             if (cached && Array.isArray(cached.data) && cached.data.length > 1) {
                 loadedData = cached.data;
                 dirtyMovedRows.clear(); updateDirtyMovedBadge();
+                _zoomTier = 'all';
                 addMarkersToMap(loadedData.slice(1));
                 displayError('');
                 renderedFromCache = true;
@@ -4753,6 +5057,7 @@
                 if (!renderedFromCache || newHash !== oldHash) {
                     loadedData = parsed;
                     dirtyMovedRows.clear(); updateDirtyMovedBadge();
+                    _zoomTier = 'all';
                     addMarkersToMap(loadedData.slice(1));
                 }
                 displayError('');
@@ -4818,7 +5123,17 @@
         }
 
         function normalizeText(text) {
-            return (text||'').toString().normalize('NFD').replace(/\p{Diacritic}/gu,'').toLowerCase();
+            // Lưu ý: đ/Đ là BASE character (không phải tổ hợp như á=a+´), NFD không tách được.
+            // Phải replace thủ công TRƯỚC khi NFD để 'duong' match 'Đường'.
+            return (text||'').toString()
+                .replace(/đ/g, 'd').replace(/Đ/g, 'D')
+                .normalize('NFD').replace(/\p{Diacritic}/gu,'').toLowerCase();
+        }
+
+        // Strip cả khoảng trắng + ký tự đặc biệt (_, -, ., …) để search permissive hơn:
+        // 'phu nhuan' / 'PHU NHUAN' / 'phunhuan' / 'phu-nhuan' đều match được 'Phú Nhuận'.
+        function normalizeTextSearchable(text) {
+            return normalizeText(text).replace(/[^a-z0-9]/g, '');
         }
 
         function clearSearchResults() {
@@ -4851,11 +5166,14 @@
             const rawInput = document.getElementById('searchInput').value.trim();
             clearSearchResults();
             if (!rawInput) { displayError('Vui lòng nhập tên trụ hoặc tọa độ.'); return; }
-            const input = normalizeText(rawInput);
+            // Search permissive: bỏ dấu, lowercase, đ→d, bỏ space + ký tự đặc biệt
+            const input = normalizeTextSearchable(rawInput);
             const matches = [];
             for (let i=0; i<markers.length; i++) {
                 const item = markers[i];
-                if (normalizeText(item.name||'').includes(input) || normalizeText(item.note||'').includes(input) || normalizeText(item.id||'').includes(input))
+                if (normalizeTextSearchable(item.name||'').includes(input)
+                 || normalizeTextSearchable(item.note||'').includes(input)
+                 || normalizeTextSearchable(item.id||'').includes(input))
                     matches.push({ index:i, item });
             }
             if (matches.length===1) {
@@ -4918,10 +5236,12 @@
         function startTrackingCurrentLocation() {
             if (!navigator.geolocation) { displayError('Trình duyệt không hỗ trợ định vị.'); return; }
             if (currentLocationWatchId !== null) return;
+            // Dùng GPS_MODES config — timeout từ mode hiện tại, luôn maximumAge:0 (fresh)
+            const cfg = GPS_MODES[currentGpsMode];
             currentLocationWatchId = navigator.geolocation.watchPosition(
                 pos => updateCurrentLocationMarker(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy),
                 err => displayError('Không thể lấy vị trí: ' + err.message),
-                { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 }
+                { enableHighAccuracy: true, maximumAge: 0, timeout: cfg.maxWaitMs }
             );
             displayInfo('Đang theo dõi vị trí...');
         }
@@ -4937,14 +5257,16 @@
         function updateCurrentLocationMarker(lat, lon, accuracy) {
             currentLocation = [lat, lon];
 
-            // Vòng tròn độ chính xác
+            // Vòng tròn độ chính xác — màu theo accuracy (P13b)
             if (typeof accuracy === 'number' && accuracy > 0) {
+                const statusColor = rtkStatus(accuracy).color;
                 if (currentLocationAccuracyCircle) {
                     currentLocationAccuracyCircle.setLatLng([lat, lon]).setRadius(accuracy);
+                    currentLocationAccuracyCircle.setStyle({ color: statusColor, fillColor: statusColor });
                 } else {
                     currentLocationAccuracyCircle = L.circle([lat, lon], {
                         radius: accuracy,
-                        color: '#4285f4', fillColor: '#4285f4',
+                        color: statusColor, fillColor: statusColor,
                         fillOpacity: 0.08, weight: 1.5, opacity: 0.35
                     }).addTo(map);
                     currentLocationAccuracyCircle.bringToBack();
@@ -5020,11 +5342,11 @@
             }
             if (currentLocation) { doRoute(); return; }
             if (!navigator.geolocation) { displayError('Trình duyệt không hỗ trợ định vị.'); return; }
-            navigator.geolocation.getCurrentPosition(
-                pos=>{ updateCurrentLocationMarker(pos.coords.latitude, pos.coords.longitude); doRoute(); },
-                err=>displayError('Không thể lấy vị trí: '+err.message),
-                { enableHighAccuracy:true, timeout:10000, maximumAge:0 }
-            );
+            // quickMode — routing cần fix nhanh, không hiện tracking bar
+            getBestFix({ quickMode: true }).then(pos => {
+                updateCurrentLocationMarker(pos.coords.latitude, pos.coords.longitude);
+                doRoute();
+            }).catch(err => displayError('Không thể lấy vị trí: ' + err.message));
         }
 
         function routeToMarkerLatLon(lat, lon) {
@@ -5039,11 +5361,13 @@
                 window.open(`https://www.google.com/maps/dir/?api=1&destination=${lat},${lon}&travelmode=driving`, '_blank');
                 return;
             }
-            navigator.geolocation.getCurrentPosition(
-                pos => { updateCurrentLocationMarker(pos.coords.latitude, pos.coords.longitude); doRoute(); },
-                () => { window.open(`https://www.google.com/maps/dir/?api=1&destination=${lat},${lon}&travelmode=driving`, '_blank'); },
-                { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-            );
+            // quickMode — fallback nếu thất bại thì mở Google Maps
+            getBestFix({ quickMode: true }).then(pos => {
+                updateCurrentLocationMarker(pos.coords.latitude, pos.coords.longitude);
+                doRoute();
+            }).catch(() => {
+                window.open(`https://www.google.com/maps/dir/?api=1&destination=${lat},${lon}&travelmode=driving`, '_blank');
+            });
         }
 
         function openEditMarker() {
@@ -5209,12 +5533,12 @@
         }
 
         function _filterTuOptions() {
-            const q = normalizeText((document.getElementById('fTuSearch') || {}).value || '');
+            const q = normalizeTextSearchable((document.getElementById('fTuSearch') || {}).value || '');
             const sel = document.getElementById('fTuDieuKhien');
             if (!sel) return;
             const cur = new Set([...sel.selectedOptions].map(o => o.value));
             const filtered = q
-                ? _getUniqueCabinets().filter(c => normalizeText(c).includes(q))
+                ? _getUniqueCabinets().filter(c => normalizeTextSearchable(c).includes(q))
                 : _getUniqueCabinets();
             sel.innerHTML = filtered
                 .map(c => `<option value="${c}"${cur.has(c) ? ' selected' : ''}>${c}</option>`)
@@ -5324,6 +5648,35 @@
             });
         }
 
+        // Re-render khi zoom-tier thay đổi (9.5)
+        // - zoom < ZOOM_TIER_THRESHOLD: chỉ render tủ điều khiển (type 5,6) → giảm CPU/RAM khi xem tổng quan
+        // - zoom >= threshold: render tất cả loại
+        function _applyZoomTier() {
+            if (!map || !Array.isArray(loadedData) || loadedData.length < 2) return;
+            const z = map.getZoom();
+            const newTier = z < ZOOM_TIER_THRESHOLD ? 'cabinet' : 'all';
+            if (newTier === _zoomTier) return; // không đổi → skip re-render
+            _zoomTier = newTier;
+
+            // Base: nếu có filter active → dùng filter, ngược lại dùng toàn bộ loadedData
+            const hasActiveFilter = _activeFilters && (
+                (_activeFilters.types && _activeFilters.types.length) ||
+                _activeFilters.nguoiKS || _activeFilters.phuongXa || _activeFilters.duong ||
+                (_activeFilters.tuDieuKhien && _activeFilters.tuDieuKhien.length)
+            );
+            const baseRows = hasActiveFilter ? _getFilteredRows() : loadedData.slice(1);
+
+            // KHÔNG fitBounds khi đổi tier — giữ nguyên viewport của user
+            if (_zoomTier === 'cabinet') {
+                addMarkersToMap(baseRows.filter(r => {
+                    const t = Number(r[6]);
+                    return t === 5 || t === 6;
+                }), { fitView: false });
+            } else {
+                addMarkersToMap(baseRows, { fitView: false });
+            }
+        }
+
         function _updateFilterCount() {
             const el = document.getElementById('filterCount');
             if (el) el.textContent = _getFilteredRows().length;
@@ -5418,31 +5771,16 @@
         function centerOnUserLocation() {
             if (!navigator.geolocation) { displayError('Trình duyệt không hỗ trợ định vị.'); return; }
 
-            const btn = document.querySelector('#bottomActionBar .bab-btn');
-            if (btn) { btn.style.opacity = '.5'; btn.style.pointerEvents = 'none'; }
-            const done = () => { if (btn) { btn.style.opacity = ''; btn.style.pointerEvents = ''; } };
+            // Vẫn dùng để center từ MapTools widget bên phải; bottom action bar đã bị gỡ
+            const done = () => {};
 
-            // Lần 1: vị trí cache (nhanh) → center ngay
-            navigator.geolocation.getCurrentPosition(
-                pos => {
-                    done();
-                    const lat = pos.coords.latitude, lon = pos.coords.longitude;
-                    updateCurrentLocationMarker(lat, lon, pos.coords.accuracy);
-                    map.setView([lat, lon], Math.max(map.getZoom(), 17), { animate: true });
-                },
-                err => { done(); displayError('Không thể lấy vị trí: ' + err.message); },
-                { enableHighAccuracy: false, timeout: 5000, maximumAge: 30000 }
-            );
-
-            // Lần 2: GPS chính xác → cập nhật icon & vòng tròn (không zoom lại)
-            navigator.geolocation.getCurrentPosition(
-                pos => {
-                    const lat = pos.coords.latitude, lon = pos.coords.longitude;
-                    updateCurrentLocationMarker(lat, lon, pos.coords.accuracy);
-                },
-                () => {},
-                { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
-            );
+            // Cả 2 lần dùng quickMode (silent, không tracking bar — đây chỉ là center map)
+            getBestFix({ quickMode: true }).then(pos => {
+                done();
+                const lat = pos.coords.latitude, lon = pos.coords.longitude;
+                updateCurrentLocationMarker(lat, lon, pos.coords.accuracy);
+                map.setView([lat, lon], Math.max(map.getZoom(), 17), { animate: true });
+            }).catch(err => { done(); displayError('Không thể lấy vị trí: ' + err.message); });
         }
 
         async function reverseGeocode(lat, lon) {
@@ -5493,27 +5831,24 @@
                 btn.classList.remove('btn-secondary');
             };
             setLoading();
-            navigator.geolocation.getCurrentPosition(
-                pos => {
-                    clearLoading();
-                    const lat = pos.coords.latitude, lon = pos.coords.longitude;
-                    const overlay = document.getElementById('markerPopupForm');
-                    const formOpen = overlay && overlay.style.display === 'flex';
-                    if (!formOpen) { showMarkerPopupAt(lat, lon); return; }
-                    markerPopupLocation = [lat, lon]; pendingMarkerLocation = [lat, lon];
-                    if (tempMarker) tempMarker.setLatLng([lat, lon]);
-                    else tempMarker = L.marker([lat, lon], { icon: customIcons.currentPos }).addTo(map);
-                    document.getElementById('markerCoordsText').textContent = `Tọa độ: ${lat.toFixed(6)}, ${lon.toFixed(6)}`;
-                    map.setView([lat, lon], Math.max(map.getZoom(), 17));
-                    displayError('Đã cập nhật vị trí.');
-                    fillGeoFields(lat, lon);
-                },
-                err => {
-                    clearLoading();
-                    displayError('Không thể lấy vị trí: ' + err.message);
-                },
-                { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
-            );
+            // Interactive mode — đặt vị trí marker chính xác qua tracking bar
+            getBestFix().then(pos => {
+                clearLoading();
+                const lat = pos.coords.latitude, lon = pos.coords.longitude;
+                const overlay = document.getElementById('markerPopupForm');
+                const formOpen = overlay && overlay.style.display === 'flex';
+                if (!formOpen) { showMarkerPopupAt(lat, lon); return; }
+                markerPopupLocation = [lat, lon]; pendingMarkerLocation = [lat, lon];
+                if (tempMarker) tempMarker.setLatLng([lat, lon]);
+                else tempMarker = L.marker([lat, lon], { icon: customIcons.currentPos }).addTo(map);
+                document.getElementById('markerCoordsText').textContent = `Tọa độ: ${formatCoord(lat)}, ${formatCoord(lon)}`;
+                map.setView([lat, lon], Math.max(map.getZoom(), 17));
+                displayInfo('Đã cập nhật vị trí.');
+                fillGeoFields(lat, lon);
+            }).catch(err => {
+                clearLoading();
+                displayError('Không thể lấy vị trí: ' + err.message);
+            });
         }
 
         function setMarkerToPickOnMap() {

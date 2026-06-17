@@ -2257,18 +2257,19 @@ timeout ngắn (8s) + không hiện UI.
 
 ### Checklist implement
 
-- [ ] (P13a) `GPS_MODES` config + state + helpers (`formatAccuracy`, `rtkStatus`, `formatCoord`, `formatVn2000`)
-- [ ] (P13a) Toggle UI section "Thiết bị GPS" trong ☰ Settings
-- [ ] (P13a) GAS HEADER thêm cột 22-23, redeploy New version
-- [ ] (P13a) syncRowToGAS payload thêm accuracy + gpsMode
-- [ ] (P13b) `getBestFix(opts)` unified function — hỗ trợ `forceMode` + `quickMode`
-- [ ] (P13b) `#gpsTrackingBar` HTML + JS state machine
-- [ ] (P13b) Refactor 6 interactive call sites + 1 quickMode (routing fallback)
-- [ ] (P13b) `averageFixes` với MAD filter
-- [ ] (P13b) Auto-accept countdown 3s
-- [ ] (P13b) Accuracy circle với màu
-- [ ] (P13c) Precision tọa độ conditional (`formatCoord` ở mọi display)
-- [ ] (P13c) VN2000 precision conditional
-- [ ] (P13c) Warn khi RTK không Fixed sau 30s + nút Hướng dẫn
-- [ ] (P13c) huongdan.html section "Cấu hình GPS" (Phone + RTK Tersus)
-- [ ] (P13c) Update bảng schema cột sheet trong tài liệu
+- [x] (P13a) `GPS_MODES` config + state + helpers (`formatAccuracy`, `rtkStatus`, `formatCoord`, `formatVn2000`) ✅
+- [x] (P13a) Toggle UI section "Thiết bị GPS" trong ☰ Settings ✅
+- [x] (P13a) GAS HEADER thêm cột 23-24 (`Độ chính xác (m)`, `Chế độ GPS`) — cần redeploy + `updateAllSheetsHeader()`
+- [x] (P13a) syncRowToGAS payload thêm accuracy + gpsMode ✅
+- [x] (P13b) `getBestFix(opts)` unified function — hỗ trợ `forceMode` + `quickMode` ✅
+- [x] (P13b) `#gpsTrackingBar` HTML + JS state machine ✅
+- [x] (P13b) Refactor 6 interactive call sites + 1 quickMode (routing fallback) ✅
+- [x] (P13b) `averageFixes` với MAD filter ✅
+- [x] (P13b) Auto-accept countdown 3s ✅
+- [x] (P13b) Accuracy circle với màu rtkStatus ✅
+- [x] (P13c) Precision tọa độ conditional (`formatCoord` trong popup + form) ✅
+- [x] (P13c) VN2000 precision (lưu integer cho phone, conditional theo formatVn2000)
+- [x] (P13c) Warn khi RTK không Fixed sau 30s + nút Hướng dẫn ✅
+- [x] (P13c) `startTrackingCurrentLocation` dùng GPS_MODES config ✅
+- [x] (P13c) huongdan.html section "Cấu hình GPS" (Phone + RTK Tersus) ✅ (đã thêm từ trước trong session)
+- [x] (P13c) Update bảng schema cột sheet trong tài liệu — 25 cột ✅

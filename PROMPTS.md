@@ -17,7 +17,7 @@ Chạy từng prompt theo thứ tự. Mỗi prompt độc lập, tự đủ ng�
 | **Tính năng 6** — Edit marker fixes | 6.1, 6.2, 6.3 | ✅ DONE | `_editingRow`, baseSelect, cable label |
 | **Tính năng 7** — Đa địa bàn | 7.1 → 7.6 | ✅ DONE | + ext `EXTERNAL_SPREADSHEET_IDS` cho CanGiuoc |
 | **Tính năng 8** — Mobile optimization | 8.1 → 8.7 | ✅ DONE | isMobile + shared icons + cluster + label threshold + animations off + lazy img + media query (verified 2026-06-17) |
-| **Tính năng 9** — Load optimization | 9.1, 9.3, 9.4 | ✅ DONE (partial) | IndexedDB cache + chunked + VN2000 ✓; 9.2/9.5/9.6 TODO |
+| **Tính năng 9** — Load optimization | 9.1 → 9.5 | ✅ DONE | IndexedDB + lazy popup + chunked + VN2000 + zoom-tier progressive (2026-06-17). Không có 9.6. |
 | **Tính năng 10** — Filter tủ | — | ✅ DONE | Multi-select + search |
 | **P1 → P8** — Print drawing optimize | (2026-06-16) | ✅ DONE | Audit fixes: bug, cleanup, perf, scale chính xác |
 | **P9** — Tách footer & ký hiệu hở | (mục 4.9) | ✅ DONE | CSS gap 16px giữa 2 khối + border 4 cạnh + radius (2026-06-17) |
@@ -25,9 +25,9 @@ Chạy từng prompt theo thứ tự. Mỗi prompt độc lập, tự đủ ng�
 | **P11** — Cáp ngầm vs cáp nổi | (mục 4.11) | ✅ DONE | Col 22 + CABLE_STYLE + UI + legend 2 dòng (2026-06-17). ⚠ Cần redeploy GAS! |
 | **P12** — TỔNG P9+P10+P11 | — | ✅ DONE | 3 mục con đã chạy riêng (2026-06-17); P9 partial: title block giữ vị trí gốc theo yêu cầu user |
 | **P13a** — GPS modes Foundation | (Tính năng 11) | ✅ DONE | `GPS_MODES` + helpers + Toggle UI + GAS schema 25 cột (2026-06-17). ⚠ Cần redeploy GAS! |
-| **P13b** — GPS pipeline + UX | (Tính năng 11) | ⏳ TODO | `getBestFix` + tracking bar |
-| **P13c** — GPS polish + docs | (Tính năng 11) | ⏳ TODO | Precision conditional + Warn RTK |
-| **P13** — TỔNG P13a+b+c | — | ⏳ TODO | 1-shot version |
+| **P13b** — GPS pipeline + UX | (Tính năng 11) | ✅ DONE | `getBestFix` + floating bar + auto-accept 3s + 6 refactored + 1 quickMode (2026-06-17) |
+| **P13c** — GPS polish + docs | (Tính năng 11) | ✅ DONE | Precision conditional + popup badge + warn RTK + startTracking sync (2026-06-17) |
+| **P13** — TỔNG P13a+b+c | — | ✅ DONE | 3 phase đã chạy riêng (2026-06-17) |
 
 **Legend:** ✅ DONE (đã implement & verified) · 🟡 PARTIAL (làm một phần) · ⏳ TODO (chưa làm) · ❌ DROPPED (bỏ)
 
@@ -2926,7 +2926,7 @@ Không thay đổi gì khác.
 
 ---
 
-## TÍNH NĂNG 9: Tối ưu load dữ liệu lớn 🟡 PARTIAL (9.1/9.3/9.4 done; 9.2/9.5/9.6 TODO)
+## TÍNH NĂNG 9: Tối ưu load dữ liệu lớn ✅ (9.1 → 9.5 done)
 
 Bối cảnh: Mỗi sheet địa bàn có ~1,000–1,200 hàng (đo thực tế từ sheet Quận 1). Với 14 địa bàn,
 tổng dữ liệu có thể lên đến 14,000+ marker. Thực hiện theo thứ tự 9.1 → 9.2 → 9.3 → 9.4.
@@ -3217,7 +3217,7 @@ Không thay đổi gì khác.
 
 ---
 
-### PROMPT 9.5 — Zoom-level progressive loading
+### PROMPT 9.5 — Zoom-level progressive loading ✅ DONE
 
 ```
 Dự án: PWA khảo sát chiếu sáng — index.html.
@@ -3982,7 +3982,7 @@ sau redeploy (giữ nguyên).
 
 ---
 
-## 🔴 PROMPT P13b — Pipeline: getBestFix + Tracking Bar UX + Refactor call sites
+## 🔴 PROMPT P13b — Pipeline: getBestFix + Tracking Bar UX + Refactor call sites ✅ DONE
 
 ````
 Implement GPS pipeline thống nhất theo CLAUDE.md mục 11.4, 11.5, 11.6,
@@ -4302,7 +4302,7 @@ edge case nào gặp.
 
 ---
 
-## 🟡 PROMPT P13c — Polish: Precision tọa độ + Warn RTK + Docs
+## 🟡 PROMPT P13c — Polish: Precision tọa độ + Warn RTK + Docs ✅ DONE
 
 ````
 Finalize chế độ GPS theo CLAUDE.md mục 11.7, 11.9, 11.11. Yêu cầu
@@ -4424,7 +4424,7 @@ warning hoạt động đúng.
 
 ---
 
-## 🎯 PROMPT P13 — TỔNG (cả 3 phase 1-shot, dùng cho dev nhanh)
+## 🎯 PROMPT P13 — TỔNG (cả 3 phase 1-shot, dùng cho dev nhanh) ✅ DONE (qua P13a+b+c)
 
 ```
 Implement toàn bộ Tính năng 11 (Chế độ GPS Phone + RTK) trong CLAUDE.md
