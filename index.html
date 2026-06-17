@@ -764,9 +764,7 @@
 
         /* Căn giữa dọc cột control bên phải */
         .leaflet-top.leaflet-right { top: 50%; transform: translateY(-50%); }
-        /* Hover effect cho nút xoay */
-        #mapRotLeft:hover, #mapRotRight:hover { background:#dbeafe !important; color:#1d4ed8 !important; }
-        #mapRotReset:hover svg { filter: drop-shadow(0 2px 4px rgba(37,99,235,.3)) !important; }
+        /* (Đã gỡ CSS hover cho nút xoay — chức năng xoay đã loại bỏ) */
 
         /* ═══ MOBILE OPTIMIZATION ═══ */
         @media (max-width: 768px) {
@@ -941,6 +939,35 @@
                              style="display:none;margin-top:6px;font-size:11px;font-weight:700;
                                     color:#2563eb;background:#eff6ff;border:1px solid #bfdbfe;
                                     border-radius:6px;padding:4px 10px;text-align:center;">
+                        </div>
+                    </div>
+
+                    <div class="ctrl-divider"></div>
+
+                    <!-- Tỷ lệ bản đồ -->
+                    <div class="ctrl-section">
+                        <div class="ctrl-title" style="display:flex;align-items:center;justify-content:space-between;">
+                            <span>Tỷ lệ bản đồ <span style="font-size:9px;font-weight:600;color:var(--text-muted);text-transform:none;letter-spacing:0;">(A3)</span></span>
+                            <span id="panelZoomDisplay" style="font-size:10px;font-weight:700;color:#2563eb;font-family:monospace;letter-spacing:0;text-transform:none;background:#eff6ff;border:1px solid #bfdbfe;border-radius:5px;padding:2px 8px;">Z 10</span>
+                        </div>
+                        <select id="mapScaleSelect" onchange="_applyMapScale(this.value)"
+                                class="ctrl-input"
+                                style="margin-bottom:0;font-family:monospace;font-weight:700;color:#1e293b;">
+                            <option value="">— Chọn tỷ lệ —</option>
+                            <option value="200">1:200</option>
+                            <option value="500">1:500</option>
+                            <option value="1000">1:1000</option>
+                            <option value="2000">1:2000</option>
+                            <option value="5000">1:5000</option>
+                            <option value="10000">1:10000</option>
+                            <option value="25000">1:25000</option>
+                        </select>
+                        <div id="panelScaleDisplay"
+                             style="display:none;margin-top:6px;font-size:13px;font-weight:800;color:#fff;
+                                    background:linear-gradient(135deg,#2563eb,#1d4ed8);
+                                    border-radius:6px;padding:7px 12px;text-align:center;letter-spacing:.5px;
+                                    box-shadow:0 2px 6px rgba(37,99,235,.25);">
+                            Đang áp dụng <span id="panelScaleValue">1:1000</span>
                         </div>
                     </div>
 
@@ -1158,18 +1185,8 @@
                 <input id="pdNgay" class="pd-ctrl" type="date">
               </div>
             </div>
-            <div class="pd-row">
-              <div class="pd-item" style="flex:1;">
-                <div class="pd-label">Xoay bản đồ</div>
-                <div style="display:flex;align-items:center;gap:10px;">
-                  <input id="pdRotation" type="range" min="-60" max="60" value="0" step="1"
-                         style="flex:1;"
-                         oninput="document.getElementById('pdRotationVal').textContent=this.value+'°'">
-                  <span id="pdRotationVal"
-                        style="font-size:12px;font-weight:700;color:#1e293b;min-width:34px;text-align:right;">0°</span>
-                </div>
-              </div>
-            </div>
+            <!-- (Đã gỡ slider Xoay bản đồ — chức năng xoay đã bị loại bỏ) -->
+            <input id="pdRotation" type="hidden" value="0">
             <div class="pd-row">
               <div class="pd-item">
                 <div class="pd-label">Chuyên viên phụ trách địa bàn</div>
@@ -2120,8 +2137,16 @@
         // Đổi zoom map theo tỷ lệ chọn từ widget — giả định in A3 landscape.
         // Dùng cho preview thông thường (không vào flow in PDF), bật fractional zoom tạm thời.
         function _applyMapScale(scaleStr) {
+            // Hide hoặc show badge "Đang áp dụng 1:N" trong ☰ panel
+            const disp = document.getElementById('panelScaleDisplay');
+            const valEl = document.getElementById('panelScaleValue');
             const scale = parseInt(scaleStr);
-            if (!scale || !isFinite(scale)) return;
+            if (!scale || !isFinite(scale)) {
+                if (disp) disp.style.display = 'none';
+                return;
+            }
+            if (valEl) valEl.textContent = '1:' + scale.toLocaleString('vi-VN');
+            if (disp) disp.style.display = 'block';
             const a3 = PRINT_CONFIG.paper.a3;
             const prevSnap = map.options.zoomSnap;
             _applyMapScale._inProgress = true;
@@ -4076,79 +4101,18 @@
             }
             map.zoomControl.setPosition('topright');
 
-            // Zoom + Compass gộp 1 control — compact, nhất quán
-            L.Control.MapTools = L.Control.extend({
-                options: { position: 'topright' },
-                onAdd: function(m) {
-                    const c = L.DomUtil.create('div');
-                    L.DomEvent.disableClickPropagation(c);
-                    L.DomEvent.disableScrollPropagation(c);
-                    c.style.cssText = 'background:white;border:2px solid rgba(0,0,0,.2);border-radius:8px;box-shadow:0 2px 6px rgba(0,0,0,.3);overflow:hidden;text-align:center;min-width:72px;';
-                    c.innerHTML = `
-                        <div id="mapZoomDisplay"
-                            style="padding:5px 8px 4px;font-size:12px;font-weight:700;color:#1e293b;font-family:monospace;
-                                   border-bottom:1px solid #e2e8f0;background:#f8fafc;letter-spacing:.5px;">
-                            Z&thinsp;${m.getZoom()}
-                        </div>
-                        <div style="padding:5px 6px 5px;">
-                            <button id="mapRotReset" onclick="_resetMapRotation()" title="Hướng Bắc — click để reset"
-                                style="display:block;margin:0 auto 4px;background:none;border:none;cursor:pointer;padding:0;border-radius:50%;line-height:0;">
-                                <svg id="compassNeedle" viewBox="0 0 32 32" width="34" height="34"
-                                    style="display:block;transition:transform .2s cubic-bezier(.4,0,.2,1);filter:drop-shadow(0 1px 2px rgba(0,0,0,.15));">
-                                    <circle cx="16" cy="16" r="15" fill="white" stroke="#e2e8f0" stroke-width="1.5"/>
-                                    <line x1="16" y1="2"  x2="16" y2="6"  stroke="#94a3b8" stroke-width="1.5" stroke-linecap="round"/>
-                                    <line x1="16" y1="26" x2="16" y2="30" stroke="#cbd5e1" stroke-width="1"   stroke-linecap="round"/>
-                                    <line x1="2"  y1="16" x2="6"  y2="16" stroke="#cbd5e1" stroke-width="1"   stroke-linecap="round"/>
-                                    <line x1="26" y1="16" x2="30" y2="16" stroke="#cbd5e1" stroke-width="1"   stroke-linecap="round"/>
-                                    <text x="16" y="9.5" text-anchor="middle" font-size="4.5" font-weight="700"
-                                        fill="#ef4444" font-family="Arial,sans-serif">N</text>
-                                    <polygon points="16,3 13.5,15 16,12 18.5,15" fill="#ef4444"/>
-                                    <polygon points="16,29 13.5,17 16,20 18.5,17" fill="#94a3b8"/>
-                                    <circle cx="16" cy="16" r="2.5" fill="#334155"/>
-                                </svg>
-                            </button>
-                            <div style="display:flex;align-items:center;justify-content:center;gap:2px;">
-                                <button id="mapRotLeft" onclick="_rotateMapFree(-5)" title="Xoay trái 5° ([)"
-                                    style="background:#f1f5f9;border:1px solid #e2e8f0;border-radius:5px;cursor:pointer;
-                                           width:22px;height:20px;font-size:13px;line-height:1;padding:0;color:#475569;
-                                           transition:background .15s;">↺</button>
-                                <span id="compassAngleLabel"
-                                    style="font-size:9px;font-weight:700;color:#64748b;font-family:monospace;min-width:24px;text-align:center;">0°</span>
-                                <button id="mapRotRight" onclick="_rotateMapFree(5)" title="Xoay phải 5° (])"
-                                    style="background:#f1f5f9;border:1px solid #e2e8f0;border-radius:5px;cursor:pointer;
-                                           width:22px;height:20px;font-size:13px;line-height:1;padding:0;color:#475569;
-                                           transition:background .15s;">↻</button>
-                            </div>
-                            <div style="margin-top:6px;padding-top:5px;border-top:1px solid #e2e8f0;">
-                                <div style="font-size:8.5px;font-weight:700;color:#64748b;letter-spacing:.4px;margin-bottom:3px;text-transform:uppercase;">Tỷ lệ (A3)</div>
-                                <select id="mapScaleSelect" onchange="_applyMapScale(this.value)" title="Set zoom map theo tỷ lệ in A3"
-                                    style="width:100%;font-size:11px;font-weight:700;font-family:monospace;color:#1e293b;
-                                           border:1px solid #cbd5e1;border-radius:5px;padding:3px 4px;background:#f8fafc;
-                                           cursor:pointer;touch-action:manipulation;">
-                                    <option value="">— Chọn —</option>
-                                    <option value="200">1:200</option>
-                                    <option value="500">1:500</option>
-                                    <option value="1000">1:1000</option>
-                                    <option value="2000">1:2000</option>
-                                    <option value="5000">1:5000</option>
-                                    <option value="10000">1:10000</option>
-                                    <option value="25000">1:25000</option>
-                                </select>
-                            </div>
-                        </div>`;
-                    m.on('zoomend', () => {
-                        const el = document.getElementById('mapZoomDisplay');
-                        if (el) el.innerHTML = 'Z&thinsp;' + m.getZoom();
-                        // Reset scale dropdown nếu user zoom thủ công (không qua _applyMapScale)
-                        if (!_applyMapScale._inProgress) {
-                            const sel = document.getElementById('mapScaleSelect');
-                            if (sel) sel.value = '';
-                        }
-                    });
-                    return c;
+            // Zoom + Tỷ lệ đã chuyển vào ☰ panel. Chỉ giữ zoomend listener để sync UI.
+            map.on('zoomend', () => {
+                const el = document.getElementById('panelZoomDisplay');
+                if (el) el.innerHTML = 'Z ' + map.getZoom();
+                // Reset scale dropdown + display nếu user zoom thủ công (không qua _applyMapScale)
+                if (!_applyMapScale._inProgress) {
+                    const sel = document.getElementById('mapScaleSelect');
+                    if (sel) sel.value = '';
+                    const disp = document.getElementById('panelScaleDisplay');
+                    if (disp) disp.style.display = 'none';
                 }
             });
-            new L.Control.MapTools().addTo(map);
 
             L.control.layers(
                 {
@@ -5883,6 +5847,9 @@
             const controlsBtn = document.getElementById('controlsBtn');
             if (controlsBtn) {
                 controlsBtn.addEventListener('click', function() {
+                    // Sync zoom display ngay khi mở modal (giá trị hiện tại của map)
+                    const zEl = document.getElementById('panelZoomDisplay');
+                    if (zEl && typeof map !== 'undefined') zEl.innerHTML = 'Z ' + map.getZoom();
                     if (typeof $!=='undefined' && $.fn.modal) {
                         $('#controlsModal').modal({ backdrop:true, keyboard:true, show:true });
                     } else {
@@ -5929,14 +5896,7 @@
             // ESC để hủy chọn vị trí trên bản đồ
             document.addEventListener('keydown', e=>{ if(e.key==='Escape' && pickMarkerMode) cancelPickOnMap(); });
 
-            // [ ] để xoay bản đồ, \ để reset hướng Bắc
-            document.addEventListener('keydown', e=>{
-                const tag = (e.target||{}).tagName||'';
-                if (['INPUT','TEXTAREA','SELECT'].includes(tag)) return;
-                if (e.key === '[' || e.key === 'BracketLeft')  { _rotateMapFree(-5); e.preventDefault(); }
-                if (e.key === ']' || e.key === 'BracketRight') { _rotateMapFree(5);  e.preventDefault(); }
-                if (e.key === '\\' || e.key === 'Backslash')   { _resetMapRotation(); e.preventDefault(); }
-            });
+            // (Đã gỡ keyboard shortcuts xoay bản đồ — chức năng xoay đã bị loại bỏ)
 
             // Đóng report modal khi click backdrop
             const reportModal = document.getElementById('reportModal');
@@ -6230,17 +6190,6 @@
         border-radius:8px;padding:8px 16px;gap:10px;align-items:center;
         font-size:13px;font-weight:600;box-shadow:0 4px 16px rgba(0,0,0,.4);">
       <span><i class="fa fa-eye"></i> Xem trước bản vẽ</span>
-      <span style="display:flex;align-items:center;gap:4px;border-left:1px solid rgba(255,255,255,.25);
-                   padding-left:10px;margin-left:2px;">
-        <button onclick="_rotateMap(-5)" title="Xoay trái 5°"
-            style="background:rgba(255,255,255,.15);color:white;border:none;border-radius:5px;
-                   width:28px;height:28px;cursor:pointer;font-size:14px;line-height:1;">↺</button>
-        <span id="previewRotVal"
-              style="font-size:11px;font-weight:700;min-width:28px;text-align:center;opacity:.85;">0°</span>
-        <button onclick="_rotateMap(5)" title="Xoay phải 5°"
-            style="background:rgba(255,255,255,.15);color:white;border:none;border-radius:5px;
-                   width:28px;height:28px;cursor:pointer;font-size:14px;line-height:1;">↻</button>
-      </span>
       <button onclick="exportDrawingPDF()" style="background:#2563eb;color:white;border:none;
         border-radius:5px;padding:5px 12px;cursor:pointer;font-weight:700;">
         <i class="fa fa-file-pdf-o"></i> Xuất PDF
