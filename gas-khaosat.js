@@ -23,7 +23,8 @@ const HEADER = [
   'ID', 'Tên trụ', 'Lat', 'Lon', 'Ghi chú', 'Người KS',
   'Loại', 'Tủ điều khiển', 'Loại trụ', 'Loại cần', 'Loại đèn',
   'Công suất', 'Ảnh', 'Thời gian cập nhật', 'Marker gốc', 'Khoảng cách (m)', 'Mã PE', 'Đường', 'Phường/ Xã',
-  'VN2000-X', 'VN2000-Y', 'Số lượng đèn'
+  'VN2000-X', 'VN2000-Y', 'Số lượng đèn', 'Loại cáp',
+  'Độ chính xác (m)', 'Chế độ GPS'
 ];
 
 // Map key payload JS → tên cột trong Sheet
@@ -50,6 +51,9 @@ const FIELD_MAP = {
   'vn2000x':     'VN2000-X',
   'vn2000y':     'VN2000-Y',
   'soLuongDen':  'Số lượng đèn',
+  'loaiCap':     'Loại cáp',
+  'accuracy':    'Độ chính xác (m)',
+  'gpsMode':     'Chế độ GPS',
 };
 
 // ── UTILS ──────────────────────────────────────────────────────────────────
@@ -59,7 +63,7 @@ const FIELD_MAP = {
 // Cách lấy ID: mở file đó → URL có dạng /spreadsheets/d/<ID>/edit → copy <ID>.
 // ⚠️ Tài khoản deploy GAS phải có quyền EDIT trên file ngoài.
 const EXTERNAL_SPREADSHEET_IDS = {
-  CanGiuoc: '',  // ← TODO: dán Spreadsheet ID của file CanGiuoc vào đây
+  CanGiuoc: '1u1KIDPX5INt-9bI6EDK-K6VKSCJAoey7drElKW3rLS0',  // ← TODO: dán Spreadsheet ID của file CanGiuoc vào đây
 };
 
 function getSheet(name) {
@@ -466,4 +470,47 @@ function setupDistrictSheets() {
     }
   });
   Logger.log('Hoàn tất. Tiếp theo: publish từng tab thành CSV và điền URL vào DISTRICT_PAGES trong index.html.');
+}
+
+/**
+ * Chạy từ Apps Script Editor để cập nhật HEADER cho TẤT CẢ sheet địa bàn
+ * (kể cả sheet ngoài qua EXTERNAL_SPREADSHEET_IDS).
+ *
+ * Dùng khi thêm cột mới vào HEADER (vd 'Loại cáp', 'Độ chính xác (m)'...)
+ * — ensureHeader() tự động chèn cột còn thiếu ở cuối, không xóa data hiện có.
+ *
+ * Cách chạy: Apps Script Editor → chọn hàm này → nhấn Run (▶)
+ */
+function updateAllSheetsHeader() {
+  // Tất cả tên sheet cần update (kể cả DanhSachTru gốc + sheet ngoài)
+  const allSheets = [
+    'DanhSachTru',
+    'Quan1', 'Quan3', 'Quan5', 'Quan8', 'Quan10', 'Quan11',
+    'PhuNhuan', 'BinhThanh', 'TanBinh', 'TanPhu',
+    'BauBang', 'TruVanTho', 'BenCat', 'CanGiuoc'
+  ];
+  let ok = 0, missing = 0, failed = 0;
+  allSheets.forEach(function(name) {
+    try {
+      const sheet = getSheet(name);
+      if (!sheet) {
+        Logger.log('⚠ Không tìm thấy sheet: ' + name);
+        missing++;
+        return;
+      }
+      const before = sheet.getLastColumn();
+      ensureHeader(sheet);
+      const after = sheet.getLastColumn();
+      const added = after - before;
+      const loc = EXTERNAL_SPREADSHEET_IDS[name] ? '[ngoài]' : '[active]';
+      Logger.log('✓ ' + loc + ' ' + name + ' — ' + (added > 0 ? 'thêm ' + added + ' cột' : 'đã đủ HEADER'));
+      ok++;
+    } catch (e) {
+      Logger.log('❌ ' + name + ' lỗi: ' + e.message);
+      failed++;
+    }
+  });
+  Logger.log('═══════════════════════════════');
+  Logger.log('Hoàn tất: ' + ok + ' sheet OK, ' + missing + ' không tìm thấy, ' + failed + ' lỗi');
+  Logger.log('HEADER hiện tại: ' + HEADER.length + ' cột — ' + HEADER.join(' | '));
 }

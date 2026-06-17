@@ -361,6 +361,12 @@
         .ctrl-btn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 6px; }
         .ctrl-btn-grid .ctrl-btn { margin-bottom: 0; }
         .ctrl-divider { height: 1px; background: var(--border); margin: 10px -16px; }
+        .ctrl-radio { display: flex; align-items: center; gap: 8px; padding: 8px 10px;
+                      border-radius: 8px; cursor: pointer; font-size: 14px; color: var(--text);
+                      transition: background .15s; margin-bottom: 4px; }
+        .ctrl-radio:hover { background: var(--surface-2); }
+        .ctrl-radio input { margin: 0; flex-shrink: 0; }
+        .ctrl-radio .hint { color: var(--text-muted); font-size: 12px; }
 
         /* GitHub contents */
         #githubContents { font-size: 13px; max-height: 220px; overflow-y: auto; }
@@ -535,7 +541,7 @@
         /* ══ MARKER LABELS ══ */
         .custom-label {
             background: none; border: none; box-shadow: none;
-            font-weight: 700; color: #111;
+            font-weight: 400; color: #111;
             text-shadow: 0 0 3px white, 0 0 6px white;
         }
         .custom-crosshair-icon { background: transparent; border: none; }
@@ -925,6 +931,24 @@
 
                     <div class="ctrl-divider"></div>
 
+                    <!-- Thiết bị GPS (Tính năng 11) -->
+                    <div class="ctrl-section">
+                        <div class="ctrl-title">Thiết bị GPS</div>
+                        <label class="ctrl-radio">
+                            <input type="radio" name="gpsMode" value="phone" onchange="switchGpsMode('phone')">
+                            <span>📱 Phone GPS <span class="hint">(mặc định, ±3-10m)</span></span>
+                        </label>
+                        <label class="ctrl-radio">
+                            <input type="radio" name="gpsMode" value="rtk" onchange="switchGpsMode('rtk')">
+                            <span>🛰 RTK Tersus Luka <span class="hint">(±cm qua mock location)</span></span>
+                        </label>
+                        <div style="font-size:11px;color:var(--text-muted);margin-top:6px;">
+                            <a href="huongdan.html#s15" target="_blank" style="color:var(--primary);text-decoration:none;">📖 Hướng dẫn setup RTK →</a>
+                        </div>
+                    </div>
+
+                    <div class="ctrl-divider"></div>
+
                     <!-- Đồng bộ -->
                     <div class="ctrl-section">
                         <div class="ctrl-title">Vị trí &amp; Đồng bộ</div>
@@ -1165,6 +1189,39 @@
         <button onclick="cancelPickOnMap()" style="background:rgba(255,255,255,.15);border:none;color:white;border-radius:8px;padding:5px 12px;cursor:pointer;font-size:13px;font-weight:600;font-family:inherit;">Hủy</button>
     </div>
 
+    <!-- ═══ GPS TRACKING BAR (P13b) ═══ -->
+    <div id="gpsTrackingBar" style="display:none; position:fixed; left:12px; right:12px;
+         bottom:calc(var(--bottombar-h) + var(--safe-bottom) + 20px); z-index:5000;
+         background:white; border:2px solid #94a3b8; border-radius:12px; padding:12px;
+         box-shadow:0 4px 20px rgba(0,0,0,.25); transition:border-color .3s;
+         font-family:var(--font); max-width:560px; margin:0 auto;">
+        <div style="display:flex; align-items:center; gap:12px;">
+            <div id="gpsStatusIcon" style="font-size:24px; flex-shrink:0;">🛰</div>
+            <div style="flex:1; min-width:0;">
+                <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                    <span id="gpsStatusLabel" style="font-size:13px; font-weight:700; color:#0f172a;">Đang tìm tín hiệu...</span>
+                    <span id="gpsStatusBadge" style="display:none; font-size:10px; font-weight:800;
+                        padding:2px 8px; border-radius:999px; background:#e5e7eb; color:#374151;"></span>
+                </div>
+                <div id="gpsAccuracyText" style="font-size:20px; font-weight:800; color:#0f172a; line-height:1.1; margin-top:2px;">— —</div>
+                <div id="gpsProgressText" style="font-size:11px; color:#64748b; margin-top:2px;">Đang lấy GPS...</div>
+            </div>
+            <div style="display:flex; flex-direction:column; gap:6px; flex-shrink:0;">
+                <button id="gpsAcceptBtn" style="background:#10b981; color:white; border:none; border-radius:8px;
+                    padding:8px 12px; font-size:13px; font-weight:700; cursor:pointer; font-family:inherit;">✓ Dùng</button>
+                <button id="gpsCancelBtn" style="background:#f3f4f6; color:#374151; border:1px solid #d1d5db;
+                    border-radius:8px; padding:8px 12px; font-size:13px; font-weight:600; cursor:pointer; font-family:inherit;">✗ Hủy</button>
+            </div>
+        </div>
+        <div id="gpsCountdownBar" style="display:none; margin-top:10px; height:5px; background:#e5e7eb; border-radius:3px; overflow:hidden;">
+            <div id="gpsCountdownFill" style="width:100%; height:100%; background:#10b981; transition:width 1s linear;"></div>
+        </div>
+        <div id="gpsWaitBetterWrap" style="display:none; text-align:center; margin-top:6px;">
+            <button onclick="_gpsWaitBetter()" style="background:none; border:none; color:#3b82f6;
+                font-size:12px; font-weight:600; cursor:pointer; text-decoration:underline; font-family:inherit;">⏸ Đợi tốt hơn</button>
+        </div>
+    </div>
+
     <!-- ═══ NÚT VỀ ĐẦU TRANG ═══ -->
     <button id="backToTopBtn" title="Về đầu trang">↑</button>
 
@@ -1362,7 +1419,7 @@
                     </div>
                 </div>
                 <div class="form-sep"></div>
-                <!-- Cáp nguồn: marker gốc + khoảng cách cùng hàng -->
+                <!-- Cáp nguồn: marker gốc + khoảng cách + loại cáp cùng hàng -->
                 <div class="form-row">
                     <div class="form-group w3">
                         <label for="markerGocInput">Cáp — Trụ/tủ gốc</label>
@@ -1375,6 +1432,13 @@
                     <div class="form-group w2">
                         <label for="markerKhoangCachInput">Cách (m)</label>
                         <input id="markerKhoangCachInput" type="number" min="0" placeholder="Tự động">
+                    </div>
+                    <div class="form-group w2">
+                        <label for="markerLoaiCapInput">Loại cáp</label>
+                        <select id="markerLoaiCapInput">
+                            <option value="noi">Cáp nổi</option>
+                            <option value="ngam">Cáp ngầm</option>
+                        </select>
                     </div>
                 </div>
                 <div class="form-group">
@@ -1451,7 +1515,8 @@
         // ─── In bản vẽ sơ đồ tuyến ───
         // ── PERSIST FORM FIELD CỦA MODAL "IN BẢN VẼ" ───────────────────
         // Lưu/khôi phục các tùy chọn user đã chọn lần trước (trừ pdNgay — luôn lấy hôm nay)
-        const _PD_FIELDS = ['pdTuSelect','pdScale','pdPaper','pdRotation','pdTenTu','pdSoBanVe','pdNguoiLap','pdCVPhuTrach','pdCSKhuVuc'];
+        // pdTenTu cố ý KHÔNG persist — luôn lấy từ filter tủ điều khiển khi mở modal
+        const _PD_FIELDS = ['pdTuSelect','pdScale','pdPaper','pdRotation','pdSoBanVe','pdNguoiLap','pdCVPhuTrach','pdCSKhuVuc'];
         function _savePdFields() {
             _PD_FIELDS.forEach(id => {
                 const el = document.getElementById(id);
@@ -1501,6 +1566,12 @@
             if (nguoiEl && !nguoiEl.value && currentUser) nguoiEl.value = currentUser.displayName || currentUser.username || '';
             const ngayEl = document.getElementById('pdNgay');
             if (ngayEl) ngayEl.value = new Date().toISOString().slice(0,10); // luôn lấy hôm nay
+            // pdTenTu LUÔN lấy từ filter tủ điều khiển — không nhớ giá trị cũ, không restore localStorage
+            const tenTuEl = document.getElementById('pdTenTu');
+            if (tenTuEl) {
+                const tuArr = (_activeFilters.tuDieuKhien || []).filter(Boolean);
+                tenTuEl.value = (tuArr.length === 1) ? tuArr[0] : '';
+            }
             $('#printDrawingModal').modal('show');
         }
 
@@ -1514,6 +1585,7 @@
             return rows.filter(r => String(r[7] || '') === tuName);
         }
 
+        // Trả về null nếu không có cycle, hoặc array chain [n1, n2, ..., nk, n1] mô tả vòng lặp.
         function _detectCableCycle(rows) {
             const parent = {};
             rows.forEach(r => {
@@ -1523,18 +1595,26 @@
             });
             for (const start of Object.keys(parent)) {
                 const visited = new Set();
+                const path = [];
                 let cur = start;
                 while (cur && parent[cur]) {
-                    if (visited.has(cur)) return true;
-                    visited.add(cur); cur = parent[cur];
+                    if (visited.has(cur)) {
+                        // Cycle: cắt path từ chỗ cur xuất hiện lần đầu, thêm cur ở cuối để hiển thị vòng
+                        const startIdx = path.indexOf(cur);
+                        return path.slice(startIdx).concat([cur]);
+                    }
+                    visited.add(cur); path.push(cur); cur = parent[cur];
                 }
             }
-            return false;
+            return null;
         }
 
         function _buildCableLines(rows) {
-            if (_detectCableCycle(rows)) {
-                displayError('⚠ Phát hiện vòng lặp Marker gốc — kiểm tra lại dữ liệu trước khi vẽ cáp.');
+            const cycle = _detectCableCycle(rows);
+            if (cycle) {
+                const chain = cycle.join(' → ');
+                console.error('[cable] Vòng lặp Marker gốc:', chain);
+                displayError('⚠ Vòng lặp Marker gốc: ' + chain + ' — sửa cột Marker gốc của 1 trong các trụ này.');
                 return;
             }
             _removeCableLines();
@@ -1554,8 +1634,10 @@
                 const child = String(r[1] || '').trim();
                 if (!child || !posIdx[child] || child === parent) return;
                 const from = posIdx[parent], to = posIdx[child];
+                const cableType = String(r[22] || 'noi');
+                const style = CABLE_STYLE[cableType] || CABLE_STYLE.noi;
                 const line = L.polyline([from, to], {
-                    color: '#1e40af', weight: 2.5, dashArray: '7 5', opacity: 0.8
+                    color: style.color, weight: 2.5, dashArray: style.dashArray, opacity: 0.8
                 });
                 line._cableRow = r;
                 line.addTo(_cableLayerGroup);
@@ -1616,12 +1698,14 @@
                     String(haversineM(posIdx[childName][0], posIdx[childName][1], posIdx[parentName][0], posIdx[parentName][1]));
                 const mx = ((from.x + to.x) / 2).toFixed(1);
                 const my = ((from.y + to.y) / 2).toFixed(1);
+                const cableType = String(r[22] || 'noi');
+                const style = CABLE_STYLE[cableType] || CABLE_STYLE.noi;
 
                 markup +=
                     `<line x1="${from.x.toFixed(1)}" y1="${from.y.toFixed(1)}" x2="${to.x.toFixed(1)}" y2="${to.y.toFixed(1)}"` +
-                    ` stroke="#1e40af" stroke-width="2.5" stroke-dasharray="7 5" opacity="0.85"/>` +
+                    ` stroke="${style.color}" stroke-width="2.5" stroke-dasharray="${style.dashArray}" opacity="0.85"/>` +
                     `<text x="${mx}" y="${my}" text-anchor="middle" dominant-baseline="middle"` +
-                    ` font-family="Arial,sans-serif" font-size="10" font-weight="700" fill="#1e40af"` +
+                    ` font-family="Arial,sans-serif" font-size="10" font-weight="700" fill="${style.color}"` +
                     ` paint-order="stroke" stroke="white" stroke-width="3" stroke-linejoin="round">${distVal}m</text>`;
             });
 
@@ -2053,27 +2137,38 @@
             _hidePrintOverlay();
             const { rows, tenTu, scale, ngay, nguoiLap, soBanVe, cvPhuTrach = '', csKhuVuc = '' } = opts;
             const usedTypes = [...new Set(rows.map(r => parseInt(r[6])).filter(t => TYPE_CONFIG[t]))];
+
             // Đếm số trụ/tủ theo từng loại trong filtered rows
             const countByType = {};
             rows.forEach(r => {
                 const t = Number(r[6]);
                 if (t) countByType[t] = (countByType[t] || 0) + 1;
             });
-            // Tổng chiều dài cáp đã được tính ở totalCap bên dưới
-            // Mỗi row: ký hiệu (icon + label) | số lượng | đơn vị | border-bottom phân tách
+
+            // ── Footer height: tự nở theo nội dung, không tính cố định (tránh clip) ──
+            // Bật compact khi > 5 loại để icon đủ nhỏ fit trong max-height 280px.
+            const compactMode = usedTypes.length > 5;
+
+            // Style động cho row/cell (font + padding scale theo mode)
             const _rowStyle = 'border-bottom:1px solid #94a3b8;';
-            const _cellLeft = 'padding:3px 8px;border-right:1px solid #94a3b8;vertical-align:middle;';
-            const _cellMid  = 'padding:3px 6px;border-right:1px solid #94a3b8;vertical-align:middle;text-align:center;font-weight:800;font-size:11px;color:#0f172a;';
-            const _cellRight= 'padding:3px 6px;vertical-align:middle;text-align:center;font-size:10px;color:#1e293b;';
+            const _cellPadV = compactMode ? '2px' : '4px';
+            const _fontMain = compactMode ? '9px' : '10px';
+            const _fontNum  = compactMode ? '10px' : '11px';
+            const _iconW    = compactMode ? '18px' : '26px';
+            const _cellLeft = `padding:${_cellPadV} 8px;border-right:1px solid #94a3b8;vertical-align:middle;`;
+            const _cellMid  = `padding:${_cellPadV} 6px;border-right:1px solid #94a3b8;vertical-align:middle;text-align:center;font-weight:400;font-size:${_fontNum};color:#0f172a;`;
+            const _cellRight= `padding:${_cellPadV} 6px;vertical-align:middle;text-align:center;font-size:${_fontMain};color:#1e293b;`;
             const legendItems = usedTypes.map(t => {
                 const cfg = TYPE_CONFIG[t];
-                const svgHtml = cfg.shape === 'cabinet' ? _makeCabinetIconSvg(cfg.color) : _makeLampIconSvg(cfg.color);
+                const svgHtml = cfg.shape === 'cabinet'
+                    ? _makeCabinetIconSvg(cfg.color, compactMode)
+                    : _makeLampIconSvg(cfg.color, compactMode);
                 const unit = cfg.shape === 'cabinet' ? 'tủ' : 'trụ';
                 return `<tr style="${_rowStyle}">
                     <td style="${_cellLeft}">
                         <div style="display:flex;align-items:center;gap:6px;">
-                            <div style="width:26px;text-align:center;flex-shrink:0;line-height:0;">${svgHtml}</div>
-                            <span style="font-size:10px;color:#1e293b;">${cfg.label}</span>
+                            <div style="width:${_iconW};text-align:center;flex-shrink:0;line-height:0;">${svgHtml}</div>
+                            <span style="font-size:${_fontMain};color:#1e293b;">${cfg.label}</span>
                         </div>
                     </td>
                     <td style="${_cellMid}">${countByType[t] || 0}</td>
@@ -2088,38 +2183,50 @@
                 const lat = parseCoord(r[2]), lon = parseCoord(r[3]);
                 if (name && Number.isFinite(lat) && Number.isFinite(lon)) posIdx[name] = [lat, lon];
             });
-            const totalCap = rows.reduce((s, r) => {
+            // Tách tổng cáp theo loại (noi/ngam) — dùng cho legend hiển thị 2 dòng riêng
+            const capByType = { noi: 0, ngam: 0 };
+            rows.forEach(r => {
                 const parent = String(r[14] || '').trim();
-                if (!parent) return s; // không có cha → không có cáp
+                if (!parent) return;
                 const child = String(r[1] || '').trim();
-                if (!posIdx[parent] || !posIdx[child] || child === parent) return s;
+                if (!posIdx[parent] || !posIdx[child] || child === parent) return;
+                const type = String(r[22] || 'noi') === 'ngam' ? 'ngam' : 'noi';
                 const v = parseFloat(String(r[15] || '').replace(',', '.'));
-                if (Number.isFinite(v) && v > 0) return s + v;
-                // Fallback Haversine
-                return s + haversineM(posIdx[parent][0], posIdx[parent][1], posIdx[child][0], posIdx[child][1]);
-            }, 0);
-            // Footer bottom-left (37.5% × 110px) — đối xứng với khung tên (62.5%, bottom-right).
-            // Chứa Bảng ký hiệu dạng bảng 3 cột (ký hiệu | số lượng | đơn vị), mỗi hàng có line gạch dưới.
-            const cableRow = `<tr style="${_rowStyle}">
-                <td style="${_cellLeft}">
-                    <div style="display:flex;align-items:center;gap:6px;">
-                        <div style="width:26px;text-align:center;flex-shrink:0;line-height:0;">
-                            <svg width="22" height="8"><line x1="0" y1="4" x2="22" y2="4" stroke="#1e40af" stroke-width="2.2" stroke-dasharray="4 2"/></svg>
+                const len = (Number.isFinite(v) && v > 0)
+                    ? v
+                    : haversineM(posIdx[parent][0], posIdx[parent][1], posIdx[child][0], posIdx[child][1]);
+                capByType[type] += len;
+            });
+
+            // Build cable rows — hiện 2 dòng riêng "Cáp nổi" và "Cáp ngầm"
+            const _cableSvgW = compactMode ? '14' : '22';
+            const _cableRow = (type) => {
+                const style = CABLE_STYLE[type];
+                const dashAttr = style.dashArray.replace('10 4', '5 2').replace('2 3 8 3', '1.5 1.5 4 1.5'); // scale dashArray cho icon nhỏ
+                return `<tr style="${_rowStyle}">
+                    <td style="${_cellLeft}">
+                        <div style="display:flex;align-items:center;gap:6px;">
+                            <div style="width:${_iconW};text-align:center;flex-shrink:0;line-height:0;">
+                                <svg width="${_cableSvgW}" height="8"><line x1="0" y1="4" x2="${_cableSvgW}" y2="4" stroke="${style.color}" stroke-width="2.2" stroke-dasharray="${dashAttr}"/></svg>
+                            </div>
+                            <span style="font-size:${_fontMain};color:#1e293b;">${style.label}</span>
                         </div>
-                        <span style="font-size:10px;color:#1e293b;">Cáp nguồn</span>
-                    </div>
-                </td>
-                <td style="${_cellMid}">${totalCap.toFixed(0)}</td>
-                <td style="${_cellRight}">m</td>
-            </tr>`;
-            const footerHtml = `<div style="position:absolute;left:0;bottom:0;width:37.5%;height:110px;
+                    </td>
+                    <td style="${_cellMid}">${Math.round(capByType[type])}</td>
+                    <td style="${_cellRight}">m</td>
+                </tr>`;
+            };
+            // Luôn hiện cáp nổi; chỉ hiện cáp ngầm nếu có dữ liệu
+            const cableRow = _cableRow('noi') + (capByType.ngam > 0 ? _cableRow('ngam') : '');
+            const footerHtml = `<div style="position:absolute;left:0;bottom:0;width:30%;
+                min-height:110px;max-height:280px;
                 background:white;border-top:2px solid #1e293b;border-right:2px solid #1e293b;
                 overflow:hidden;font-family:Arial,sans-serif;">
-                <table style="width:100%;height:100%;border-collapse:collapse;table-layout:fixed;">
+                <table style="width:100%;border-collapse:collapse;table-layout:fixed;">
                     <colgroup>
-                        <col style="width:60%">
-                        <col style="width:22%">
+                        <col style="width:66%">
                         <col style="width:18%">
+                        <col style="width:16%">
                     </colgroup>
                     <!-- Header row -->
                     <thead>
@@ -2159,7 +2266,7 @@
                         </div>
                     </div>
                     ${footerHtml}
-                    <!-- Khung tên (title block) -->
+                    <!-- Khung tên (title block) — fixed 110px ở góc dưới phải, KHÔNG đồng bộ với footer -->
                     <div style="position:absolute;right:0;bottom:0;width:62.5%;height:110px;
                                 background:white;border-top:2px solid #1e293b;border-left:2px solid #1e293b;overflow:hidden;">
                       <table style="width:100%;height:100%;border-collapse:collapse;table-layout:fixed;font-family:Arial,sans-serif;">
@@ -2174,7 +2281,7 @@
                           </td>
                           <td colspan="2" style="border-right:1px solid #94a3b8;border-bottom:1px solid #94a3b8;padding:2px 5px;text-align:center;vertical-align:middle;">
                             <div style="font-size:7.5px;font-weight:800;color:#0f172a;text-transform:uppercase;line-height:1.4;">CÔNG TY CỔ PHẦN CHIẾU SÁNG CÔNG CỘNG TP.HCM</div>
-                            <div style="font-size:6.5px;font-weight:700;color:#475569;text-transform:uppercase;margin-top:2px;letter-spacing:.3px;">CHIẾU SÁNG KHU VỰC TRUNG TÂM</div>
+                            <div style="font-size:6.5px;font-weight:800;color:#0f172a;text-transform:uppercase;margin-top:2px;letter-spacing:.3px;">CHIẾU SÁNG KHU VỰC TRUNG TÂM</div>
                           </td>
                           <td rowspan="2" style="border-right:1px solid #94a3b8;padding:5px 10px;vertical-align:middle;text-align:center;">
                             <div style="font-size:9.5px;font-weight:800;color:#0f172a;text-transform:uppercase;letter-spacing:.3px;">BẢN VẼ SƠ ĐỒ TUYẾN TRẠM ĐÈN</div>
@@ -2686,6 +2793,8 @@
 
         function _applyRoleUI() {
             const edit = canEdit();
+            // Sync GPS mode radio button (Tính năng 11 — P13a)
+            _syncGpsModeRadio();
             // Ẩn nút Thêm marker với vai trò demo
             const addBtn = document.getElementById('addMarkerBtn');
             if (addBtn) addBtn.style.display = edit ? '' : 'none';
@@ -3346,7 +3455,7 @@
 
             if (name) {
                 labelLayerGroup.addLayer(L.marker([lat, lon], {
-                    icon: L.divIcon({ className: 'custom-label', html: `<div style="font-size:12px;font-weight:bold">${name}</div>`, iconSize: [80,20], iconAnchor: [40,-20] }),
+                    icon: L.divIcon({ className: 'custom-label', html: `<div style="font-size:11px;font-weight:400">${name}</div>`, iconSize: [80,20], iconAnchor: [40,-20] }),
                     interactive: false,
                     pane: 'shadowPane'
                 }));
@@ -3382,6 +3491,77 @@
             5: { color: '#2563eb', bg: '#dbeafe', label: 'Tủ chiếu sáng nổi', emoji: '🗄', shape: 'cabinet' },
             6: { color: '#334155', bg: '#e2e8f0', label: 'Tủ chiếu sáng ngầm',emoji: '🗄', shape: 'cabinet' },
         };
+
+        // Loại cáp: 'noi' (nổi/aerial) hoặc 'ngam' (ngầm/buried).
+        // Mặc định 'noi' cho marker cũ không có row[22].
+        const CABLE_STYLE = {
+            noi:  { color: '#1e40af', dashArray: '10 4',    label: 'Cáp nổi'  },
+            ngam: { color: '#dc2626', dashArray: '2 3 8 3', label: 'Cáp ngầm' }
+        };
+
+        // ── GPS MODES (Tính năng 11) ──────────────────────────────────────
+        // 2 chế độ: phone GPS thường (±3-10m) vs RTK qua mock location (±cm).
+        // P13b sẽ dùng getBestFix(opts) để thực thi pipeline khác nhau theo mode.
+        const GPS_MODES = {
+            phone: {
+                label: '📱 Phone GPS', emoji: '📱',
+                targetAccuracy: 5.0,    // m
+                maxWaitMs: 30000,
+                useAveraging: true,
+                averageSamples: 8,
+                coordPrecision: 6,
+                vn2000Precision: 0,
+                statusBadge: false
+            },
+            rtk: {
+                label: '🛰 RTK', emoji: '🛰',
+                targetAccuracy: 0.05,   // 5cm — RTK Fixed
+                maxWaitMs: 60000,
+                useAveraging: false,
+                coordPrecision: 8,
+                vn2000Precision: 3,
+                statusBadge: true
+            }
+        };
+        let currentGpsMode = localStorage.getItem('gpsMode') || 'phone';
+
+        // ── Helpers hiển thị accuracy / coord / VN2000 theo mode ─────────
+        function formatAccuracy(meters) {
+            if (meters == null || !Number.isFinite(meters)) return '—';
+            if (meters < 1)   return `±${(meters * 100).toFixed(1)} cm`;
+            if (meters < 10)  return `±${meters.toFixed(2)} m`;
+            return `±${meters.toFixed(0)} m`;
+        }
+        function rtkStatus(acc) {
+            if (acc <= 0.05) return { label: 'RTK FIXED', color: '#10b981', emoji: '🟢' };
+            if (acc <= 0.50) return { label: 'RTK FLOAT', color: '#f59e0b', emoji: '🟡' };
+            if (acc <= 5.00) return { label: 'DGPS',      color: '#3b82f6', emoji: '🔵' };
+            return                   { label: 'SPS',       color: '#6b7280', emoji: '⚪' };
+        }
+        function formatCoord(value, mode) {
+            const cfg = GPS_MODES[mode || currentGpsMode];
+            return Number(value).toFixed(cfg.coordPrecision);
+        }
+        function formatVn2000(value, mode) {
+            const cfg = GPS_MODES[mode || currentGpsMode];
+            return Number(value).toFixed(cfg.vn2000Precision);
+        }
+
+        // Chuyển mode — gọi từ radio button trong ☰ Settings.
+        // P13b sẽ thêm logic auto-discard ongoing tracking.
+        function switchGpsMode(newMode) {
+            if (!GPS_MODES[newMode]) return;
+            if (typeof _hideGpsTrackingBar === 'function') _hideGpsTrackingBar();
+            currentGpsMode = newMode;
+            localStorage.setItem('gpsMode', newMode);
+            displayInfo(`Đã chuyển sang chế độ ${GPS_MODES[newMode].label}`);
+            _syncGpsModeRadio();
+        }
+        function _syncGpsModeRadio() {
+            document.querySelectorAll('input[name="gpsMode"]').forEach(r => {
+                r.checked = r.value === currentGpsMode;
+            });
+        }
 
         function makeLampIcon(color, loaiDen, congSuat, soLuong) {
             const n = Math.min(Math.max(parseInt(soLuong) || 1, 1), 4);
@@ -3497,16 +3677,19 @@
                 <rect x="17.5" y="3" width="7" height="4" rx="2" fill="white" opacity="0.85"/>
             </svg>`;
         }
-        // Legend SVGs — kích thước khớp với icon hiển thị trên bản đồ (sau html2canvas)
-        // Map icon thực: cabinet 24×28, lamp 26×18 (variant 1 đèn)
-        function _makeCabinetIconSvg(color) {
-            return `<svg xmlns="http://www.w3.org/2000/svg" width="22" height="26" viewBox="0 0 24 28">
+        // Legend SVGs — kích thước khớp với icon hiển thị trên bản đồ (sau html2canvas).
+        // Map icon thực: cabinet 24×28, lamp 26×18 (variant 1 đèn).
+        // compact=true → icon nhỏ hơn (dùng khi N loại > 8, footer chật).
+        function _makeCabinetIconSvg(color, compact) {
+            const w = compact ? 12 : 22, h = compact ? 14 : 26;
+            return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 24 28">
                 <rect x="2" y="1" width="20" height="24" rx="3" fill="${color}" stroke="white" stroke-width="2"/>
                 <line x1="2" y1="11" x2="22" y2="11" stroke="white" stroke-width="1.5" opacity="0.7"/>
                 <circle cx="12" cy="18" r="3" fill="white" opacity="0.85"/></svg>`;
         }
-        function _makeLampIconSvg(color) {
-            return `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="38" viewBox="0 0 26 42">
+        function _makeLampIconSvg(color, compact) {
+            const w = compact ? 14 : 24, h = compact ? 22 : 38;
+            return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 26 42">
                 <rect x="10" y="18" width="4" height="24" rx="2" fill="${color}"/>
                 <path d="M12 18 C12 12 15 7 22 5" stroke="${color}" stroke-width="3.2" stroke-linecap="round" fill="none"/>
                 <rect x="16" y="1.5" width="10" height="7" rx="3.5" fill="${color}"/>
@@ -3816,6 +3999,8 @@
             if (streetInput) streetInput.value = lastMarkerStreet || '';
             const wardInput = document.getElementById('markerWardInput');
             if (wardInput) wardInput.value = lastMarkerWard || '';
+            const loaiCapInput = document.getElementById('markerLoaiCapInput');
+            if (loaiCapInput) loaiCapInput.value = 'noi'; // default cho marker mới
             // Populate datalist gợi ý phường/xã
             const dl = document.getElementById('wardDatalist');
             if (dl) {
@@ -4037,7 +4222,10 @@
                         khoangCach: row[15] || '', maPE: row[16] || '',
                         duong: row[17] || '', phuongXa: row[18] || '',
                         vn2000x: row[19] || '', vn2000y: row[20] || '',
-                        soLuongDen: row[21] || ''
+                        soLuongDen: row[21] || '',
+                        loaiCap: row[22] || 'noi',
+                        accuracy: row[23] != null ? String(row[23]) : '',
+                        gpsMode:  row[24] != null ? String(row[24]) : ''
                     })
                 });
                 const data = await res.json();
@@ -4094,6 +4282,7 @@
                 const type = currentMarkerType || 1;
                 const markerGocVal     = (document.getElementById('markerGocInput')      || {}).value?.trim() || '';
                 const khoangCachVal    = (document.getElementById('markerKhoangCachInput') || {}).value?.trim() || '';
+                const loaiCapVal       = (document.getElementById('markerLoaiCapInput')   || {}).value || 'noi';
                 let baseMarkerName = '', distanceToBase = '';
                 if (markerGocVal) {
                     baseMarkerName  = markerGocVal;
@@ -4124,7 +4313,7 @@
                     });
 
                     // Cập nhật row in-place (giữ ID, cập nhật tất cả field còn lại)
-                    const updated = ['',name,lat,lon,note,nguoiKS,type,cabinetName,poleType,'',lampType,congSuat,keepImg,updatedAt,baseMarkerName,distanceToBase,maPE,street,ward,Math.round(_vn.x),Math.round(_vn.y),soLuongDen];
+                    const updated = ['',name,lat,lon,note,nguoiKS,type,cabinetName,poleType,'',lampType,congSuat,keepImg,updatedAt,baseMarkerName,distanceToBase,maPE,street,ward,Math.round(_vn.x),Math.round(_vn.y),soLuongDen,loaiCapVal];
                     updated[0] = existingId;
                     for (let i = 0; i < updated.length; i++) _editingRow[i] = updated[i];
 
@@ -4138,7 +4327,7 @@
                     displayError('Đã cập nhật marker — đang lưu lên Google Sheets...');
                 } else {
                     // ── CHẾ ĐỘ THÊM MỚI ──
-                    const newRow = ['',name,lat,lon,note,nguoiKS,type,cabinetName,poleType,'',lampType,congSuat,markerImageDataUrl||'',updatedAt,baseMarkerName,distanceToBase,maPE,street,ward,Math.round(_vn.x),Math.round(_vn.y),soLuongDen];
+                    const newRow = ['',name,lat,lon,note,nguoiKS,type,cabinetName,poleType,'',lampType,congSuat,markerImageDataUrl||'',updatedAt,baseMarkerName,distanceToBase,maPE,street,ward,Math.round(_vn.x),Math.round(_vn.y),soLuongDen,loaiCapVal];
                     loadedData.push(newRow); newMarkerRows.push(newRow);
                     markerImageDataUrl = null;
                     const newMarker = addMarkerRowToMap(newRow);
@@ -4907,6 +5096,8 @@
                 if (markerGocEl) markerGocEl.value = row[14] || '';
                 const khoangCachEl = document.getElementById('markerKhoangCachInput');
                 if (khoangCachEl) khoangCachEl.value = row[15] || '';
+                const loaiCapEl = document.getElementById('markerLoaiCapInput');
+                if (loaiCapEl) loaiCapEl.value = row[22] === 'ngam' ? 'ngam' : 'noi';
 
                 // Ảnh hiện có
                 const imgVal = row[12] || '';

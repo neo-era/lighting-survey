@@ -144,6 +144,7 @@
       <li><a href="#s12">Xuất CAD (DXF)</a></li>
       <li><a href="#s13">Đồng bộ GitHub</a></li>
       <li><a href="#s14">Cài app trên điện thoại / máy tính</a></li>
+      <li><a href="#s15">Cấu hình GPS (Phone &amp; RTK Tersus Luka)</a></li>
     </ol>
   </div>
 
@@ -698,6 +699,139 @@
       <span class="note-icon">📱</span>
       <div>Sau khi cài, app mở toàn màn hình (không có thanh địa chỉ). Bản đồ, thư viện và dữ liệu địa bàn đã cache offline — vẫn xem được khi mất mạng.</div>
     </div>
+  </section>
+
+  <!-- 15. CẤU HÌNH GPS -->
+  <section id="s15">
+    <h2><span class="num">15</span> Cấu hình GPS (Phone &amp; RTK)</h2>
+    <p>App hỗ trợ 2 chế độ GPS: <strong>📱 Phone GPS</strong> (mặc định, ±3–10m) và <strong>🛰 RTK</strong> (Tersus Luka qua mock location, ±1–5cm khi Fixed). Chọn chế độ tại <kbd>☰</kbd> → <strong>Thiết bị GPS</strong>.</p>
+
+    <div class="note note-info">
+      <span class="note-icon">ℹ️</span>
+      <div>Mỗi chế độ có ngưỡng accuracy + precision tọa độ riêng. Marker đo bằng RTK lưu tọa độ chính xác đến <code>mm</code> (8 chữ số thập phân), marker phone GPS lưu <code>cm</code> (6 chữ số).</div>
+    </div>
+
+    <h3>Quá trình lấy GPS — thanh tiến độ nổi</h3>
+    <p>Khi user bấm <strong>"Thêm marker"</strong> hoặc <strong>"Vị trí hiện tại"</strong>, một thanh nổi xuất hiện sát đáy màn hình hiển thị accuracy realtime:</p>
+    <ul>
+      <li><strong>⏳ Phase tìm tín hiệu</strong> — bar màu vàng/cam, hiển thị accuracy hiện tại + mục tiêu + thời gian đã chờ. Map vẫn pan/zoom được.</li>
+      <li><strong>✓ Phase đạt mục tiêu</strong> — bar đổi xanh, countdown <strong>3 giây auto-accept</strong>. User có thể bấm <strong>"Dùng ngay"</strong> để chấp nhận ngay, hoặc <strong>"Đợi tốt hơn"</strong> để chờ accuracy tốt hơn.</li>
+      <li>Auto-discard nếu user bấm <strong>"Hủy"</strong> hoặc đổi chế độ GPS giữa chừng.</li>
+    </ul>
+
+    <h3>Phần A — Cấu hình Phone GPS (mặc định)</h3>
+    <p>Tối ưu GPS điện thoại để đạt accuracy &lt;5m:</p>
+    <div class="steps">
+      <div class="step">
+        <div class="sn">1</div>
+        <div class="sc"><strong>Bật chế độ High Accuracy</strong>:
+          <em>Settings → Location → Mode → "High accuracy"</em> (Android) hoặc <em>Settings → Privacy → Location Services → ON</em> (iOS). Đảm bảo dùng GNSS thật, không chỉ Wi-Fi/Network.</div>
+      </div>
+      <div class="step">
+        <div class="sn">2</div>
+        <div class="sc"><strong>Đứng outdoor, sky view rõ</strong> — Tránh tường, dưới cây dày, gầm cầu. Multipath làm sai số tăng 5-10× trong đô thị dày đặc.</div>
+      </div>
+      <div class="step">
+        <div class="sn">3</div>
+        <div class="sc"><strong>Tắt Battery Saver cho browser</strong> — Battery saver throttle GPS, accuracy tệ đi đáng kể. Set Chrome / Safari "No restrictions" trong Battery settings.</div>
+      </div>
+      <div class="step">
+        <div class="sn">4</div>
+        <div class="sc"><strong>Warm-up GPS</strong> — Trước khi khảo sát, mở Google Maps 30 giây để GPS download orbit data (A-GPS). Sau đó mở app khảo sát, fix sẽ nhanh và chính xác hơn.</div>
+      </div>
+      <div class="step">
+        <div class="sn">5</div>
+        <div class="sc"><strong>Đứng yên 5-10s khi lấy GPS</strong> — App tự gom 8 mẫu liên tiếp, loại outlier (Median Absolute Deviation), tính trung bình. Sai số giảm ~√8 ≈ 2.83 lần so với 1 mẫu.</div>
+      </div>
+    </div>
+
+    <h3>Phần B — Setup RTK Tersus Luka qua Mock Location (Android)</h3>
+    <p>Đạt accuracy &lt;5cm (RTK Fixed) — chỉ trên Android, cần app <strong>Nuwa</strong> của Tersus + NTRIP correction.</p>
+    <div class="steps">
+      <div class="step">
+        <div class="sn">1</div>
+        <div class="sc"><strong>Pair Bluetooth</strong>: Bật Luka, long-press power 5s → chuyển sang chế độ pair. Settings → Bluetooth → tìm "Luka_xxx" → kết nối.</div>
+      </div>
+      <div class="step">
+        <div class="sn">2</div>
+        <div class="sc"><strong>Cài Nuwa</strong>: Tải APK từ <code>tersus-gnss.com</code> (không có trên Play Store). Cài đặt và mở.</div>
+      </div>
+      <div class="step">
+        <div class="sn">3</div>
+        <div class="sc"><strong>Connect Luka trong Nuwa</strong>: Device → Connect → chọn Luka đã pair. Hiển thị trạng thái "Connected".</div>
+      </div>
+      <div class="step">
+        <div class="sn">4</div>
+        <div class="sc"><strong>Config NTRIP</strong>: Survey → Settings → CORS/NTRIP. Điền:
+          <ul style="margin-top:6px;">
+            <li><strong>Server</strong>: IP NTRIP caster (VD VINAGEO: <code>caster.vinageoit.com</code>)</li>
+            <li><strong>Port</strong>: <code>2101</code> hoặc <code>8080</code></li>
+            <li><strong>Mountpoint</strong>: VD <code>VRSNT_NRTK</code></li>
+            <li><strong>User / Password</strong>: do nhà cung cấp cấp</li>
+          </ul></div>
+      </div>
+      <div class="step">
+        <div class="sn">5</div>
+        <div class="sc"><strong>Chờ RTK FIXED</strong>: Nuwa hiển thị quality indicator ở góc dưới — <code>SINGLE</code> → <code>DGNSS</code> → <code>FLOAT</code> → <code>FIXED</code>. Cần đạt <strong>FIXED</strong> mới có ±1-2cm. Thời gian: 30s - 2 phút tùy NTRIP và môi trường.</div>
+      </div>
+      <div class="step">
+        <div class="sn">6</div>
+        <div class="sc"><strong>Bật Developer Options trên Android</strong>:
+          <em>Settings → About phone → tap "Build number" 7 lần</em> → quay lại Settings → có mục "Developer options".</div>
+      </div>
+      <div class="step">
+        <div class="sn">7</div>
+        <div class="sc"><strong>Set Nuwa làm Mock Location app</strong>:
+          <em>Settings → Developer options → "Select mock location app"</em> → chọn <strong>Nuwa</strong>.</div>
+      </div>
+      <div class="step">
+        <div class="sn">8</div>
+        <div class="sc"><strong>Trong Nuwa: Output to System Location</strong>:
+          Device → Output → bật <strong>"Output to system location"</strong> (tên có thể là "Mock location output" hoặc "Share with system"). Bắt đầu phát tọa độ RTK ra Android Location Service.</div>
+      </div>
+      <div class="step">
+        <div class="sn">9</div>
+        <div class="sc"><strong>Verify</strong>: Mở Chrome → vào <code>https://www.maptiler.com/whereami/</code> hoặc app khảo sát → accuracy phải hiển thị <strong>≈ 0.02m (2cm)</strong>. Nếu vẫn 3-5m, mock location chưa hoạt động — kiểm tra bước 7-8.</div>
+      </div>
+      <div class="step">
+        <div class="sn">10</div>
+        <div class="sc"><strong>Trong app khảo sát</strong>: <kbd>☰</kbd> → <strong>Thiết bị GPS</strong> → chọn <strong>🛰 RTK</strong>. Từ giờ thanh tracking bar sẽ hiển thị status badge: <code>RTK FIXED</code> / <code>FLOAT</code> / <code>DGPS</code>.</div>
+      </div>
+    </div>
+
+    <div class="note note-warn">
+      <span class="note-icon">⚠️</span>
+      <div>iOS không cho phép mock location qua app bên thứ 3 — chỉ Android. Trên iPhone vẫn dùng được Phone GPS thường.</div>
+    </div>
+
+    <h3>NTRIP — chọn nguồn correction ở Việt Nam</h3>
+    <ul>
+      <li><strong>VINAGEO</strong> (<code>vinageoit.com</code>) — phổ biến nhất với surveyor, phủ TP HCM/Hà Nội/Đà Nẵng. Subscription tháng.</li>
+      <li><strong>VRSNT (Bộ TN&amp;MT)</strong> — toàn quốc nhưng phải xin phép qua Sở TN&amp;MT địa phương.</li>
+      <li><strong>CHC NETSS / Trimble VRS Now</strong> — đi kèm hardware từ dealer.</li>
+      <li><strong>Base station riêng</strong> — cần 1 GNSS receiver thứ 2 làm base, phủ bán kính ~10-15 km. Free sau invest.</li>
+    </ul>
+    <p>Cho khảo sát ở khu vực <strong>HCMC / Bình Dương / Long An</strong>, VINAGEO là lựa chọn phù hợp nhất.</p>
+
+    <h3>Phân biệt RTK Fixed / Float / DGPS / SPS</h3>
+    <ul>
+      <li><strong>🟢 RTK FIXED</strong> (accuracy &lt; 5cm) — Ambiguity đã giải, độ chính xác cm. Mục tiêu khi khảo sát chính xác.</li>
+      <li><strong>🟡 RTK FLOAT</strong> (5-50cm) — Vẫn đang tìm ambiguity, chấp nhận được cho khảo sát thông thường.</li>
+      <li><strong>🔵 DGPS / SBAS</strong> (50cm-5m) — Code differential, chính xác thấp.</li>
+      <li><strong>⚪ SPS</strong> (>5m) — GPS thường, không có correction. Tương đương Phone GPS.</li>
+    </ul>
+
+    <div class="note note-info">
+      <span class="note-icon">📡</span>
+      <div>App tự phân loại status dựa trên giá trị <code>accuracy</code> trả về từ browser. Không cần parse NMEA — workflow mock location ẩn hoàn toàn chi tiết hardware.</div>
+    </div>
+
+    <h3>Lưu trong sheet</h3>
+    <ul>
+      <li>Mỗi marker lưu thêm 2 cột: <strong>Độ chính xác (m)</strong> (giá trị raw, vd <code>0.018</code>) và <strong>Chế độ GPS</strong> (<code>rtk</code> hoặc <code>phone</code>).</li>
+      <li>Sau này có thể filter Excel để biết marker nào đo bằng RTK (vd <code>Độ chính xác &lt; 0.1</code>).</li>
+      <li>Marker cũ chưa có 2 cột này → hiển thị rỗng, không ảnh hưởng chức năng.</li>
+    </ul>
   </section>
 
 </div>

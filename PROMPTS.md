@@ -5,7 +5,35 @@ Chạy từng prompt theo thứ tự. Mỗi prompt độc lập, tự đủ ng�
 
 ---
 
-## TÍNH NĂNG 1: Log lịch sử thao tác
+## 📊 Trạng thái implement (cập nhật 2026-06-17)
+
+| Group | Prompt | Status | Note |
+|---|---|---|---|
+| **Tính năng 1** — Log lịch sử thao tác | 1.1, 1.2, 1.3, 1.4 | ✅ DONE | Sheet `LichSu` + admin role |
+| **Tính năng 2** — Version auto-bump | 2.1, 2.2 | ✅ DONE | Đã chuyển sang GitHub Action workflow |
+| **Tính năng 3** — In bản vẽ PDF | 3.1 → 3.8 | ✅ DONE | Layout + cable + export PDF |
+| **Tính năng 4** — Cải tiến bản vẽ | 4.1 → 4.8 | ✅ DONE | Preview, persist, cycle detect, distance auto |
+| **Tính năng 5** — Cable + Rotation | 5.1 → 5.6 | ✅ DONE | Multi-select tủ, edit cable, xoay map |
+| **Tính năng 6** — Edit marker fixes | 6.1, 6.2, 6.3 | ✅ DONE | `_editingRow`, baseSelect, cable label |
+| **Tính năng 7** — Đa địa bàn | 7.1 → 7.6 | ✅ DONE | + ext `EXTERNAL_SPREADSHEET_IDS` cho CanGiuoc |
+| **Tính năng 8** — Mobile optimization | 8.1 → 8.7 | ✅ DONE | isMobile + shared icons + cluster + label threshold + animations off + lazy img + media query (verified 2026-06-17) |
+| **Tính năng 9** — Load optimization | 9.1, 9.3, 9.4 | ✅ DONE (partial) | IndexedDB cache + chunked + VN2000 ✓; 9.2/9.5/9.6 TODO |
+| **Tính năng 10** — Filter tủ | — | ✅ DONE | Multi-select + search |
+| **P1 → P8** — Print drawing optimize | (2026-06-16) | ✅ DONE | Audit fixes: bug, cleanup, perf, scale chính xác |
+| **P9** — Tách footer & ký hiệu hở | (mục 4.9) | ✅ DONE | CSS gap 16px giữa 2 khối + border 4 cạnh + radius (2026-06-17) |
+| **P10** — Hiển thị tất cả đối tượng | (mục 4.10) | ✅ DONE | Auto-fit footer height + compact icons khi N>8 (2026-06-17) |
+| **P11** — Cáp ngầm vs cáp nổi | (mục 4.11) | ✅ DONE | Col 22 + CABLE_STYLE + UI + legend 2 dòng (2026-06-17). ⚠ Cần redeploy GAS! |
+| **P12** — TỔNG P9+P10+P11 | — | ✅ DONE | 3 mục con đã chạy riêng (2026-06-17); P9 partial: title block giữ vị trí gốc theo yêu cầu user |
+| **P13a** — GPS modes Foundation | (Tính năng 11) | ✅ DONE | `GPS_MODES` + helpers + Toggle UI + GAS schema 25 cột (2026-06-17). ⚠ Cần redeploy GAS! |
+| **P13b** — GPS pipeline + UX | (Tính năng 11) | ⏳ TODO | `getBestFix` + tracking bar |
+| **P13c** — GPS polish + docs | (Tính năng 11) | ⏳ TODO | Precision conditional + Warn RTK |
+| **P13** — TỔNG P13a+b+c | — | ⏳ TODO | 1-shot version |
+
+**Legend:** ✅ DONE (đã implement & verified) · 🟡 PARTIAL (làm một phần) · ⏳ TODO (chưa làm) · ❌ DROPPED (bỏ)
+
+---
+
+## TÍNH NĂNG 1: Log lịch sử thao tác ✅
 
 ---
 
@@ -175,7 +203,7 @@ Không thay đổi gì khác.
 
 ---
 
-## TÍNH NĂNG 2: Version tự động tăng khi push GitHub
+## TÍNH NĂNG 2: Version tự động tăng khi push GitHub ✅
 
 ---
 
@@ -291,7 +319,7 @@ Không thay đổi gì khác.
 
 ---
 
-## TÍNH NĂNG 3: In bản vẽ sơ đồ tuyến trạm đèn
+## TÍNH NĂNG 3: In bản vẽ sơ đồ tuyến trạm đèn ✅
 
 Xuất PDF A3/A4 landscape: nền CartoDB + ký hiệu SVG + đường cáp + khoảng cách + bảng ký hiệu + khung bản vẽ.
 Thực hiện theo thứ tự 3.1 → 3.2 → 3.3 → 3.4 → 3.5.
@@ -1686,7 +1714,7 @@ Không thay đổi gì khác.
 
 ---
 
-## TÍNH NĂNG 6: Sửa lỗi & cải tiến form chỉnh sửa marker
+## TÍNH NĂNG 6: Sửa lỗi & cải tiến form chỉnh sửa marker ✅
 
 ---
 
@@ -1874,7 +1902,7 @@ Không thay đổi gì khác.
 
 ---
 
-## TÍNH NĂNG 7: Đa địa bàn — nhiều sheet theo quận/huyện/xã
+## TÍNH NĂNG 7: Đa địa bàn — nhiều sheet theo quận/huyện/xã ✅
 
 Mục tiêu: Mỗi địa bàn hành chính (quận, huyện, xã, phường) lưu trên 1 tab sheet riêng trong
 cùng 1 Google Spreadsheet. Người dùng chuyển địa bàn qua dropdown "Chọn trang". Thực hiện
@@ -2256,7 +2284,7 @@ Hướng dẫn hoàn tất sau khi chạy các prompt:
 
 ---
 
-## TÍNH NĂNG: Xoay bản đồ tương tác (Compass + MapTools)
+## TÍNH NĂNG: Xoay bản đồ tương tác (Compass + MapTools) ✅
 
 Mục tiêu: Cho phép người dùng xoay góc nhìn bản đồ trực tiếp (không chỉ khi xuất PDF) bằng
 nút ↺↻, bàn phím `[` `]` `\`, và cử chỉ hai ngón tay. Cửa sổ hướng la bàn hiển thị góc xoay
@@ -2601,7 +2629,7 @@ Không thay đổi gì khác.
 
 ---
 
-## TÍNH NĂNG 8: Tối ưu mobile
+## TÍNH NĂNG 8: Tối ưu mobile ✅
 
 Mục tiêu: App chạy mượt trên thiết bị Android/iOS tầm trung (RAM 3–4 GB, màn hình 360–414px).
 Thực hiện theo thứ tự 8.1 → 8.2 → 8.3 → 8.4 → 8.5 → 8.6 → 8.7.
@@ -2898,7 +2926,7 @@ Không thay đổi gì khác.
 
 ---
 
-## TÍNH NĂNG 9: Tối ưu load dữ liệu lớn
+## TÍNH NĂNG 9: Tối ưu load dữ liệu lớn 🟡 PARTIAL (9.1/9.3/9.4 done; 9.2/9.5/9.6 TODO)
 
 Bối cảnh: Mỗi sheet địa bàn có ~1,000–1,200 hàng (đo thực tế từ sheet Quận 1). Với 14 địa bàn,
 tổng dữ liệu có thể lên đến 14,000+ marker. Thực hiện theo thứ tự 9.1 → 9.2 → 9.3 → 9.4.
@@ -3550,3 +3578,886 @@ bước nào, dừng và báo cáo trước khi tiếp.
 - Magic numbers rải rác (110px, 14px, 420/297mm…)
 - Duplicate logic giữa `openPrintPreview()` ↔ `exportDrawingPDF()`
 - HTML inline style >120 dòng string trong `_showPrintOverlay()`
+
+---
+
+# 🎨 Bộ Prompt — Cải tiến bố cục & ký hiệu bản vẽ (kế hoạch 4.9 - 4.11)
+
+Theo CLAUDE.md mục "Tính năng đang phát triển" số 4.9, 4.10, 4.11.
+Ưu tiên đề xuất: **P10 → P9 → P11** (P10 fix bug user thấy, P9 cosmetic nhỏ, P11 cần đụng data model + GAS deploy).
+
+---
+
+## 🟡 PROMPT P9 — Tách khung tên và khung ký hiệu hở ra (mục 4.9) ✅ DONE
+
+```
+Trong file index.html, hàm _showPrintOverlay() (~line 2049-2160) hiện
+vẽ 2 khung chạm sát nhau:
+- Footer (legend + stats): left:0; bottom:0; width:37.5%; height:110px;
+  border-top:2px; border-right:2px (border-left/border-bottom inherit từ frame)
+- Title block: right:0; bottom:0; width:62.5%; height:110px;
+  border-top:2px; border-left:2px
+
+Đổi sang layout TÁCH RỜI có gap 16px giữa 2 khung + 8px margin với frame:
+
+footer:  left:8px;  bottom:8px; width:calc(37.5% - 16px); height:110px
+title:   right:8px; bottom:8px; width:calc(62.5% - 16px); height:110px
+→ gap giữa 2 khung = 100% - 37.5% - 62.5% + 16px×2 = 16px nền trắng lộ ra
+
+Yêu cầu:
+1. Sửa style position của 2 khối — left/right/width như trên
+2. Đảm bảo cả 2 khối có border đầy đủ 4 cạnh (2px solid #1e293b),
+   không kế thừa từ print-frame nữa
+3. Thêm border-radius: 3px cho mềm mại
+4. Test với cả A3 + A4 — tỷ lệ vẫn đúng (footerWidth + gap + titleWidth ≈
+   100% của print frame area)
+
+Sau khi sửa, "Xem trước" verify 2 khung tách rời rõ ràng, mỗi khung có viền
+4 cạnh đầy đủ. Hard reload trước test.
+```
+
+---
+
+## 🔴 PROMPT P10 — Hiển thị tất cả đối tượng trong bảng ký hiệu (mục 4.10) ✅ DONE
+
+````
+Trong file index.html, footer bảng ký hiệu hiện FIXED 110px (overflow:hidden)
+nên với 6 loại marker + 1 cáp = 7 rows × ~26px = 182px → bị clip 4-5 hàng.
+User chỉ thấy 2-3 loại đầu.
+
+Implement auto-fit height (cách A):
+
+1. Đếm rows cần hiển thị:
+   ```js
+   const N = usedTypes.length + 1; // +1 cho cáp nguồn
+   const HEADER_H = 24, ROW_H = 26, PADDING_V = 6;
+   const neededH = HEADER_H + N * ROW_H + PADDING_V;
+   const footerH = Math.max(110, Math.min(neededH, 220)); // clamp 110-220px
+   ```
+
+2. Áp footerH cho cả 2 khối (footer + title block) — đối xứng chiều cao,
+   căn dưới cùng:
+   ```html
+   <div style="...; bottom:0; height:${footerH}px;">  <!-- footer -->
+   <div style="...; bottom:0; height:${footerH}px;">  <!-- title block -->
+   ```
+
+3. Title block 4 hàng hiện chia đều — khi height tăng cần adjust:
+   - Hàng 1 (logo tổ chức): height auto
+   - Hàng 2-3 (chữ ký): chia đều phần còn lại
+   - Hàng 4 (tên người): fixed ~22px bottom
+   → Dùng table rules đã có, height giãn tự động.
+
+4. Fallback compact icons (cách C) — nếu N > 8:
+   - Icon lamp: 14×20 (thay 24×38)
+   - Icon cabinet: 12×14 (thay 22×26)
+   - ROW_H giảm còn 18px
+   - footerH tối đa = 200px
+
+5. Update _showPrintOverlay opts — không cần thay đổi API, chỉ tính footerH
+   nội bộ rồi inject vào style.
+
+Lưu ý: stats nằm sát đáy print frame — nếu footerH tăng, vẫn căn bottom:0
+nên 2 khối vẫn dính đáy như cũ, chỉ kéo dài LÊN TRÊN, không xuống.
+
+Test với data có 1, 3, 5, 7 loại marker — verify tất cả hiện hết, không bị clip.
+````
+
+---
+
+## 🔴 PROMPT P11 — Phân loại cáp (cáp ngầm vs cáp nổi) (mục 4.11) ✅ DONE
+
+````
+Thêm cột "Loại cáp" (column index 22) vào sheet DanhSachTru — value
+'noi' / 'ngam' / '' (default 'noi'). Mỗi marker có row[14] (Marker gốc)
+sẽ dùng row[22] để chọn style cáp khi vẽ.
+
+🔧 Phần 1 — Update GAS (gas-khaosat.js):
+
+1. Thêm 'Loại cáp' vào HEADER array (sau 'Số lượng đèn'):
+   ```js
+   const HEADER = [..., 'Số lượng đèn', 'Loại cáp'];
+   ```
+
+2. Thêm vào FIELD_MAP:
+   ```js
+   'loaiCap': 'Loại cáp',
+   ```
+
+3. Redeploy GAS (New version) — bắt buộc.
+
+🔧 Phần 2 — Update index.html (UI nhập liệu):
+
+1. Trong popup marker, thêm <select> "Loại cáp" cùng hàng với "Khoảng cách":
+   ```html
+   <div class="form-row">
+     <div class="form-group w3">
+       <label>Cáp Trụ/tủ gốc</label>
+       <select id="markerBaseSelect">...</select>
+     </div>
+     <div class="form-group w2">
+       <label>Cách (m)</label>
+       <input id="markerKhoangCachInput" type="number">
+     </div>
+     <div class="form-group w2">
+       <label>Loại cáp</label>
+       <select id="markerLoaiCapInput">
+         <option value="noi">Cáp nổi</option>
+         <option value="ngam">Cáp ngầm</option>
+       </select>
+     </div>
+   </div>
+   ```
+
+2. saveMarkerPopup() đọc value: `const loaiCap = (document.getElementById('markerLoaiCapInput')||{}).value || 'noi';`
+   Push vào newRow ở index 22.
+
+3. openEditMarker() restore: `markerLoaiCapInput.value = row[22] || 'noi';`
+
+4. syncRowToGAS() payload thêm: `loaiCap: row[22] || 'noi'`
+
+🔧 Phần 3 — Update vẽ cáp:
+
+1. Constants CABLE_STYLE ở đầu print section:
+   ```js
+   const CABLE_STYLE = {
+     noi:  { color: '#1e40af', dashArray: '10 4',    label: 'Cáp nổi'  },
+     ngam: { color: '#dc2626', dashArray: '2 3 8 3', label: 'Cáp ngầm' }
+   };
+   ```
+
+2. _buildCableLines(rows): mỗi polyline dùng style theo r[22]:
+   ```js
+   const cableType = String(r[22] || 'noi');
+   const style = CABLE_STYLE[cableType] || CABLE_STYLE.noi;
+   const line = L.polyline([from, to], {
+     color: style.color, weight: 2.5,
+     dashArray: style.dashArray, opacity: 0.8
+   });
+   ```
+
+3. _buildPrintCableSvg(rows) tương tự — set stroke + stroke-dasharray theo style.
+
+🔧 Phần 4 — Update legend + stats footer:
+
+1. Tách count + tổng cáp theo loại:
+   ```js
+   let cnNoi = 0, cnNgam = 0, lenNoi = 0, lenNgam = 0;
+   rows.forEach(r => {
+     if (!r[14]) return;
+     const type = String(r[22] || 'noi');
+     const len = computeLength(r); // logic Haversine fallback như cũ
+     if (type === 'ngam') { cnNgam++; lenNgam += len; }
+     else                 { cnNoi++;  lenNoi  += len; }
+   });
+   ```
+
+2. Footer table thêm 2 row riêng (thay 1 row "Cáp nguồn"):
+   - Row "Cáp nổi": SVG dashArray='10 4' xanh + count + tổng m
+   - Row "Cáp ngầm": SVG dashArray='2 3 8 3' đỏ + count + tổng m
+   - Nếu lenNgam == 0 → ẩn row cáp ngầm, ngược lại
+
+🔧 Phần 5 — Migration safety:
+
+- Marker cũ không có row[22] → default 'noi' (vẽ như cũ, không break)
+- Sheet địa bàn cũ chưa có cột "Loại cáp" → ensureHeader() trong GAS tự thêm
+
+🔧 Phần 6 — CLAUDE.md update:
+
+- Đổi "Cấu trúc cột (DanhSachTru) — 22 cột" → 23 cột
+- Thêm row [22] | Loại cáp | loaiCap | 'noi'/'ngam' (default 'noi')
+
+Test:
+1. Thêm marker mới, chọn "Cáp ngầm" → verify lưu Sheet OK
+2. Reload data → vẽ cáp với dashArray + color khác
+3. In PDF → legend hiện 2 dòng "Cáp nổi" + "Cáp ngầm" với count đúng
+4. Marker cũ vẽ vẫn xanh nét đứt (default 'noi')
+````
+
+---
+
+## 🎯 PROMPT P12 — TỔNG (cả 3 cải tiến 1-shot) ✅ DONE (qua P9+P10+P11)
+
+```
+Theo CLAUDE.md mục 4.9-4.11, implement tuần tự 3 cải tiến bản vẽ:
+
+1. (4.10) **Auto-fit footer height** — fix bug bảng ký hiệu bị clip
+   chỉ hiện 2-3 hàng. Tính footerH theo số loại marker, clamp 110-220px,
+   apply cho cả footer lẫn title block (đối xứng). Fallback compact icons
+   khi N > 8.
+
+2. (4.9) **Tách footer & title block** — đổi position từ dính sát sang
+   left:8px / right:8px / width:calc(... - 16px), gap 16px giữa 2 khung,
+   border 4 cạnh đầy đủ, border-radius:3px.
+
+3. (4.11) **Phân loại cáp ngầm/nổi**:
+   - GAS: HEADER + FIELD_MAP thêm 'Loại cáp', redeploy New version
+   - UI popup: <select> Loại cáp cùng hàng với Khoảng cách
+   - saveMarkerPopup / openEditMarker / syncRowToGAS đọc/ghi row[22]
+   - CABLE_STYLE constants — noi: '10 4' xanh, ngam: '2 3 8 3' đỏ
+   - _buildCableLines + _buildPrintCableSvg apply style theo r[22]
+   - Legend bottom-left: tách 2 row "Cáp nổi" + "Cáp ngầm" với count & length riêng
+   - Migration: row cũ default 'noi', sheet cũ ensureHeader tự thêm cột
+   - CLAUDE.md: cập nhật 22 → 23 cột
+
+Sau mỗi mục, hard reload + test:
+- 4.10: data có 1, 3, 5, 7 loại — không bị clip
+- 4.9: 2 khung tách rời, gap rõ, viền 4 cạnh
+- 4.11: thêm marker cáp ngầm, in PDF, verify dashArray + màu + legend
+
+Báo cáo sau từng mục, dừng nếu test fail.
+```
+
+---
+
+# 📡 Bộ Prompt — Chế độ GPS Phone + RTK Tersus Luka (Tính năng 11)
+
+Theo CLAUDE.md "Tính năng 11: Chế độ GPS với hỗ trợ RTK Tersus Luka" (mục 11.1 - 11.11).
+Tách thành 3 phase: **P13a (foundation)** → **P13b (pipeline + UX)** → **P13c (polish + docs)**.
+
+⚠ **P13a cần redeploy GAS** (HEADER mở rộng 22 → 24 cột). Đảm bảo bạn có quyền edit GAS trước khi chạy.
+
+---
+
+## 🔴 PROMPT P13a — Foundation: GPS_MODES config + Toggle UI + Sheet schema ✅ DONE
+
+````
+Implement nền tảng cho hệ thống chế độ GPS theo CLAUDE.md mục 11.1, 11.2,
+11.3, 11.8. KHÔNG động vào các call site getCurrentPosition cũ (để P13b lo)
+— chỉ build infrastructure.
+
+🔧 Phần 1 — Constants + state
+
+Trong index.html, gần TYPE_CONFIG (~line 1539), thêm:
+```js
+const GPS_MODES = {
+    phone: {
+        label: '📱 Phone GPS', emoji: '📱',
+        targetAccuracy: 5.0, maxWaitMs: 30000,
+        useAveraging: true, averageSamples: 8,
+        coordPrecision: 6, vn2000Precision: 0,
+        statusBadge: false
+    },
+    rtk: {
+        label: '🛰 RTK', emoji: '🛰',
+        targetAccuracy: 0.05, maxWaitMs: 60000,
+        useAveraging: false,
+        coordPrecision: 8, vn2000Precision: 3,
+        statusBadge: true
+    }
+};
+let currentGpsMode = localStorage.getItem('gpsMode') || 'phone';
+```
+
+🔧 Phần 2 — Helpers (gần các helper khác)
+
+```js
+function formatAccuracy(meters) {
+    if (meters < 1)   return `±${(meters * 100).toFixed(1)} cm`;
+    if (meters < 10)  return `±${meters.toFixed(2)} m`;
+    return `±${meters.toFixed(0)} m`;
+}
+
+function rtkStatus(acc) {
+    if (acc <= 0.05) return { label: 'RTK FIXED', color: '#10b981', emoji: '🟢' };
+    if (acc <= 0.50) return { label: 'RTK FLOAT', color: '#f59e0b', emoji: '🟡' };
+    if (acc <= 5.00) return { label: 'DGPS',      color: '#3b82f6', emoji: '🔵' };
+    return                   { label: 'SPS',       color: '#6b7280', emoji: '⚪' };
+}
+
+function formatCoord(value, mode) {
+    const cfg = GPS_MODES[mode || currentGpsMode];
+    return Number(value).toFixed(cfg.coordPrecision);
+}
+
+function formatVn2000(value, mode) {
+    const cfg = GPS_MODES[mode || currentGpsMode];
+    return Number(value).toFixed(cfg.vn2000Precision);
+}
+```
+
+🔧 Phần 3 — Toggle UI trong ☰ Settings
+
+Trong modal #controlsModal, thêm section MỚI giữa "Điều hướng" và
+"Chỉnh vị trí & Đồng bộ":
+```html
+<div class="ctrl-divider"></div>
+<div class="ctrl-section">
+    <div class="ctrl-title">Thiết bị GPS</div>
+    <label class="ctrl-radio">
+        <input type="radio" name="gpsMode" value="phone" onchange="switchGpsMode('phone')">
+        <span>📱 Phone GPS <span class="hint">(mặc định, ±3-10m)</span></span>
+    </label>
+    <label class="ctrl-radio">
+        <input type="radio" name="gpsMode" value="rtk" onchange="switchGpsMode('rtk')">
+        <span>🛰 RTK Tersus Luka <span class="hint">(±cm, cần setup mock location)</span></span>
+    </label>
+    <div style="font-size:11px;color:var(--text-muted);margin-top:6px;">
+        <a href="huongdan.html#s15" target="_blank">📖 Hướng dẫn setup RTK</a>
+    </div>
+</div>
+```
+
+Hàm switchGpsMode:
+```js
+function switchGpsMode(newMode) {
+    if (!GPS_MODES[newMode]) return;
+    // Auto-discard ongoing GPS tracking (P13b sẽ implement _hideGpsTrackingBar)
+    if (typeof _hideGpsTrackingBar === 'function') _hideGpsTrackingBar();
+    currentGpsMode = newMode;
+    localStorage.setItem('gpsMode', newMode);
+    displayInfo(`Đã chuyển sang chế độ ${GPS_MODES[newMode].label}`);
+    _syncGpsModeRadio();
+}
+
+function _syncGpsModeRadio() {
+    document.querySelectorAll('input[name="gpsMode"]').forEach(r => {
+        r.checked = r.value === currentGpsMode;
+    });
+}
+// Gọi _syncGpsModeRadio() khi modal #controlsModal mở (sau _applyRoleUI)
+```
+
+CSS .ctrl-radio (gần .ctrl-btn):
+```css
+.ctrl-radio { display:flex; align-items:center; gap:8px; padding:8px 10px;
+              border-radius:8px; cursor:pointer; font-size:14px; }
+.ctrl-radio:hover { background:#f9fafb; }
+.ctrl-radio input { margin:0; }
+.ctrl-radio .hint { color:var(--text-muted); font-size:12px; }
+```
+
+🔧 Phần 4 — GAS HEADER mở rộng (gas-khaosat.js)
+
+Thay HEADER array thêm 2 cột cuối:
+```js
+const HEADER = [
+    'ID', 'Tên trụ', 'Lat', 'Lon', 'Ghi chú', 'Người KS',
+    'Loại', 'Tủ điều khiển', 'Loại trụ', 'Loại cần', 'Loại đèn',
+    'Công suất', 'Ảnh', 'Thời gian cập nhật', 'Marker gốc', 'Khoảng cách (m)',
+    'Mã PE', 'Đường', 'Phường/ Xã', 'VN2000-X', 'VN2000-Y', 'Số lượng đèn',
+    'Độ chính xác (m)', 'Chế độ GPS'  // ← MỚI cột 22, 23
+];
+```
+
+Thêm vào FIELD_MAP:
+```js
+'accuracy': 'Độ chính xác (m)',
+'gpsMode':  'Chế độ GPS',
+```
+
+ensureHeader() đã handle missing columns — sẽ tự auto-append cho mọi sheet
+địa bàn lần POST đầu sau redeploy.
+
+🔧 Phần 5 — syncRowToGAS update payload
+
+Trong syncRowToGAS, payload JSON thêm:
+```js
+accuracy: row[22] != null ? String(row[22]) : '',
+gpsMode:  row[23] != null ? String(row[23]) : ''
+```
+
+🔧 Phần 6 — Redeploy GAS
+
+Sau khi sửa gas-khaosat.js:
+1. Mở Apps Script
+2. Deploy → Manage deployments → Edit ✏️
+3. Version: New version
+4. Deploy (giữ nguyên URL)
+
+🧪 Test:
+
+1. Hard reload app
+2. Mở ☰ → thấy section "Thiết bị GPS" với 2 radio button
+3. Chuyển sang RTK → reload page → vẫn nhớ RTK (localStorage)
+4. Trong Apps Script Editor: chạy ensureHeader() thủ công cho sheet
+   DanhSachTru → verify 2 cột mới "Độ chính xác (m)" và "Chế độ GPS"
+   được tạo
+5. Vẫn thêm/sửa marker bình thường — không break gì
+6. KHÔNG cần test mock location ở phase này (P13b)
+
+Báo cáo: số dòng index.html tăng, số dòng gas-khaosat.js tăng, URL GAS
+sau redeploy (giữ nguyên).
+````
+
+---
+
+## 🔴 PROMPT P13b — Pipeline: getBestFix + Tracking Bar UX + Refactor call sites
+
+````
+Implement GPS pipeline thống nhất theo CLAUDE.md mục 11.4, 11.5, 11.6,
+11.10. Yêu cầu P13a đã xong (constants GPS_MODES + helpers tồn tại).
+
+🔧 Phần 1 — Floating tracking bar HTML
+
+Trong index.html, gần các overlay khác (vd #pickOnMapHint), thêm:
+```html
+<div id="gpsTrackingBar" style="display:none;position:fixed;left:12px;right:12px;
+     bottom:calc(var(--bottombar-h) + var(--safe-bottom) + 20px);z-index:5000;
+     background:white;border:2px solid #94a3b8;border-radius:12px;padding:12px;
+     box-shadow:0 4px 20px rgba(0,0,0,.25);transition:border-color .3s, transform .2s;
+     font-family:var(--font);">
+    <div style="display:flex;align-items:center;gap:12px;">
+        <div id="gpsStatusIcon" style="font-size:24px;flex-shrink:0;">🛰</div>
+        <div style="flex:1;min-width:0;">
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                <span id="gpsStatusLabel" style="font-size:13px;font-weight:700;color:#0f172a;">Đang tìm tín hiệu...</span>
+                <span id="gpsStatusBadge" style="display:none;font-size:10px;font-weight:800;
+                    padding:2px 8px;border-radius:999px;background:#e5e7eb;color:#374151;"></span>
+            </div>
+            <div id="gpsAccuracyText" style="font-size:20px;font-weight:800;color:#0f172a;line-height:1.1;margin-top:2px;">— —</div>
+            <div id="gpsProgressText" style="font-size:11px;color:#64748b;margin-top:2px;">Đang lấy GPS...</div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px;flex-shrink:0;">
+            <button id="gpsAcceptBtn" style="background:#10b981;color:white;border:none;border-radius:8px;
+                padding:8px 12px;font-size:13px;font-weight:700;cursor:pointer;">✓ Dùng</button>
+            <button id="gpsCancelBtn" style="background:#f3f4f6;color:#374151;border:1px solid #d1d5db;
+                border-radius:8px;padding:8px 12px;font-size:13px;font-weight:600;cursor:pointer;">✗ Hủy</button>
+        </div>
+    </div>
+    <div id="gpsCountdownBar" style="display:none;margin-top:10px;height:5px;background:#e5e7eb;border-radius:3px;overflow:hidden;">
+        <div id="gpsCountdownFill" style="width:100%;height:100%;background:#10b981;transition:width 1s linear;"></div>
+    </div>
+    <div id="gpsWaitBetterBtn" style="display:none;text-align:center;margin-top:6px;">
+        <button onclick="_gpsWaitBetter()" style="background:none;border:none;color:#3b82f6;
+            font-size:12px;font-weight:600;cursor:pointer;text-decoration:underline;">⏸ Đợi tốt hơn</button>
+    </div>
+</div>
+```
+
+🔧 Phần 2 — Tracking bar JS controller
+
+```js
+let _gpsTrackingState = null;
+
+function _showGpsTrackingBar({ mode }) {
+    const cfg = GPS_MODES[mode];
+    const bar = document.getElementById('gpsTrackingBar');
+    bar.style.display = 'block';
+    bar.style.borderColor = '#94a3b8';
+    document.getElementById('gpsCountdownBar').style.display = 'none';
+    document.getElementById('gpsWaitBetterBtn').style.display = 'none';
+    document.getElementById('gpsStatusIcon').textContent = cfg.emoji;
+    document.getElementById('gpsStatusLabel').textContent = `${cfg.label}: tìm tín hiệu...`;
+    document.getElementById('gpsStatusBadge').style.display = 'none';
+    document.getElementById('gpsAccuracyText').textContent = '— —';
+    document.getElementById('gpsProgressText').textContent = `Mục tiêu: ${formatAccuracy(cfg.targetAccuracy)}`;
+
+    const state = {
+        startTime: Date.now(),
+        cfg,
+        autoAcceptTimer: null,
+        autoAcceptCb: null,
+        onAcceptCb: null,
+        onCancelCb: null
+    };
+    _gpsTrackingState = state;
+
+    document.getElementById('gpsAcceptBtn').onclick = () => state.onAcceptCb && state.onAcceptCb();
+    document.getElementById('gpsCancelBtn').onclick = () => state.onCancelCb && state.onCancelCb();
+
+    return {
+        startTime: state.startTime,
+        update: (info) => _gpsUpdateBar(info),
+        startAutoAccept: (ms, cb) => _gpsStartAutoAccept(ms, cb),
+        onAccept: (cb) => { state.onAcceptCb = cb; },
+        onCancel: (cb) => { state.onCancelCb = cb; },
+        hide: () => _hideGpsTrackingBar(),
+        showWarning: (opts) => _gpsShowWarning(opts),
+        dismissWarning: () => _gpsDismissWarning()
+    };
+}
+
+function _gpsUpdateBar({ accuracy, status, samples, elapsed }) {
+    const s = _gpsTrackingState;
+    if (!s) return;
+    document.getElementById('gpsAccuracyText').textContent = formatAccuracy(accuracy);
+    const elapsedS = (elapsed / 1000).toFixed(1);
+    const maxS = (s.cfg.maxWaitMs / 1000).toFixed(0);
+    let progText = `${elapsedS}s / ${maxS}s`;
+    if (s.cfg.useAveraging) progText += ` · ${samples}/${s.cfg.averageSamples} mẫu`;
+    document.getElementById('gpsProgressText').textContent = progText;
+    const badge = document.getElementById('gpsStatusBadge');
+    if (status) {
+        badge.style.display = 'inline-block';
+        badge.textContent = status.label;
+        badge.style.background = status.color;
+        badge.style.color = 'white';
+    } else {
+        badge.style.display = 'none';
+    }
+    // Đổi border color theo accuracy
+    const bar = document.getElementById('gpsTrackingBar');
+    if (accuracy <= s.cfg.targetAccuracy) bar.style.borderColor = '#10b981';
+    else if (accuracy <= s.cfg.targetAccuracy * 3) bar.style.borderColor = '#f59e0b';
+    else bar.style.borderColor = '#94a3b8';
+}
+
+function _gpsStartAutoAccept(ms, cb) {
+    const s = _gpsTrackingState;
+    if (!s) return;
+    // Cancel countdown cũ nếu có (vd: accuracy improve, reset)
+    if (s.autoAcceptTimer) clearTimeout(s.autoAcceptTimer);
+    s.autoAcceptCb = cb;
+    document.getElementById('gpsCountdownBar').style.display = 'block';
+    document.getElementById('gpsWaitBetterBtn').style.display = 'block';
+    const fill = document.getElementById('gpsCountdownFill');
+    fill.style.transition = 'none';
+    fill.style.width = '100%';
+    void fill.offsetWidth; // force reflow
+    fill.style.transition = `width ${ms}ms linear`;
+    fill.style.width = '0%';
+    s.autoAcceptTimer = setTimeout(() => {
+        if (s.autoAcceptCb) s.autoAcceptCb();
+    }, ms);
+}
+
+function _gpsWaitBetter() {
+    const s = _gpsTrackingState;
+    if (!s) return;
+    if (s.autoAcceptTimer) clearTimeout(s.autoAcceptTimer);
+    s.autoAcceptTimer = null;
+    s.autoAcceptCb = null;
+    document.getElementById('gpsCountdownBar').style.display = 'none';
+    document.getElementById('gpsWaitBetterBtn').style.display = 'none';
+}
+
+function _hideGpsTrackingBar() {
+    const s = _gpsTrackingState;
+    if (s && s.autoAcceptTimer) clearTimeout(s.autoAcceptTimer);
+    _gpsTrackingState = null;
+    document.getElementById('gpsTrackingBar').style.display = 'none';
+}
+```
+
+🔧 Phần 3 — getBestFix(opts) unified
+
+API: `getBestFix(opts)` — opts hỗ trợ:
+- `forceMode`: 'phone' | 'rtk' — override currentGpsMode tạm thời
+- `quickMode`: true — chế độ silent fast cho luồng cần fix nhanh (vd routing).
+  Không hiện tracking bar, timeout ngắn (~8s), nhận fix đầu tiên có accuracy
+  hợp lý (không chờ <5m / <5cm).
+
+```js
+async function getBestFix(opts = {}) {
+    const mode = opts.forceMode || currentGpsMode;
+    const cfg  = GPS_MODES[mode];
+
+    // ── QUICK MODE — silent, fast, dùng cho routing fallback ──
+    if (opts.quickMode) {
+        return new Promise((resolve, reject) => {
+            navigator.geolocation.getCurrentPosition(
+                pos => resolve(pos),
+                err => reject(err),
+                { enableHighAccuracy: true, maximumAge: 0, timeout: 8000 }
+            );
+        });
+    }
+
+    // ── INTERACTIVE MODE — có tracking bar, threshold check, averaging ──
+    const bar  = _showGpsTrackingBar({ mode });
+
+    let bestFix = null;
+    let samples = [];
+
+    return new Promise((resolve, reject) => {
+        const finish = (result) => {
+            navigator.geolocation.clearWatch(watchId);
+            bar.hide();
+            resolve(result);
+        };
+        const fail = (err) => {
+            navigator.geolocation.clearWatch(watchId);
+            bar.hide();
+            reject(err);
+        };
+
+        const watchId = navigator.geolocation.watchPosition(
+            pos => {
+                const acc = pos.coords.accuracy;
+                if (!bestFix || acc < bestFix.coords.accuracy) bestFix = pos;
+                if (cfg.useAveraging && acc < cfg.targetAccuracy * 3) samples.push(pos);
+
+                bar.update({
+                    accuracy: acc,
+                    status: cfg.statusBadge ? rtkStatus(acc) : null,
+                    samples: samples.length,
+                    elapsed: Date.now() - bar.startTime
+                });
+
+                const reachedTarget = (acc <= cfg.targetAccuracy);
+                const enoughSamples = cfg.useAveraging && samples.length >= cfg.averageSamples;
+
+                if (reachedTarget && !cfg.useAveraging) {
+                    bar.startAutoAccept(3000, () => finish(bestFix));
+                } else if (enoughSamples) {
+                    finish(averageFixes(samples));
+                } else if (reachedTarget && cfg.useAveraging && samples.length >= 3) {
+                    // Mode phone đạt target sớm với ≥3 samples → cũng auto-accept
+                    bar.startAutoAccept(3000, () => finish(averageFixes(samples)));
+                }
+            },
+            err => fail(err),
+            { enableHighAccuracy: true, maximumAge: 0, timeout: cfg.maxWaitMs }
+        );
+
+        setTimeout(() => {
+            if (bestFix) finish(cfg.useAveraging && samples.length > 0 ? averageFixes(samples) : bestFix);
+            else fail(new Error('Không lấy được GPS — quá thời gian chờ'));
+        }, cfg.maxWaitMs);
+
+        bar.onAccept(() => {
+            if (bestFix) finish(cfg.useAveraging && samples.length > 0 ? averageFixes(samples) : bestFix);
+            else fail(new Error('Chưa có fix nào'));
+        });
+        bar.onCancel(() => fail(new Error('User đã hủy')));
+    });
+}
+
+function averageFixes(fixes) {
+    const lats = fixes.map(f => f.coords.latitude).sort();
+    const lons = fixes.map(f => f.coords.longitude).sort();
+    const medLat = lats[Math.floor(lats.length / 2)];
+    const medLon = lons[Math.floor(lons.length / 2)];
+    const inliers = fixes.filter(f => {
+        const dLat = Math.abs(f.coords.latitude - medLat);
+        const dLon = Math.abs(f.coords.longitude - medLon);
+        return dLat < 0.00005 && dLon < 0.00005;
+    });
+    const avgLat = inliers.reduce((s, f) => s + f.coords.latitude, 0) / inliers.length;
+    const avgLon = inliers.reduce((s, f) => s + f.coords.longitude, 0) / inliers.length;
+    const avgAcc = inliers.reduce((s, f) => s + f.coords.accuracy, 0) / inliers.length;
+    return {
+        coords: {
+            latitude: avgLat, longitude: avgLon,
+            accuracy: avgAcc / Math.sqrt(inliers.length)
+        }
+    };
+}
+```
+
+🔧 Phần 4 — Refactor 6 call sites + 1 quick mode
+
+Thay `navigator.geolocation.getCurrentPosition(success, error, opts)` bằng:
+```js
+try {
+    const fix = await getBestFix();
+    success(fix);
+} catch(err) {
+    error(err);
+}
+```
+
+Các vị trí cần thay (interactive mode — có tracking bar):
+- ~line 3766: startAddMarker GPS auto
+- ~line 4834: centerOnUserLocation
+- ~line 4853: "Vị trí hiện tại" button in form
+- ~line 5247: Geocode lat/lon
+- ~line 5305: "Định vị" marker popup
+
+Vị trí dùng **quickMode** (silent, không tracking bar):
+- ~line 5235: routing fallback — cần fix nhanh để bắt đầu tính tuyến
+  ```js
+  try {
+      const fix = await getBestFix({ quickMode: true });
+      success(fix);
+  } catch(err) {
+      error(err);
+  }
+  ```
+
+Giữ NGUYÊN (watchPosition liên tục, không phải single fix):
+- ~line 4732: startTrackingCurrentLocation — live location tracking, P13c sẽ
+  update options để đọc GPS_MODES config
+
+🔧 Phần 5 — Accuracy circle với màu theo status
+
+Tìm hàm tạo currentLocationAccuracyCircle. Thay color hardcode bằng:
+```js
+const color = rtkStatus(acc).color;
+L.circle([lat, lon], { radius: acc, color, fillColor: color, fillOpacity: 0.15, weight: 1 });
+```
+
+🧪 Test:
+
+1. Hard reload, chế độ phone GPS, bấm "Vị trí hiện tại"
+   → Tracking bar hiện, accuracy realtime, samples counter tăng
+   → Đạt 8 samples HOẶC accuracy <5m → auto-accept 3s countdown
+   → Bấm "Đợi tốt hơn" → countdown dừng, vẫn track
+   → Bấm "Dùng" → finish ngay với best so far
+2. Bấm "Thêm marker" → tracking bar → đặt được marker tự động
+3. Bấm "Hủy" giữa chừng → bar đóng, không đặt marker
+4. **Test quickMode**: Bấm "Chỉ đường" trong popup marker
+   → **KHÔNG có tracking bar** (silent mode)
+   → Routing bắt đầu trong <8s với fix đầu tiên
+   → Console log fix với accuracy không cần <5m
+5. Chuyển sang RTK mode (chưa setup mock) → bấm vị trí
+   → Bar hiện 60s timeout, accuracy ~5m, không Fixed
+   → Hết 60s → dùng best fix có sẵn
+6. Verify accuracy circle đổi màu: xanh (Fixed) / vàng (Float) / xám (Phone)
+
+Báo cáo: 6 interactive call sites + 1 quickMode call site đã refactor,
+edge case nào gặp.
+````
+
+---
+
+## 🟡 PROMPT P13c — Polish: Precision tọa độ + Warn RTK + Docs
+
+````
+Finalize chế độ GPS theo CLAUDE.md mục 11.7, 11.9, 11.11. Yêu cầu
+P13a và P13b đã chạy xong.
+
+🔧 Phần 1 — Precision tọa độ conditional khi LƯU & HIỂN THỊ
+
+1. saveMarkerPopup (và mọi nơi push vào loadedData):
+```js
+const lat = formatCoord(rawLat);  // toFixed(6) hoặc toFixed(8) tùy mode
+const lon = formatCoord(rawLon);
+// Lưu STRING vào row[2], row[3] để giữ trailing zeros
+row[2] = lat; row[3] = lon;
+// Lưu accuracy + mode vào cột mới
+row[22] = String(rawAccuracy);
+row[23] = currentGpsMode;
+```
+
+2. VN2000 calculation conditional:
+```js
+const {x, y} = convertLatLonToVn2000(lat, lon);
+row[19] = formatVn2000(x);  // integer hoặc 3 decimal
+row[20] = formatVn2000(y);
+```
+
+3. Marker popup display tọa độ:
+Tìm các nơi `lat.toFixed(6)` thay bằng:
+```js
+formatCoord(lat, row[23])  // dùng mode đã lưu trong row, không phải currentGpsMode
+```
+
+🔧 Phần 2 — Hiển thị accuracy + mode badge trong popup
+
+Trong createMarkerPopupContent, thêm dòng dưới tọa độ:
+```js
+const acc = parseFloat(row[22]);
+const mode = String(row[23] || '');
+const accInfo = Number.isFinite(acc) ? formatAccuracy(acc) : '—';
+const modeEmoji = mode === 'rtk' ? '🛰' : (mode === 'phone' ? '📱' : '');
+const statusBadge = Number.isFinite(acc) && mode === 'rtk' ?
+    `<span style="background:${rtkStatus(acc).color};color:white;padding:1px 6px;border-radius:999px;font-size:10px;font-weight:700;">${rtkStatus(acc).label}</span>` : '';
+// Inject vào HTML: ${modeEmoji} ${accInfo} ${statusBadge}
+```
+
+🔧 Phần 3 — Warn khi RTK không Fixed sau 30s
+
+Trong getBestFix watchPosition callback, sau khi update bar:
+```js
+const elapsed = Date.now() - bar.startTime;
+if (mode === 'rtk' && elapsed > 30000 && acc > 0.5 && !s._warnShown) {
+    s._warnShown = true;
+    bar.showWarning({
+        title: '⚠ Chế độ RTK nhưng accuracy ' + formatAccuracy(acc),
+        body: 'Bạn có thể chưa setup mock location đúng. Kiểm tra Nuwa đã connect Luka chưa, NTRIP đang Fixed chưa.',
+        actions: [
+            { label: '📖 Hướng dẫn', onClick: () => window.open('huongdan.html#s15', '_blank') },
+            { label: 'Tiếp tục đợi', onClick: () => bar.dismissWarning() }
+        ]
+    });
+}
+```
+
+Implement _gpsShowWarning trong tracking bar controller:
+- Thêm sub-div trong bar HTML để hiển thị warning (yellow background)
+- showWarning render content + actions buttons
+- dismissWarning hide sub-div, set s._warnShown = true để không re-show
+
+🔧 Phần 4 — Sync với startTrackingCurrentLocation
+
+startTrackingCurrentLocation (watchPosition liên tục) cần đọc GPS_MODES
+cho options:
+```js
+const cfg = GPS_MODES[currentGpsMode];
+navigator.geolocation.watchPosition(
+    pos => updateCurrentLocationMarker(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy),
+    err => displayError('Không thể lấy vị trí: ' + err.message),
+    {
+        enableHighAccuracy: true,
+        maximumAge: 0,
+        timeout: cfg.maxWaitMs
+    }
+);
+```
+
+updateCurrentLocationMarker cũng dùng _updateAccuracyCircle (đổi màu theo status).
+
+🔧 Phần 5 — CSS cảnh báo trong bar
+
+```css
+#gpsTrackingBar.has-warning { border-color: #f59e0b; }
+.gps-warning-box { background:#fef3c7; border:1px solid #f59e0b; border-radius:8px;
+    padding:8px 10px; margin-top:8px; font-size:12px; color:#92400e; }
+.gps-warning-box .gw-title { font-weight:700; margin-bottom:4px; }
+.gps-warning-box .gw-actions { display:flex; gap:8px; margin-top:6px; }
+.gps-warning-box button { background:white; border:1px solid #d97706; color:#92400e;
+    border-radius:6px; padding:4px 10px; font-size:11px; font-weight:600; cursor:pointer; }
+```
+
+🔧 Phần 6 — Cập nhật MEMORY và CLAUDE
+
+CLAUDE.md đã có Tính năng 11 từ trước — chỉ cần đánh dấu các checkbox đã
+implement xong (✅).
+
+🧪 Test:
+
+1. Marker mới với chế độ phone → row[22] có accuracy (vd "3.8"),
+   row[23] = "phone", lat/lon dạng 10.123456
+2. Marker mới với RTK mock (nếu có hardware) → lat/lon 10.12345678 (8 chữ số),
+   accuracy ~0.02, mode "rtk"
+3. Popup marker hiển thị "📱 ±3.8 m" hoặc "🛰 ±2.1 cm  RTK FIXED"
+4. Chuyển sang RTK, đứng 35s với accuracy ~5m (chưa setup mock) → warning
+   hiện màu vàng kèm nút "Hướng dẫn" (mở huongdan.html#s15)
+5. Bấm "Tiếp tục đợi" → warning đóng, vẫn track
+6. Accuracy circle đổi màu khi tracking liên tục (Phone vs RTK)
+
+Báo cáo: confirm precision lưu sheet đúng format, popup hiển thị badge,
+warning hoạt động đúng.
+````
+
+---
+
+## 🎯 PROMPT P13 — TỔNG (cả 3 phase 1-shot, dùng cho dev nhanh)
+
+```
+Implement toàn bộ Tính năng 11 (Chế độ GPS Phone + RTK) trong CLAUDE.md
+theo thứ tự P13a → P13b → P13c. Sau mỗi phase hard reload + test sanity
+trước khi sang phase tiếp.
+
+P13a (Foundation, ~1 giờ):
+- GPS_MODES config + currentGpsMode state + helpers
+- Toggle UI radio trong ☰ Settings
+- GAS HEADER 22→24 cột (Độ chính xác, Chế độ GPS), redeploy
+- syncRowToGAS payload thêm 2 field
+
+P13b (Pipeline + UX, ~2 giờ):
+- Floating tracking bar HTML + controller
+- getBestFix(opts) unified function với auto-accept countdown 3s
+- averageFixes với MAD outlier filter
+- Refactor 5 call sites (Vị trí hiện tại, Thêm marker, Định vị popup, v.v.)
+- Accuracy circle màu theo rtkStatus
+
+P13c (Polish + Docs, ~1 giờ):
+- Precision tọa độ conditional (formatCoord/formatVn2000)
+- Popup hiển thị accuracy + mode badge
+- Warn khi RTK >30s không Fixed + nút "Hướng dẫn"
+- startTrackingCurrentLocation đọc GPS_MODES config
+
+Sau khi xong:
+- Mark các checkbox trong CLAUDE.md mục 11 thành ✅
+- Test phone GPS: track → đạt target 5m → auto-accept
+- Test RTK (nếu có hardware): track → Fixed → 3s countdown → accept
+- Test switching mode giữa chừng → ongoing track auto-discard
+- Test cancel button → dismiss bar, không tạo marker
+
+Báo cáo lỗi sau mỗi phase, dừng nếu test fail.
+```
+
+
