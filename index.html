@@ -543,6 +543,8 @@
             background: none; border: none; box-shadow: none;
             font-weight: 400; color: #111;
             text-shadow: 0 0 3px white, 0 0 6px white;
+            white-space: normal; word-break: break-word;
+            text-align: center; line-height: 1.3;
         }
         .custom-crosshair-icon { background: transparent; border: none; }
         @keyframes ks-pulse { 0%,100%{transform:scale(1);opacity:1} 50%{transform:scale(1.5);opacity:.7} }
@@ -3056,6 +3058,8 @@
         let labelLayerGroup = L.layerGroup();
         let markers = [];
         let loadedData = [];
+        const _labelOffsets = {};     // rowId → {dlat, dlon}
+        const _labelSyncTimers = {};  // rowId → debounce timer
         let newMarkerRows = [];
         let dirtyMovedRows = new Set();
         let editPositionMode = false;
@@ -3517,9 +3521,14 @@
                 if (md) { md.lat = newLat; md.lon = newLon; }
                 updateMarkerCoordinatesInData(name, newLat, newLon);
                 marker.setPopupContent(createMarkerPopupContent(row));
+                // Cập nhật label: giữ nguyên offset tương đối so với trụ
+                const _rowIdForLabel = String(row[0] || row[1] || '');
+                const _off = _labelOffsets[_rowIdForLabel] || { dlat: 0, dlon: 0 };
                 labelLayerGroup.getLayers().forEach(layer => {
-                    if (layer.getIcon().options.html && layer.getIcon().options.html.includes(name))
-                        layer.setLatLng([newLat, newLon]);
+                    if (layer._rowId === _rowIdForLabel) {
+                        layer.setLatLng([newLat + _off.dlat, newLon + _off.dlon]);
+                        layer._poleLatlng = L.latLng(newLat, newLon);
+                    }
                 });
                 displayError(`Marker "${name}" đã di chuyển đến (${newLat.toFixed(6)}, ${newLon.toFixed(6)})`);
             });
@@ -3529,11 +3538,35 @@
             markers.push({ lat, lon, name, note, id, marker });
 
             if (name) {
-                labelLayerGroup.addLayer(L.marker([lat, lon], {
-                    icon: L.divIcon({ className: 'custom-label', html: `<div style="font-size:11px;font-weight:400">${name}</div>`, iconSize: [80,20], iconAnchor: [40,-20] }),
-                    interactive: false,
+                const _rid = String(row[0] || row[1] || '');
+                // Parse offset lưu trong row[25]: "dlat,dlon"
+                const _offStr = String(row[25] || '').trim();
+                let _dlat = 0, _dlon = 0;
+                if (_offStr) { const _p = _offStr.split(','); _dlat = parseFloat(_p[0]) || 0; _dlon = parseFloat(_p[1]) || 0; }
+                if (_dlat || _dlon) _labelOffsets[_rid] = { dlat: _dlat, dlon: _dlon };
+                const _lbl = L.marker([lat + _dlat, lon + _dlon], {
+                    icon: L.divIcon({ className: 'custom-label', html: `<div style="font-size:11px;font-weight:400;max-width:80px">${name}</div>`, iconSize: [80,32], iconAnchor: [40,-12] }),
+                    interactive: canEdit(),
+                    draggable: canEdit(),
                     pane: 'shadowPane'
-                }));
+                });
+                _lbl._rowId = _rid;
+                _lbl._poleLatlng = L.latLng(lat, lon);
+                if (canEdit()) {
+                    _lbl.on('dragend', function() {
+                        const _nl = _lbl.getLatLng(), _pl = _lbl._poleLatlng;
+                        const _nd = { dlat: _nl.lat - _pl.lat, dlon: _nl.lng - _pl.lng };
+                        _labelOffsets[_rid] = _nd;
+                        clearTimeout(_labelSyncTimers[_rid]);
+                        _labelSyncTimers[_rid] = setTimeout(() => {
+                            const _offVal = (_nd.dlat === 0 && _nd.dlon === 0) ? '' : `${_nd.dlat},${_nd.dlon}`;
+                            fetch(KHAOSAT_GAS_URL, { method: 'POST', headers: {'Content-Type':'application/json'},
+                                body: JSON.stringify({ action:'full_update', sheet:currentSheet, id:String(row[0]||''), tenTru:String(row[1]||''), labelOffset:_offVal })
+                            }).catch(() => {});
+                        }, 1500);
+                    });
+                }
+                labelLayerGroup.addLayer(_lbl);
             }
             return marker;
         }

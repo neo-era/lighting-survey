@@ -24,7 +24,7 @@ const HEADER = [
   'Loại', 'Tủ điều khiển', 'Loại trụ', 'Loại cần', 'Loại đèn',
   'Công suất', 'Ảnh', 'Thời gian cập nhật', 'Marker gốc', 'Khoảng cách (m)', 'Mã PE', 'Đường', 'Phường/ Xã',
   'VN2000-X', 'VN2000-Y', 'Số lượng đèn', 'Loại cáp',
-  'Độ chính xác (m)', 'Chế độ GPS'
+  'Độ chính xác (m)', 'Chế độ GPS', 'Label offset'
 ];
 
 // Map key payload JS → tên cột trong Sheet
@@ -52,8 +52,9 @@ const FIELD_MAP = {
   'vn2000y':     'VN2000-Y',
   'soLuongDen':  'Số lượng đèn',
   'loaiCap':     'Loại cáp',
-  'accuracy':    'Độ chính xác (m)',
-  'gpsMode':     'Chế độ GPS',
+  'accuracy':     'Độ chính xác (m)',
+  'gpsMode':      'Chế độ GPS',
+  'labelOffset':  'Label offset',
 };
 
 // ── UTILS ──────────────────────────────────────────────────────────────────
@@ -348,6 +349,18 @@ function doPost(e) {
       return handleNormalizeCoords(data.sheet || 'DanhSachTru');
     }
 
+    if (data.action === 'fix_loai') {
+      return handleFixLoai(data.sheet || 'DanhSachTru');
+    }
+
+    if (data.action === 'fill_marker_goc') {
+      return handleFillMarkerGoc(data.sheet || 'DanhSachTru', data.overwrite === true);
+    }
+
+    if (data.action === 'fill_marker_goc_chain') {
+      return handleFillMarkerGocChain(data.sheet || 'DanhSachTru', data.overwrite === true);
+    }
+
     return jsonResponse({ status: 'error', message: 'action không hợp lệ: ' + data.action });
   } catch (err) {
     return jsonResponse({ status: 'error', message: err.message });
@@ -633,4 +646,221 @@ function updateAllSheetsHeader() {
   Logger.log('═══════════════════════════════');
   Logger.log('Hoàn tất: ' + ok + ' sheet OK, ' + missing + ' không tìm thấy, ' + failed + ' lỗi');
   Logger.log('HEADER hiện tại: ' + HEADER.length + ' cột — ' + HEADER.join(' | '));
+}
+
+// ── ĐIỀN MARKER GỐC = TỦ ĐIỀU KHIỂN cho mỗi trụ ─────────────────────────
+// Chỉ điền khi Marker gốc đang trống (hoặc overwrite=true).
+// Bỏ qua hàng tủ (Loại trụ trống).
+function handleFillMarkerGoc(sheetName, overwrite) {
+  var sheet = getSheet(sheetName);
+  if (!sheet) return jsonResponse({ status: 'error', message: 'Sheet không tồn tại: ' + sheetName });
+  var lastRow = sheet.getLastRow();
+  if (lastRow < 2) return jsonResponse({ status: 'ok', fixed: 0, total: 0 });
+
+  var headers  = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  var hIdx     = buildHeaderIndex(headers);
+  var tuCol    = hIdx[norm('tủ điều khiển')];
+  var gocCol   = hIdx[norm('marker gốc')];
+  var loaiTruCol = hIdx[norm('loại trụ')];
+
+  if (tuCol === undefined || gocCol === undefined) {
+    return jsonResponse({ status: 'error', message: 'Không tìm thấy cột Tủ điều khiển / Marker gốc: ' + sheetName });
+  }
+
+  var numCols = headers.length;
+  var allData = sheet.getRange(2, 1, lastRow - 1, numCols).getValues();
+  var fixedCount = 0;
+
+  for (var i = 0; i < allData.length; i++) {
+    var row = allData[i];
+    // Bỏ qua hàng tủ (Loại trụ trống)
+    if (loaiTruCol !== undefined && !String(row[loaiTruCol] || '').trim()) continue;
+    var tu  = String(row[tuCol]  || '').trim();
+    var goc = String(row[gocCol] || '').trim();
+    if (!tu) continue;
+    if (!overwrite && goc) continue; // đã có, không ghi đè
+    if (row[gocCol] !== tu) {
+      row[gocCol] = tu;
+      fixedCount++;
+    }
+  }
+
+  if (fixedCount > 0) {
+    sheet.getRange(2, 1, allData.length, numCols).setValues(allData);
+  }
+  return jsonResponse({ status: 'ok', fixed: fixedCount, total: allData.length, sheet: sheetName });
+}
+
+// ── ĐIỀN MARKER GỐC THEO CHUỖI TUYẾN (tủ có thể nằm giữa) ───────────────
+// Logic:
+//   1. Nhóm trụ theo (Tủ điều khiển, prefix tên trụ) — cùng tuyến
+//   2. Sort theo số thứ tự cuối tên (VD: ADV_2_1 → seq=1)
+//   3. Tìm vị trí chèn tủ vào chuỗi bằng minimum detour cost:
+//      cost(chèn giữa A-B) = dist(A,tủ) + dist(tủ,B) - dist(A,B)
+//      cost(chèn đầu)      = dist(tủ, p[0])
+//      cost(chèn cuối)     = dist(tủ, p[N-1])
+//   4. Trụ bên trái điểm chèn → chuỗi hướng phải (→ tủ)
+//      Trụ bên phải điểm chèn → chuỗi hướng trái (→ tủ)
+//      Cả hai trụ sát tủ đều có Marker gốc = tên tủ
+function handleFillMarkerGocChain(sheetName, overwrite) {
+  var sheet = getSheet(sheetName);
+  if (!sheet) return jsonResponse({ status: 'error', message: 'Sheet không tồn tại: ' + sheetName });
+  var lastRow = sheet.getLastRow();
+  if (lastRow < 2) return jsonResponse({ status: 'ok', filled: 0, total: 0 });
+
+  var headers    = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  var hIdx       = buildHeaderIndex(headers);
+  var numCols    = headers.length;
+  var tenTruCol  = hIdx[norm('tên trụ')];
+  var latCol     = hIdx[norm('lat')];
+  var lonCol     = hIdx[norm('lon')];
+  var tuCol      = hIdx[norm('tủ điều khiển')];
+  var gocCol     = hIdx[norm('marker gốc')];
+  var loaiTruCol = hIdx[norm('loại trụ')];
+
+  if (tenTruCol===undefined||latCol===undefined||lonCol===undefined||tuCol===undefined||gocCol===undefined) {
+    return jsonResponse({ status: 'error', message: 'Thiếu cột cần thiết trong sheet: ' + sheetName });
+  }
+
+  var allData = sheet.getRange(2, 1, lastRow - 1, numCols).getValues();
+
+  // Map tên → {lat, lon}
+  var posMap = {};
+  allData.forEach(function(row) {
+    var name = String(row[tenTruCol]||'').trim();
+    var lat  = parseFloat(row[latCol]);
+    var lon  = parseFloat(row[lonCol]);
+    if (name && isFinite(lat) && isFinite(lon) && lat !== 0) posMap[name] = { lat: lat, lon: lon };
+  });
+
+  function haversineM(lat1,lon1,lat2,lon2) {
+    var R=6371000, dLat=(lat2-lat1)*Math.PI/180, dLon=(lon2-lon1)*Math.PI/180;
+    var a=Math.sin(dLat/2)*Math.sin(dLat/2)+Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)*Math.sin(dLon/2);
+    return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+  }
+
+  function parseName(name) {
+    var m = name.match(/^(.+)_(\d+)$/);
+    return m ? { prefix: m[1], seq: parseInt(m[2], 10) } : { prefix: name, seq: 0 };
+  }
+
+  // Nhóm trụ theo (tủ, prefix)
+  var groups = {};
+  var rowIdxByName = {};
+  allData.forEach(function(row, i) {
+    var loaiTru = loaiTruCol !== undefined ? String(row[loaiTruCol]||'').trim() : 'x';
+    if (!loaiTru) return; // bỏ qua tủ
+    var name = String(row[tenTruCol]||'').trim();
+    var tu   = String(row[tuCol]||'').trim();
+    if (!name || !tu) return;
+    rowIdxByName[name] = i;
+    var p = parseName(name);
+    var key = tu + '\x00' + p.prefix;
+    if (!groups[key]) groups[key] = [];
+    groups[key].push({ name: name, seq: p.seq, tu: tu });
+  });
+
+  var filledCount = 0;
+
+  Object.keys(groups).forEach(function(key) {
+    var group = groups[key];
+    var tuName = group[0].tu;
+    var tuPos  = posMap[tuName];
+    var n = group.length;
+
+    group.sort(function(a,b){ return a.seq - b.seq; });
+
+    // Tìm vị trí chèn tủ tối ưu (bestK = số trụ bên trái tủ)
+    var bestK = n; // mặc định: tủ ở cuối
+    if (tuPos) {
+      var minCost = Infinity;
+
+      // Chèn trước p[0]
+      var p0 = posMap[group[0].name];
+      if (p0) {
+        var c = haversineM(tuPos.lat,tuPos.lon,p0.lat,p0.lon);
+        if (c < minCost) { minCost = c; bestK = 0; }
+      }
+
+      // Chèn sau p[n-1]
+      var pN = posMap[group[n-1].name];
+      if (pN) {
+        var c = haversineM(tuPos.lat,tuPos.lon,pN.lat,pN.lon);
+        if (c < minCost) { minCost = c; bestK = n; }
+      }
+
+      // Chèn giữa p[i-1] và p[i]
+      for (var i = 1; i < n; i++) {
+        var posA = posMap[group[i-1].name], posB = posMap[group[i].name];
+        if (!posA || !posB) continue;
+        var c = haversineM(posA.lat,posA.lon,tuPos.lat,tuPos.lon)
+              + haversineM(tuPos.lat,tuPos.lon,posB.lat,posB.lon)
+              - haversineM(posA.lat,posA.lon,posB.lat,posB.lon);
+        if (c < minCost) { minCost = c; bestK = i; }
+      }
+    }
+
+    // Gán Marker gốc:
+    // Trụ 0..bestK-1: chuỗi tăng dần → tủ  (p[0]→p[1]→...→p[bestK-1]→tủ)
+    for (var i = 0; i < bestK; i++) {
+      var idx = rowIdxByName[group[i].name];
+      if (idx===undefined) continue;
+      if (!overwrite && String(allData[idx][gocCol]||'').trim()) continue;
+      allData[idx][gocCol] = (i === bestK-1) ? tuName : group[i+1].name;
+      filledCount++;
+    }
+    // Trụ bestK..n-1: chuỗi giảm dần → tủ  (p[n-1]→p[n-2]→...→p[bestK]→tủ)
+    for (var i = bestK; i < n; i++) {
+      var idx = rowIdxByName[group[i].name];
+      if (idx===undefined) continue;
+      if (!overwrite && String(allData[idx][gocCol]||'').trim()) continue;
+      allData[idx][gocCol] = (i === bestK) ? tuName : group[i-1].name;
+      filledCount++;
+    }
+  });
+
+  if (filledCount > 0) {
+    sheet.getRange(2, 1, allData.length, numCols).setValues(allData);
+  }
+  return jsonResponse({ status: 'ok', filled: filledCount, total: allData.length, sheet: sheetName });
+}
+
+// ── SỬA CỘT LOẠI dựa theo tên Loại trụ ───────────────────────────────────
+// bê tông → 3 | trang trí → 2 | kim loại / khác → 1
+function handleFixLoai(sheetName) {
+  var sheet = getSheet(sheetName);
+  if (!sheet) return jsonResponse({ status: 'error', message: 'Sheet không tồn tại: ' + sheetName });
+  var lastRow = sheet.getLastRow();
+  if (lastRow < 2) return jsonResponse({ status: 'ok', fixed: 0, total: 0 });
+
+  var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  var hIdx    = buildHeaderIndex(headers);
+  var loaiCol    = hIdx[norm('loại')];
+  var loaiTruCol = hIdx[norm('loại trụ')];
+  if (loaiCol === undefined || loaiTruCol === undefined) {
+    return jsonResponse({ status: 'error', message: 'Không tìm thấy cột Loại / Loại trụ: ' + sheetName });
+  }
+
+  var numCols = headers.length;
+  var allData = sheet.getRange(2, 1, lastRow - 1, numCols).getValues();
+  var fixedCount = 0;
+
+  for (var i = 0; i < allData.length; i++) {
+    var row = allData[i];
+    var tenLoai = String(row[loaiTruCol] || '').toLowerCase();
+    if (!tenLoai) continue; // tủ điều khiển — bỏ qua
+    var newLoai;
+    if (tenLoai.indexOf('trang tr') !== -1) newLoai = 2;
+    else if (tenLoai.indexOf('bê tông') !== -1) newLoai = 3;
+    else newLoai = 1;
+    if (row[loaiCol] !== newLoai) {
+      row[loaiCol] = newLoai;
+      fixedCount++;
+    }
+  }
+
+  if (fixedCount > 0) {
+    sheet.getRange(2, 1, allData.length, numCols).setValues(allData);
+  }
+  return jsonResponse({ status: 'ok', fixed: fixedCount, total: allData.length, sheet: sheetName });
 }
