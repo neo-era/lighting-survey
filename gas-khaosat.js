@@ -340,10 +340,39 @@ function doPost(e) {
       return jsonResponse({ status: 'error', message: 'Không tìm thấy hàng để xóa.' });
     }
 
+    if (data.action === 'batch_import') {
+      return handleBatchImport(data.sheet, data.rows || [], data.clearFirst === true);
+    }
+
     return jsonResponse({ status: 'error', message: 'action không hợp lệ: ' + data.action });
   } catch (err) {
     return jsonResponse({ status: 'error', message: err.message });
   }
+}
+
+// ── BATCH IMPORT (nhập hàng loạt từ Excel) ────────────────────────────────
+
+function handleBatchImport(sheetName, rows, clearFirst) {
+  const sheet = getSheet(sheetName);
+  if (!sheet) return jsonResponse({ status: 'error', message: 'Sheet không tồn tại: ' + sheetName });
+
+  // Ensure header row exists
+  ensureHeader(sheet);
+
+  if (clearFirst) {
+    const lastRow = sheet.getLastRow();
+    if (lastRow > 1) {
+      sheet.getRange(2, 1, lastRow - 1, sheet.getLastColumn()).clearContent();
+    }
+  }
+
+  if (rows.length > 0) {
+    const startRow = clearFirst ? 2 : (Math.max(sheet.getLastRow(), 1) + 1);
+    const numCols  = rows[0].length;
+    sheet.getRange(startRow, 1, rows.length, numCols).setValues(rows);
+  }
+
+  return jsonResponse({ status: 'ok', count: rows.length, sheet: sheetName });
 }
 
 // ── LOG LỊCH SỬ THAO TÁC ──────────────────────────────────────────────────
