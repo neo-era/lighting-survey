@@ -344,6 +344,10 @@ function doPost(e) {
       return handleBatchImport(data.sheet, data.rows || [], data.clearFirst === true);
     }
 
+    if (data.action === 'normalize_coords') {
+      return handleNormalizeCoords(data.sheet || 'DanhSachTru');
+    }
+
     return jsonResponse({ status: 'error', message: 'action không hợp lệ: ' + data.action });
   } catch (err) {
     return jsonResponse({ status: 'error', message: err.message });
@@ -465,6 +469,93 @@ function buildFieldValues(data) {
 function doGet(e) {
   ensureHeader(getSheet());
   return jsonResponse({ status: 'ok', message: 'KhaoSat GAS v2 — login ready, header ensured' });
+}
+
+// ── CHUẨN HÓA TỌA ĐỘ ─────────────────────────────────────────────────────
+
+// Tính VN2000 (Gauss-Krüger, múi 6°, GRS80) — khớp hàm convertLatLonToVn2000 trong index.html
+function _convertLatLonToVn2000(lat, lon) {
+  var toRad = function(x) { return x * Math.PI / 180; };
+  var a = 6378137.0, f = 1/298.257222101;
+  var e2 = 2*f - f*f, k0 = 0.9996;
+  var zone = Math.floor((lon + 180)/6) + 1;
+  var lon0 = toRad(zone*6 - 183);
+  var phi = toRad(lat), lambda = toRad(lon);
+  var sinPhi = Math.sin(phi), cosPhi = Math.cos(phi), tanPhi = Math.tan(phi);
+  var N = a / Math.sqrt(1 - e2*sinPhi*sinPhi);
+  var T = tanPhi*tanPhi, C = e2/(1-e2)*cosPhi*cosPhi;
+  var A = (lambda - lon0)*cosPhi;
+  var M = a * ((1-e2/4-3*Math.pow(e2,2)/64-5*Math.pow(e2,3)/256)*phi
+    - (3*e2/8+3*Math.pow(e2,2)/32+45*Math.pow(e2,3)/1024)*Math.sin(2*phi)
+    + (15*Math.pow(e2,2)/256+45*Math.pow(e2,3)/1024)*Math.sin(4*phi)
+    - (35*Math.pow(e2,3)/3072)*Math.sin(6*phi));
+  var x = k0*N*(A+(1-T+C)*Math.pow(A,3)/6+(5-18*T+T*T+72*C-58*e2/(1-e2))*Math.pow(A,5)/120);
+  var y = k0*(M+N*tanPhi*(Math.pow(A,2)/2+(5-T+9*C+4*C*C)*Math.pow(A,4)/24+(61-58*T+T*T+600*C-330*e2/(1-e2))*Math.pow(A,6)/720));
+  return { x: x + 500000, y: y, zone: zone };
+}
+
+function handleNormalizeCoords(sheetName) {
+  var sheet = getSheet(sheetName);
+  if (!sheet) return jsonResponse({ status: 'error', message: 'Sheet không tồn tại: ' + sheetName });
+
+  var lastRow = sheet.getLastRow();
+  if (lastRow < 2) return jsonResponse({ status: 'ok', fixed: 0, total: 0 });
+
+  var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  var hIdx    = buildHeaderIndex(headers);
+  var numCols = headers.length;
+
+  var latCol = hIdx[norm('lat')];
+  var lonCol = hIdx[norm('lon')];
+  var vxCol  = hIdx[norm('vn2000-x')];
+  var vyCol  = hIdx[norm('vn2000-y')];
+
+  if (latCol === undefined || lonCol === undefined) {
+    return jsonResponse({ status: 'error', message: 'Không tìm thấy cột Lat/Lon trong sheet: ' + sheetName });
+  }
+
+  var allData = sheet.getRange(2, 1, lastRow - 1, numCols).getValues();
+  var fixedCount = 0;
+
+  for (var i = 0; i < allData.length; i++) {
+    var row = allData[i];
+    var rawLat = row[latCol];
+    var rawLon = row[lonCol];
+
+    var lat = parseFloat(String(rawLat).replace(',', '.'));
+    var lon = parseFloat(String(rawLon).replace(',', '.'));
+
+    if (!isFinite(lat) || !isFinite(lon) || lat === 0 || lon === 0) continue;
+
+    var changed = false;
+
+    // Chuẩn hóa string → number
+    if (typeof rawLat !== 'number' || rawLat !== lat) {
+      row[latCol] = lat;
+      changed = true;
+    }
+    if (typeof rawLon !== 'number' || rawLon !== lon) {
+      row[lonCol] = lon;
+      changed = true;
+    }
+
+    // Tính lại VN2000
+    if (vxCol !== undefined && vyCol !== undefined) {
+      var vn   = _convertLatLonToVn2000(lat, lon);
+      var newX = Math.round(vn.x);
+      var newY = Math.round(vn.y);
+      if (row[vxCol] !== newX) { row[vxCol] = newX; changed = true; }
+      if (row[vyCol] !== newY) { row[vyCol] = newY; changed = true; }
+    }
+
+    if (changed) fixedCount++;
+  }
+
+  if (fixedCount > 0) {
+    sheet.getRange(2, 1, allData.length, numCols).setValues(allData);
+  }
+
+  return jsonResponse({ status: 'ok', fixed: fixedCount, total: allData.length, sheet: sheetName });
 }
 
 /**
