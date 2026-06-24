@@ -868,8 +868,8 @@ function handlePurgeNoGps(sheetName) {
 
   var headers  = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
   var hIdx     = buildHeaderIndex(headers);
-  var latCol   = hIdx[norm('lat')];
-  var nguoiCol = hIdx[norm('nguoi ks')];
+  var latCol   = hIdx[norm('Lat')];
+  var nguoiCol = hIdx[norm('Người KS')];
   if (latCol === undefined) return jsonResponse({ status: 'error', message: 'Không tìm thấy cột Lat' });
 
   var allData = sheet.getRange(2, 1, lastRow - 1, headers.length).getValues();
@@ -897,8 +897,17 @@ function handleBatchMatchUpdate(sheetName, records) {
 
   var headers  = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
   var hIdx     = buildHeaderIndex(headers);
-  var nameCol  = hIdx[norm('ten tru')];
-  if (nameCol === undefined) return jsonResponse({ status: 'error', message: 'Không tìm thấy cột Tên trụ' });
+  // Tìm cột Tên trụ: thử theo tên trước, fallback index cứng 1 (cột B)
+  var nameCol = hIdx[norm('Tên trụ')];
+  if (nameCol === undefined) {
+    // Fallback: scan headers tìm bất kỳ header nào có 'tr' (tên trụ, ten tru, ...)
+    for (var hi = 0; hi < headers.length; hi++) {
+      var hn = norm(headers[hi]);
+      if (hn.indexOf('tr') !== -1 && hn.indexOf('t') === 0) { nameCol = hi; break; }
+    }
+  }
+  if (nameCol === undefined) nameCol = 1; // hardcode cột B nếu không tìm thấy
+  if (headers.length < 2) return jsonResponse({ status: 'error', message: 'Sheet không có đủ cột' });
 
   var allData   = sheet.getRange(2, 1, lastRow - 1, headers.length).getValues();
   var nameToRow = {};

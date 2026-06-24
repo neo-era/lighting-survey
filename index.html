@@ -2650,11 +2650,11 @@
                     }
                 }, 'restoreZoomSnap');
 
-                // Restore map size nếu đã resize
+                // Luôn restore map size — kể cả khi resize từ preview mode (resized=false nhưng map đã bị co lại)
                 _safe(() => {
-                    if (resized && mapEl) {
-                        mapEl.style.width = origStyleW;
-                        mapEl.style.height = origStyleH;
+                    if (mapEl) {
+                        mapEl.style.width  = '';
+                        mapEl.style.height = '';
                         if (map) map.invalidateSize({ animate: false });
                     }
                 }, 'restoreMapSize');
