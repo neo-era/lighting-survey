@@ -1154,7 +1154,9 @@
                 <div class="pd-label">Tỉ lệ</div>
                 <select id="pdScale" class="pd-ctrl">
                   <option value="500">1 : 500</option>
+                  <option value="725">1 : 725</option>
                   <option value="1000" selected>1 : 1000</option>
+                  <option value="1500">1 : 1500</option>
                   <option value="2000">1 : 2000</option>
                   <option value="5000">1 : 5000</option>
                 </select>
@@ -1173,8 +1175,12 @@
                 <input id="pdTenTu" class="pd-ctrl" type="text" placeholder="VD: KNỞ P12 Trần Thiện Chánh">
               </div>
               <div class="pd-item">
-                <div class="pd-label">Số bản vẽ</div>
-                <input id="pdSoBanVe" class="pd-ctrl" type="text" placeholder="VD: 001">
+                <div class="pd-label">Bản vẽ số</div>
+                <div style="display:flex;align-items:center;gap:4px;">
+                  <input id="pdSoBanVe" class="pd-ctrl" type="text" placeholder="1" style="width:48%;text-align:center;">
+                  <span style="font-size:16px;font-weight:700;color:#64748b;flex-shrink:0;">/</span>
+                  <input id="pdTongBanVe" class="pd-ctrl" type="text" placeholder="1" style="width:48%;text-align:center;">
+                </div>
               </div>
             </div>
             <div class="pd-row">
@@ -1565,7 +1571,7 @@
         // ── PERSIST FORM FIELD CỦA MODAL "IN BẢN VẼ" ───────────────────
         // Lưu/khôi phục các tùy chọn user đã chọn lần trước (trừ pdNgay — luôn lấy hôm nay)
         // pdTenTu cố ý KHÔNG persist — luôn lấy từ filter tủ điều khiển khi mở modal
-        const _PD_FIELDS = ['pdTuSelect','pdScale','pdPaper','pdRotation','pdSoBanVe','pdNguoiLap','pdCVPhuTrach','pdCSKhuVuc'];
+        const _PD_FIELDS = ['pdTuSelect','pdScale','pdPaper','pdRotation','pdSoBanVe','pdTongBanVe','pdNguoiLap','pdCVPhuTrach','pdCSKhuVuc'];
         function _savePdFields() {
             _PD_FIELDS.forEach(id => {
                 const el = document.getElementById(id);
@@ -2192,7 +2198,7 @@
         // ── PRINT OVERLAY (legend + title block) ─────────────────────────
         function _showPrintOverlay(opts) {
             _hidePrintOverlay();
-            const { rows, tenTu, scale, ngay, nguoiLap, soBanVe, cvPhuTrach = '', csKhuVuc = '' } = opts;
+            const { rows, tenTu, scale, ngay, nguoiLap, soBanVe, tongBanVe, cvPhuTrach = '', csKhuVuc = '' } = opts;
             const usedTypes = [...new Set(rows.map(r => parseInt(r[6])).filter(t => TYPE_CONFIG[t]))];
 
             // Đếm số trụ/tủ theo từng loại trong filtered rows
@@ -2369,7 +2375,7 @@
                           </td>
                           <td style="border-bottom:1px solid #94a3b8;padding:2px 7px;vertical-align:middle;">
                             <div style="font-size:7.5px;font-weight:700;color:#475569;">Bản vẽ số:</div>
-                            <div style="font-size:11px;font-weight:800;color:#0f172a;">${soBanVe || ''}</div>
+                            <div style="font-size:11px;font-weight:800;color:#0f172a;">${soBanVe ? (tongBanVe ? soBanVe + '/' + tongBanVe : soBanVe) : ''}</div>
                           </td>
                         </tr>
                         <!-- Hàng 4: Tên người ký + Ngày -->
@@ -2462,6 +2468,7 @@
             const paper      = (document.getElementById('pdPaper')     || {}).value || 'a3';
             const tenTu      = (document.getElementById('pdTenTu')      || {}).value?.trim() || '';
             const soBanVe    = (document.getElementById('pdSoBanVe')    || {}).value?.trim() || '';
+            const tongBanVe  = (document.getElementById('pdTongBanVe')  || {}).value?.trim() || '';
             const nguoiLap   = (document.getElementById('pdNguoiLap')   || {}).value?.trim() || '';
             const ngay       = (document.getElementById('pdNgay')       || {}).value;
             const cvPhuTrach = (document.getElementById('pdCVPhuTrach') || {}).value?.trim() || '';
@@ -2480,7 +2487,7 @@
             map.setView(map.getCenter(), map.getZoom(), { animate: false, reset: true });
             await new Promise(r => setTimeout(r, PRINT_CONFIG.resyncDelayMs.normal));
             _buildCableLines(rows); // L.polyline cho xem trước (không qua html2canvas)
-            _showPrintOverlay({ rows, tenTu, scale, ngay, nguoiLap, soBanVe, cvPhuTrach, csKhuVuc });
+            _showPrintOverlay({ rows, tenTu, scale, ngay, nguoiLap, soBanVe, tongBanVe, cvPhuTrach, csKhuVuc });
             _currentMapRotation = parseFloat((document.getElementById('pdRotation') || {}).value) || 0;
             _applyMapRotation(_currentMapRotation);
             const prevRotEl = document.getElementById('previewRotVal');
@@ -2523,7 +2530,8 @@
                 const scale    = parseInt((document.getElementById('pdScale')   || {}).value) || 1000;
                 const paper    = (document.getElementById('pdPaper')     || {}).value || 'a3';
                 const tenTu    = (document.getElementById('pdTenTu')     || {}).value.trim();
-                const soBanVe  = (document.getElementById('pdSoBanVe')   || {}).value.trim();
+                const soBanVe    = (document.getElementById('pdSoBanVe')    || {}).value.trim();
+                const tongBanVe  = (document.getElementById('pdTongBanVe')  || {}).value.trim();
                 const nguoiLap = (document.getElementById('pdNguoiLap')  || {}).value.trim();
                 const ngay       = (document.getElementById('pdNgay')        || {}).value;
                 const cvPhuTrach = (document.getElementById('pdCVPhuTrach') || {}).value?.trim() || '';
@@ -2563,7 +2571,7 @@
 
                 if (!_previewMode) {
                     // 4. Hiện overlay legend + title block
-                    _showPrintOverlay({ rows, tenTu: tenTu || activeTu || 'Sơ đồ tuyến', scale, ngay, nguoiLap, soBanVe, cvPhuTrach, csKhuVuc });
+                    _showPrintOverlay({ rows, tenTu: tenTu || activeTu || 'Sơ đồ tuyến', scale, ngay, nguoiLap, soBanVe, tongBanVe, cvPhuTrach, csKhuVuc });
                     await new Promise(r => setTimeout(r, PRINT_CONFIG.overlayDelayMs));
                 }
 
@@ -6252,8 +6260,21 @@
         border-radius:8px;padding:8px 16px;gap:10px;align-items:center;
         font-size:13px;font-weight:600;box-shadow:0 4px 16px rgba(0,0,0,.4);">
       <span><i class="fa fa-eye"></i> Xem trước bản vẽ</span>
+      <span style="display:flex;align-items:center;gap:4px;border-left:1px solid #475569;padding-left:10px;">
+        <span style="font-size:11px;color:#94a3b8;">Xoay:</span>
+        <button onclick="_rotateMap(-5)" title="Xoay trái 5°"
+          style="background:#334155;color:white;border:none;border-radius:4px;
+                 padding:3px 8px;cursor:pointer;font-size:13px;">◀</button>
+        <span id="previewRotVal" style="min-width:34px;text-align:center;font-size:12px;color:#e2e8f0;">0°</span>
+        <button onclick="_rotateMap(5)" title="Xoay phải 5°"
+          style="background:#334155;color:white;border:none;border-radius:4px;
+                 padding:3px 8px;cursor:pointer;font-size:13px;">▶</button>
+        <button onclick="_rotateMap(-_currentMapRotation)" title="Đặt lại 0°"
+          style="background:#334155;color:#94a3b8;border:none;border-radius:4px;
+                 padding:3px 6px;cursor:pointer;font-size:11px;">↺</button>
+      </span>
       <button onclick="exportDrawingPDF()" style="background:#2563eb;color:white;border:none;
-        border-radius:5px;padding:5px 12px;cursor:pointer;font-weight:700;">
+        border-radius:5px;padding:5px 12px;cursor:pointer;font-weight:700;border-left:1px solid #475569;margin-left:4px;">
         <i class="fa fa-file-pdf-o"></i> Xuất PDF
       </button>
       <button onclick="closePrintPreview()" style="background:#475569;color:white;border:none;
