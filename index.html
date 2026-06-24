@@ -541,7 +541,7 @@
         /* ══ MARKER LABELS ══ */
         .custom-label {
             background: none; border: none; box-shadow: none;
-            font-weight: 400; color: #111;
+            font-size: 10px; font-weight: 600; color: #111;
             text-shadow: 0 0 3px white, 0 0 6px white;
             white-space: normal; word-break: break-word;
             text-align: center; line-height: 1.3;
@@ -2407,11 +2407,24 @@
 
             _savePdFields();
             const rows = _getFilteredRows();
+            let mapEl, origStyleW, resized = false;
+
             if (!opts.skipTileSetup && rows.length > 0) {
                 // Bật fractional zoom để Leaflet không round zoom (cần thiết cho tỷ lệ chính xác).
-                // Lưu zoomSnap gốc để cleanup restore lại.
                 if (map._origZoomSnap === undefined) map._origZoomSnap = map.options.zoomSnap;
                 map.options.zoomSnap = 0;
+
+                // Force aspect ratio khổ giấy — giống exportDrawingPDF
+                mapEl = document.getElementById('map');
+                origStyleW = mapEl.style.width;
+                const ratio = paperDim.mmW / paperDim.mmH;
+                const targetW = Math.round(mapEl.offsetHeight * ratio);
+                if (Math.abs(mapEl.offsetWidth - targetW) > PRINT_CONFIG.aspectRatioThresholdPx) {
+                    mapEl.style.width = targetW + 'px';
+                    map.invalidateSize({ animate: false });
+                    resized = true;
+                    await new Promise(r => setTimeout(r, PRINT_CONFIG.resyncDelayMs.afterResize));
+                }
 
                 _switchToPrintTile();
                 _zoomToScale(opts.scale, paperDim.mmW, paperDim.mmH);
@@ -2428,7 +2441,13 @@
                     _safe(_restoreOriginalTiles);
                     _safe(_clearMapRotation);
                     _safe(() => {
-                        // Restore zoomSnap gốc
+                        // Restore kích thước map
+                        if (resized && mapEl) {
+                            mapEl.style.width = origStyleW || '';
+                            map.invalidateSize({ animate: false });
+                        }
+                    });
+                    _safe(() => {
                         if (map._origZoomSnap !== undefined) {
                             map.options.zoomSnap = map._origZoomSnap;
                             delete map._origZoomSnap;
@@ -2525,20 +2544,10 @@
                 });
                 if (rows.length === 0) { displayError('Không có dữ liệu để in.'); return; }
 
-                // 2. Force landscape aspect ratio TRƯỚC khi vẽ cáp SVG
-                //    — luôn áp dụng để tỷ lệ capture khớp với khổ giấy
-                const paperDim = PRINT_CONFIG.paper[paper] || PRINT_CONFIG.paper.a3;
-                const ratio = paperDim.mmW / paperDim.mmH;
-                const targetW = Math.round(mapEl.offsetHeight * ratio);
-                if (Math.abs(mapEl.offsetWidth - targetW) > PRINT_CONFIG.aspectRatioThresholdPx) {
-                    mapEl.style.width = targetW + 'px';
-                    map.invalidateSize({ animate: false });
-                    resized = true;
-                }
-                // Reset pixel origin sau resize (quan trọng để tiles + markers đúng vị trí)
+                // Reset pixel origin (quan trọng để tiles + markers đúng vị trí)
+                // Aspect ratio đã được force trong _preparePrintLayout (khi !skipTileSetup)
                 map.setView(map.getCenter(), map.getZoom(), { animate: false, reset: true });
-                await new Promise(r => setTimeout(r,
-                    resized ? PRINT_CONFIG.resyncDelayMs.afterResize : PRINT_CONFIG.resyncDelayMs.normal));
+                await new Promise(r => setTimeout(r, PRINT_CONFIG.resyncDelayMs.normal));
 
                 // Re-apply rotation SAU setView — vì setView({reset}) ghi đè pane transform,
                 // xóa mất rotation đã áp dụng trong preview
@@ -3487,13 +3496,13 @@
                 const congSuat = String(row[11] || '').trim();
                 const soLuong = String(row[21] || '').trim();
                 if (_icCfg.shape === 'cabinet') {
-                    icon = makeCabinetIcon(_icCfg.color);
+                    icon = makeCabinetIcon(_icCfg.color, type);
                 } else if (isMobile && !loaiDen && !congSuat) {
                     const mobileKey = 'mobile_' + type;
-                    if (!customIcons[mobileKey]) customIcons[mobileKey] = makeLampIconMobile(_icCfg.color);
+                    if (!customIcons[mobileKey]) customIcons[mobileKey] = makeLampIconMobile(_icCfg.color, type);
                     icon = customIcons[mobileKey];
                 } else {
-                    icon = makeLampIcon(_icCfg.color, loaiDen, congSuat, soLuong);
+                    icon = makeLampIcon(_icCfg.color, loaiDen, congSuat, soLuong, type);
                 }
             } else {
                 icon = customIcons.default;
@@ -3545,7 +3554,7 @@
                 if (_offStr) { const _p = _offStr.split(','); _dlat = parseFloat(_p[0]) || 0; _dlon = parseFloat(_p[1]) || 0; }
                 if (_dlat || _dlon) _labelOffsets[_rid] = { dlat: _dlat, dlon: _dlon };
                 const _lbl = L.marker([lat + _dlat, lon + _dlon], {
-                    icon: L.divIcon({ className: 'custom-label', html: `<div style="font-size:11px;font-weight:400;max-width:80px">${name}</div>`, iconSize: [80,32], iconAnchor: [40,-12] }),
+                    icon: L.divIcon({ className: 'custom-label', html: `<div style="max-width:80px">${name}</div>`, iconSize: [80,32], iconAnchor: [40,-12] }),
                     interactive: canEdit(),
                     draggable: canEdit(),
                     pane: 'shadowPane'
@@ -3918,14 +3927,27 @@
             };
         }
 
-        function makeLampIcon(color, loaiDen, congSuat, soLuong) {
+        function makeLampIcon(color, loaiDen, congSuat, soLuong, type) {
             const n = Math.min(Math.max(parseInt(soLuong) || 1, 1), 4);
+            const t = parseInt(type) || 1;
 
-            // Lamp pill helper: returns SVG rect pair (body + glass)
+            // Lamp head: shape varies by type for B&W print distinction
+            // Type 1 STK:    ● filled pill     Type 2 trang trí: ○ hollow pill
+            // Type 3 HTLT:   ■ filled square   Type 4 TTLT:      □ hollow square
             const lamp = (x, y, w, h) => {
                 const r = h / 2;
-                return `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${r}" fill="${color}" filter="url(#ls)"/>` +
-                       `<rect x="${x+1.5}" y="${y+1.5}" width="${w-3}" height="${h-3}" rx="${r-1.5}" fill="white" opacity="0.82"/>`;
+                const s = h - 0.5, sx = x + (w - s) / 2;
+                if (t === 1) {
+                    return `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${r}" fill="${color}" filter="url(#ls)"/>` +
+                           `<rect x="${x+1.5}" y="${y+1.5}" width="${w-3}" height="${h-3}" rx="${r-1.5}" fill="white" opacity="0.82"/>`;
+                } else if (t === 2) {
+                    return `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${r}" fill="white" stroke="${color}" stroke-width="1.8" filter="url(#ls)"/>`;
+                } else if (t === 3) {
+                    return `<rect x="${sx}" y="${y}" width="${s}" height="${s}" fill="${color}" filter="url(#ls)"/>` +
+                           `<rect x="${sx+1.5}" y="${y+1.5}" width="${s-3}" height="${s-3}" fill="white" opacity="0.82"/>`;
+                } else {
+                    return `<rect x="${sx}" y="${y}" width="${s}" height="${s}" fill="white" stroke="${color}" stroke-width="1.8" filter="url(#ls)"/>`;
+                }
             };
             const arm = (x1, y1, cx, cy, x2, y2, sw) =>
                 `<path d="M${x1} ${y1} C${cx} ${cy} ${x2} ${y2} ${x2} ${y2}" stroke="${color}" stroke-width="${sw}" stroke-linecap="round" fill="none" filter="url(#ls)"/>`;
@@ -3977,29 +3999,36 @@
         // keep makePoleIcon as alias for legacy/default
         function makePoleIcon(color) { return makeLampIcon(color); }
 
-        function makeLampIconMobile(color) {
+        function makeLampIconMobile(color, type) {
+            const t = parseInt(type) || 1;
+            let shape;
+            if (t === 1)      shape = `<circle cx="6" cy="6" r="5.5" fill="${color}"/><circle cx="6" cy="6" r="3.5" fill="white" opacity="0.8"/>`;
+            else if (t === 2) shape = `<circle cx="6" cy="6" r="5.5" fill="white" stroke="${color}" stroke-width="2"/>`;
+            else if (t === 3) shape = `<rect x="0.5" y="0.5" width="11" height="11" fill="${color}"/><rect x="2.5" y="2.5" width="7" height="7" fill="white" opacity="0.8"/>`;
+            else              shape = `<rect x="0.5" y="0.5" width="11" height="11" fill="white" stroke="${color}" stroke-width="2"/>`;
             return L.divIcon({
                 className: '',
-                html: `<svg width="12" height="12" viewBox="0 0 12 12" xmlns="http://www.w3.org/2000/svg">
-                    <circle cx="6" cy="6" r="5.5" fill="${color}"/>
-                    <circle cx="6" cy="6" r="3.5" fill="white" opacity="0.8"/>
-                </svg>`,
+                html: `<svg width="12" height="12" viewBox="0 0 12 12" xmlns="http://www.w3.org/2000/svg">${shape}</svg>`,
                 iconSize: [12, 12], iconAnchor: [6, 12], popupAnchor: [0, -14]
             });
         }
 
-        function makeCabinetIcon(color) {
+        function makeCabinetIcon(color, type) {
+            // Type 5 tủ nổi: solid fill  |  Type 6 tủ ngầm: hollow + dashed border (B&W-distinct)
+            const body = parseInt(type) === 6
+                ? `<rect x="2" y="1" width="20" height="24" rx="3" fill="white" stroke="${color}" stroke-width="2.5" stroke-dasharray="4 2" style="filter:drop-shadow(0 1px 3px rgba(0,0,0,0.45))"/>
+                   <line x1="2" y1="11" x2="22" y2="11" stroke="${color}" stroke-width="1.2" opacity="0.5" stroke-dasharray="4 2"/>
+                   <rect x="5" y="4" width="14" height="5" rx="1.5" fill="none" stroke="${color}" stroke-width="1" opacity="0.5"/>
+                   <circle cx="12" cy="18" r="2.8" fill="${color}" opacity="0.7"/>
+                   <line x1="8" y1="18" x2="10" y2="18" stroke="white" stroke-width="1.2"/>`
+                : `<rect x="2" y="1" width="20" height="24" rx="3" fill="${color}" stroke="white" stroke-width="1.5" style="filter:drop-shadow(0 1px 3px rgba(0,0,0,0.45))"/>
+                   <line x1="2" y1="11" x2="22" y2="11" stroke="white" stroke-width="1.2" opacity="0.65"/>
+                   <rect x="5" y="4" width="14" height="5" rx="1.5" fill="white" opacity="0.3"/>
+                   <circle cx="12" cy="18" r="2.8" fill="white" opacity="0.8"/>
+                   <line x1="8" y1="18" x2="10" y2="18" stroke="${color}" stroke-width="1.2"/>`;
             return L.divIcon({
                 className: '',
-                html: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="28" viewBox="0 0 24 28">
-                    <rect x="2" y="1" width="20" height="24" rx="3"
-                        fill="${color}" stroke="white" stroke-width="1.5"
-                        style="filter:drop-shadow(0 1px 3px rgba(0,0,0,0.45))"/>
-                    <line x1="2" y1="11" x2="22" y2="11" stroke="white" stroke-width="1.2" opacity="0.65"/>
-                    <rect x="5" y="4" width="14" height="5" rx="1.5" fill="white" opacity="0.3"/>
-                    <circle cx="12" cy="18" r="2.8" fill="white" opacity="0.8"/>
-                    <line x1="8" y1="18" x2="10" y2="18" stroke="${color}" stroke-width="1.2"/>
-                </svg>`,
+                html: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="28" viewBox="0 0 24 28">${body}</svg>`,
                 iconSize: [24, 28], iconAnchor: [12, 28], popupAnchor: [0, -30]
             });
         }
@@ -4007,16 +4036,16 @@
         function makeMarkerIcon(typeNum) {
             const cfg = TYPE_CONFIG[typeNum];
             if (!cfg) return makePoleIcon('#94a3b8');
-            return cfg.shape === 'cabinet' ? makeCabinetIcon(cfg.color) : makePoleIcon(cfg.color);
+            return cfg.shape === 'cabinet' ? makeCabinetIcon(cfg.color, typeNum) : makeLampIcon(cfg.color, '', '', 1, typeNum);
         }
 
         const customIcons = {
-            1: makeLampIcon('#0ea5e9'),
-            2: makeLampIcon('#ec4899'),
-            3: makeLampIcon('#10b981'),
-            4: makeLampIcon('#f97316'),
-            5: makeCabinetIcon('#2563eb'),
-            6: makeCabinetIcon('#334155'),
+            1: makeLampIcon('#0ea5e9', '', '', 1, 1),
+            2: makeLampIcon('#ec4899', '', '', 1, 2),
+            3: makeLampIcon('#10b981', '', '', 1, 3),
+            4: makeLampIcon('#f97316', '', '', 1, 4),
+            5: makeCabinetIcon('#2563eb', 5),
+            6: makeCabinetIcon('#334155', 6),
             currentPos: L.divIcon({
                 className: 'gmap-loc-icon',
                 html: '<div class="gmap-dot"></div>',
