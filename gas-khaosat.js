@@ -724,7 +724,6 @@ function handleFillMarkerGocChain(sheetName, overwrite) {
 
   var allData = sheet.getRange(2, 1, lastRow - 1, numCols).getValues();
 
-  // Map tên → {lat, lon}
   var posMap = {};
   allData.forEach(function(row) {
     var name = String(row[tenTruCol]||'').trim();
@@ -749,7 +748,7 @@ function handleFillMarkerGocChain(sheetName, overwrite) {
   var rowIdxByName = {};
   allData.forEach(function(row, i) {
     var loaiTru = loaiTruCol !== undefined ? String(row[loaiTruCol]||'').trim() : 'x';
-    if (!loaiTru) return; // bỏ qua tủ
+    if (!loaiTru) return;
     var name = String(row[tenTruCol]||'').trim();
     var tu   = String(row[tuCol]||'').trim();
     if (!name || !tu) return;
@@ -770,26 +769,14 @@ function handleFillMarkerGocChain(sheetName, overwrite) {
 
     group.sort(function(a,b){ return a.seq - b.seq; });
 
-    // Tìm vị trí chèn tủ tối ưu (bestK = số trụ bên trái tủ)
-    var bestK = n; // mặc định: tủ ở cuối
+    // Tìm vị trí chèn tủ tối ưu (minimum detour cost)
+    var bestK = n;
     if (tuPos) {
       var minCost = Infinity;
-
-      // Chèn trước p[0]
       var p0 = posMap[group[0].name];
-      if (p0) {
-        var c = haversineM(tuPos.lat,tuPos.lon,p0.lat,p0.lon);
-        if (c < minCost) { minCost = c; bestK = 0; }
-      }
-
-      // Chèn sau p[n-1]
+      if (p0) { var c = haversineM(tuPos.lat,tuPos.lon,p0.lat,p0.lon); if (c < minCost) { minCost = c; bestK = 0; } }
       var pN = posMap[group[n-1].name];
-      if (pN) {
-        var c = haversineM(tuPos.lat,tuPos.lon,pN.lat,pN.lon);
-        if (c < minCost) { minCost = c; bestK = n; }
-      }
-
-      // Chèn giữa p[i-1] và p[i]
+      if (pN) { var c = haversineM(tuPos.lat,tuPos.lon,pN.lat,pN.lon); if (c < minCost) { minCost = c; bestK = n; } }
       for (var i = 1; i < n; i++) {
         var posA = posMap[group[i-1].name], posB = posMap[group[i].name];
         if (!posA || !posB) continue;
@@ -800,8 +787,6 @@ function handleFillMarkerGocChain(sheetName, overwrite) {
       }
     }
 
-    // Gán Marker gốc:
-    // Trụ 0..bestK-1: chuỗi tăng dần → tủ  (p[0]→p[1]→...→p[bestK-1]→tủ)
     for (var i = 0; i < bestK; i++) {
       var idx = rowIdxByName[group[i].name];
       if (idx===undefined) continue;
@@ -809,7 +794,6 @@ function handleFillMarkerGocChain(sheetName, overwrite) {
       allData[idx][gocCol] = (i === bestK-1) ? tuName : group[i+1].name;
       filledCount++;
     }
-    // Trụ bestK..n-1: chuỗi giảm dần → tủ  (p[n-1]→p[n-2]→...→p[bestK]→tủ)
     for (var i = bestK; i < n; i++) {
       var idx = rowIdxByName[group[i].name];
       if (idx===undefined) continue;
