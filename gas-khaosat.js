@@ -345,6 +345,14 @@ function doPost(e) {
       return handleBatchImport(data.sheet, data.rows || [], data.clearFirst === true);
     }
 
+    if (data.action === 'purge_no_gps') {
+      return handlePurgeNoGps(data.sheet || 'DanhSachTru');
+    }
+
+    if (data.action === 'batch_match_update') {
+      return handleBatchMatchUpdate(data.sheet, data.records || []);
+    }
+
     if (data.action === 'normalize_coords') {
       return handleNormalizeCoords(data.sheet || 'DanhSachTru');
     }
@@ -847,4 +855,69 @@ function handleFixLoai(sheetName) {
     sheet.getRange(2, 1, allData.length, numCols).setValues(allData);
   }
   return jsonResponse({ status: 'ok', fixed: fixedCount, total: allData.length, sheet: sheetName });
+}
+
+// ── PURGE IMPORTED ROWS WITHOUT GPS ──────────────────────────────────────────
+// Xóa hàng có Người KS = 'import' VÀ Lat rỗng (dọn dẹp import nhầm từ Excel)
+function handlePurgeNoGps(sheetName) {
+  var sheet = getSheet(sheetName);
+  if (!sheet) return jsonResponse({ status: 'error', message: 'Sheet không tồn tại: ' + sheetName });
+
+  var lastRow = sheet.getLastRow();
+  if (lastRow < 2) return jsonResponse({ status: 'ok', deleted: 0, total: 0 });
+
+  var headers  = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  var hIdx     = buildHeaderIndex(headers);
+  var latCol   = hIdx[norm('lat')];
+  var nguoiCol = hIdx[norm('nguoi ks')];
+  if (latCol === undefined) return jsonResponse({ status: 'error', message: 'Không tìm thấy cột Lat' });
+
+  var allData = sheet.getRange(2, 1, lastRow - 1, headers.length).getValues();
+  var toDelete = [];
+  for (var i = 0; i < allData.length; i++) {
+    var lat   = String(allData[i][latCol]   || '').trim();
+    var nguoi = nguoiCol !== undefined ? String(allData[i][nguoiCol] || '').trim().toLowerCase() : '';
+    if (!lat && nguoi === 'import') toDelete.push(i + 2);
+  }
+  for (var j = toDelete.length - 1; j >= 0; j--) {
+    sheet.deleteRow(toDelete[j]);
+  }
+  return jsonResponse({ status: 'ok', deleted: toDelete.length, total: allData.length, sheet: sheetName });
+}
+
+// ── BATCH MATCH UPDATE (chỉ update, không insert) ────────────────────────────
+// records: [{tenTru, loaiDen, congSuat, soLuongDen, tuDieuKhien, ...}]
+// Tìm hàng theo Tên trụ → update field, bỏ qua nếu không tìm thấy
+function handleBatchMatchUpdate(sheetName, records) {
+  var sheet = getSheet(sheetName);
+  if (!sheet) return jsonResponse({ status: 'error', message: 'Sheet không tồn tại: ' + sheetName });
+
+  var lastRow = sheet.getLastRow();
+  if (lastRow < 2) return jsonResponse({ status: 'ok', updated: 0, notFound: records.length });
+
+  var headers  = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  var hIdx     = buildHeaderIndex(headers);
+  var nameCol  = hIdx[norm('ten tru')];
+  if (nameCol === undefined) return jsonResponse({ status: 'error', message: 'Không tìm thấy cột Tên trụ' });
+
+  var allData   = sheet.getRange(2, 1, lastRow - 1, headers.length).getValues();
+  var nameToRow = {};
+  for (var i = 0; i < allData.length; i++) {
+    var nm = norm(String(allData[i][nameCol] || ''));
+    if (nm && !nameToRow[nm]) nameToRow[nm] = i + 2;
+  }
+
+  var updated = 0, notFound = 0;
+  for (var k = 0; k < records.length; k++) {
+    var rec    = records[k];
+    var rnm    = norm(String(rec.tenTru || ''));
+    var rowNum = nameToRow[rnm];
+    if (rowNum) {
+      updateRowFields(sheet, hIdx, rowNum, buildFieldValues(rec));
+      updated++;
+    } else {
+      notFound++;
+    }
+  }
+  return jsonResponse({ status: 'ok', updated: updated, notFound: notFound, sheet: sheetName });
 }

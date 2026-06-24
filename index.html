@@ -1168,6 +1168,14 @@
                   <option value="a4">A4 (ngang)</option>
                 </select>
               </div>
+              <div class="pd-item">
+                <div class="pd-label">Nền bản đồ</div>
+                <select id="pdTileStyle" class="pd-ctrl">
+                  <option value="voyager" selected>Voyager (màu)</option>
+                  <option value="dark">Dark Matter (tối đậm)</option>
+                  <option value="positron">Positron (sáng)</option>
+                </select>
+              </div>
             </div>
             <div class="pd-row">
               <div class="pd-item" style="flex:2">
@@ -1571,7 +1579,7 @@
         // ── PERSIST FORM FIELD CỦA MODAL "IN BẢN VẼ" ───────────────────
         // Lưu/khôi phục các tùy chọn user đã chọn lần trước (trừ pdNgay — luôn lấy hôm nay)
         // pdTenTu cố ý KHÔNG persist — luôn lấy từ filter tủ điều khiển khi mở modal
-        const _PD_FIELDS = ['pdTuSelect','pdScale','pdPaper','pdRotation','pdSoBanVe','pdTongBanVe','pdNguoiLap','pdCVPhuTrach','pdCSKhuVuc'];
+        const _PD_FIELDS = ['pdTuSelect','pdScale','pdPaper','pdTileStyle','pdRotation','pdSoBanVe','pdTongBanVe','pdNguoiLap','pdCVPhuTrach','pdCSKhuVuc'];
         function _savePdFields() {
             _PD_FIELDS.forEach(id => {
                 const el = document.getElementById(id);
@@ -2102,7 +2110,14 @@
             _clearMapRotation();
         }
 
-        function _switchToPrintTile() {
+        const _PRINT_TILE_URLS = {
+            voyager:  'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
+            dark:     'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+            positron: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+        };
+
+        function _switchToPrintTile(style) {
+            const tileUrl = _PRINT_TILE_URLS[style] || _PRINT_TILE_URLS.voyager;
             _savedBaseLayers = [];
             map.eachLayer(l => {
                 if (l instanceof L.TileLayer && l.options.pane !== 'shadowPane') {
@@ -2110,8 +2125,7 @@
                     map.removeLayer(l);
                 }
             });
-            _printCartoLayer = L.tileLayer(
-                'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
+            _printCartoLayer = L.tileLayer(tileUrl,
                 { maxZoom: 20, attribution: '© CartoDB', crossOrigin: 'anonymous' }
             );
             _printCartoLayer.addTo(map);
@@ -2430,7 +2444,7 @@
                     await new Promise(r => setTimeout(r, PRINT_CONFIG.resyncDelayMs.afterResize));
                 }
 
-                _switchToPrintTile();
+                _switchToPrintTile(opts.tileStyle);
                 _zoomToScale(opts.scale, paperDim.mmW, paperDim.mmH);
                 if (opts.displayMsg) displayInfo(opts.displayMsg);
                 await _waitForTileLoad(_printCartoLayer, PRINT_CONFIG.tileLoadTimeoutMs);
@@ -2464,6 +2478,7 @@
         async function openPrintPreview() {
             const scale      = parseInt((document.getElementById('pdScale')      || {}).value) || 1000;
             const paper      = (document.getElementById('pdPaper')     || {}).value || 'a3';
+            const tileStyle  = (document.getElementById('pdTileStyle') || {}).value || 'voyager';
             const tenTu      = (document.getElementById('pdTenTu')      || {}).value?.trim() || '';
             const soBanVe    = (document.getElementById('pdSoBanVe')    || {}).value?.trim() || '';
             const tongBanVe  = (document.getElementById('pdTongBanVe')  || {}).value?.trim() || '';
@@ -2479,6 +2494,7 @@
             const { rows } = await _preparePrintLayout({
                 scale,
                 paper,
+                tileStyle,
                 displayMsg: 'Đang tải bản đồ xem trước...'
             });
 
@@ -2525,13 +2541,14 @@
                 displayInfo('Đang tải thư viện in...');
                 await _loadPrintLibs();
 
-                const scale    = parseInt((document.getElementById('pdScale')   || {}).value) || 1000;
-                const paper    = (document.getElementById('pdPaper')     || {}).value || 'a3';
-                const tenTu    = (document.getElementById('pdTenTu')     || {}).value.trim();
+                const scale      = parseInt((document.getElementById('pdScale')      || {}).value) || 1000;
+                const paper      = (document.getElementById('pdPaper')      || {}).value || 'a3';
+                const tileStyle  = (document.getElementById('pdTileStyle')  || {}).value || 'voyager';
+                const tenTu      = (document.getElementById('pdTenTu')      || {}).value.trim();
                 const soBanVe    = (document.getElementById('pdSoBanVe')    || {}).value.trim();
                 const tongBanVe  = (document.getElementById('pdTongBanVe')  || {}).value.trim();
-                const nguoiLap = (document.getElementById('pdNguoiLap')  || {}).value.trim();
-                const ngay       = (document.getElementById('pdNgay')        || {}).value;
+                const nguoiLap   = (document.getElementById('pdNguoiLap')   || {}).value.trim();
+                const ngay       = (document.getElementById('pdNgay')       || {}).value;
                 const cvPhuTrach = (document.getElementById('pdCVPhuTrach') || {}).value?.trim() || '';
                 const csKhuVuc   = (document.getElementById('pdCSKhuVuc')   || {}).value?.trim() || '';
                 const rotation   = parseFloat((document.getElementById('pdRotation') || {}).value) || 0;
@@ -2545,6 +2562,7 @@
                 const { rows } = await _preparePrintLayout({
                     scale,
                     paper,
+                    tileStyle,
                     displayMsg: 'Đang chờ bản đồ tải...',
                     skipTileSetup: _previewMode
                 });
