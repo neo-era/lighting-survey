@@ -721,6 +721,7 @@
         .pc-actions.two   { grid-template-columns: 1fr 1fr; }
         .pc-actions.three { grid-template-columns: 1fr 1fr 1fr; }
         .pc-actions.four  { grid-template-columns: 1fr 1fr 1fr 1fr; }
+        .pc-actions.five  { grid-template-columns: 1fr 1fr 1fr 1fr 1fr; }
         .pc-btn { padding: 11px 6px; border-radius: 11px; border: none; font-size: 12px; font-weight: 700; cursor: pointer; font-family: 'Inter', system-ui, sans-serif; transition: opacity .15s, transform .1s; display: flex; align-items: center; justify-content: center; gap: 5px; touch-action: manipulation; min-height: 44px; white-space: nowrap; }
         .pc-btn:active { opacity: .82; transform: scale(.97); }
         .pc-btn.route  { background: #0ea5e9; color: #fff; }
@@ -728,6 +729,10 @@
         .pc-btn.delete { background: #fee2e2; color: #dc2626; }
         .pc-btn.delete.confirm { background: #dc2626; color: #fff; }
         .pc-btn.street { background: #f0fdf4; color: #16a34a; }
+        .pc-btn.report { background: #fff7ed; color: #f97316; }
+        .sc-chip { padding: 7px 12px; border-radius: 20px; border: 1.5px solid #e2e8f0; background: #f8fafc; color: #334155; font-size: 13px; font-weight: 600; cursor: pointer; transition: all .15s; }
+        .sc-chip.active { border-color: #f97316; background: #fff7ed; color: #f97316; }
+        .sc-chip:active { transform: scale(.97); }
 
         /* ── Thumbnail icon on map ── */
         .img-marker-icon img { width:44px;height:44px;object-fit:cover;border-radius:8px;border:2.5px solid #fff;box-shadow:0 2px 10px rgba(0,0,0,.45);display:block; }
@@ -1378,6 +1383,71 @@
                     <button type="button" class="btn btn-success" onclick="exportReport()">
                         <i class="fa fa-file-excel-o"></i> Xuất Excel
                     </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══ SỰ CỐ MODALS ═══ -->
+    <div class="modal fade" id="suCoModal" tabindex="-1" role="dialog" aria-labelledby="suCoModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered" role="document">
+            <div class="modal-content">
+                <div class="modal-header" style="background:#fff7ed;border-bottom:2px solid #f97316;">
+                    <h5 class="modal-title" id="suCoModalLabel">⚠️ Báo sự cố đèn chiếu sáng</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Đóng"><span aria-hidden="true">&times;</span></button>
+                </div>
+                <div class="modal-body">
+                    <div id="scTruInfo" style="background:#f8fafc;padding:8px 12px;border-radius:8px;margin-bottom:14px;font-size:13px;color:#1e293b;line-height:1.6;"></div>
+                    <div class="form-group">
+                        <label style="font-weight:700;font-size:13px;">Loại sự cố <span style="color:red">*</span></label>
+                        <div id="scLoaiChips" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;">
+                            <button type="button" class="sc-chip" data-val="Đèn tắt" onclick="_scSelectChip(this)">💡 Đèn tắt</button>
+                            <button type="button" class="sc-chip" data-val="Đèn mờ" onclick="_scSelectChip(this)">🔅 Đèn mờ</button>
+                            <button type="button" class="sc-chip" data-val="Trụ nghiêng" onclick="_scSelectChip(this)">🪝 Trụ nghiêng</button>
+                            <button type="button" class="sc-chip" data-val="Tủ hỏng" onclick="_scSelectChip(this)">🗄 Tủ hỏng</button>
+                            <button type="button" class="sc-chip" data-val="Dây đứt" onclick="_scSelectChip(this)">⚡ Dây đứt</button>
+                            <button type="button" class="sc-chip" data-val="Khác" onclick="_scSelectChip(this)">📝 Khác</button>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label style="font-weight:700;font-size:13px;">Mức độ</label>
+                        <select id="scMucDo" class="form-control" style="font-size:16px;">
+                            <option value="Bình thường">Bình thường</option>
+                            <option value="Khẩn cấp">⚡ Khẩn cấp</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label style="font-weight:700;font-size:13px;">Mô tả thêm</label>
+                        <textarea id="scMoTa" class="form-control" rows="2" style="font-size:16px;" placeholder="Mô tả chi tiết sự cố..."></textarea>
+                    </div>
+                    <div class="form-group mb-0">
+                        <label style="font-weight:700;font-size:13px;">📷 Ảnh sự cố (tùy chọn)</label>
+                        <input type="file" id="scAnh" accept="image/*" capture="environment" class="form-control-file" style="margin-top:6px;">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Hủy</button>
+                    <button type="button" class="btn btn-warning" onclick="saveSuCo()" id="btnSaveSuCo" style="font-weight:700;">📤 Gửi báo cáo</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="suCoAdminModal" tabindex="-1" role="dialog" aria-labelledby="suCoAdminModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-xl" role="document">
+            <div class="modal-content">
+                <div class="modal-header" style="background:#fff7ed;border-bottom:2px solid #f97316;">
+                    <h5 class="modal-title" id="suCoAdminModalLabel">⚠️ Danh sách sự cố</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Đóng"><span aria-hidden="true">&times;</span></button>
+                </div>
+                <div class="modal-body p-0">
+                    <div id="suCoAdminContent" style="max-height:70vh;overflow-y:auto;padding:12px;">
+                        <div style="text-align:center;padding:40px;color:#94a3b8;">Đang tải...</div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Đóng</button>
+                    <button type="button" class="btn btn-outline-primary" onclick="showSuCoAdminModal()">🔄 Tải lại</button>
                 </div>
             </div>
         </div>
@@ -2743,6 +2813,7 @@
                 currentSheet = defaultPage.sheet;
                 loadFromCSVWithCache(defaultPage.sheet, defaultPage.csvUrl);
             }
+            _loadSuCoData();
         }
 
         let _loginCtrl = null;
@@ -2917,7 +2988,7 @@
         function _buildDistrictOptions() {
             const sel = document.getElementById('pages');
             if (!sel) return;
-            [...sel.options].filter(o => o.value.startsWith('district_')).forEach(o => o.remove());
+            [...sel.options].filter(o => o.value.startsWith('district_') || o.value === 'suco').forEach(o => o.remove());
             const firstOpt = sel.options[0];
             _allowedPages().forEach(page => {
                 const opt = document.createElement('option');
@@ -2926,6 +2997,12 @@
                 if (page.sheet === currentSheet) opt.selected = true;
                 sel.insertBefore(opt, firstOpt);
             });
+            if (currentUser && currentUser.role === 'admin') {
+                const opt = document.createElement('option');
+                opt.value = 'suco';
+                opt.textContent = '⚠️ Sự cố';
+                sel.appendChild(opt);
+            }
         }
 
         // ── LAZY LOAD ExcelJS (chỉ tải khi user xuất Excel/báo cáo) ──────────
@@ -3132,6 +3209,8 @@
         const KHAOSAT_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRjBdN5epr38kL2jLituPUC4wJO_Ohr_AsFpzaZh6Azxxs_gkzGT5s3JiZ1uFkNQFP5epR2U_wYT6wT/pub?output=csv';
         const KHAOSAT_GAS_URL = 'https://script.google.com/macros/s/AKfycbxPFn7lnJZYdjUg5WlVq1P1JGI5O3rvcry_IVE3bhF5foDmbgT6KwBU4xFxHNwKruHRvQ/exec';
         const MAPILLARY_TOKEN = 'MLY|36684115377868575|f79dc382b6bbd9a0f9bdfe79c4eed78e';
+        const SUCO_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRjBdN5epr38kL2jLituPUC4wJO_Ohr_AsFpzaZh6Azxxs_gkzGT5s3JiZ1uFkNQFP5epR2U_wYT6wT/pub?gid=1918026795&single=true&output=csv';
+        let _activeIncidents = new Map(); // tenTru (normalized) → count active incidents
 
         // ── ĐA ĐỊA BÀN — cấu hình CSV URL sau khi publish từng tab trong Google Sheet ──
         const DISTRICT_PAGES = [
@@ -3357,18 +3436,19 @@
             }
 
             const streetBtn = `<button class="pc-btn street" onclick="openStreetView(${lat},${lon},'${(name||'').replace(/'/g,'\\\'')}')" title="Xem ảnh đường phố Mapillary">🌐 Phố</button>`;
+            const reportBtn = canEdit() ? `<button class="pc-btn report" onclick="openSuCoModal()">⚠️ Sự cố</button>` : '';
             let actionBtns, actionClass;
             if (canDelete()) {
                 actionBtns = `<button class="pc-btn route" onclick="routeToMarkerLatLon(${lat},${lon})">🧭 Đi đến</button>
                 <button class="pc-btn edit" onclick="openEditMarker()">✏️ Sửa</button>
                 <button class="pc-btn delete" onclick="confirmDeleteMarker(this)">🗑 Xóa</button>
-                ${streetBtn}`;
-                actionClass = 'four';
+                ${streetBtn}${reportBtn}`;
+                actionClass = canEdit() ? 'five' : 'four';
             } else if (canEdit()) {
                 actionBtns = `<button class="pc-btn route" onclick="routeToMarkerLatLon(${lat},${lon})">🧭 Đi đến</button>
                 <button class="pc-btn edit" onclick="openEditMarker()">✏️ Sửa</button>
-                ${streetBtn}`;
-                actionClass = 'three';
+                ${streetBtn}${reportBtn}`;
+                actionClass = 'four';
             } else {
                 actionBtns = `<button class="pc-btn route" onclick="routeToMarkerLatLon(${lat},${lon})">🧭 Đi đến</button>
                 ${streetBtn}`;
@@ -3519,14 +3599,15 @@
                 const loaiDen = String(row[10] || '').trim();
                 const congSuat = String(row[11] || '').trim();
                 const soLuong = String(row[21] || '').trim();
+                const hasIncident = _activeIncidents.has(normalizeText(String(row[1] || '')));
                 if (_icCfg.shape === 'cabinet') {
-                    icon = makeCabinetIcon(_icCfg.color, type);
-                } else if (isMobile && !loaiDen && !congSuat) {
+                    icon = makeCabinetIcon(_icCfg.color, type, hasIncident);
+                } else if (isMobile && !loaiDen && !congSuat && !hasIncident) {
                     const mobileKey = 'mobile_' + type;
                     if (!customIcons[mobileKey]) customIcons[mobileKey] = makeLampIconMobile(_icCfg.color, type);
                     icon = customIcons[mobileKey];
                 } else {
-                    icon = makeLampIcon(_icCfg.color, loaiDen, congSuat, soLuong, type);
+                    icon = makeLampIcon(_icCfg.color, loaiDen, congSuat, soLuong, type, hasIncident);
                 }
             } else {
                 icon = customIcons.default;
@@ -3951,7 +4032,7 @@
             };
         }
 
-        function makeLampIcon(color, loaiDen, congSuat, soLuong, type) {
+        function makeLampIcon(color, loaiDen, congSuat, soLuong, type, hasIncident) {
             const n = Math.min(Math.max(parseInt(soLuong) || 1, 1), 4);
             const t = parseInt(type) || 1;
 
@@ -4018,9 +4099,12 @@
             const badge = compact
                 ? `<div style="position:absolute;top:19px;left:50%;transform:translateX(-50%);white-space:nowrap;font-family:Arial,sans-serif;font-size:8px;font-weight:700;color:#fff;background:${color};border-radius:3px;padding:1px 4px;line-height:1.5;box-shadow:0 1px 2px rgba(0,0,0,.4);pointer-events:none;">${compact}</div>`
                 : '';
+            const incidentDot = hasIncident
+                ? `<div style="position:absolute;top:-3px;right:-3px;width:9px;height:9px;background:#ef4444;border:1.5px solid #fff;border-radius:50%;box-shadow:0 1px 3px rgba(0,0,0,.4);pointer-events:none;"></div>`
+                : '';
             return L.divIcon({
                 className: '',
-                html: `<div style="position:relative;display:inline-block;overflow:visible;">${svg}${badge}</div>`,
+                html: `<div style="position:relative;display:inline-block;overflow:visible;">${svg}${badge}${incidentDot}</div>`,
                 iconSize: [w, 18], iconAnchor: [ax, 18], popupAnchor: [0, -20]
             });
         }
@@ -4050,7 +4134,7 @@
             });
         }
 
-        function makeCabinetIcon(color, type) {
+        function makeCabinetIcon(color, type, hasIncident) {
             // Type 5 tủ nổi: solid fill  |  Type 6 tủ ngầm: hollow + dashed border (B&W-distinct)
             const body = parseInt(type) === 6
                 ? `<rect x="2" y="1" width="20" height="24" rx="3" fill="white" stroke="${color}" stroke-width="2.5" stroke-dasharray="4 2" style="filter:drop-shadow(0 1px 3px rgba(0,0,0,0.45))"/>
@@ -4063,9 +4147,12 @@
                    <rect x="5" y="4" width="14" height="5" rx="1.5" fill="white" opacity="0.3"/>
                    <circle cx="12" cy="18" r="2.8" fill="white" opacity="0.8"/>
                    <line x1="8" y1="18" x2="10" y2="18" stroke="${color}" stroke-width="1.2"/>`;
+            const incidentDot = hasIncident
+                ? `<div style="position:absolute;top:-3px;right:-3px;width:9px;height:9px;background:#ef4444;border:1.5px solid #fff;border-radius:50%;box-shadow:0 1px 3px rgba(0,0,0,.4);pointer-events:none;"></div>`
+                : '';
             return L.divIcon({
                 className: '',
-                html: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="28" viewBox="0 0 24 28">${body}</svg>`,
+                html: `<div style="position:relative;display:inline-block;overflow:visible;"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="28" viewBox="0 0 24 28">${body}</svg>${incidentDot}</div>`,
                 iconSize: [24, 28], iconAnchor: [12, 28], popupAnchor: [0, -30]
             });
         }
@@ -5194,6 +5281,12 @@
             const s = document.getElementById('pages');
             if (!s || !s.value) return;
             const val = s.value;
+            const prev = currentSheet ? 'district_' + currentSheet : s.options[0] && s.options[0].value;
+            if (val === 'suco') {
+                showSuCoAdminModal();
+                setTimeout(() => { if (s) s.value = prev; }, 0);
+                return;
+            }
             if (val.startsWith('district_')) {
                 switchDistrict(val.replace('district_', ''));
                 return;
@@ -5811,6 +5904,186 @@
             };
             // fire-and-forget — không await, không block UI
             fetch(KHAOSAT_GAS_URL, { method: 'POST', body: JSON.stringify(payload) }).catch(() => {});
+        }
+
+        // ── BÁO SỰ CỐ ────────────────────────────────────────────────────────
+        async function _loadSuCoData() {
+            if (!SUCO_CSV_URL) return;
+            try {
+                const res = await fetch(SUCO_CSV_URL + '&t=' + Date.now());
+                if (!res.ok) return;
+                const text = await res.text();
+                const rows = parseCSVText(text);
+                _activeIncidents.clear();
+                for (let i = 1; i < rows.length; i++) {
+                    const r = rows[i];
+                    const trangThai = String(r[14] || '').trim();
+                    if (trangThai === 'Đã xử lý') continue;
+                    const tenTru = normalizeText(String(r[2] || ''));
+                    if (tenTru) _activeIncidents.set(tenTru, (_activeIncidents.get(tenTru) || 0) + 1);
+                }
+            } catch (_) {}
+        }
+
+        function _scSelectChip(el) {
+            document.querySelectorAll('#scLoaiChips .sc-chip').forEach(c => c.classList.remove('active'));
+            el.classList.add('active');
+        }
+
+        function openSuCoModal() {
+            if (!_currentPopupRow) return;
+            const row = _currentPopupRow;
+            const tenTru = String(row[1] || row[0] || '');
+            document.getElementById('scTruInfo').innerHTML =
+                `<b>${tenTru}</b><br>` +
+                (row[17] ? `${row[17]}` : '') +
+                (row[18] ? `, ${row[18]}` : '') +
+                (row[7] ? `<br>Tủ ĐK: <b>${row[7]}</b>` : '');
+            document.querySelectorAll('#scLoaiChips .sc-chip').forEach(c => c.classList.remove('active'));
+            const moTa = document.getElementById('scMoTa');
+            if (moTa) moTa.value = '';
+            const mucDo = document.getElementById('scMucDo');
+            if (mucDo) mucDo.value = 'Bình thường';
+            const anh = document.getElementById('scAnh');
+            if (anh) anh.value = '';
+            $('#suCoModal').modal('show');
+        }
+
+        async function saveSuCo() {
+            const chip = document.querySelector('#scLoaiChips .sc-chip.active');
+            if (!chip) { displayError('Vui lòng chọn loại sự cố'); return; }
+            if (!_currentPopupRow) return;
+            const row = _currentPopupRow;
+            const btn = document.getElementById('btnSaveSuCo');
+            if (btn) { btn.disabled = true; btn.textContent = '⏳ Đang gửi...'; }
+            try {
+                const tenTru    = String(row[1] || row[0] || '');
+                const loaiSuCo  = chip.dataset.val;
+                const mucDo     = (document.getElementById('scMucDo') || {}).value || 'Bình thường';
+                const moTa      = ((document.getElementById('scMoTa') || {}).value || '').trim();
+                const anhFile   = document.getElementById('scAnh') && document.getElementById('scAnh').files[0];
+                const thoiGian  = new Date().toLocaleString('sv-SE', { timeZone: 'Asia/Ho_Chi_Minh' }).replace(' ', 'T');
+
+                let anhUrl = '';
+                if (anhFile) {
+                    anhUrl = await new Promise((res, rej) => {
+                        const reader = new FileReader();
+                        reader.onload = async e => {
+                            try {
+                                const base64 = e.target.result.split(',')[1];
+                                const ext = anhFile.name.split('.').pop() || 'jpg';
+                                const soTru = `suco_${tenTru.replace(/[^a-zA-Z0-9]/g, '_')}_${Date.now()}`;
+                                const r = await fetch(KHAOSAT_GAS_URL, {
+                                    method: 'POST',
+                                    body: JSON.stringify({ action: 'upload_image', imageBase64: base64, soTru, ext })
+                                });
+                                const d = await r.json();
+                                res(d.url || '');
+                            } catch (e2) { res(''); }
+                        };
+                        reader.onerror = () => res('');
+                        reader.readAsDataURL(anhFile);
+                    });
+                }
+
+                const payload = {
+                    action: 'report_suco',
+                    thoiGian, tenTru, idTru: String(row[0] || ''),
+                    lat: String(row[2] || ''), lon: String(row[3] || ''),
+                    tuDieuKhien: String(row[7] || ''), duong: String(row[17] || ''),
+                    phuongXa: String(row[18] || ''),
+                    loaiSuCo, mucDo, moTa, anh: anhUrl,
+                    nguoiBaoCao: currentUser ? (currentUser.username || '') : ''
+                };
+                const resp = await fetch(KHAOSAT_GAS_URL, { method: 'POST', body: JSON.stringify(payload) });
+                const data = await resp.json();
+                if (data.status !== 'ok') throw new Error(data.message || 'Lỗi gửi báo cáo');
+
+                const key = normalizeText(tenTru);
+                _activeIncidents.set(key, (_activeIncidents.get(key) || 0) + 1);
+                // Refresh marker icon
+                if (Array.isArray(markers)) {
+                    const m = markers.find(mk => mk._rowRef && normalizeText(String(mk._rowRef[1] || '')) === key);
+                    if (m) {
+                        const r2 = m._rowRef;
+                        const cfg = TYPE_CONFIG[parseInt(r2[6])];
+                        if (cfg) {
+                            const newIcon = cfg.shape === 'cabinet'
+                                ? makeCabinetIcon(cfg.color, parseInt(r2[6]), true)
+                                : makeLampIcon(cfg.color, String(r2[10]||''), String(r2[11]||''), String(r2[21]||''), parseInt(r2[6]), true);
+                            m.setIcon(newIcon);
+                        }
+                    }
+                }
+                $('#suCoModal').modal('hide');
+                displayInfo('Đã gửi báo cáo sự cố ✅');
+            } catch (err) {
+                displayError('Lỗi: ' + err.message);
+            } finally {
+                if (btn) { btn.disabled = false; btn.textContent = '📤 Gửi báo cáo'; }
+            }
+        }
+
+        async function showSuCoAdminModal() {
+            $('#suCoAdminModal').modal('show');
+            const content = document.getElementById('suCoAdminContent');
+            content.innerHTML = '<div style="text-align:center;padding:40px;color:#94a3b8;">Đang tải...</div>';
+            if (!SUCO_CSV_URL) {
+                content.innerHTML = '<div style="padding:20px;color:#94a3b8;">Chưa cấu hình SUCO_CSV_URL. Vui lòng tạo sheet SuCo, publish CSV và điền URL vào SUCO_CSV_URL trong index.html.</div>';
+                return;
+            }
+            try {
+                const res = await fetch(SUCO_CSV_URL + '&t=' + Date.now());
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                const text = await res.text();
+                const rows = parseCSVText(text);
+                if (rows.length < 2) { content.innerHTML = '<div style="padding:20px;color:#94a3b8;">Chưa có sự cố nào.</div>'; return; }
+                const STATUS_COLOR = { 'Chờ xử lý': '#fef3c7', 'Đang xử lý': '#dbeafe', 'Đã xử lý': '#dcfce7' };
+                let html = `<table class="table table-sm table-bordered" style="font-size:12px;min-width:800px;">
+                    <thead style="background:#f8fafc;font-weight:700;">
+                        <tr><th>ID</th><th>Thời gian</th><th>Tên trụ</th><th>Loại SC</th><th>Mức độ</th><th>Mô tả</th><th>Người báo</th><th>Trạng thái</th><th></th></tr>
+                    </thead><tbody>`;
+                for (let i = 1; i < rows.length; i++) {
+                    const r = rows[i];
+                    const scId = r[0], tg = String(r[1] || '').replace('T', ' ').substring(0, 16),
+                          ten = r[2], loai = r[9], muc = r[10], moTa = r[11],
+                          nguoi = r[13], tt = String(r[14] || 'Chờ xử lý');
+                    const ttColor = STATUS_COLOR[tt] || '#f8fafc';
+                    html += `<tr>
+                        <td>${scId}</td><td>${tg}</td>
+                        <td><b>${ten}</b></td><td>${loai}</td>
+                        <td>${muc === 'Khẩn cấp' ? '⚡ ' + muc : muc}</td>
+                        <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${(moTa||'').replace(/"/g,'&quot;')}">${moTa||''}</td>
+                        <td>${nguoi}</td>
+                        <td style="background:${ttColor}">${tt}</td>
+                        <td><button class="btn btn-xs btn-outline-warning" onclick="_openUpdateSuCo('${scId}','${tt.replace(/'/g,'\\\'')}')" style="white-space:nowrap;font-size:11px;">✏️ Cập nhật</button></td>
+                    </tr>`;
+                }
+                html += '</tbody></table>';
+                content.innerHTML = html;
+            } catch (err) {
+                content.innerHTML = `<div style="padding:20px;color:#dc2626;">Lỗi tải dữ liệu: ${err.message}</div>`;
+            }
+        }
+
+        function _openUpdateSuCo(scId, currentStatus) {
+            const newStatus = prompt(`Cập nhật trạng thái cho ${scId}\nTrạng thái hiện tại: ${currentStatus}\n\nNhập trạng thái mới:\n1. Chờ xử lý\n2. Đang xử lý\n3. Đã xử lý`);
+            if (!newStatus) return;
+            const statusMap = { '1': 'Chờ xử lý', '2': 'Đang xử lý', '3': 'Đã xử lý',
+                'Chờ xử lý': 'Chờ xử lý', 'Đang xử lý': 'Đang xử lý', 'Đã xử lý': 'Đã xử lý' };
+            const trangThai = statusMap[newStatus.trim()] || newStatus.trim();
+            const ghiChu = prompt('Ghi chú xử lý (tùy chọn):') || '';
+            fetch(KHAOSAT_GAS_URL, {
+                method: 'POST',
+                body: JSON.stringify({
+                    action: 'update_suco', id: scId, trangThai,
+                    nguoiXuLy: currentUser ? (currentUser.username || '') : '',
+                    ghiChuXuLy: ghiChu
+                })
+            }).then(r => r.json()).then(d => {
+                if (d.status === 'ok') { displayInfo('Đã cập nhật ✅'); showSuCoAdminModal(); }
+                else displayError('Lỗi: ' + d.message);
+            }).catch(e => displayError('Lỗi: ' + e.message));
         }
 
         // ── VERSION DỮ LIỆU ──────────────────────────────────────────────────

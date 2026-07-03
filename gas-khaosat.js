@@ -27,6 +27,14 @@ const HEADER = [
   'Độ chính xác (m)', 'Chế độ GPS', 'Label offset'
 ];
 
+// Header sheet SuCo (báo sự cố)
+const HEADER_SUCO = [
+  'ID', 'Thời gian', 'Tên trụ', 'ID trụ', 'Lat', 'Lon',
+  'Tủ điều khiển', 'Đường', 'Phường/Xã',
+  'Loại sự cố', 'Mức độ', 'Mô tả', 'Ảnh', 'Người báo cáo',
+  'Trạng thái', 'Người xử lý', 'Ghi chú xử lý'
+];
+
 // Map key payload JS → tên cột trong Sheet
 const FIELD_MAP = {
   'id':          'ID',
@@ -368,6 +376,9 @@ function doPost(e) {
     if (data.action === 'fill_marker_goc_chain') {
       return handleFillMarkerGocChain(data.sheet || 'DanhSachTru', data.overwrite === true);
     }
+
+    if (data.action === 'report_suco')  return handleReportSuCo(data);
+    if (data.action === 'update_suco')  return handleUpdateSuCo(data);
 
     return jsonResponse({ status: 'error', message: 'action không hợp lệ: ' + data.action });
   } catch (err) {
@@ -929,4 +940,89 @@ function handleBatchMatchUpdate(sheetName, records) {
     }
   }
   return jsonResponse({ status: 'ok', updated: updated, notFound: notFound, sheet: sheetName });
+}
+
+// ── BÁO SỰ CỐ ────────────────────────────────────────────────────────────────
+
+function ensureHeaderSuCo(sheet) {
+  var lastCol = sheet.getLastColumn();
+  if (lastCol === 0 || sheet.getLastRow() === 0) {
+    sheet.appendRow(HEADER_SUCO);
+    sheet.getRange(1, 1, 1, HEADER_SUCO.length)
+      .setFontWeight('bold').setBackground('#fef3c7').setHorizontalAlignment('center');
+    sheet.setFrozenRows(1);
+    return;
+  }
+  var existing = sheet.getRange(1, 1, 1, lastCol).getValues()[0].map(function(h) { return String(h); });
+  var toAdd = [];
+  HEADER_SUCO.forEach(function(h) { if (existing.indexOf(h) === -1) toAdd.push(h); });
+  if (toAdd.length > 0) {
+    toAdd.forEach(function(h) {
+      var col = sheet.getLastColumn() + 1;
+      sheet.getRange(1, col).setValue(h).setFontWeight('bold').setBackground('#fef3c7');
+    });
+  }
+}
+
+function handleReportSuCo(data) {
+  var ss    = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('SuCo');
+  if (!sheet) {
+    sheet = ss.insertSheet('SuCo');
+  }
+  ensureHeaderSuCo(sheet);
+
+  var lastRow = sheet.getLastRow();
+  var n       = lastRow < 1 ? 1 : lastRow; // row 1 = header
+  var scId    = 'SC_' + String(n).padStart(3, '0');
+
+  var now = new Date();
+  var thoiGian = Utilities.formatDate(now, 'Asia/Ho_Chi_Minh', "yyyy-MM-dd'T'HH:mm:ss'+07:00'");
+
+  sheet.appendRow([
+    scId,
+    thoiGian,
+    data.tenTru      || '',
+    data.idTru       || '',
+    data.lat         || '',
+    data.lon         || '',
+    data.tuDieuKhien || '',
+    data.duong       || '',
+    data.phuongXa    || '',
+    data.loaiSuCo    || '',
+    data.mucDo       || 'Bình thường',
+    data.moTa        || '',
+    data.anh         || '',
+    data.nguoiBaoCao || '',
+    'Chờ xử lý',
+    '',
+    ''
+  ]);
+  return jsonResponse({ status: 'ok', id: scId });
+}
+
+function handleUpdateSuCo(data) {
+  var ss    = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('SuCo');
+  if (!sheet) return jsonResponse({ status: 'error', message: 'Sheet SuCo không tồn tại' });
+
+  var lastRow = sheet.getLastRow();
+  if (lastRow < 2) return jsonResponse({ status: 'error', message: 'Không có dữ liệu' });
+
+  var idCol        = 0; // cột A = ID
+  var trangThaiCol = 14;
+  var nguoiXuLyCol = 15;
+  var ghiChuCol    = 16;
+
+  var allData = sheet.getRange(2, 1, lastRow - 1, 17).getValues();
+  for (var i = 0; i < allData.length; i++) {
+    if (String(allData[i][idCol]) === String(data.id)) {
+      var rowNum = i + 2;
+      if (data.trangThai   !== undefined) sheet.getRange(rowNum, trangThaiCol + 1).setValue(data.trangThai);
+      if (data.nguoiXuLy   !== undefined) sheet.getRange(rowNum, nguoiXuLyCol + 1).setValue(data.nguoiXuLy);
+      if (data.ghiChuXuLy  !== undefined) sheet.getRange(rowNum, ghiChuCol + 1).setValue(data.ghiChuXuLy);
+      return jsonResponse({ status: 'ok' });
+    }
+  }
+  return jsonResponse({ status: 'error', message: 'Không tìm thấy sự cố ID: ' + data.id });
 }
