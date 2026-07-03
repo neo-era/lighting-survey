@@ -145,7 +145,16 @@
       <li><a href="#s12">Xuất CAD (DXF)</a></li>
       <li><a href="#s13">Đồng bộ GitHub</a></li>
       <li><a href="#s14">Cài app trên điện thoại / máy tính</a></li>
-      <li><a href="#s15">Cấu hình GPS (Phone &amp; RTK Tersus Luka)</a></li>
+      <li><a href="#s15">Cấu hình GPS (Phone &amp; RTK Tersus Luka)</a>
+        <ul style="margin-top:4px;padding-left:16px;">
+          <li><a href="#s15" style="font-weight:400;color:#4b5563;">Phone GPS — tối ưu</a></li>
+          <li><a href="#s15" style="font-weight:400;color:#4b5563;">Setup RTK Luka qua mock location</a></li>
+          <li><a href="#s15" style="font-weight:400;color:#4b5563;">Nuwa Output to System Location</a></li>
+          <li><a href="#s15" style="font-weight:400;color:#4b5563;">CORS / NTRIP — có phí &amp; miễn phí (RTK2go)</a></li>
+          <li><a href="#s15" style="font-weight:400;color:#4b5563;">Chế độ mặc định không có CORS</a></li>
+          <li><a href="#s15" style="font-weight:400;color:#4b5563;">Ngưỡng độ chính xác (thanh trượt)</a></li>
+        </ul>
+      </li>
     </ol>
   </div>
 
@@ -908,8 +917,16 @@
       </div>
       <div class="step">
         <div class="sn">8</div>
-        <div class="sc"><strong>Trong Nuwa: Output to System Location</strong>:
-          Device → Output → bật <strong>"Output to system location"</strong> (tên có thể là "Mock location output" hoặc "Share with system"). Bắt đầu phát tọa độ RTK ra Android Location Service.</div>
+        <div class="sc"><strong>Trong Nuwa: Output to System Location</strong> — bước quan trọng nhất.<br>
+          Tên menu khác nhau theo phiên bản Nuwa, tìm theo các con đường sau:
+          <ul style="margin-top:6px;">
+            <li><strong>Nuwa mới (≥ 2.x)</strong>: Menu <kbd>☰</kbd> → <strong>Device</strong> → <strong>Output</strong> → bật <em>"Output to System Location"</em></li>
+            <li><strong>Nuwa cũ (1.x)</strong>: Menu <kbd>☰</kbd> → <strong>Settings</strong> → <strong>Location Output</strong> → bật <em>"Mock Location Output"</em></li>
+            <li><strong>Hoặc</strong>: Màn hình Survey → biểu tượng <kbd>⚙</kbd> → <strong>Share Location</strong> → bật toggle</li>
+          </ul>
+          <em>Tìm từ khóa trong Settings của Nuwa: <code>Output</code>, <code>Location</code>, <code>Mock</code>, <code>Share</code>, <code>System</code></em><br>
+          Khi bật thành công Nuwa hiển thị thông báo <em>"Sharing location with system"</em> hoặc icon định vị có chữ <strong>M</strong> (mock).
+        </div>
       </div>
       <div class="step">
         <div class="sn">9</div>
@@ -921,19 +938,78 @@
       </div>
     </div>
 
+    <h3>Xử lý sự cố thường gặp</h3>
+    <table class="role-table">
+      <tr><th>Triệu chứng</th><th>Nguyên nhân</th><th>Xử lý</th></tr>
+      <tr><td>Pill hiển thị SPS ±5m dù đang RTK</td><td>Chưa bật "Output to System Location"</td><td>Vào lại Nuwa → tìm toggle Output/Location → bật</td></tr>
+      <tr><td>Không thấy Nuwa trong danh sách Mock app</td><td>Chưa mở Nuwa lần nào</td><td>Mở Nuwa, vào Survey, rồi quay lại Developer Options chọn</td></tr>
+      <tr><td>Mãi ở Float, không lên Fixed</td><td>Trời nhiều mây, multipath, ít vệ tinh</td><td>Ra nơi thoáng, tránh tòa nhà cao, chờ 2–3 phút</td></tr>
+      <tr><td>NTRIP timeout / không lấy được Source List</td><td>Sai host/port hoặc mất 4G</td><td>Kiểm tra mạng; thử port 8080; chọn NTRIP v1</td></tr>
+      <tr><td>Luka không pair được Bluetooth</td><td>Đang pair với thiết bị khác</td><td>Tắt Bluetooth điện thoại khác, tắt/bật Luka lại</td></tr>
+      <tr><td>Accuracy vẫn 0.5–1m dù NTRIP connect</td><td>Vẫn ở Float, chưa Fixed</td><td>Đứng chỗ thoáng thêm, kiểm tra mountpoint gần nhất</td></tr>
+      <tr><td>App báo "GPS chưa đạt ngưỡng"</td><td>Ngưỡng slider đặt quá chặt</td><td>☰ → GPS → kéo slider lên hoặc chọn vị trí trên bản đồ</td></tr>
+    </table>
+
     <div class="note note-warn">
       <span class="note-icon">⚠️</span>
       <div>iOS không cho phép mock location qua app bên thứ 3 — chỉ Android. Trên iPhone vẫn dùng được Phone GPS thường.</div>
     </div>
 
+    <h3>Quy trình nhanh mỗi lần ra hiện trường</h3>
+    <div class="steps">
+      <div class="step"><div class="sn">1</div><div class="sc"><strong>Bật Luka</strong> — giữ nút nguồn ~3s, đèn xanh nhấp nháy = sẵn sàng pair</div></div>
+      <div class="step"><div class="sn">2</div><div class="sc"><strong>Mở Nuwa</strong> → kết nối Bluetooth Luka → NTRIP → Connect → chờ <span class="badge badge-green">FIXED</span></div></div>
+      <div class="step"><div class="sn">3</div><div class="sc"><strong>Bật Output to System Location</strong> trong Nuwa (xem Bước 8 ở trên)</div></div>
+      <div class="step"><div class="sn">4</div><div class="sc"><strong>Mở app khảo sát</strong> → <kbd>☰</kbd> → Thiết bị GPS → chọn <strong>🛰 RTK</strong></div></div>
+      <div class="step"><div class="sn">5</div><div class="sc"><strong>Pill góc trên phải</strong> hiển thị <span class="badge badge-green">🟢 RTK FIXED</span> → bắt đầu khảo sát</div></div>
+    </div>
+
     <h3>NTRIP — chọn nguồn correction ở Việt Nam</h3>
-    <ul>
-      <li><strong>VINAGEO</strong> (<code>vinageoit.com</code>) — phổ biến nhất với surveyor, phủ TP HCM/Hà Nội/Đà Nẵng. Subscription tháng.</li>
-      <li><strong>VRSNT (Bộ TN&amp;MT)</strong> — toàn quốc nhưng phải xin phép qua Sở TN&amp;MT địa phương.</li>
-      <li><strong>CHC NETSS / Trimble VRS Now</strong> — đi kèm hardware từ dealer.</li>
-      <li><strong>Base station riêng</strong> — cần 1 GNSS receiver thứ 2 làm base, phủ bán kính ~10-15 km. Free sau invest.</li>
-    </ul>
+    <table class="role-table">
+      <tr><th>Mạng</th><th>Host</th><th>Port</th><th>Chi phí</th><th>Phủ sóng</th></tr>
+      <tr><td><strong>VINAGEO</strong></td><td><code>ntrip.vinageo.vn</code></td><td>2101</td><td>~2–3 tr/năm</td><td>Toàn quốc</td></tr>
+      <tr><td><strong>VRSNT</strong></td><td><code>vrsnt.vn</code></td><td>2101</td><td>Liên hệ</td><td>TP.HCM + lân cận</td></tr>
+      <tr><td><strong>DGPSNET</strong></td><td><code>dgpsnet.vn</code></td><td>2101</td><td>Liên hệ</td><td>Hà Nội + phía Bắc</td></tr>
+      <tr><td><strong>RTK2go</strong></td><td><code>rtk2go.com</code></td><td>2101</td><td><span class="badge badge-green">Miễn phí</span></td><td>Cộng đồng*</td></tr>
+    </table>
     <p>Cho khảo sát ở khu vực <strong>HCMC / Bình Dương / Long An</strong>, VINAGEO là lựa chọn phù hợp nhất.</p>
+
+    <h3>RTK2go — Mạng CORS miễn phí</h3>
+    <p><strong>RTK2go</strong> là caster NTRIP cộng đồng toàn cầu, hoàn toàn miễn phí:</p>
+    <table class="role-table">
+      <tr><th>Trường</th><th>Giá trị</th></tr>
+      <tr><td>Host</td><td><code>rtk2go.com</code></td></tr>
+      <tr><td>Port</td><td><code>2101</code></td></tr>
+      <tr><td>Username</td><td>Bất kỳ email nào (vd: <code>test@gmail.com</code>)</td></tr>
+      <tr><td>Password</td><td><code>none</code> (gõ đúng chữ "none")</td></tr>
+      <tr><td>Mountpoint</td><td>Nhấn <strong>"Get Source List"</strong> trong Nuwa để lấy danh sách</td></tr>
+    </table>
+    <div class="note note-warn">
+      <span class="note-icon">⚠️</span>
+      <div>RTK2go <strong>rất ít trạm ở Việt Nam</strong> — phần lớn trạm ở Thái Lan, Singapore, Nhật, Hàn Quốc. Khoảng cách base &gt; 50 km làm accuracy giảm rõ, khó đạt Fixed. Kiểm tra bản đồ trạm tại <code>rtk2go.com</code> trước khi dùng.</div>
+    </div>
+    <p>Cách xem mountpoint hiện có: truy cập <code>http://rtk2go.com:2101/SNIP::STATUS</code> — danh sách tất cả trạm đang online. Hoặc nhấn <strong>"Get Source List"</strong> trong Nuwa sau khi điền host/port/user/pass.</p>
+
+    <h3>Không có CORS — chế độ mặc định Luka</h3>
+    <p>Khi không kết nối NTRIP, Luka vẫn hoạt động ở chế độ GNSS thông thường:</p>
+    <table class="role-table">
+      <tr><th>Chế độ</th><th>Accuracy</th><th>Cần gì</th><th>Phù hợp</th></tr>
+      <tr><td><strong>Single</strong> (mặc định)</td><td>±1–3m</td><td>Chỉ cần bầu trời thoáng</td><td>Khảo sát sơ bộ</td></tr>
+      <tr><td><strong>SBAS</strong> (tự động)</td><td>±0.5–1m</td><td>Tín hiệu vệ tinh SBAS khu vực</td><td>Khảo sát thông thường</td></tr>
+      <tr><td><strong>RTK Float</strong></td><td>±10–50cm</td><td>Cần CORS hoặc base station</td><td>Khảo sát trung bình</td></tr>
+      <tr><td><strong>RTK Fixed</strong></td><td>±1–3cm</td><td>Cần CORS hoặc base station</td><td>Bản vẽ kỹ thuật</td></tr>
+    </table>
+    <div class="note note-info">
+      <span class="note-icon">📡</span>
+      <div>Luka tự nhận <strong>SBAS</strong> (MSAS từ Nhật / GAGAN từ Ấn Độ) hoàn toàn miễn phí — không cần cài đặt gì. Accuracy ~0.5–1m, tốt hơn hẳn GPS điện thoại thông thường trong cùng điều kiện.</div>
+    </div>
+    <table class="role-table" style="margin-top:12px">
+      <tr><th>Mục đích</th><th>Cần CORS?</th></tr>
+      <tr><td>Khảo sát sơ bộ, vẽ sơ đồ tổng thể</td><td class="yes">Không — Single/SBAS đủ</td></tr>
+      <tr><td>Xác định vị trí trụ đèn (±1m chấp nhận)</td><td class="yes">Không</td></tr>
+      <tr><td>Toạ độ chính xác nhập Google Sheet</td><td class="no">Có — RTK Float trở lên</td></tr>
+      <tr><td>VN2000 mm-level cho bản vẽ kỹ thuật</td><td class="no">Có — bắt buộc RTK Fixed</td></tr>
+    </table>
 
     <h3>Phân biệt RTK Fixed / Float / DGPS / SPS</h3>
     <ul>
@@ -946,6 +1022,24 @@
     <div class="note note-info">
       <span class="note-icon">📡</span>
       <div>App tự phân loại status dựa trên giá trị <code>accuracy</code> trả về từ browser. Không cần parse NMEA — workflow mock location ẩn hoàn toàn chi tiết hardware.</div>
+    </div>
+
+    <h3>Ngưỡng độ chính xác — Thanh trượt</h3>
+    <p>Tại <kbd>☰</kbd> → <strong>Thiết bị GPS</strong>, có thanh trượt <strong>"Ngưỡng độ chính xác"</strong> từ ±0.1m đến ±10m:</p>
+    <ul>
+      <li>Nếu GPS trả về accuracy <strong>vượt quá ngưỡng</strong> → app <strong>không cho lưu tọa độ GPS</strong>, hiện thông báo lỗi</li>
+      <li>User phải <strong>chọn vị trí thủ công trên bản đồ</strong> (chạm vào bản đồ để đặt marker)</li>
+      <li>Ngưỡng lưu vào bộ nhớ điện thoại — không reset khi tắt app</li>
+    </ul>
+    <table class="role-table">
+      <tr><th>Chế độ</th><th>Ngưỡng gợi ý</th><th>Lý do</th></tr>
+      <tr><td>📱 Phone GPS</td><td>2–5m</td><td>Phone thường đạt ±3–8m, chọn 3m là hợp lý</td></tr>
+      <tr><td>🛰 RTK Float</td><td>0.3–0.5m</td><td>Chấp nhận Float khi chưa có Fixed</td></tr>
+      <tr><td>🛰 RTK Fixed</td><td>0.05–0.1m</td><td>Chỉ ghi khi Fixed thật sự (±5cm)</td></tr>
+    </table>
+    <div class="note note-warn">
+      <span class="note-icon">💡</span>
+      <div>Khi ngưỡng không đạt: app <strong>không tự động chọn bản đồ</strong> — user cần tự chạm vào bản đồ để chọn vị trí. Đây là tính năng bảo đảm chất lượng dữ liệu, tránh ghi tọa độ sai.</div>
     </div>
 
     <h3>Lưu trong sheet</h3>

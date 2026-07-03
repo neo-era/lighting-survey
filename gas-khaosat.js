@@ -972,12 +972,35 @@ function handleReportSuCo(data) {
   }
   ensureHeaderSuCo(sheet);
 
-  var lastRow = sheet.getLastRow();
-  var n       = lastRow < 1 ? 1 : lastRow; // row 1 = header
-  var scId    = 'SC_' + String(n).padStart(3, '0');
-
   var now = new Date();
   var thoiGian = Utilities.formatDate(now, 'Asia/Ho_Chi_Minh', "yyyy-MM-dd'T'HH:mm:ss'+07:00'");
+
+  // Tìm sự cố chưa xử lý của cùng trụ + cùng loại → cập nhật thay vì tạo mới
+  var lastRow = sheet.getLastRow();
+  if (lastRow >= 2) {
+    var allData = sheet.getRange(2, 1, lastRow - 1, 17).getValues();
+    for (var i = 0; i < allData.length; i++) {
+      var r = allData[i];
+      var sameTru   = String(r[2] || '').trim() === String(data.tenTru || '').trim();
+      var sameLoai  = String(r[9] || '').trim() === String(data.loaiSuCo || '').trim();
+      var notDone   = String(r[14] || '').trim() !== 'Đã xử lý';
+      if (sameTru && sameLoai && notDone) {
+        // Cập nhật các trường có thể thay đổi
+        var rowNum = i + 2; // +1 header +1 vì i bắt đầu từ 0
+        sheet.getRange(rowNum, 2).setValue(thoiGian);           // Thời gian
+        sheet.getRange(rowNum, 11).setValue(data.mucDo || 'Bình thường'); // Mức độ
+        sheet.getRange(rowNum, 12).setValue(data.moTa || '');             // Mô tả
+        if (data.anh) sheet.getRange(rowNum, 13).setValue(data.anh);      // Ảnh (chỉ ghi đè nếu có ảnh mới)
+        sheet.getRange(rowNum, 14).setValue(data.nguoiBaoCao || '');      // Người báo cáo
+        var existingId = String(r[0] || '');
+        return jsonResponse({ status: 'ok', id: existingId, updated: true });
+      }
+    }
+  }
+
+  // Không tìm thấy → tạo mới
+  var n    = lastRow < 1 ? 1 : lastRow;
+  var scId = 'SC_' + String(n).padStart(3, '0');
 
   sheet.appendRow([
     scId,
@@ -998,7 +1021,7 @@ function handleReportSuCo(data) {
     '',
     ''
   ]);
-  return jsonResponse({ status: 'ok', id: scId });
+  return jsonResponse({ status: 'ok', id: scId, updated: false });
 }
 
 function handleUpdateSuCo(data) {

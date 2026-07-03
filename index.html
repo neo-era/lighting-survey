@@ -3472,24 +3472,40 @@
                 pcRows.push(`<div class="pc-row"><span class="pi">📏</span><span class="pk">Khoảng cách</span><span class="pv">${Math.round(totalDistance)} m</span><select size="3" class="pc-dist-list">${segments.join('')}</select></div>`);
             }
 
-            const streetBtn = `<button class="pc-btn street" onclick="openStreetView(${lat},${lon},'${(name||'').replace(/'/g,'\\\'')}')" title="Xem ảnh đường phố Mapillary">🌐 Phố</button>`;
             const reportBtn = canEdit() ? `<button class="pc-btn report" onclick="openSuCoModal()">⚠️ Sự cố</button>` : '';
+
+            // Block thông tin sự cố đang hoạt động
+            const _inc = _activeIncidents.get(normalizeText(name || ''));
+            let incidentBlock = '';
+            if (_inc && _inc.count > 0) {
+                const itemsHtml = _inc.items.map(it => {
+                    const mucDoHtml = it.mucDo === 'Khẩn cấp'
+                        ? `<span style="color:#dc2626;font-weight:700">⚡ Khẩn cấp</span>`
+                        : `<span style="color:#92400e">Bình thường</span>`;
+                    const ttColor = it.trangThai === 'Chờ xử lý' ? '#dc2626' : '#d97706';
+                    return `<div style="font-size:12px;color:#374151;margin-top:3px;">• ${it.loai || '—'} · ${mucDoHtml} · <span style="color:${ttColor};font-weight:600">${it.trangThai}</span></div>`;
+                }).join('');
+                incidentBlock = `<div style="background:#fff7ed;border:1.5px solid #f97316;border-radius:10px;margin:6px 16px 0;padding:9px 12px;">
+                    <div style="font-weight:700;color:#c2410c;font-size:12px;margin-bottom:4px;">⚠️ ${_inc.count} sự cố chưa xử lý</div>
+                    ${itemsHtml}
+                </div>`;
+            }
+
             let actionBtns, actionClass;
             if (canDelete()) {
                 actionBtns = `<button class="pc-btn route" onclick="routeToMarkerLatLon(${lat},${lon})">🧭 Đi đến</button>
                 <button class="pc-btn edit" onclick="openEditMarker()">✏️ Sửa</button>
                 <button class="pc-btn delete" onclick="confirmDeleteMarker(this)">🗑 Xóa</button>
-                ${streetBtn}${reportBtn}`;
-                actionClass = canEdit() ? 'five' : 'four';
+                ${reportBtn}`;
+                actionClass = 'four';
             } else if (canEdit()) {
                 actionBtns = `<button class="pc-btn route" onclick="routeToMarkerLatLon(${lat},${lon})">🧭 Đi đến</button>
                 <button class="pc-btn edit" onclick="openEditMarker()">✏️ Sửa</button>
-                ${streetBtn}${reportBtn}`;
-                actionClass = 'four';
+                ${reportBtn}`;
+                actionClass = 'three';
             } else {
-                actionBtns = `<button class="pc-btn route" onclick="routeToMarkerLatLon(${lat},${lon})">🧭 Đi đến</button>
-                ${streetBtn}`;
-                actionClass = 'two';
+                actionBtns = `<button class="pc-btn route" onclick="routeToMarkerLatLon(${lat},${lon})">🧭 Đi đến</button>`;
+                actionClass = 'one';
             }
 
             return `<div class="pc">
@@ -3504,6 +3520,7 @@
               </div>
               <div class="pc-divider"></div>
               <div class="pc-body">${pcRows.join('')}<div class="pc-coords">📡 ${coordStr}</div>${gpsInfo}</div>
+              ${incidentBlock}
               <div class="pc-actions ${actionClass}">
                 ${actionBtns}
               </div>
@@ -6156,7 +6173,17 @@
                     const trangThai = String(r[14] || '').trim();
                     if (trangThai === 'Đã xử lý') continue;
                     const tenTru = normalizeText(String(r[2] || ''));
-                    if (tenTru) _activeIncidents.set(tenTru, (_activeIncidents.get(tenTru) || 0) + 1);
+                    if (!tenTru) continue;
+                    const existing = _activeIncidents.get(tenTru) || { count: 0, items: [] };
+                    existing.count++;
+                    existing.items.push({
+                        id: String(r[0] || ''),
+                        loai: String(r[9] || ''),
+                        mucDo: String(r[10] || ''),
+                        trangThai,
+                        thoiGian: String(r[1] || '')
+                    });
+                    _activeIncidents.set(tenTru, existing);
                 }
             } catch (_) {}
         }
@@ -6236,8 +6263,21 @@
                 if (data.status !== 'ok') throw new Error(data.message || 'Lỗi gửi báo cáo');
 
                 const key = normalizeText(tenTru);
-                _activeIncidents.set(key, (_activeIncidents.get(key) || 0) + 1);
-                // Refresh marker icon
+                if (data.updated) {
+                    // Cùng loại sự cố chưa xử lý → cập nhật item hiện có trong cache
+                    const _ex = _activeIncidents.get(key);
+                    if (_ex) {
+                        const existing = _ex.items.find(it => normalizeText(it.loai) === normalizeText(loaiSuCo));
+                        if (existing) { existing.mucDo = mucDo; existing.thoiGian = thoiGian; }
+                    }
+                } else {
+                    // Loại sự cố mới → thêm vào cache
+                    const _ex = _activeIncidents.get(key) || { count: 0, items: [] };
+                    _ex.count++;
+                    _ex.items.push({ id: data.id || '', loai: loaiSuCo, mucDo, trangThai: 'Chờ xử lý', thoiGian });
+                    _activeIncidents.set(key, _ex);
+                }
+                // Refresh marker icon (chỉ cần nếu chưa có incident badge)
                 if (Array.isArray(markers)) {
                     const m = markers.find(mk => mk._rowRef && normalizeText(String(mk._rowRef[1] || '')) === key);
                     if (m) {
@@ -6252,7 +6292,7 @@
                     }
                 }
                 $('#suCoModal').modal('hide');
-                displayInfo('Đã gửi báo cáo sự cố ✅');
+                displayInfo(data.updated ? 'Đã cập nhật sự cố ✅' : 'Đã gửi báo cáo sự cố ✅');
             } catch (err) {
                 displayError('Lỗi: ' + err.message);
             } finally {
