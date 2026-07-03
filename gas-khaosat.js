@@ -985,9 +985,8 @@ function handleReportSuCo(data) {
       var sameLoai  = String(r[9] || '').trim() === String(data.loaiSuCo || '').trim();
       var notDone   = String(r[14] || '').trim() !== 'Đã xử lý';
       if (sameTru && sameLoai && notDone) {
-        // Cập nhật các trường có thể thay đổi
+        // Cập nhật các trường có thể thay đổi (giữ nguyên Thời gian phát hiện ban đầu)
         var rowNum = i + 2; // +1 header +1 vì i bắt đầu từ 0
-        sheet.getRange(rowNum, 2).setValue(thoiGian);           // Thời gian
         sheet.getRange(rowNum, 11).setValue(data.mucDo || 'Bình thường'); // Mức độ
         sheet.getRange(rowNum, 12).setValue(data.moTa || '');             // Mô tả
         if (data.anh) sheet.getRange(rowNum, 13).setValue(data.anh);      // Ảnh (chỉ ghi đè nếu có ảnh mới)
