@@ -548,6 +548,7 @@
         }
         .custom-crosshair-icon { background: transparent; border: none; }
         @keyframes ks-pulse { 0%,100%{transform:scale(1);opacity:1} 50%{transform:scale(1.5);opacity:.7} }
+        @keyframes gpsPillBlink { 0%,100%{opacity:1} 50%{opacity:.35} }
 
         /* Google Maps–style current position dot */
         .gmap-loc-icon { background:none !important; border:none !important; overflow:visible !important; }
@@ -996,6 +997,11 @@
                                 <span>🛰 RTK</span>
                             </label>
                         </div>
+                        <div id="rtkLiveStatus" style="display:none;margin-top:8px;padding:7px 10px;border-radius:8px;font-size:12px;font-weight:700;text-align:center;transition:background .4s;">
+                            <span id="rtkLiveDot">⚪</span>
+                            <span id="rtkLiveText"> Đang tìm tín hiệu...</span>
+                            <span id="rtkLiveAcc" style="opacity:.75;font-weight:600;"></span>
+                        </div>
                     </div>
 
                     <div class="ctrl-divider"></div>
@@ -1240,6 +1246,17 @@
     <div id="pickOnMapHint" style="display:none; position:fixed; bottom:calc(var(--bottombar-h) + var(--safe-bottom) + 14px); left:50%; transform:translateX(-50%); z-index:4500; background:#1f2937; color:white; font-size:14px; font-weight:600; padding:12px 20px 12px 16px; border-radius:999px; box-shadow:0 4px 20px rgba(0,0,0,.35); white-space:nowrap; align-items:center; gap:12px;">
         <span>📍 Nhấp vào bản đồ để chọn vị trí</span>
         <button onclick="cancelPickOnMap()" style="background:rgba(255,255,255,.15);border:none;color:white;border-radius:8px;padding:5px 12px;cursor:pointer;font-size:13px;font-weight:600;font-family:inherit;">Hủy</button>
+    </div>
+
+    <!-- ═══ GPS BACKGROUND STATUS PILL ═══ -->
+    <div id="gpsBgStatusPill" style="display:none; position:fixed; top:56px; right:8px; z-index:4500;
+         border-radius:20px; padding:5px 11px; font-size:12px; font-weight:700; cursor:default;
+         box-shadow:0 2px 10px rgba(0,0,0,.25); transition:background .4s,border-color .4s;
+         pointer-events:none; letter-spacing:0.2px; white-space:nowrap;
+         border:2px solid rgba(255,255,255,.3); color:white;">
+        <span id="gpsBgStatusDot" style="font-size:10px;">⚪</span>
+        <span id="gpsBgStatusText"> Đang tìm...</span>
+        <span id="gpsBgStatusAcc" style="opacity:.85;"></span>
     </div>
 
     <!-- ═══ GPS TRACKING BAR (P13b) ═══ -->
@@ -2814,6 +2831,7 @@
                 loadFromCSVWithCache(defaultPage.sheet, defaultPage.csvUrl);
             }
             _loadSuCoData();
+            if (currentGpsMode === 'rtk') _startBgGpsWatch();
         }
 
         let _loginCtrl = null;
@@ -3771,6 +3789,114 @@
 
         // Chuyển mode — gọi từ radio button trong ☰ Settings.
         // P13b sẽ thêm logic auto-discard ongoing tracking.
+        // ── BACKGROUND GPS STATUS WATCH ──────────────────────────────────────
+        let _bgGpsWatchId = null;
+        let _bgGpsNoSignalTimer = null;
+
+        function _startBgGpsWatch() {
+            if (!navigator.geolocation) return;
+            if (_bgGpsWatchId !== null) return; // already running
+            _updateGpsBgStatus(null); // show "searching"
+            const pill = document.getElementById('gpsBgStatusPill');
+            if (pill) pill.style.display = 'block';
+            const liveDiv = document.getElementById('rtkLiveStatus');
+            if (liveDiv) liveDiv.style.display = 'block';
+
+            // Alerte sau 30s nếu vẫn SPS (không có RTK)
+            _bgGpsNoSignalTimer = setTimeout(() => {
+                const acc = _lastBgAcc;
+                if (acc === null || acc > 0.5) _blinkGpsPill();
+            }, 30000);
+
+            _bgGpsWatchId = navigator.geolocation.watchPosition(
+                pos => _updateGpsBgStatus(pos.coords.accuracy),
+                () => _updateGpsBgStatus(null, true),
+                { enableHighAccuracy: true, maximumAge: 3000 }
+            );
+        }
+
+        function _stopBgGpsWatch() {
+            if (_bgGpsWatchId !== null) {
+                navigator.geolocation.clearWatch(_bgGpsWatchId);
+                _bgGpsWatchId = null;
+            }
+            if (_bgGpsNoSignalTimer) { clearTimeout(_bgGpsNoSignalTimer); _bgGpsNoSignalTimer = null; }
+            const pill = document.getElementById('gpsBgStatusPill');
+            if (pill) { pill.style.display = 'none'; pill.style.animation = ''; }
+            const liveDiv = document.getElementById('rtkLiveStatus');
+            if (liveDiv) liveDiv.style.display = 'none';
+            _lastBgAcc = null;
+        }
+
+        let _lastBgAcc = null;
+
+        function _updateGpsBgStatus(acc, isError) {
+            _lastBgAcc = isError ? null : acc;
+            const pill    = document.getElementById('gpsBgStatusPill');
+            const dot     = document.getElementById('gpsBgStatusDot');
+            const txt     = document.getElementById('gpsBgStatusText');
+            const accEl   = document.getElementById('gpsBgStatusAcc');
+            const liveDiv = document.getElementById('rtkLiveStatus');
+            const liveDot = document.getElementById('rtkLiveDot');
+            const liveTxt = document.getElementById('rtkLiveText');
+            const liveAcc = document.getElementById('rtkLiveAcc');
+
+            const BG_MAP = { '#10b981': '#dcfce7', '#f59e0b': '#fef3c7', '#3b82f6': '#dbeafe', '#6b7280': '#f1f5f9' };
+
+            if (isError) {
+                if (pill) { pill.style.background = '#ef4444'; pill.style.animation = ''; }
+                if (dot)     dot.textContent = '🔴';
+                if (txt)     txt.textContent = ' Lỗi GPS';
+                if (accEl)   accEl.textContent = '';
+                if (liveDiv) { liveDiv.style.background = '#fee2e2'; liveDiv.style.color = '#dc2626'; }
+                if (liveDot) liveDot.textContent = '🔴';
+                if (liveTxt) liveTxt.textContent = ' Lỗi GPS / Tắt quyền vị trí';
+                if (liveAcc) liveAcc.textContent = '';
+                return;
+            }
+            if (acc === null) {
+                if (pill) { pill.style.background = 'rgba(100,116,139,.85)'; pill.style.animation = ''; }
+                if (dot)     dot.textContent = '⚪';
+                if (txt)     txt.textContent = ' Đang tìm...';
+                if (accEl)   accEl.textContent = '';
+                if (liveDiv) { liveDiv.style.background = '#f1f5f9'; liveDiv.style.color = '#475569'; }
+                if (liveDot) liveDot.textContent = '⚪';
+                if (liveTxt) liveTxt.textContent = ' Đang tìm tín hiệu...';
+                if (liveAcc) liveAcc.textContent = '';
+                return;
+            }
+
+            const st = rtkStatus(acc);
+            const accStr = ' ' + formatAccuracy(acc);
+
+            if (pill) { pill.style.background = st.color; pill.style.animation = ''; }
+            if (dot)   dot.textContent = st.emoji;
+            if (txt)   txt.textContent = ' ' + st.label;
+            if (accEl) accEl.textContent = accStr;
+
+            if (liveDiv) {
+                liveDiv.style.background = BG_MAP[st.color] || '#f1f5f9';
+                liveDiv.style.color = '#1e293b';
+            }
+            if (liveDot) liveDot.textContent = st.emoji;
+            if (liveTxt) liveTxt.textContent = ' ' + st.label;
+            if (liveAcc) liveAcc.textContent = accStr;
+
+            // Nếu đã đạt FIXED/FLOAT → hủy cảnh báo no-signal
+            if (acc <= 0.5 && _bgGpsNoSignalTimer) {
+                clearTimeout(_bgGpsNoSignalTimer);
+                _bgGpsNoSignalTimer = null;
+                if (pill) pill.style.animation = '';
+            }
+        }
+
+        function _blinkGpsPill() {
+            const pill = document.getElementById('gpsBgStatusPill');
+            if (!pill || pill.style.display === 'none') return;
+            // Blink 3 lần để thu hút chú ý, sau đó dừng
+            pill.style.animation = 'gpsPillBlink 0.6s ease-in-out 4';
+        }
+
         function switchGpsMode(newMode) {
             if (!GPS_MODES[newMode]) return;
             if (typeof _hideGpsTrackingBar === 'function') _hideGpsTrackingBar();
@@ -3778,6 +3904,8 @@
             localStorage.setItem('gpsMode', newMode);
             displayInfo(`Đã chuyển sang chế độ ${GPS_MODES[newMode].label}`);
             _syncGpsModeRadio();
+            if (newMode === 'rtk') _startBgGpsWatch();
+            else _stopBgGpsWatch();
         }
         function _syncGpsModeRadio() {
             document.querySelectorAll('input[name="gpsMode"]').forEach(r => {
@@ -3969,6 +4097,7 @@
                             samples: samples.length,
                             elapsed: elapsedMs
                         });
+                        if (opts.onProgress) opts.onProgress(acc);
 
                         // Warn nếu mode RTK nhưng sau 30s vẫn chưa FLOAT (acc > 0.5m)
                         if (!warnShown && mode === 'rtk' && elapsedMs > 30000 && acc > 0.5) {
@@ -6184,7 +6313,11 @@
             };
             setLoading();
             // Interactive mode — đặt vị trí marker chính xác qua tracking bar
-            getBestFix().then(pos => {
+            getBestFix({ onProgress: (acc) => {
+                if (!btn) return;
+                const accStr = acc < 1 ? `±${(acc * 100).toFixed(0)}cm` : `±${acc.toFixed(0)}m`;
+                btn.innerHTML = `<i class="fa fa-spinner fa-spin"></i> ${accStr}`;
+            }}).then(pos => {
                 clearLoading();
                 const lat = pos.coords.latitude, lon = pos.coords.longitude;
                 const overlay = document.getElementById('markerPopupForm');
