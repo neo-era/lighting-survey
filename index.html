@@ -1031,6 +1031,10 @@
                                 <i class="fa fa-arrows"></i>
                                 <span id="editPositionBtnLabel">Chỉnh vị trí</span>
                             </button>
+                            <button id="editLabelBtn" onclick="toggleLabelEditMode()" class="ctrl-btn outline">
+                                <i class="fa fa-tag"></i>
+                                <span id="editLabelBtnLabel">Chỉnh nhãn</span>
+                            </button>
                             <button id="updateMovedBtn" onclick="pushMovedMarkersToSheet()" class="ctrl-btn warning" disabled>
                                 <i class="fa fa-refresh"></i>
                                 <span id="updateMovedBtnLabel">Cập nhật</span>
@@ -3226,6 +3230,7 @@
         let loadedData = [];
         const _labelOffsets = {};     // rowId → {dlat, dlon}
         const _labelSyncTimers = {};  // rowId → debounce timer
+        let labelEditMode = false;
         let newMarkerRows = [];
         let dirtyMovedRows = new Set();
         let editPositionMode = false;
@@ -3621,6 +3626,29 @@
                 : 'Đã khóa vị trí marker.');
         }
 
+        function toggleLabelEditMode() {
+            if (!canEdit()) {
+                displayError('Tài khoản hiện tại không có quyền chỉnh nhãn.');
+                return;
+            }
+            labelEditMode = !labelEditMode;
+            labelLayerGroup.eachLayer(function(layer) {
+                if (!layer.dragging) return;
+                if (labelEditMode) layer.dragging.enable();
+                else layer.dragging.disable();
+            });
+            const btn   = document.getElementById('editLabelBtn');
+            const label = document.getElementById('editLabelBtnLabel');
+            if (btn) {
+                btn.classList.toggle('warning', labelEditMode);
+                btn.classList.toggle('outline', !labelEditMode);
+            }
+            if (label) label.textContent = labelEditMode ? 'Đang chỉnh nhãn' : 'Chỉnh nhãn';
+            displayInfo(labelEditMode
+                ? 'Đã mở khóa — kéo nhãn trên bản đồ để dời vị trí.'
+                : 'Đã khóa nhãn.');
+        }
+
         async function pushMovedMarkersToSheet() {
             const rows = [...dirtyMovedRows];
             if (rows.length === 0) {
@@ -3738,7 +3766,7 @@
                 const _lbl = L.marker([lat + _dlat, lon + _dlon], {
                     icon: L.divIcon({ className: 'custom-label', html: `<div style="max-width:80px">${name}</div>`, iconSize: [80,32], iconAnchor: [40,-12] }),
                     interactive: canEdit(),
-                    draggable: canEdit(),
+                    draggable: false,
                     pane: 'shadowPane'
                 });
                 _lbl._rowId = _rid;
