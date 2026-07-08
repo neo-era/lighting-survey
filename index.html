@@ -488,11 +488,10 @@
             color: var(--ptc-color, var(--primary));
         }
 
-        .marker-image-preview { margin-top: 8px; display: flex; justify-content: center; }
-        .marker-image-preview img {
-            max-width: 100%; max-height: 140px;
-            border-radius: var(--radius); border: 1px solid var(--border); object-fit: cover;
-        }
+        .marker-image-preview { margin-top: 8px; display: flex; gap: 6px; }
+        .img-slot { flex: 1; height: 78px; border: 1.5px dashed #cbd5e1; border-radius: 8px; overflow: hidden; position: relative; background: #f8fafc; display: flex; align-items: center; justify-content: center; cursor: pointer; color: #94a3b8; font-size: 20px; }
+        .img-slot img { width: 100%; height: 100%; object-fit: cover; display: block; }
+        .img-slot-x { position: absolute; top: 3px; right: 3px; width: 20px; height: 20px; border-radius: 50%; border: none; background: rgba(0,0,0,.55); color: #fff; font-size: 12px; line-height: 20px; text-align: center; cursor: pointer; padding: 0; z-index: 1; }
         .marker-image-button { width: 100%; }
         .coords-info {
             font-size: 12px; color: var(--text-muted); margin-top: 4px;
@@ -708,6 +707,8 @@
         .pc-header { padding: 14px 16px 10px; display: flex; gap: 12px; align-items: flex-start; }
         .pc-avatar { width: 54px; height: 54px; border-radius: 12px; object-fit: cover; flex-shrink: 0; border: 2px solid rgba(0,0,0,.07); cursor: zoom-in; }
         .pc-avatar-ph { width: 54px; height: 54px; border-radius: 12px; background: linear-gradient(135deg,#f1f5f9,#e2e8f0); display: flex; align-items: center; justify-content: center; font-size: 26px; flex-shrink: 0; }
+        .pc-img-strip { display: flex; gap: 6px; padding: 0 16px 8px; }
+        .pc-img-extra { width: 60px; height: 60px; border-radius: 8px; object-fit: cover; cursor: zoom-in; border: 1.5px solid rgba(0,0,0,.07); flex-shrink: 0; }
         .pc-meta { min-width: 0; flex: 1; }
         .pc-name { font-size: 15px; font-weight: 800; color: #1e293b; line-height: 1.25; letter-spacing: -.2px; }
         .pc-id { font-size: 11px; color: #64748b; margin-top: 2px; }
@@ -1528,7 +1529,7 @@
                     </button>
                 </div>
                 <button id="markerImageButton" type="button" class="btn btn-outline-primary marker-image-button" onclick="triggerMarkerImageInput()">
-                    <i class="fa fa-camera"></i> Chụp / chọn ảnh
+                    <i class="fa fa-camera"></i> <span id="markerImageBtnLabel">Chụp / chọn ảnh</span>
                 </button>
                 <div class="footer-location-actions">
                     <button id="markerCurrentLocationBtn" type="button" class="btn btn-info" onclick="setMarkerToCurrentLocation()">
@@ -1627,7 +1628,7 @@
                     </div>
                     <div class="form-group w2">
                         <label for="markerLoaiCapInput">Loại cáp</label>
-                        <select id="markerLoaiCapInput">
+                        <select id="markerLoaiCapInput" onchange="localStorage.setItem('lastLoaiCap',this.value)">
                             <option value="noi">Cáp nổi</option>
                             <option value="ngam">Cáp ngầm</option>
                         </select>
@@ -3245,7 +3246,8 @@
         let pendingNewMarker = false;
         let pendingMarkerLocation = null;
         let markerPopupLocation = null;
-        let markerImageDataUrl = null;
+        let markerImageDataUrls = ['', '', ''];
+        let _currentImgSlot = 0;
         // Lưu accuracy + mode của fix gần nhất để gắn vào marker khi save (Tính năng 11 — P13c)
         let _lastFixAccuracy = '';
         let _lastFixMode = '';
@@ -3321,16 +3323,11 @@
 
         function generateId() {
             const prefix = SHEET_ID_PREFIX[currentSheet] || 'XX';
-            const existing = Array.isArray(loadedData)
-                ? loadedData.slice(1).map(r => String(r[0] || ''))
-                : [];
-            let n = existing.length + 1;
-            let candidate = `${prefix}_${String(n).padStart(3, '0')}`;
-            while (existing.includes(candidate)) {
-                n++;
-                candidate = `${prefix}_${String(n).padStart(3, '0')}`;
-            }
-            return candidate;
+            const now = new Date();
+            const pad = n => String(n).padStart(2, '0');
+            const ms = String(now.getMilliseconds()).padStart(3, '0');
+            const ts = `${now.getFullYear()}${pad(now.getMonth()+1)}${pad(now.getDate())}T${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}${ms}`;
+            return `${prefix}_${ts}`;
         }
 
         function debounce(fn, ms) {
@@ -3449,9 +3446,15 @@
             const soLuongDen = row[21] || '';
             const cfg = TYPE_CONFIG[type] || { color: '#94a3b8', bg: '#f1f5f9', label: 'Không xác định', emoji: '💡' };
 
-            const avatarHtml = imageValue
-                ? `<img class="pc-avatar" src="${imageValue}" style="cursor:zoom-in" onerror="this.outerHTML='<div class=\\'pc-avatar-ph\\'>${cfg.emoji}</div>'" loading="lazy">`
+            const _imgUrls = imageValue ? imageValue.split(';').map(function(s){return s.trim();}).filter(Boolean) : [];
+            const _img0 = _imgUrls[0] || '';
+            const avatarHtml = _img0
+                ? `<img class="pc-avatar" src="${_img0}" style="cursor:zoom-in" onerror="this.outerHTML='<div class=\\'pc-avatar-ph\\'>${cfg.emoji}</div>'" loading="lazy">`
                 : `<div class="pc-avatar-ph">${cfg.emoji}</div>`;
+            const _extraStripHtml = _imgUrls.slice(1).map(function(url) {
+                return `<img class="pc-img-extra" src="${url}" loading="lazy" onerror="this.style.display='none'">`;
+            }).join('');
+            const extraStripHtml = _extraStripHtml ? `<div class="pc-img-strip">${_extraStripHtml}</div>` : '';
 
             // Hiển thị tọa độ + accuracy + mode badge (Tính năng 11 — P13c)
             const savedMode = String(row[24] || '').trim();
@@ -3549,6 +3552,7 @@
               <div class="pc-divider"></div>
               <div class="pc-body">${pcRows.join('')}<div class="pc-coords">📡 ${coordStr}</div>${gpsInfo}</div>
               ${incidentBlock}
+              ${extraStripHtml}
               <div class="pc-actions ${actionClass}">
                 ${actionBtns}
               </div>
@@ -3729,8 +3733,9 @@
                     if (!popup) return;
                     const el = popup.getElement();
                     if (!el) return;
-                    const avatar = el.querySelector('.pc-avatar');
-                    if (avatar) avatar.addEventListener('click', function() { openImageLightbox(avatar.src); });
+                    el.querySelectorAll('.pc-avatar, .pc-img-extra').forEach(function(img) {
+                        img.addEventListener('click', function() { openImageLightbox(img.src); });
+                    });
                 }, 0);
             });
             marker.on('dragend', function(e) {
@@ -4764,14 +4769,14 @@
             const wardInput = document.getElementById('markerWardInput');
             if (wardInput) wardInput.value = lastMarkerWard || '';
             const loaiCapInput = document.getElementById('markerLoaiCapInput');
-            if (loaiCapInput) loaiCapInput.value = 'noi'; // default cho marker mới
+            if (loaiCapInput) loaiCapInput.value = localStorage.getItem('lastLoaiCap') || 'noi';
             // Populate datalist gợi ý phường/xã
             const dl = document.getElementById('wardDatalist');
             if (dl) {
                 const wards = getUniqueWards();
                 dl.innerHTML = wards.map(w => `<option value="${w}">`).join('');
             }
-            preview.innerHTML = ''; fileInput.value = null;
+            markerImageDataUrls = ['', '', '']; _renderImageSlots(); fileInput.value = null;
             coordsText.textContent = `Tọa độ: ${formatCoord(lat)}, ${formatCoord(lon)}`;
             fillGeoFields(lat, lon);
 
@@ -4857,6 +4862,19 @@
                     }
                 };
                 baseSelect.onchange();
+                // Auto-select marker gần nhất làm Marker gốc mặc định (chỉ cho marker mới)
+                if (!_editingRow && markerPopupLocation && baseSelect.options.length > 0) {
+                    let bestVal = '', bestDist = Infinity;
+                    Array.from(baseSelect.options).forEach(function(opt) {
+                        const mi = parseInt(opt.value, 10);
+                        if (isNaN(mi)) return;
+                        const m = markers[mi];
+                        if (!m) return;
+                        const d = haversineM(markerPopupLocation[0], markerPopupLocation[1], m.lat, m.lon);
+                        if (d < bestDist) { bestDist = d; bestVal = opt.value; }
+                    });
+                    if (bestVal !== '') { baseSelect.value = bestVal; baseSelect.dispatchEvent(new Event('change')); }
+                }
             }
 
             overlay.style.display = 'flex';
@@ -4868,7 +4886,7 @@
             const overlay = document.getElementById('markerPopupForm');
             if (overlay) overlay.style.display = 'none';
             if (tempMarker) { map.removeLayer(tempMarker); tempMarker = null; }
-            markerPopupLocation = null; markerImageDataUrl = null;
+            markerPopupLocation = null; markerImageDataUrls = ['', '', ''];
             _editingRow = null;
             const fi = document.getElementById('markerImageInput');
             if (fi) fi.value = null;
@@ -4903,9 +4921,48 @@
             handle.addEventListener('pointercancel', endDrag);
         }
 
-        function triggerMarkerImageInput() {
+        function _renderImageSlots() {
+            const container = document.getElementById('markerImagePreview');
+            if (!container) return;
+            container.innerHTML = '';
+            for (let i = 0; i < 3; i++) {
+                const url = markerImageDataUrls[i] || '';
+                const slot = document.createElement('div');
+                slot.className = 'img-slot';
+                if (url) {
+                    const img = document.createElement('img');
+                    img.src = url;
+                    const btnX = document.createElement('button');
+                    btnX.type = 'button';
+                    btnX.className = 'img-slot-x';
+                    btnX.textContent = '×';
+                    btnX.onclick = (function(idx) { return function(e) { e.stopPropagation(); removeSlotImage(idx); }; })(i);
+                    slot.appendChild(img);
+                    slot.appendChild(btnX);
+                } else {
+                    slot.innerHTML = '<i class="fa fa-camera"></i>';
+                    slot.onclick = (function(idx) { return function() { triggerSlotImageInput(idx); }; })(i);
+                }
+                container.appendChild(slot);
+            }
+            const count = markerImageDataUrls.filter(function(u) { return !!u; }).length;
+            const lbl = document.getElementById('markerImageBtnLabel');
+            if (lbl) lbl.textContent = count > 0 ? 'Thêm ảnh (' + count + '/3)' : 'Chụp / chọn ảnh';
+            const btn = document.getElementById('markerImageButton');
+            if (btn) btn.disabled = count >= 3;
+        }
+        function removeSlotImage(slot) {
+            markerImageDataUrls[slot] = '';
+            _renderImageSlots();
+        }
+        function triggerSlotImageInput(slot) {
+            _currentImgSlot = slot;
             const fi = document.getElementById('markerImageInput');
             if (fi) { fi.value = null; fi.click(); }
+        }
+        function triggerMarkerImageInput() {
+            const nextSlot = markerImageDataUrls.findIndex(function(u) { return !u; });
+            if (nextSlot >= 0) triggerSlotImageInput(nextSlot);
         }
 
         function resizeImageDataUrl(dataUrl, callback) {
@@ -4943,14 +5000,11 @@
             const reader = new FileReader();
             reader.onload = function(e) {
                 resizeImageDataUrl(e.target.result, function(resizedDataUrl, errorMessage) {
-                    const preview = document.getElementById('markerImagePreview');
                     if (resizedDataUrl) {
-                        markerImageDataUrl = resizedDataUrl;
-                        if (preview) preview.innerHTML = `<img src="${markerImageDataUrl}" alt="Ảnh trụ">`;
+                        markerImageDataUrls[_currentImgSlot] = resizedDataUrl;
+                        _renderImageSlots();
                         displayError('Ảnh đã sẵn sàng.');
                     } else {
-                        markerImageDataUrl = '';
-                        if (preview) preview.innerHTML = '';
                         displayError(errorMessage);
                     }
                 });
@@ -4963,16 +5017,28 @@
             const oldTenTru = (opts && opts.oldTenTru) || '';
             if (!KHAOSAT_GAS_URL) return false;
             try {
-                let imagePath = row[12] || '';
-                if (imagePath && imagePath.startsWith('data:')) {
-                    const ext = getImageExtensionFromDataUrl(imagePath);
-                    const upRes = await fetch(KHAOSAT_GAS_URL, {
-                        method: 'POST',
-                        body: JSON.stringify({ action: 'upload_image', imageBase64: getBase64FromDataUrl(imagePath), soTru: row[1] || '', ext })
-                    });
-                    const upData = await upRes.json();
-                    if (upData.status === 'ok') { imagePath = upData.path; row[12] = imagePath; }
+                const imgSlots = (opts && opts.imageSlots)
+                    ? opts.imageSlots.filter(Boolean)
+                    : (row[12] || '').split(';').map(function(s) { return s.trim(); }).filter(Boolean);
+                const uploadedParts = [];
+                for (let _ii = 0; _ii < imgSlots.length; _ii++) {
+                    const _part = imgSlots[_ii];
+                    if (_part && _part.startsWith('data:')) {
+                        try {
+                            const ext = getImageExtensionFromDataUrl(_part);
+                            const soTru = _ii === 0 ? (row[1] || '') : ((row[1] || '') + '_' + (_ii + 1));
+                            const upRes = await fetch(KHAOSAT_GAS_URL, {
+                                method: 'POST',
+                                body: JSON.stringify({ action: 'upload_image', imageBase64: getBase64FromDataUrl(_part), soTru, ext })
+                            });
+                            const upData = await upRes.json();
+                            uploadedParts.push(upData.status === 'ok' ? upData.path : _part);
+                        } catch(e) { uploadedParts.push(_part); }
+                    } else {
+                        uploadedParts.push(_part);
+                    }
                 }
+                if (uploadedParts.length > 0) row[12] = uploadedParts.filter(Boolean).join(';');
                 const res = await fetch(KHAOSAT_GAS_URL, {
                     method: 'POST',
                     body: JSON.stringify({
@@ -4983,7 +5049,7 @@
                         ghiChu: row[4] || '', nguoiKS: row[5] || '', loai: row[6],
                         tuDieuKhien: row[7] || '', loaiTru: row[8] || '',
                         loaiCan: row[9] || '', loaiDen: row[10] || '',
-                        congSuat: row[11] || '', hinhAnh: imagePath,
+                        congSuat: row[11] || '', hinhAnh: row[12] || '',
                         capNhat: row[13] || '', markerGoc: row[14] || '',
                         khoangCach: row[15] || '', maPE: row[16] || '',
                         duong: row[17] || '', phuongXa: row[18] || '',
@@ -5068,7 +5134,8 @@
                     // ── CHẾ ĐỘ SỬA ──
                     const existingId = _editingRow[0];
                     const oldName = String(_editingRow[1] || '').trim();
-                    const keepImg = markerImageDataUrl || _editingRow[12] || ''; // giữ ảnh cũ nếu không upload mới
+                    const _pendingImgSlots = markerImageDataUrls.slice();
+                    const keepImg = _editingRow[12] || '';
 
                     // Xóa marker cũ khỏi map
                     const oldIdx = markers.findIndex(md => md.marker._rowRef === _editingRow);
@@ -5086,12 +5153,12 @@
                     updated[0] = existingId;
                     for (let i = 0; i < updated.length; i++) _editingRow[i] = updated[i];
 
-                    markerImageDataUrl = null;
+                    markerImageDataUrls = ['', '', ''];
                     const updMarker = addMarkerRowToMap(_editingRow);
                     if (updMarker) { map.setView([updMarker.getLatLng().lat, updMarker.getLatLng().lng], map.getZoom()); updMarker.openPopup(); }
                     const rowRef = _editingRow; // lưu trước khi hideMarkerPopup() reset _editingRow = null
                     hideMarkerPopup();
-                    syncRowToGAS(rowRef, { oldTenTru: oldName });
+                    syncRowToGAS(rowRef, { oldTenTru: oldName, imageSlots: _pendingImgSlots });
                     _logAction('edit', rowRef, { nguoiKS: rowRef[5], loai: rowRef[6] });
                     displayError('Đã cập nhật marker — đang lưu lên Google Sheets...');
                 } else {
@@ -5099,15 +5166,16 @@
                     // Lưu accuracy + mode của fix gần nhất (mặc định mode hiện tại nếu chưa có fix)
                     const accVal = _lastFixAccuracy !== '' ? _lastFixAccuracy : '';
                     const modeVal = _lastFixMode !== '' ? _lastFixMode : currentGpsMode;
-                    const newRow = ['',name,lat,lon,note,nguoiKS,type,cabinetName,poleType,'',lampType,congSuat,markerImageDataUrl||'',updatedAt,baseMarkerName,distanceToBase,maPE,street,ward,Math.round(_vn.x),Math.round(_vn.y),soLuongDen,loaiCapVal,accVal,modeVal];
+                    const _pendingImgSlots = markerImageDataUrls.slice();
+                    const newRow = ['',name,lat,lon,note,nguoiKS,type,cabinetName,poleType,'',lampType,congSuat,'',updatedAt,baseMarkerName,distanceToBase,maPE,street,ward,Math.round(_vn.x),Math.round(_vn.y),soLuongDen,loaiCapVal,accVal,modeVal];
                     loadedData.push(newRow); newMarkerRows.push(newRow);
-                    markerImageDataUrl = null;
+                    markerImageDataUrls = ['', '', ''];
                     const newMarker = addMarkerRowToMap(newRow);
                     if (newMarker) { map.setView([newMarker.getLatLng().lat, newMarker.getLatLng().lng], 19); newMarker.openPopup(); }
                     hideMarkerPopup();
                     pendingNewMarker = true; addMarkerMode = true; pendingMarkerLocation = null;
                     updateAddMarkerButton();
-                    syncRowToGAS(newRow);
+                    syncRowToGAS(newRow, { imageSlots: _pendingImgSlots });
                     _logAction('edit', newRow, { nguoiKS: newRow[5], loai: newRow[6] });
                     displayError('Đã thêm marker — đang lưu lên Google Sheets...');
                 }
@@ -5899,14 +5967,11 @@
                 const loaiCapEl = document.getElementById('markerLoaiCapInput');
                 if (loaiCapEl) loaiCapEl.value = row[22] === 'ngam' ? 'ngam' : 'noi';
 
-                // Ảnh hiện có
+                // Ảnh hiện có — restore vào 3 slots
                 const imgVal = row[12] || '';
-                const preview = document.getElementById('markerImagePreview');
-                if (preview) {
-                    preview.innerHTML = imgVal
-                        ? `<img src="${imgVal}" loading="lazy" style="max-width:100%;max-height:120px;border-radius:6px;margin-top:6px" onerror="this.style.display='none'">`
-                        : '';
-                }
+                const _slots = imgVal ? imgVal.split(';').map(function(s){return s.trim();}) : [];
+                markerImageDataUrls = [_slots[0]||'', _slots[1]||'', _slots[2]||''];
+                _renderImageSlots();
 
                 // Pre-select baseSelect khớp với Marker gốc từ Sheet
                 const linkedGoc = String(row[14] || '').trim();
