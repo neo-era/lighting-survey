@@ -5167,7 +5167,7 @@
                     const accVal = _lastFixAccuracy !== '' ? _lastFixAccuracy : '';
                     const modeVal = _lastFixMode !== '' ? _lastFixMode : currentGpsMode;
                     const _pendingImgSlots = markerImageDataUrls.slice();
-                    const newRow = ['',name,lat,lon,note,nguoiKS,type,cabinetName,poleType,'',lampType,congSuat,'',updatedAt,baseMarkerName,distanceToBase,maPE,street,ward,Math.round(_vn.x),Math.round(_vn.y),soLuongDen,loaiCapVal,accVal,modeVal];
+                    const newRow = [generateId(),name,lat,lon,note,nguoiKS,type,cabinetName,poleType,'',lampType,congSuat,'',updatedAt,baseMarkerName,distanceToBase,maPE,street,ward,Math.round(_vn.x),Math.round(_vn.y),soLuongDen,loaiCapVal,accVal,modeVal];
                     loadedData.push(newRow); newMarkerRows.push(newRow);
                     markerImageDataUrls = ['', '', ''];
                     const newMarker = addMarkerRowToMap(newRow);

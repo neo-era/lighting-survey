@@ -153,43 +153,34 @@ function jsonResponse(obj) {
     .setMimeType(ContentService.MimeType.JSON);
 }
 
-// ── UPLOAD ẢNH LÊN GITHUB (lưu vào thư mục images/ gốc của repo) ──────────
+// ── UPLOAD ẢNH LÊN GOOGLE DRIVE ───────────────────────────────────────────
+// Lưu vào thư mục "KhaoSatAnh" trong Drive của tài khoản deploy GAS.
+// Trả về URL dạng https://drive.google.com/uc?export=view&id=FILE_ID
+// — dùng trực tiếp trong thẻ <img> mà không cần xác thực.
 
 function handleImageUpload(imageBase64, soTru, ext) {
-  const token = PropertiesService.getScriptProperties().getProperty('GITHUB_TOKEN');
-  if (!token) {
-    return jsonResponse({ status: 'error', message: 'GITHUB_TOKEN chưa được cài trong Script Properties.' });
+  try {
+    const ts = Utilities.formatDate(new Date(), 'Asia/Ho_Chi_Minh', "yyyyMMdd'T'HHmmss");
+    const safeName = (soTru || 'img').replace(/[^a-zA-Z0-9]/g, '-').toLowerCase();
+    const fileName = safeName + '-' + ts + '.' + (ext || 'jpg');
+
+    // Lấy hoặc tạo thư mục KhaoSatAnh
+    const folderIter = DriveApp.getFoldersByName('KhaoSatAnh');
+    const folder = folderIter.hasNext() ? folderIter.next() : DriveApp.createFolder('KhaoSatAnh');
+
+    // Giải mã base64 → Blob → tạo file
+    const mimeType = (ext === 'png') ? 'image/png' : 'image/jpeg';
+    const blob = Utilities.newBlob(Utilities.base64Decode(imageBase64), mimeType, fileName);
+    const file = folder.createFile(blob);
+
+    // Cho phép bất kỳ ai có link xem được (không cần đăng nhập)
+    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+
+    const viewUrl = 'https://drive.google.com/uc?export=view&id=' + file.getId();
+    return jsonResponse({ status: 'ok', path: viewUrl });
+  } catch (e) {
+    return jsonResponse({ status: 'error', message: 'Drive upload lỗi: ' + e.message });
   }
-
-  const ts = Utilities.formatDate(new Date(), 'UTC', "yyyy-MM-dd'T'HH-mm-ss") + 'Z';
-  const safeName = (soTru || 'img').replace(/[^a-zA-Z0-9]/g, '-').toLowerCase();
-  const fileName  = safeName + '-' + ts + '.' + (ext || 'jpg');
-  const filePath  = 'images/' + fileName; // ← lưu vào thư mục images/ gốc
-
-  const apiUrl = 'https://api.github.com/repos/neo-era/lighting-survey/contents/'
-    + filePath.split('/').map(encodeURIComponent).join('/');
-
-  const res = UrlFetchApp.fetch(apiUrl, {
-    method: 'put',
-    headers: {
-      'Authorization': 'token ' + token,
-      'Accept': 'application/vnd.github+json',
-      'Content-Type': 'application/json'
-    },
-    payload: JSON.stringify({
-      message: 'Upload ảnh khảo sát: ' + fileName,
-      content: imageBase64,
-      branch: 'main'
-    }),
-    muteHttpExceptions: true
-  });
-
-  const code = res.getResponseCode();
-  if (code !== 200 && code !== 201) {
-    return jsonResponse({ status: 'error', message: 'GitHub API lỗi ' + code + ': ' + res.getContentText().slice(0, 300) });
-  }
-  const absoluteUrl = 'https://raw.githubusercontent.com/neo-era/lighting-survey/main/images/' + fileName;
-  return jsonResponse({ status: 'ok', path: absoluteUrl });
 }
 
 // ── UPLOAD FILE LÊN GITHUB (proxy — dùng token lưu trong Script Properties) ─
