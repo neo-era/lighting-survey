@@ -2936,6 +2936,10 @@
             if (!confirm('Đăng xuất?')) return;
             currentUser = null;
             localStorage.removeItem('ks_user');
+            // Đóng tất cả Bootstrap modal + xóa backdrop để input login không bị block
+            $('.modal').modal('hide');
+            $('body').removeClass('modal-open');
+            $('.modal-backdrop').remove();
             const chip = document.getElementById('topbarUser');
             if (chip) chip.style.display = 'none';
             document.getElementById('loginOverlay').classList.add('visible');
