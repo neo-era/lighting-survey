@@ -158,15 +158,29 @@ function jsonResponse(obj) {
 // Trả về URL dạng https://drive.google.com/uc?export=view&id=FILE_ID
 // — dùng trực tiếp trong thẻ <img> mà không cần xác thực.
 
+// Folder ID cụ thể trên Google Drive để lưu ảnh khảo sát.
+// Cách lấy: mở folder → URL /folders/<ID> → copy ID.
+// ⚠ Tài khoản deploy GAS phải có quyền EDIT trên folder này.
+const DRIVE_IMAGE_FOLDER_ID = '1i32dWpWSSoW61MIUD1qDJZne2FBiofOr';
+
 function handleImageUpload(imageBase64, soTru, ext) {
   try {
+    if (!imageBase64) return jsonResponse({ status: 'error', message: 'Thiếu dữ liệu ảnh (imageBase64).' });
+
     const ts = Utilities.formatDate(new Date(), 'Asia/Ho_Chi_Minh', "yyyyMMdd'T'HHmmss");
     const safeName = (soTru || 'img').replace(/[^a-zA-Z0-9]/g, '-').toLowerCase();
     const fileName = safeName + '-' + ts + '.' + (ext || 'jpg');
 
-    // Lấy hoặc tạo thư mục KhaoSatAnh
-    const folderIter = DriveApp.getFoldersByName('KhaoSatAnh');
-    const folder = folderIter.hasNext() ? folderIter.next() : DriveApp.createFolder('KhaoSatAnh');
+    // Lấy folder cố định theo ID (chính xác hơn getFoldersByName — không lỗi khi có 2 folder cùng tên)
+    let folder;
+    try {
+      folder = DriveApp.getFolderById(DRIVE_IMAGE_FOLDER_ID);
+    } catch (e) {
+      return jsonResponse({
+        status: 'error',
+        message: 'Không mở được folder Drive (ID: ' + DRIVE_IMAGE_FOLDER_ID + '). Kiểm tra ID + quyền truy cập. ' + e.message
+      });
+    }
 
     // Giải mã base64 → Blob → tạo file
     const mimeType = (ext === 'png') ? 'image/png' : 'image/jpeg';
@@ -176,8 +190,11 @@ function handleImageUpload(imageBase64, soTru, ext) {
     // Cho phép bất kỳ ai có link xem được (không cần đăng nhập)
     file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
 
-    const viewUrl = 'https://drive.google.com/uc?export=view&id=' + file.getId();
-    return jsonResponse({ status: 'ok', path: viewUrl });
+    // URL dùng cho thẻ <img> — googleusercontent.com/d/ hoạt động ổn định hơn drive.google.com/uc
+    // (Google Drive không còn phản hồi /uc?export=view cho public images từ 2024).
+    const fileId = file.getId();
+    const viewUrl = 'https://lh3.googleusercontent.com/d/' + fileId;
+    return jsonResponse({ status: 'ok', path: viewUrl, fileId: fileId });
   } catch (e) {
     return jsonResponse({ status: 'error', message: 'Drive upload lỗi: ' + e.message });
   }

@@ -212,8 +212,10 @@ GAS trả về `vung: ['Quan1','Quan3']` trong login response. Client lưu vào 
 ```javascript
 canEdit()        // true nếu role = admin | user | user1
 canDelete()      // true nếu role = admin | user
-_allowedPages()  // lọc DISTRICT_PAGES theo currentUser.vung ([] = tất cả)
+_allowedPages()  // admin luôn thấy tất cả; role khác lọc theo currentUser.vung ([] = tất cả)
 ```
+
+**⚠ Admin bypass vung filter:** `_allowedPages()` check `role === 'admin'` trước `vung` — admin luôn thấy đủ 15 địa bàn dù cột `vung` trong sheet TaiKhoan có gõ gì. Điều này tránh việc admin bị mất access do gõ nhầm sheet trong `vung`.
 
 **Enforcement:**
 - `_applyRoleUI()` → `_buildDistrictOptions()` — chỉ render district options trong `_allowedPages()`
@@ -448,10 +450,13 @@ Leaflet: ground_per_px = earthCirc × cos(lat) / (256 × 2^Z)
 
 **Bug cũ:** dùng `96 / 25.4` (DPI screen) — sai 2-3× zoom level vì image bị stretch lên paper, không in 1:1 từ pixel screen.
 
-**Widget chọn tỷ lệ** (`_applyMapScale(scale)`) — dropdown trong control box bên phải (`MapTools`):
+**Widget chọn tỷ lệ** (`_applyMapScale(scale)`) — dropdown **trong ☰ panel** (đã chuyển từ MapTools widget bên phải):
 - Options 1:200, 500, 1000, 2000, 5000, 10000, 25000 với reference A3
+- Section "Tỷ lệ bản đồ (A3)" với badge `Z <zoom>` (xanh) + dropdown + display badge "Đang áp dụng 1:N" (gradient xanh, chỉ hiện khi chọn)
 - onChange → bật zoomSnap=0, gọi `_zoomToScale`, restore zoomSnap sau 200ms
 - `_applyMapScale._inProgress` flag để zoomend listener không reset dropdown
+- Zoomend listener sync `#panelZoomDisplay` + reset dropdown/display khi user zoom thủ công
+- Modal open (controlsBtn click) sync `#panelZoomDisplay` với `map.getZoom()` hiện tại
 
 ---
 
@@ -982,6 +987,48 @@ Thêm 2 hàng vào bảng ký hiệu (thay vì 1 hàng "Cáp nguồn"):
 
 ## Các pattern quan trọng
 
+### UI layout — mọi control tập trung vào ☰ panel (2026-06-18)
+
+Refactor lớn: **topbar chỉ còn nút hamburger**, gỡ hoàn toàn `#bottomActionBar` và widget MapTools bên phải bản đồ. Tất cả control tập trung vào modal `#controlsModal`.
+
+**Thứ tự section trong ☰ panel** (từ trên xuống):
+1. **User chip** — tên + nút đăng xuất + nút 🔑 đổi pass
+2. **Tìm kiếm** — input `#searchInput` + nút 🔍 (chuyển từ topbar)
+3. **Hành động nhanh** — [+ Thêm marker] [⏧ Lọc] (2 cột, đã gỡ nút "Lưu" duplicate)
+4. **Điều hướng** — dropdown `#pages` chọn địa bàn
+5. **Tỷ lệ bản đồ (A3)** — badge `Z <zoom>` + dropdown scale + display badge "Đang áp dụng 1:N"
+6. **Thiết bị GPS** — 2 radio segmented horizontal (📱 Phone / 🛰 RTK)
+7. **Vị trí & Đồng bộ** — [Chỉnh vị trí] [Cập nhật]
+8. **Xuất dữ liệu** — 2×2 grid (Báo cáo / CAD / In bản vẽ / Sơ đồ cáp)
+9. **GitHub Sync** — input path + [Lưu Excel] [Đẩy lên]
+
+**Bootstrap modal focus trap**: nút mở overlay khác (Lọc, Thêm marker, Tìm kiếm) đều `closeControlsModal()` trước → tránh Bootstrap backdrop chặn input trong filter overlay.
+
+**Compact CSS**: `.ctrl-section margin-bottom:8px`, `.ctrl-title margin-bottom:4px`, `.ctrl-divider margin:6px -16px`, `.ctrl-radio padding:5px 8px`.
+
+**Đã gỡ**:
+- `#bottomActionBar` (nút Vị trí + Thêm marker + Lọc + Lưu ở đáy màn hình)
+- Nút "Vị trí" — user dùng widget zoom bên phải hoặc "Thêm marker" (auto get GPS)
+- `--bottombar-h: 0px` để map dùng full chiều cao
+
+### Chức năng xoay bản đồ — ĐÃ GỠ (2026-06-18)
+
+Gỡ hoàn toàn xoay bản đồ. Còn lại chỉ là dead code an toàn để không phá print cleanup.
+
+**Gỡ**:
+- Compass SVG + nút ↺↻ + label angle trong MapTools widget
+- CSS hover `#mapRotLeft/Right/Reset`
+- Keyboard shortcuts `[` `]` `\`
+- Slider "Xoay bản đồ" trong print modal (giữ hidden `#pdRotation=0` cho code đọc)
+- Rotation buttons trong print preview bar
+
+**Giữ (dead code an toàn)**:
+- `_applyMapRotation(angle)`, `_clearMapRotation()`, `_updateCompassUI()` — có null-guard, no-op khi `_currentMapRotation=0`
+- `_rotateMap`, `_rotateMapFree`, `_resetMapRotation` — không caller nhưng khai báo còn
+- `_currentMapRotation` init 0, không có UI set khác
+
+Print flow vẫn đọc `pdRotation` → luôn `0` → không apply rotation → cleanup paths gọi `_clearMapRotation` an toàn.
+
 ### Chỉnh sửa marker — `_editingRow`
 
 `saveMarkerPopup()` dùng biến `_editingRow` để phân biệt chế độ:
@@ -1035,8 +1082,21 @@ Client không giữ token. Luồng:
 3. Client POST `{ action: 'upload_to_github', path, content }` lên GAS
 4. GAS đọc `GITHUB_TOKEN` từ Script Properties → gọi GitHub API
 
-### Tìm kiếm
-`searchMarkers()` tìm theo tên (bỏ dấu), ID, và tọa độ `lat,lon`.
+### Tìm kiếm — text normalization
+`searchMarkers()` (topbar → giờ trong ☰ panel) và `_filterTuOptions()` (filter tủ) dùng chung 2 helper:
+
+- **`normalizeText(text)`** — chuẩn hóa cơ bản:
+  1. `replace(/đ/g,'d').replace(/Đ/g,'D')` — **thủ công trước NFD** (đ là base char, NFD không tách được)
+  2. `.normalize('NFD').replace(/\p{Diacritic}/gu,'')` — bỏ dấu
+  3. `.toLowerCase()`
+- **`normalizeTextSearchable(text)`** — thêm `.replace(/[^a-z0-9]/g,'')` để bỏ mọi space + ký tự đặc biệt (`_`, `-`, `#`...).
+
+Cả 2 hàm áp dụng cho:
+- Topbar search (`searchMarkers`): tên trụ / ID / ghi chú — dùng `normalizeTextSearchable`
+- Filter panel search tủ (`_filterTuOptions`): tên tủ — dùng `normalizeTextSearchable`
+- Coord parse vẫn dùng `rawInput.trim()` (không normalize) để không phá tọa độ `lat,lon`.
+
+Test: gõ `duongtranhungdao` → match `Đường Trần Hưng Đạo #5` (bỏ dấu, đ→d, bỏ space + #).
 
 ### Xuất CAD
 DXF tọa độ VN-2000. Hàm `convertLatLonToVn2000(lat, lon)` → `{ x, y, zone }` (Gauss-Krüger, múi 6°, ellipsoid GRS80).
@@ -1708,13 +1768,24 @@ Nhưng L.canvas chỉ hỗ trợ `L.circleMarker` / `L.circle`, không hỗ tr�
 ### Checklist implement (theo thứ tự ưu tiên)
 
 ```
-9.1 → index.html: IndexedDB cache CSV + stale-while-revalidate         ⬜
-9.2 → index.html: Lazy popup content (bind '' + generate on popupopen) ⬜
-9.3 → index.html: chunked addMarkersToMap + progress bar               ⬜
-9.4 → index.html: xác nhận VN2000 không gọi khi render                ⬜
-9.5 → index.html: viewport culling (chỉ nếu > 2,000 marker)           ⬜
-9.6 → index.html: Canvas renderer (refactor lớn, defer)                ⬜
+9.1 → index.html: IndexedDB cache CSV + stale-while-revalidate         ✅
+9.2 → index.html: Lazy popup content (bind '' + generate on popupopen) ✅
+9.3 → index.html: chunked addMarkersToMap + progress bar               ✅
+9.4 → index.html: xác nhận VN2000 không gọi khi render                ✅
+9.5 → index.html: zoom-tier progressive (cabinet only zoom < 12)      ✅
 ```
+
+### 9.5 — Zoom-tier progressive loading (đã implement 2026-06-17)
+
+- Const `ZOOM_TIER_THRESHOLD = 12`, state `_zoomTier: 'cabinet' | 'all'` (default `'all'`)
+- Function `_applyZoomTier()` — check zoom < threshold → tier `'cabinet'` (chỉ render type 5,6); ngược lại `'all'`
+- Chỉ re-render khi tier thực sự đổi (tránh render khi pan trong cùng tier)
+- Base rows = filtered nếu có `_activeFilters` active, ngược lại `loadedData.slice(1)`
+- Hook vào `map.on('zoomend')` sau logic labelLayerGroup add/remove
+
+**⚠ Bug đã fix**: `addMarkersToMap(data, opts)` giờ nhận `opts.fitView` (default true). `_applyZoomTier` truyền `fitView: false` để KHÔNG `fitBounds()` khi đổi tier — giữ nguyên viewport user. Không có fix này, zoom từ 11→12 sẽ reset về ~10 do `fitBounds` recompute cho all markers.
+
+Reset `_zoomTier = 'all'` trước mỗi `addMarkersToMap` từ data fresh (loadFromCSV, loadFromCSVWithCache) — để lần render đầu không bị stale tier.
 
 ### Ước tính cải thiện
 

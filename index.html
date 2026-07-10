@@ -489,7 +489,7 @@
         }
 
         .marker-image-preview { margin-top: 8px; display: flex; gap: 6px; }
-        .img-slot { flex: 1; height: 78px; border: 1.5px dashed #cbd5e1; border-radius: 8px; overflow: hidden; position: relative; background: #f8fafc; display: flex; align-items: center; justify-content: center; cursor: pointer; color: #94a3b8; font-size: 20px; }
+        .img-slot { flex: 1; height: 102px; border: 1.5px dashed #cbd5e1; border-radius: 8px; overflow: hidden; position: relative; background: #f8fafc; display: flex; align-items: center; justify-content: center; cursor: pointer; color: #94a3b8; font-size: 24px; }
         .img-slot img { width: 100%; height: 100%; object-fit: cover; display: block; }
         .img-slot-x { position: absolute; top: 3px; right: 3px; width: 20px; height: 20px; border-radius: 50%; border: none; background: rgba(0,0,0,.55); color: #fff; font-size: 12px; line-height: 20px; text-align: center; cursor: pointer; padding: 0; z-index: 1; }
         .marker-image-button { width: 100%; }
@@ -1463,7 +1463,14 @@
                     </div>
                     <div class="form-group mb-0">
                         <label style="font-weight:700;font-size:13px;">📷 Ảnh sự cố (tùy chọn)</label>
-                        <input type="file" id="scAnh" accept="image/*" capture="environment" class="form-control-file" style="margin-top:6px;">
+                        <input type="file" id="scAnh" accept="image/*" capture="environment" style="display:none;"
+                               onchange="handleScAnhFile(event)">
+                        <!-- Slot pattern giống marker popup: camera icon khi trống, thumbnail + X khi có ảnh -->
+                        <div id="scAnhPreview" class="marker-image-preview" style="margin-top:6px;">
+                            <div class="img-slot" style="flex:0 0 78px;" onclick="triggerScAnhInput()">
+                                <i class="fa fa-camera"></i>
+                            </div>
+                        </div>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -1638,7 +1645,7 @@
                     <label for="markerNoteInput">Ghi chú</label>
                     <textarea id="markerNoteInput" placeholder="Ghi chú (tùy chọn)"></textarea>
                 </div>
-                <input id="markerImageInput" type="file" accept="image/*" capture="environment" style="display:none" onchange="handleMarkerImageFile(event)">
+                <input id="markerImageInput" type="file" accept="image/*" capture="environment" multiple style="display:none" onchange="handleMarkerImageFile(event)">
                 <div class="marker-image-preview" id="markerImagePreview"></div>
                 <div id="markerCoordsText" class="coords-info">Tọa độ: —</div>
             </div>
@@ -3041,6 +3048,8 @@
         }
 
         function _allowedPages() {
+            // Admin luôn thấy tất cả địa bàn, bất kể cột vung trong sheet TaiKhoan
+            if (currentUser && currentUser.role === 'admin') return DISTRICT_PAGES;
             const vung = currentUser && currentUser.vung;
             if (!vung || vung.length === 0) return DISTRICT_PAGES;
             return DISTRICT_PAGES.filter(p => vung.includes(p.sheet));
@@ -3275,7 +3284,7 @@
         const SUCO_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRjBdN5epr38kL2jLituPUC4wJO_Ohr_AsFpzaZh6Azxxs_gkzGT5s3JiZ1uFkNQFP5epR2U_wYT6wT/pub?gid=1918026795&single=true&output=csv';
         let _activeIncidents = new Map(); // tenTru (normalized) → count active incidents
 
-        // ── ĐA ĐỊA BÀN — cấu hình CSV URL sau khi publish từng tab trong Google Sheet ──
+        // ── ĐA ĐỊA BÀN — cấu hình CSV URL sau khi publish từng tab trong Data ──
         const DISTRICT_PAGES = [
             { label: 'Tổng quan',        sheet: 'DanhSachTru', csvUrl: KHAOSAT_CSV_URL },
             { label: 'Quận 1',           sheet: 'Quan1',       csvUrl: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRjBdN5epr38kL2jLituPUC4wJO_Ohr_AsFpzaZh6Azxxs_gkzGT5s3JiZ1uFkNQFP5epR2U_wYT6wT/pub?gid=1271544040&single=true&output=csv' },
@@ -3675,7 +3684,7 @@
             }
             if (btnLabel) btnLabel.textContent = origLabel || 'Cập nhật';
             updateDirtyMovedBadge();
-            displayError(`Đã cập nhật ${ok}/${rows.length} marker lên Google Sheets${failed ? ` (${failed} lỗi)` : ''}.`);
+            displayError(`Đã cập nhật ${ok}/${rows.length} marker lên Data${failed ? ` (${failed} lỗi)` : ''}.`);
         }
 
         function makeImageIcon(url) {
@@ -4956,13 +4965,16 @@
             _renderImageSlots();
         }
         function triggerSlotImageInput(slot) {
+            // Click 1 ô ảnh riêng lẻ → chỉ chọn 1 file thay slot đó
             _currentImgSlot = slot;
             const fi = document.getElementById('markerImageInput');
             if (fi) { fi.value = null; fi.click(); }
         }
         function triggerMarkerImageInput() {
-            const nextSlot = markerImageDataUrls.findIndex(function(u) { return !u; });
-            if (nextSlot >= 0) triggerSlotImageInput(nextSlot);
+            // Click nút chính "Chụp / chọn ảnh" → multi-select đến 3 file, fill vào các slot trống
+            _currentImgSlot = -1;
+            const fi = document.getElementById('markerImageInput');
+            if (fi) { fi.value = null; fi.click(); }
         }
 
         function resizeImageDataUrl(dataUrl, callback) {
@@ -4995,21 +5007,57 @@
         }
 
         function handleMarkerImageFile(event) {
-            const file = event.target.files && event.target.files[0];
-            if (!file) return;
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                resizeImageDataUrl(e.target.result, function(resizedDataUrl, errorMessage) {
-                    if (resizedDataUrl) {
-                        markerImageDataUrls[_currentImgSlot] = resizedDataUrl;
-                        _renderImageSlots();
-                        displayError('Ảnh đã sẵn sàng.');
-                    } else {
-                        displayError(errorMessage);
-                    }
-                });
-            };
-            reader.readAsDataURL(file);
+            const files = Array.from(event.target.files || []);
+            if (!files.length) return;
+
+            // Tính list slot đích:
+            // - Nếu _currentImgSlot === -1 (click nút chính "Chụp / chọn ảnh"):
+            //   → fill vào các slot ĐANG TRỐNG, tối đa 3 file
+            // - Nếu _currentImgSlot >= 0 (click 1 ô cụ thể):
+            //   → chỉ thay ô đó với file đầu tiên
+            let targetSlots;
+            if (_currentImgSlot === -1) {
+                const emptySlots = [];
+                for (let i = 0; i < 3; i++) if (!markerImageDataUrls[i]) emptySlots.push(i);
+                targetSlots = emptySlots.slice(0, Math.min(files.length, emptySlots.length));
+                if (targetSlots.length === 0) {
+                    displayError('Đã đủ 3 ảnh — xóa bớt để thêm ảnh khác.');
+                    return;
+                }
+            } else {
+                targetSlots = [_currentImgSlot];
+            }
+
+            let processed = 0;
+            let errorCount = 0;
+            const filesToRead = Math.min(files.length, targetSlots.length);
+
+            for (let idx = 0; idx < filesToRead; idx++) {
+                const file = files[idx];
+                const slot = targetSlots[idx];
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    resizeImageDataUrl(e.target.result, function(resizedDataUrl, errorMessage) {
+                        if (resizedDataUrl) {
+                            markerImageDataUrls[slot] = resizedDataUrl;
+                        } else {
+                            errorCount++;
+                            console.warn('[image] Ảnh #' + (idx+1) + ' lỗi:', errorMessage);
+                        }
+                        processed++;
+                        if (processed === filesToRead) {
+                            _renderImageSlots();
+                            const okCount = filesToRead - errorCount;
+                            if (errorCount > 0) {
+                                displayError('Đã tải ' + okCount + '/' + filesToRead + ' ảnh (' + errorCount + ' lỗi).');
+                            } else {
+                                displayError(okCount === 1 ? 'Ảnh đã sẵn sàng.' : 'Đã tải ' + okCount + ' ảnh.');
+                            }
+                        }
+                    });
+                };
+                reader.readAsDataURL(file);
+            }
         }
 
         async function syncRowToGAS(row, opts) {
@@ -5021,6 +5069,8 @@
                     ? opts.imageSlots.filter(Boolean)
                     : (row[12] || '').split(';').map(function(s) { return s.trim(); }).filter(Boolean);
                 const uploadedParts = [];
+                let uploadFailed = false;
+                let uploadErrorMsg = '';
                 for (let _ii = 0; _ii < imgSlots.length; _ii++) {
                     const _part = imgSlots[_ii];
                     if (_part && _part.startsWith('data:')) {
@@ -5032,11 +5082,26 @@
                                 body: JSON.stringify({ action: 'upload_image', imageBase64: getBase64FromDataUrl(_part), soTru, ext })
                             });
                             const upData = await upRes.json();
-                            uploadedParts.push(upData.status === 'ok' ? upData.path : _part);
-                        } catch(e) { uploadedParts.push(_part); }
+                            if (upData.status === 'ok') {
+                                uploadedParts.push(upData.path);
+                            } else {
+                                uploadFailed = true;
+                                uploadErrorMsg = upData.message || 'lỗi không rõ';
+                                console.error('[upload_image] GAS trả về error:', upData);
+                                uploadedParts.push(''); // ← BỎ base64 khỏi row — không nhét chuỗi khổng lồ vào sheet
+                            }
+                        } catch(e) {
+                            uploadFailed = true;
+                            uploadErrorMsg = e.message || String(e);
+                            console.error('[upload_image] Fetch error:', e);
+                            uploadedParts.push('');
+                        }
                     } else {
                         uploadedParts.push(_part);
                     }
+                }
+                if (uploadFailed && !silent) {
+                    displayError('⚠ Upload ảnh Drive thất bại: ' + uploadErrorMsg + ' — marker vẫn lưu nhưng không có ảnh. Kiểm tra Console (F12) để xem chi tiết.');
                 }
                 if (uploadedParts.length > 0) row[12] = uploadedParts.filter(Boolean).join(';');
                 const res = await fetch(KHAOSAT_GAS_URL, {
@@ -5062,11 +5127,11 @@
                 });
                 const data = await res.json();
                 if (data.status !== 'ok') throw new Error(data.message || 'lỗi không rõ');
-                if (!silent) displayError('Đã lưu lên Google Sheets.');
+                if (!silent) displayError('Đã lưu lên Data.');
                 return true;
             } catch (e) {
                 console.error('syncRowToGAS:', e);
-                if (!silent) displayError('Lỗi lưu Google Sheets: ' + (e.message || e));
+                if (!silent) displayError('Lỗi lưu Data: ' + (e.message || e));
                 return false;
             }
         }
@@ -5160,7 +5225,7 @@
                     hideMarkerPopup();
                     syncRowToGAS(rowRef, { oldTenTru: oldName, imageSlots: _pendingImgSlots });
                     _logAction('edit', rowRef, { nguoiKS: rowRef[5], loai: rowRef[6] });
-                    displayError('Đã cập nhật marker — đang lưu lên Google Sheets...');
+                    displayError('Đã cập nhật marker — đang lưu lên Data...');
                 } else {
                     // ── CHẾ ĐỘ THÊM MỚI ──
                     // Lưu accuracy + mode của fix gần nhất (mặc định mode hiện tại nếu chưa có fix)
@@ -5177,7 +5242,7 @@
                     updateAddMarkerButton();
                     syncRowToGAS(newRow, { imageSlots: _pendingImgSlots });
                     _logAction('edit', newRow, { nguoiKS: newRow[5], loai: newRow[6] });
-                    displayError('Đã thêm marker — đang lưu lên Google Sheets...');
+                    displayError('Đã thêm marker — đang lưu lên Data...');
                 }
             } catch (error) {
                 console.error('saveMarkerPopup error:', error);
@@ -5477,8 +5542,8 @@
                     : `data/khaosat_${currentSheet}.xlsx`;
                 const path = pathInput && pathInput.value.trim() ? pathInput.value.trim() : defaultPath;
 
-                // 1. Tải toàn bộ dữ liệu mới nhất từ Google Sheet
-                displayInfo('Đang tải dữ liệu từ Google Sheets...');
+                // 1. Tải toàn bộ dữ liệu mới nhất từ Data
+                displayInfo('Đang tải dữ liệu từ Data...');
                 let csvRows;
                 try {
                     const res = await fetch(KHAOSAT_CSV_URL + '&t=' + Date.now());
@@ -5486,7 +5551,7 @@
                     csvRows = parseCSVText(await res.text());
                     if (csvRows.length < 2) throw new Error('Dữ liệu rỗng');
                 } catch(e) {
-                    displayError('Không tải được Google Sheets: ' + e.message); return;
+                    displayError('Không tải được Data: ' + e.message); return;
                 }
                 const header = csvRows[0];
                 const bodyRows = csvRows.slice(1);
@@ -5553,7 +5618,7 @@
         async function loadFromCSV(url) {
             const csvUrl = url || KHAOSAT_CSV_URL;
             try {
-                displayInfo('Đang tải dữ liệu từ Google Sheets...');
+                displayInfo('Đang tải dữ liệu từ Data...');
                 const res = await fetch(csvUrl);
                 if (!res.ok) throw new Error('HTTP ' + res.status);
                 const rows = parseCSVText(await res.text());
@@ -5564,7 +5629,7 @@
                 addMarkersToMap(rows.slice(1));
                 displayError('');
             } catch (e) {
-                displayError('Không tải được Google Sheets, dùng file cục bộ.');
+                displayError('Không tải được Data, dùng file cục bộ.');
                 if (!url) loadDefaultFile(); // chỉ fallback khi tải sheet mặc định
             }
         }
@@ -6041,7 +6106,7 @@
             _currentPopupRow = null;
             displayError(`Đã xóa marker "${name}" trên bản đồ — đang đồng bộ...`);
 
-            // Đồng bộ lên GAS / Google Sheet
+            // Đồng bộ lên GAS / Data
             try {
                 const resp = await fetch(KHAOSAT_GAS_URL, {
                     method: 'POST',
@@ -6049,7 +6114,7 @@
                 });
                 const json = await resp.json();
                 if (json.status === 'ok') {
-                    displayError(`Đã xóa "${name}" khỏi Google Sheet.`, 'success');
+                    displayError(`Đã xóa "${name}" khỏi Data.`, 'success');
                     _logAction('delete', row, { lat: row[2], lon: row[3] });
                 } else {
                     displayError(`Xóa trên bản đồ OK, nhưng Sheet báo lỗi: ${json.message || ''}`, 'warning');
@@ -6323,9 +6388,62 @@
             if (moTa) moTa.value = '';
             const mucDo = document.getElementById('scMucDo');
             if (mucDo) mucDo.value = 'Bình thường';
+            // Reset ảnh sự cố (dùng slot pattern giống marker popup)
+            _scAnhDataUrl = '';
             const anh = document.getElementById('scAnh');
             if (anh) anh.value = '';
+            _renderScAnhSlot();
             $('#suCoModal').modal('show');
+        }
+
+        // ── Xử lý ảnh sự cố — pattern giống marker popup ──────────────────
+        let _scAnhDataUrl = '';
+
+        function triggerScAnhInput() {
+            const fi = document.getElementById('scAnh');
+            if (fi) { fi.value = null; fi.click(); }
+        }
+
+        function handleScAnhFile(event) {
+            const file = event.target.files && event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = e => {
+                _scAnhDataUrl = e.target.result;
+                _renderScAnhSlot();
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function _renderScAnhSlot() {
+            const container = document.getElementById('scAnhPreview');
+            if (!container) return;
+            container.innerHTML = '';
+            const slot = document.createElement('div');
+            slot.className = 'img-slot';
+            slot.style.flex = '0 0 78px';
+            if (_scAnhDataUrl) {
+                const img = document.createElement('img');
+                img.src = _scAnhDataUrl;
+                const btnX = document.createElement('button');
+                btnX.type = 'button';
+                btnX.className = 'img-slot-x';
+                btnX.textContent = '×';
+                btnX.onclick = e => { e.stopPropagation(); removeScAnh(); };
+                slot.appendChild(img);
+                slot.appendChild(btnX);
+            } else {
+                slot.innerHTML = '<i class="fa fa-camera"></i>';
+                slot.onclick = triggerScAnhInput;
+            }
+            container.appendChild(slot);
+        }
+
+        function removeScAnh() {
+            _scAnhDataUrl = '';
+            const fi = document.getElementById('scAnh');
+            if (fi) fi.value = null;
+            _renderScAnhSlot();
         }
 
         async function saveSuCo() {
@@ -6340,29 +6458,27 @@
                 const loaiSuCo  = chip.dataset.val;
                 const mucDo     = (document.getElementById('scMucDo') || {}).value || 'Bình thường';
                 const moTa      = ((document.getElementById('scMoTa') || {}).value || '').trim();
-                const anhFile   = document.getElementById('scAnh') && document.getElementById('scAnh').files[0];
                 const thoiGian  = new Date().toLocaleString('sv-SE', { timeZone: 'Asia/Ho_Chi_Minh' }).replace(' ', 'T');
 
                 let anhUrl = '';
-                if (anhFile) {
-                    anhUrl = await new Promise((res, rej) => {
-                        const reader = new FileReader();
-                        reader.onload = async e => {
-                            try {
-                                const base64 = e.target.result.split(',')[1];
-                                const ext = anhFile.name.split('.').pop() || 'jpg';
-                                const soTru = `suco_${tenTru.replace(/[^a-zA-Z0-9]/g, '_')}_${Date.now()}`;
-                                const r = await fetch(KHAOSAT_GAS_URL, {
-                                    method: 'POST',
-                                    body: JSON.stringify({ action: 'upload_image', imageBase64: base64, soTru, ext })
-                                });
-                                const d = await r.json();
-                                res(d.url || '');
-                            } catch (e2) { res(''); }
-                        };
-                        reader.onerror = () => res('');
-                        reader.readAsDataURL(anhFile);
-                    });
+                if (_scAnhDataUrl && _scAnhDataUrl.startsWith('data:')) {
+                    try {
+                        const base64 = _scAnhDataUrl.split(',')[1];
+                        const ext = getImageExtensionFromDataUrl(_scAnhDataUrl);
+                        const soTru = `suco_${tenTru.replace(/[^a-zA-Z0-9]/g, '_')}_${Date.now()}`;
+                        const r = await fetch(KHAOSAT_GAS_URL, {
+                            method: 'POST',
+                            body: JSON.stringify({ action: 'upload_image', imageBase64: base64, soTru, ext })
+                        });
+                        const d = await r.json();
+                        if (d.status === 'ok') {
+                            anhUrl = d.path || d.url || '';
+                        } else {
+                            console.error('[suco upload_image] GAS error:', d);
+                        }
+                    } catch (e2) {
+                        console.error('[suco upload_image] Fetch error:', e2);
+                    }
                 }
 
                 const payload = {
