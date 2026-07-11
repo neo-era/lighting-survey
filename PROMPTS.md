@@ -5828,7 +5828,7 @@ Dân chỉ cần Zalo, không cần cài app. Sự cố tự động vào hệ t
 
 ---
 
-### P30 — REST API cho hệ thống ngoài
+### P30 — REST API cho hệ thống ngoài ✅ DONE 2026-07-12
 
 ```
 Task: Expose REST API cho SCADA / ERP đọc/ghi data.
@@ -5885,7 +5885,7 @@ Bên thứ 3 có thể query/write data programmatically.
 
 ## Nhóm 16 — Field Survey nâng cao
 
-### P31 — Voice note trên marker
+### P31 — Voice note trên marker ✅ DONE 2026-07-12
 
 ```
 Task: Ghi âm ghi chú, đính vào marker.
@@ -5946,7 +5946,7 @@ Khảo sát viên ghi note nhanh không cần gõ.
 
 ---
 
-### P32 — QR/Barcode scan
+### P32 — QR/Barcode scan ✅ DONE 2026-07-12
 
 ```
 Task: Scan tag QR/barcode trên trụ để nhập nhanh ID.
@@ -5999,7 +5999,7 @@ Nhập tên trụ nhanh gấp 3-5 lần, không nhầm.
 
 ---
 
-### P33 — Vẽ vùng polygon
+### P33 — Vẽ vùng polygon ✅ DONE 2026-07-12
 
 ```
 Task: Vẽ polygon "khu vực đã khảo sát" hoặc "cụm dân cư".
@@ -6057,7 +6057,7 @@ Admin có thể đánh dấu vùng địa lý rõ ràng.
 
 ---
 
-### P34 — Đo khoảng cách trên bản đồ
+### P34 — Đo khoảng cách trên bản đồ ✅ DONE 2026-07-12
 
 ```
 Task: Click 2 điểm → hiện khoảng cách + đường thẳng.
@@ -6120,7 +6120,7 @@ map.on('click', (e) => {
 
 ## Nhóm 17 — DevOps & Quality
 
-### P35 — Smoke tests với Playwright
+### P35 — Smoke tests với Playwright ✅ DONE 2026-07-12
 
 ```
 Task: Setup Playwright + 5 test critical flow + CI GitHub Actions.
@@ -6281,7 +6281,7 @@ Bug production được phát hiện trong phút chứ không phải tuần.
 
 ---
 
-### P37 — Progressive module extraction
+### P37 — Progressive module extraction ✅ DONE 2026-07-12 (partial: lib/vn2000, utils, dxf)
 
 ```
 Task: Chia index.html 7000 dòng thành modules.
@@ -6334,7 +6334,7 @@ Codebase dễ maintain, mỗi module < 500 dòng.
 
 ---
 
-### P38 — Unit tests với Vitest
+### P38 — Unit tests với Vitest ✅ DONE 2026-07-12
 
 ```
 Task: Test coverage 80% pure functions.
@@ -6636,7 +6636,7 @@ SaaS auto revenue, không cần bill thủ công.
 
 ---
 
-### P42 — Vertical expansion — Đèn tín hiệu giao thông
+### P42 — Vertical expansion — Đèn tín hiệu giao thông ✅ DONE 2026-07-12 (config template)
 
 ```
 Task: Extend product sang khảo sát đèn tín hiệu giao thông (traffic lights).
