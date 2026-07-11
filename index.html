@@ -847,6 +847,43 @@
     <!-- (Bottom action bar đã bị gỡ — 3 nút Thêm marker / Lọc / Lưu chuyển vào ☰ panel) -->
     <!-- Nút Vị trí cũng đã bỏ; user dùng widget bên phải để center map -->
 
+    <!-- ═══ CAD UPLOAD MODAL (P17) ═══ -->
+    <div id="cadUploadModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9600;align-items:center;justify-content:center;padding:16px;" onclick="if(event.target===this)_closeCadUpload()">
+        <div style="background:#fff;border-radius:12px;max-width:480px;width:100%;padding:20px;box-shadow:0 10px 40px rgba(0,0,0,.3);">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+                <h4 style="margin:0;font-size:17px;font-weight:800;color:#1e293b;">📐 Tải bản vẽ CAD (DXF)</h4>
+                <button onclick="_closeCadUpload()" style="background:none;border:none;font-size:22px;cursor:pointer;color:#64748b;">×</button>
+            </div>
+            <div style="font-size:12px;color:#64748b;margin-bottom:12px;line-height:1.5;">
+                File CAD phải xuất từ AutoCAD sang DXF (<code>File → Save As → AutoCAD DXF</code>).
+                Chọn kinh tuyến trung tâm đúng với hệ tọa độ của bản vẽ.
+            </div>
+
+            <label style="display:block;font-size:12px;font-weight:700;color:#334155;margin-bottom:4px;">File DXF</label>
+            <input type="file" id="cadFileInput" accept=".dxf" onchange="_onCadFileChange(this)"
+                   style="width:100%;padding:8px;border:1.5px solid var(--border);border-radius:6px;margin-bottom:4px;font-size:13px;">
+            <div id="cadFileInfo" style="font-size:11px;color:#059669;margin-bottom:10px;min-height:14px;"></div>
+
+            <label style="display:block;font-size:12px;font-weight:700;color:#334155;margin-bottom:4px;">Kinh tuyến trung tâm</label>
+            <select id="cadMeridianInput" style="width:100%;padding:8px;border:1.5px solid var(--border);border-radius:6px;margin-bottom:10px;font-size:13px;font-family:monospace;">
+                <option value="105">105° (múi 6° UTM zone 48)</option>
+                <option value="105.5">105°30' (múi 3° Bình Dương)</option>
+                <option value="105.75" selected>105°45' (múi 3° HCM/Long An)</option>
+                <option value="106">106° (múi 3° khác)</option>
+            </select>
+
+            <label style="display:block;font-size:12px;font-weight:700;color:#334155;margin-bottom:4px;">Scale factor k₀</label>
+            <select id="cadK0Input" style="width:100%;padding:8px;border:1.5px solid var(--border);border-radius:6px;margin-bottom:14px;font-size:13px;font-family:monospace;">
+                <option value="0.9996">0.9996 (UTM múi 6°)</option>
+                <option value="0.9999" selected>0.9999 (VN-2000 múi 3°)</option>
+            </select>
+
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+                <button onclick="_closeCadUpload()" class="ctrl-btn outline" style="margin-bottom:0;padding:10px;font-size:13px;">Hủy</button>
+                <button onclick="_handleCadUpload()" class="ctrl-btn primary" style="margin-bottom:0;padding:10px;font-size:13px;">Tải lên</button>
+            </div>
+        </div>
+    </div>
 
     <!-- ═══ FILTER PANEL ═══ -->
     <div id="filterOverlay" onclick="if(event.target===this)closeFilterPanel()">
@@ -986,6 +1023,29 @@
 
                     <div class="ctrl-divider"></div>
 
+                    <!-- Xoay bản đồ (compass rotate 2D) -->
+                    <div class="ctrl-section">
+                        <div class="ctrl-title" style="display:flex;align-items:center;justify-content:space-between;">
+                            <span>Xoay bản đồ</span>
+                            <span id="panelRotDisplay" style="font-size:10px;font-weight:700;color:#2563eb;font-family:monospace;letter-spacing:0;text-transform:none;background:#eff6ff;border:1px solid #bfdbfe;border-radius:5px;padding:2px 8px;">0°</span>
+                        </div>
+                        <div style="display:flex;align-items:center;gap:8px;">
+                            <input type="range" id="panelRotSlider" min="0" max="359" step="1" value="0"
+                                   oninput="_onRotSliderChange(this.value)"
+                                   style="flex:1;accent-color:#2563eb;">
+                            <button type="button" onclick="_resetRotSlider()" title="Hướng Bắc (0°)"
+                                    style="border:1.5px solid var(--border);background:#f8fafc;border-radius:6px;padding:5px 9px;font-size:12px;font-weight:700;color:#1e293b;cursor:pointer;">↺ 0°</button>
+                        </div>
+                        <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:5px;margin-top:6px;">
+                            <button type="button" onclick="_setRotation(0)" class="ctrl-btn outline" style="font-size:11px;padding:5px 4px;">B (0°)</button>
+                            <button type="button" onclick="_setRotation(90)" class="ctrl-btn outline" style="font-size:11px;padding:5px 4px;">Đ (90°)</button>
+                            <button type="button" onclick="_setRotation(180)" class="ctrl-btn outline" style="font-size:11px;padding:5px 4px;">N (180°)</button>
+                            <button type="button" onclick="_setRotation(270)" class="ctrl-btn outline" style="font-size:11px;padding:5px 4px;">T (270°)</button>
+                        </div>
+                    </div>
+
+                    <div class="ctrl-divider"></div>
+
                     <!-- Thiết bị GPS (Tính năng 11) — segmented horizontal -->
                     <div class="ctrl-section">
                         <div class="ctrl-title" style="display:flex;align-items:center;justify-content:space-between;">
@@ -1069,6 +1129,28 @@
                             </button>
                             <button id="btnDrawCable" onclick="toggleDrawCableMode()" class="ctrl-btn outline" style="margin-bottom:0;font-size:12px;padding:8px;">
                                 <i class="fa fa-plus-circle"></i> Vẽ cáp
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="ctrl-divider"></div>
+
+                    <!-- Bản vẽ CAD (P17 — DXF overlay) -->
+                    <div class="ctrl-section">
+                        <div class="ctrl-title">Bản vẽ CAD</div>
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+                            <button onclick="_openCadUpload()" class="ctrl-btn primary" style="margin-bottom:0;font-size:12px;padding:8px;">
+                                📐 Tải DXF
+                            </button>
+                            <button id="btnCadToggle" onclick="_toggleCad()" class="ctrl-btn outline" style="margin-bottom:0;font-size:12px;padding:8px;" disabled>
+                                👁 Ẩn/Hiện
+                            </button>
+                        </div>
+                        <div id="cadInfoBox" style="display:none;margin-top:8px;padding:8px;background:#f8fafc;border:1px solid var(--border);border-radius:6px;font-size:11px;">
+                            <div id="cadFilename" style="font-weight:700;color:#1e293b;word-break:break-all;"></div>
+                            <div id="cadEntityCount" style="color:var(--text-muted);margin-top:2px;"></div>
+                            <button onclick="_removeCad()" class="ctrl-btn outline" style="width:100%;margin-top:6px;margin-bottom:0;font-size:11px;padding:5px;color:#dc2626;border-color:#fca5a5;">
+                                🗑 Gỡ bản vẽ
                             </button>
                         </div>
                     </div>
@@ -1236,6 +1318,22 @@
             </div>
             <!-- (Đã gỡ slider Xoay bản đồ — chức năng xoay đã bị loại bỏ) -->
             <input id="pdRotation" type="hidden" value="0">
+            <div class="pd-row">
+              <div class="pd-item">
+                <div class="pd-label">Đơn vị quản lý (khung tên — trái)</div>
+                <input id="pdDonVi1" class="pd-ctrl" type="text" placeholder="VD: TT QUẢN LÝ GIAO THÔNG VÀ HẠ TẦNG KỸ THUẬT TP.HCM">
+              </div>
+            </div>
+            <div class="pd-row">
+              <div class="pd-item">
+                <div class="pd-label">Đơn vị thi công (khung tên — giữa, dòng 1)</div>
+                <input id="pdDonVi2" class="pd-ctrl" type="text" placeholder="VD: CÔNG TY CỔ PHẦN CHIẾU SÁNG CÔNG CỘNG TP.HCM">
+              </div>
+              <div class="pd-item">
+                <div class="pd-label">Khu vực (khung tên — giữa, dòng 2)</div>
+                <input id="pdDonVi2Sub" class="pd-ctrl" type="text" placeholder="VD: CHIẾU SÁNG KHU VỰC TRUNG TÂM">
+              </div>
+            </div>
             <div class="pd-row">
               <div class="pd-item">
                 <div class="pd-label">Chuyên viên phụ trách địa bàn</div>
@@ -1716,7 +1814,7 @@
         // ── PERSIST FORM FIELD CỦA MODAL "IN BẢN VẼ" ───────────────────
         // Lưu/khôi phục các tùy chọn user đã chọn lần trước (trừ pdNgay — luôn lấy hôm nay)
         // pdTenTu cố ý KHÔNG persist — luôn lấy từ filter tủ điều khiển khi mở modal
-        const _PD_FIELDS = ['pdTuSelect','pdScale','pdPaper','pdTileStyle','pdRotation','pdSoBanVe','pdTongBanVe','pdNguoiLap','pdCVPhuTrach','pdCSKhuVuc'];
+        const _PD_FIELDS = ['pdTuSelect','pdScale','pdPaper','pdTileStyle','pdRotation','pdSoBanVe','pdTongBanVe','pdNguoiLap','pdCVPhuTrach','pdCSKhuVuc','pdDonVi1','pdDonVi2','pdDonVi2Sub'];
         function _savePdFields() {
             _PD_FIELDS.forEach(id => {
                 const el = document.getElementById(id);
@@ -2165,9 +2263,10 @@
             svgCableDelayMs: 100,
             // Wait sau khi append overlay (legend + title block) — chờ font/layout settle
             overlayDelayMs:  300,
-            // html2canvas: scale 2 = sharp HiDPI; 0.93 JPEG = cân giữa size & chất lượng
-            captureScale: 2,
-            jpegQuality:  0.93,
+            // html2canvas: scale 3 = pin-sharp cho A3 300 DPI (capture ~3600×2550 → 4960×3508 stretch chỉ 1.38×);
+            // scale 2 làm text bể vì stretch 2×. PNG lossless để tránh JPEG artifact quanh text.
+            captureScale: 3,
+            jpegQuality:  0.95,
             // Timeout chờ tile layer load (fallback nếu network treo)
             tileLoadTimeoutMs: 5000
         };
@@ -2187,25 +2286,81 @@
             if (rotEl) { rotEl.value = _currentMapRotation; document.getElementById('pdRotationVal').textContent = _currentMapRotation + '°'; }
         }
 
-        function _applyMapRotation(angle) {
-            // Chỉ xoay map pane — KHÔNG xoay cable SVG
-            // Cable SVG dùng toạ độ pre-rotated bằng toán học trong _buildPrintCableSvg
-            const mapEl = document.getElementById('map');
-            const pane  = mapEl && mapEl.querySelector('.leaflet-map-pane');
-            if (!angle) {
-                if (pane) { pane.style.transform = (pane.style.transform || '').replace(/\s*rotate\([^)]*\)/g, '').trim(); pane.style.transformOrigin = ''; }
-                _updateCompassUI();
-                return;
-            }
-            if (!pane) { _updateCompassUI(); return; }
-            const mapRect  = mapEl.getBoundingClientRect();
-            const paneRect = pane.getBoundingClientRect();
-            const ox = mapRect.left + mapRect.width  / 2 - paneRect.left;
-            const oy = mapRect.top  + mapRect.height / 2 - paneRect.top;
+        // Hook Leaflet 'move' để re-apply rotation sau khi Leaflet ghi đè transform (pan/zoom)
+        let _rotationHookInstalled = false;
+        function _installRotationHook() {
+            if (_rotationHookInstalled || typeof map === 'undefined') return;
+            _rotationHookInstalled = true;
+            map.on('move viewreset zoomanim', function() {
+                if (_currentMapRotation !== 0) _applyRotationCore(_currentMapRotation);
+            });
+        }
+
+        // Core apply — dùng Leaflet's stored pane position (không phải getBoundingClientRect
+        // vì rect của pane đã rotated là AABB, KHÔNG phản ánh vị trí gốc)
+        function _applyRotationCore(angle) {
+            const pane = document.querySelector('#map .leaflet-map-pane');
+            if (!pane || typeof L === 'undefined' || !L.DomUtil) return;
+            const panePos = L.DomUtil.getPosition(pane) || { x: 0, y: 0 };
+            const size = map.getSize();
+            // Origin = tâm viewport chuyển sang toạ độ local của pane (trước khi pane translate)
+            const ox = size.x / 2 - panePos.x;
+            const oy = size.y / 2 - panePos.y;
             const base = (pane.style.transform || '').replace(/\s*rotate\([^)]*\)/g, '').trim();
             pane.style.transformOrigin = `${ox}px ${oy}px`;
             pane.style.transform = base + ` rotate(${angle}deg)`;
+        }
+
+        function _applyMapRotation(angle) {
+            if (!angle) {
+                const pane = document.querySelector('#map .leaflet-map-pane');
+                if (pane) {
+                    pane.style.transform = (pane.style.transform || '').replace(/\s*rotate\([^)]*\)/g, '').trim();
+                    pane.style.transformOrigin = '';
+                }
+                _setRotationTileBuffer(false);
+                _updateCompassUI();
+                return;
+            }
+            _installRotationHook();
+            _applyRotationCore(angle);
+            _setRotationTileBuffer(true);
             _updateCompassUI();
+        }
+
+        // Monkey-patch L.GridLayer.prototype._pxBoundsToTileRange để load thêm tile ở góc chéo
+        // khi rotate — nếu không sẽ có tam giác trắng ở 4 góc.
+        function _setRotationTileBuffer(active) {
+            if (typeof L === 'undefined' || !L.GridLayer) return;
+            const proto = L.GridLayer.prototype;
+            if (!proto._origPxBoundsToTileRange) {
+                proto._origPxBoundsToTileRange = proto._pxBoundsToTileRange;
+            }
+            if (active) {
+                proto._pxBoundsToTileRange = function(bounds) {
+                    const tileSize = this.getTileSize();
+                    // Mở rộng 60% mỗi bên → phủ diagonal √2
+                    const w = bounds.max.x - bounds.min.x;
+                    const h = bounds.max.y - bounds.min.y;
+                    const padX = w * 0.6, padY = h * 0.6;
+                    return new L.Bounds(
+                        L.point(Math.floor((bounds.min.x - padX) / tileSize.x) - 1,
+                                Math.floor((bounds.min.y - padY) / tileSize.y) - 1),
+                        L.point(Math.ceil((bounds.max.x + padX) / tileSize.x) - 1,
+                                Math.ceil((bounds.max.y + padY) / tileSize.y) - 1)
+                    );
+                };
+            } else {
+                proto._pxBoundsToTileRange = proto._origPxBoundsToTileRange;
+            }
+            // Trigger tile reload với range mới
+            if (typeof map !== 'undefined') {
+                map.eachLayer(function(l) {
+                    if (l instanceof L.TileLayer && typeof l._resetView === 'function') {
+                        l._resetView(map.getCenter(), map.getZoom(), true, false);
+                    }
+                });
+            }
         }
 
         function _clearMapRotation() {
@@ -2215,6 +2370,7 @@
                 pane.style.transform = (pane.style.transform || '').replace(/\s*rotate\([^)]*\)/g, '').trim();
                 pane.style.transformOrigin = '';
             }
+            _setRotationTileBuffer(false);
             _updateCompassUI();
         }
 
@@ -2246,6 +2402,24 @@
             _currentMapRotation = 0;
             _clearMapRotation();
         }
+
+        // Wire slider "Xoay bản đồ" trong ☰ panel
+        function _onRotSliderChange(v) {
+            const angle = parseInt(v, 10) || 0;
+            _currentMapRotation = angle;
+            _applyMapRotation(angle);
+            const el = document.getElementById('panelRotDisplay');
+            if (el) el.textContent = angle + '°';
+        }
+        function _setRotation(angle) {
+            _currentMapRotation = angle;
+            _applyMapRotation(angle);
+            const sl = document.getElementById('panelRotSlider');
+            if (sl) sl.value = angle;
+            const el = document.getElementById('panelRotDisplay');
+            if (el) el.textContent = angle + '°';
+        }
+        function _resetRotSlider() { _setRotation(0); _clearMapRotation(); }
 
         const _PRINT_TILE_URLS = {
             voyager:  'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
@@ -2349,7 +2523,12 @@
         // ── PRINT OVERLAY (legend + title block) ─────────────────────────
         function _showPrintOverlay(opts) {
             _hidePrintOverlay();
-            const { rows, tenTu, scale, ngay, nguoiLap, soBanVe, tongBanVe, cvPhuTrach = '', csKhuVuc = '' } = opts;
+            const { rows, tenTu, scale, ngay, nguoiLap, soBanVe, tongBanVe, cvPhuTrach = '', csKhuVuc = '',
+                    donVi1 = '', donVi2 = '', donVi2Sub = '' } = opts;
+            // Default nếu user không nhập
+            const _donVi1     = donVi1    || 'TT QUẢN LÝ GIAO THÔNG VÀ HẠ TẦNG KỸ THUẬT TP.HCM';
+            const _donVi2     = donVi2    || 'CÔNG TY CỔ PHẦN CHIẾU SÁNG CÔNG CỘNG TP.HCM';
+            const _donVi2Sub  = donVi2Sub || 'CHIẾU SÁNG KHU VỰC TRUNG TÂM';
             const usedTypes = [...new Set(rows.map(r => parseInt(r[6])).filter(t => TYPE_CONFIG[t]))];
 
             // Đếm số trụ/tủ theo từng loại trong filtered rows
@@ -2463,7 +2642,10 @@
             </div>`;
             const overlay = document.createElement('div');
             overlay.id = 'printOverlay';
-            overlay.style.cssText = 'position:absolute;inset:0;z-index:8000;pointer-events:none;font-family:Arial,sans-serif;';
+            overlay.style.cssText = 'position:absolute;inset:0;z-index:8000;pointer-events:none;'
+                + 'font-family:Arial,Helvetica,sans-serif;'
+                + 'text-rendering:geometricPrecision;'
+                + '-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;';
             overlay.innerHTML = `
                 <!-- Khung in (margin + border) -->
                 <div style="position:absolute;inset:14px;border:2px solid #1e293b;">
@@ -2491,11 +2673,11 @@
                         <!-- Hàng 1: Tên tổ chức — col 2+3 gộp -->
                         <tr>
                           <td style="border-right:1px solid #94a3b8;border-bottom:1px solid #94a3b8;padding:2px 5px;text-align:center;vertical-align:middle;">
-                            <div style="font-size:7.5px;font-weight:800;color:#0f172a;text-transform:uppercase;line-height:1.4;">TT QUẢN LÝ GIAO THÔNG VÀ HẠ TẦNG KỸ THUẬT TP.HCM</div>
+                            <div style="font-size:7.5px;font-weight:800;color:#0f172a;text-transform:uppercase;line-height:1.4;">${_donVi1}</div>
                           </td>
                           <td colspan="2" style="border-right:1px solid #94a3b8;border-bottom:1px solid #94a3b8;padding:2px 5px;text-align:center;vertical-align:middle;">
-                            <div style="font-size:7.5px;font-weight:800;color:#0f172a;text-transform:uppercase;line-height:1.4;">CÔNG TY CỔ PHẦN CHIẾU SÁNG CÔNG CỘNG TP.HCM</div>
-                            <div style="font-size:6.5px;font-weight:800;color:#0f172a;text-transform:uppercase;margin-top:2px;letter-spacing:.3px;">CHIẾU SÁNG KHU VỰC TRUNG TÂM</div>
+                            <div style="font-size:7.5px;font-weight:800;color:#0f172a;text-transform:uppercase;line-height:1.4;">${_donVi2}</div>
+                            <div style="font-size:6.5px;font-weight:800;color:#0f172a;text-transform:uppercase;margin-top:2px;letter-spacing:.3px;">${_donVi2Sub}</div>
                           </td>
                           <td rowspan="2" style="border-right:1px solid #94a3b8;padding:5px 10px;vertical-align:middle;text-align:center;">
                             <div style="font-size:9.5px;font-weight:800;color:#0f172a;text-transform:uppercase;letter-spacing:.3px;">BẢN VẼ SƠ ĐỒ TUYẾN TRẠM ĐÈN</div>
@@ -2623,6 +2805,9 @@
             const ngay       = (document.getElementById('pdNgay')       || {}).value;
             const cvPhuTrach = (document.getElementById('pdCVPhuTrach') || {}).value?.trim() || '';
             const csKhuVuc   = (document.getElementById('pdCSKhuVuc')   || {}).value?.trim() || '';
+            const donVi1     = (document.getElementById('pdDonVi1')     || {}).value?.trim() || '';
+            const donVi2     = (document.getElementById('pdDonVi2')     || {}).value?.trim() || '';
+            const donVi2Sub  = (document.getElementById('pdDonVi2Sub')  || {}).value?.trim() || '';
 
             // Fail-fast nếu không có dữ liệu (trước khi hide modal)
             if (!_getFilteredRows().length) { displayError('Không có dữ liệu để xem trước.'); return; }
@@ -2638,7 +2823,7 @@
             map.setView(map.getCenter(), map.getZoom(), { animate: false, reset: true });
             await new Promise(r => setTimeout(r, PRINT_CONFIG.resyncDelayMs.normal));
             _buildCableLines(rows); // L.polyline cho xem trước (không qua html2canvas)
-            _showPrintOverlay({ rows, tenTu, scale, ngay, nguoiLap, soBanVe, tongBanVe, cvPhuTrach, csKhuVuc });
+            _showPrintOverlay({ rows, tenTu, scale, ngay, nguoiLap, soBanVe, tongBanVe, cvPhuTrach, csKhuVuc, donVi1, donVi2, donVi2Sub });
             _currentMapRotation = parseFloat((document.getElementById('pdRotation') || {}).value) || 0;
             _applyMapRotation(_currentMapRotation);
             const prevRotEl = document.getElementById('previewRotVal');
@@ -2688,6 +2873,9 @@
                 const ngay       = (document.getElementById('pdNgay')       || {}).value;
                 const cvPhuTrach = (document.getElementById('pdCVPhuTrach') || {}).value?.trim() || '';
                 const csKhuVuc   = (document.getElementById('pdCSKhuVuc')   || {}).value?.trim() || '';
+                const donVi1     = (document.getElementById('pdDonVi1')     || {}).value?.trim() || '';
+                const donVi2     = (document.getElementById('pdDonVi2')     || {}).value?.trim() || '';
+                const donVi2Sub  = (document.getElementById('pdDonVi2Sub')  || {}).value?.trim() || '';
                 const rotation   = parseFloat((document.getElementById('pdRotation') || {}).value) || 0;
 
                 // Derive fallback name từ active tu filter (chỉ dùng khi user lọc đúng 1 tủ)
@@ -2724,7 +2912,7 @@
 
                 if (!_previewMode) {
                     // 4. Hiện overlay legend + title block
-                    _showPrintOverlay({ rows, tenTu: tenTu || activeTu || 'Sơ đồ tuyến', scale, ngay, nguoiLap, soBanVe, tongBanVe, cvPhuTrach, csKhuVuc });
+                    _showPrintOverlay({ rows, tenTu: tenTu || activeTu || 'Sơ đồ tuyến', scale, ngay, nguoiLap, soBanVe, tongBanVe, cvPhuTrach, csKhuVuc, donVi1, donVi2, donVi2Sub });
                     await new Promise(r => setTimeout(r, PRINT_CONFIG.overlayDelayMs));
                 }
 
@@ -2751,8 +2939,10 @@
                 const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: paper });
                 const pw = doc.internal.pageSize.getWidth();
                 const ph = doc.internal.pageSize.getHeight();
-                const imgData = canvas.toDataURL('image/jpeg', PRINT_CONFIG.jpegQuality);
-                doc.addImage(imgData, 'JPEG', 0, 0, pw, ph);
+                // PNG lossless → text edge sharp hơn hẳn JPEG (JPEG chroma subsampling làm chữ có halo).
+                // File PDF nặng hơn ~2-3× nhưng cần thiết cho bản vẽ kỹ thuật.
+                const imgData = canvas.toDataURL('image/png');
+                doc.addImage(imgData, 'PNG', 0, 0, pw, ph, undefined, 'FAST');
 
                 // 7. Lưu file
                 const safeName = (tenTu || activeTu || 'sodotuyen').replace(/[^a-zA-Z0-9À-ɏḀ-ỿ\s_-]/g,'').trim().replace(/\s+/g,'-') || 'sodotuyen';
@@ -2879,6 +3069,8 @@
             if (defaultPage) {
                 currentSheet = defaultPage.sheet;
                 loadFromCSVWithCache(defaultPage.sheet, defaultPage.csvUrl);
+                // Load CAD overlay cache (P17)
+                if (typeof _loadCachedCad === 'function') _loadCachedCad(defaultPage.sheet);
             }
             _loadSuCoData();
             if (currentGpsMode === 'rtk') _startBgGpsWatch();
@@ -3359,11 +3551,16 @@
             el.style.width = Math.min(pct, 98) + '%';
         }
 
-        // ─── IndexedDB helpers (cache CSV) ───
+        // ─── IndexedDB helpers (cache CSV + CAD drawings) ───
+        // DB v1 = csv-cache only; DB v2 thêm cad-drawings (P17 — CAD overlay)
         function _idbOpen() {
             return new Promise((res, rej) => {
-                const r = indexedDB.open('lighting-survey-db', 1);
-                r.onupgradeneeded = e => e.target.result.createObjectStore('csv-cache');
+                const r = indexedDB.open('lighting-survey-db', 2);
+                r.onupgradeneeded = e => {
+                    const db = e.target.result;
+                    if (!db.objectStoreNames.contains('csv-cache')) db.createObjectStore('csv-cache');
+                    if (!db.objectStoreNames.contains('cad-drawings')) db.createObjectStore('cad-drawings');
+                };
                 r.onsuccess = e => res(e.target.result);
                 r.onerror = rej;
             });
@@ -3384,6 +3581,36 @@
                 await new Promise((res, rej) => {
                     const tx = db.transaction('csv-cache', 'readwrite');
                     tx.objectStore('csv-cache').put(val, key);
+                    tx.oncomplete = res; tx.onerror = rej;
+                });
+            } catch { /* ignore */ }
+        }
+        async function _idbGetCad(key) {
+            try {
+                const db = await _idbOpen();
+                return await new Promise((res, rej) => {
+                    const r = db.transaction('cad-drawings', 'readonly').objectStore('cad-drawings').get(key);
+                    r.onsuccess = () => res(r.result);
+                    r.onerror = rej;
+                });
+            } catch { return null; }
+        }
+        async function _idbSetCad(key, val) {
+            try {
+                const db = await _idbOpen();
+                await new Promise((res, rej) => {
+                    const tx = db.transaction('cad-drawings', 'readwrite');
+                    tx.objectStore('cad-drawings').put(val, key);
+                    tx.oncomplete = res; tx.onerror = rej;
+                });
+            } catch { /* ignore */ }
+        }
+        async function _idbDelCad(key) {
+            try {
+                const db = await _idbOpen();
+                await new Promise((res, rej) => {
+                    const tx = db.transaction('cad-drawings', 'readwrite');
+                    tx.objectStore('cad-drawings').delete(key);
                     tx.oncomplete = res; tx.onerror = rej;
                 });
             } catch { /* ignore */ }
@@ -3442,6 +3669,322 @@
             return { x: x+500000, y, zone };
         }
 
+        // ─── Reverse Gauss-Krüger cho CAD overlay (P17) ───
+        // Input: x = easting (m, có false easting 500000); y = northing (m)
+        //        centralMeridianDeg = kinh tuyến trung tâm (105 múi 6°, 105.75 múi 3° HCM/BD/LA)
+        //        k0 = scale factor (0.9996 múi 6° UTM, 0.9999 múi 3° VN-2000)
+        // Output: {lat, lon} độ
+        function convertVn2000ToLatLon(x, y, centralMeridianDeg, k0) {
+            const a = 6378137.0, f = 1/298.257222101;
+            const e2 = 2*f - f*f;
+            const ep2 = e2 / (1 - e2);
+            k0 = k0 || 0.9996;
+            const lon0 = centralMeridianDeg * Math.PI / 180;
+            const xFalse = x - 500000; // remove false easting
+            const M = y / k0;
+            const mu = M / (a * (1 - e2/4 - 3*e2*e2/64 - 5*e2*e2*e2/256));
+            const e1 = (1 - Math.sqrt(1-e2)) / (1 + Math.sqrt(1-e2));
+            const phi1 = mu
+                + (3*e1/2 - 27*e1*e1*e1/32) * Math.sin(2*mu)
+                + (21*e1*e1/16 - 55*e1*e1*e1*e1/32) * Math.sin(4*mu)
+                + (151*e1*e1*e1/96) * Math.sin(6*mu)
+                + (1097*e1*e1*e1*e1/512) * Math.sin(8*mu);
+            const sinP = Math.sin(phi1), cosP = Math.cos(phi1), tanP = Math.tan(phi1);
+            const N1 = a / Math.sqrt(1 - e2*sinP*sinP);
+            const R1 = a*(1-e2) / Math.pow(1 - e2*sinP*sinP, 1.5);
+            const T1 = tanP * tanP;
+            const C1 = ep2 * cosP * cosP;
+            const D = xFalse / (N1 * k0);
+            const lat = phi1 - (N1*tanP/R1) * (
+                D*D/2 - (5 + 3*T1 + 10*C1 - 4*C1*C1 - 9*ep2) * Math.pow(D,4)/24
+                + (61 + 90*T1 + 298*C1 + 45*T1*T1 - 252*ep2 - 3*C1*C1) * Math.pow(D,6)/720
+            );
+            const lon = lon0 + (
+                D - (1 + 2*T1 + C1) * Math.pow(D,3)/6
+                + (5 - 2*C1 + 28*T1 - 3*C1*C1 + 8*ep2 + 24*T1*T1) * Math.pow(D,5)/120
+            ) / cosP;
+            return { lat: lat * 180/Math.PI, lon: lon * 180/Math.PI };
+        }
+
+        // ─── CAD (DXF) overlay — Tính năng 12 P17 ───
+        let _cadLayer = null;       // L.LayerGroup chứa entities render
+        let _cadEntities = [];      // parsed entities
+        let _cadMeta = null;        // { filename, uploadedAt, zone, k0, layers, entityCount, bounds }
+        let _cadVisible = true;
+
+        // DXF ACI color index → hex (16 màu đầu; index 7 = trắng/đen theo bg)
+        const _DXF_COLORS = [
+            '#000000','#ff0000','#ffff00','#00ff00','#00ffff','#0000ff','#ff00ff','#333333',
+            '#808080','#c0c0c0','#ff0000','#ff8080','#a52a2a','#a56666','#7f0000','#7f4040'
+        ];
+        function _dxfColorToHex(idx) {
+            if (idx == null || idx === 256) return '#333'; // BYLAYER fallback
+            if (idx === 0 || idx === 7) return '#333';    // BYBLOCK / white → dark trên nền sáng
+            return _DXF_COLORS[idx] || '#666';
+        }
+
+        // Central meridian default theo district
+        const _CAD_DEFAULT_MERIDIAN = {
+            // TP.HCM + Long An: múi 3° kinh tuyến 105°45'
+            Quan1: 105.75, Quan3: 105.75, Quan5: 105.75, Quan8: 105.75, Quan10: 105.75, Quan11: 105.75,
+            PhuNhuan: 105.75, BinhThanh: 105.75, TanBinh: 105.75, TanPhu: 105.75,
+            CanGiuoc: 105.75,
+            // Bình Dương: múi 3° kinh tuyến 105°45' (hoặc 105.5°, cần xác nhận)
+            BauBang: 105.75, TruVanTho: 105.75, BenCat: 105.75,
+            // DanhSachTru (tổng quan): default UTM 6° kinh tuyến 105°
+            DanhSachTru: 105
+        };
+
+        async function _loadDxfParser() {
+            if (window.DxfParser) return;
+            return new Promise((resolve, reject) => {
+                const s = document.createElement('script');
+                s.src = 'https://cdn.jsdelivr.net/npm/dxf-parser@1.1.2/dist/parser.js';
+                let timer = setTimeout(() => {
+                    s.remove();
+                    reject(new Error('Timeout tải dxf-parser'));
+                }, 15000);
+                s.onload = () => { clearTimeout(timer); resolve(); };
+                s.onerror = () => { clearTimeout(timer); s.remove(); reject(new Error('Không tải được dxf-parser')); };
+                document.head.appendChild(s);
+            });
+        }
+
+        function _parseDxfEntities(dxf) {
+            const entities = [];
+            (dxf.entities || []).forEach(e => {
+                try {
+                    if (e.type === 'LINE') {
+                        entities.push({
+                            type: 'line', layer: e.layer, color: e.color,
+                            points: [
+                                { x: e.vertices[0].x, y: e.vertices[0].y },
+                                { x: e.vertices[1].x, y: e.vertices[1].y }
+                            ]
+                        });
+                    } else if ((e.type === 'LWPOLYLINE' || e.type === 'POLYLINE') && Array.isArray(e.vertices)) {
+                        entities.push({
+                            type: 'polyline', layer: e.layer, color: e.color,
+                            points: e.vertices.map(v => ({ x: v.x, y: v.y })),
+                            closed: !!(e.shape || e.closed)
+                        });
+                    } else if (e.type === 'CIRCLE' && e.center) {
+                        entities.push({
+                            type: 'circle', layer: e.layer, color: e.color,
+                            center: { x: e.center.x, y: e.center.y },
+                            radius: e.radius
+                        });
+                    } else if ((e.type === 'TEXT' || e.type === 'MTEXT') && (e.position || e.startPoint)) {
+                        const pos = e.position || e.startPoint;
+                        entities.push({
+                            type: 'text', layer: e.layer, color: e.color,
+                            position: { x: pos.x, y: pos.y },
+                            text: (e.text || e.string || '').toString(),
+                            height: e.textHeight || 2.5
+                        });
+                    }
+                    // ARC, HATCH, BLOCK, DIMENSION — skip cho MVP P17
+                } catch { /* ignore malformed entity */ }
+            });
+            return entities;
+        }
+
+        function _computeCadBounds(entities) {
+            let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+            entities.forEach(e => {
+                const pts = e.points ? e.points
+                    : e.center ? [e.center]
+                    : e.position ? [e.position]
+                    : [];
+                pts.forEach(p => {
+                    if (p.x < minX) minX = p.x;
+                    if (p.y < minY) minY = p.y;
+                    if (p.x > maxX) maxX = p.x;
+                    if (p.y > maxY) maxY = p.y;
+                });
+            });
+            return Number.isFinite(minX) ? { minX, minY, maxX, maxY } : null;
+        }
+
+        function _renderCadLayer(fitBounds) {
+            if (_cadLayer) { map.removeLayer(_cadLayer); _cadLayer = null; }
+            if (!_cadEntities.length || !_cadMeta) return;
+
+            _cadLayer = L.layerGroup();
+            const zone = _cadMeta.zone;
+            const k0 = _cadMeta.k0 || 0.9996;
+            let latLngBounds = null;
+
+            _cadEntities.forEach(e => {
+                const color = _dxfColorToHex(e.color);
+                try {
+                    if (e.type === 'line' || e.type === 'polyline') {
+                        const latlngs = e.points.map(p => {
+                            const c = convertVn2000ToLatLon(p.x, p.y, zone, k0);
+                            return [c.lat, c.lon];
+                        });
+                        if (latlngs.length < 2) return;
+                        (e.closed ? L.polygon : L.polyline)(latlngs, {
+                            color, weight: 1.5, opacity: 0.85, fill: false, interactive: false
+                        }).addTo(_cadLayer);
+                    } else if (e.type === 'circle') {
+                        const c = convertVn2000ToLatLon(e.center.x, e.center.y, zone, k0);
+                        L.circle([c.lat, c.lon], {
+                            radius: e.radius, color, weight: 1.2,
+                            fillOpacity: 0.05, interactive: false
+                        }).addTo(_cadLayer);
+                    } else if (e.type === 'text') {
+                        const c = convertVn2000ToLatLon(e.position.x, e.position.y, zone, k0);
+                        const icon = L.divIcon({
+                            className: 'cad-text-label',
+                            html: `<span style="color:${color};font-size:10px;font-family:Arial;white-space:nowrap;pointer-events:none;text-shadow:0 0 2px #fff,0 0 2px #fff;">${e.text.replace(/[<>&]/g, '')}</span>`,
+                            iconAnchor: [0, 0]
+                        });
+                        L.marker([c.lat, c.lon], { icon, interactive: false, keyboard: false }).addTo(_cadLayer);
+                    }
+                } catch { /* skip malformed */ }
+            });
+
+            if (_cadVisible) _cadLayer.addTo(map);
+
+            // Fit view lên bounds nếu request
+            if (fitBounds && _cadMeta.bounds) {
+                const b = _cadMeta.bounds;
+                const nw = convertVn2000ToLatLon(b.minX, b.maxY, zone, k0);
+                const se = convertVn2000ToLatLon(b.maxX, b.minY, zone, k0);
+                map.fitBounds([[nw.lat, nw.lon], [se.lat, se.lon]], { padding: [40, 40] });
+            }
+
+            // UI update
+            const infoBox = document.getElementById('cadInfoBox');
+            const toggle = document.getElementById('btnCadToggle');
+            if (infoBox) infoBox.style.display = 'block';
+            if (toggle) { toggle.disabled = false; toggle.textContent = _cadVisible ? '👁 Ẩn' : '👁 Hiện'; }
+            const fn = document.getElementById('cadFilename');
+            const ec = document.getElementById('cadEntityCount');
+            if (fn) fn.textContent = _cadMeta.filename;
+            if (ec) ec.textContent = `${_cadMeta.entityCount} đối tượng · ${_cadMeta.layers.length} lớp · KTTT ${_cadMeta.zone}°`;
+        }
+
+        function _openCadUpload() {
+            const modal = document.getElementById('cadUploadModal');
+            if (!modal) return;
+            // Set default meridian theo district
+            const sel = document.getElementById('cadMeridianInput');
+            if (sel && !sel.value) sel.value = String(_CAD_DEFAULT_MERIDIAN[currentSheet] || 105);
+            // Reset file input
+            const fi = document.getElementById('cadFileInput');
+            if (fi) fi.value = '';
+            const info = document.getElementById('cadFileInfo');
+            if (info) info.textContent = '';
+            modal.style.display = 'flex';
+            closeControlsModal && closeControlsModal();
+        }
+
+        function _closeCadUpload() {
+            const modal = document.getElementById('cadUploadModal');
+            if (modal) modal.style.display = 'none';
+        }
+
+        function _onCadFileChange(input) {
+            const file = input.files && input.files[0];
+            const info = document.getElementById('cadFileInfo');
+            if (!file || !info) return;
+            const sizeMB = (file.size / 1024 / 1024).toFixed(2);
+            info.textContent = `📎 ${file.name} — ${sizeMB} MB`;
+        }
+
+        async function _handleCadUpload() {
+            const fi = document.getElementById('cadFileInput');
+            const file = fi && fi.files && fi.files[0];
+            if (!file) { displayError('Chưa chọn file DXF'); return; }
+            if (!file.name.toLowerCase().endsWith('.dxf')) { displayError('Chỉ nhận file .dxf'); return; }
+            const meridianDeg = parseFloat(document.getElementById('cadMeridianInput').value) || 105;
+            const k0 = parseFloat(document.getElementById('cadK0Input').value) || 0.9996;
+
+            displayInfo('Đang tải thư viện DXF...');
+            try { await _loadDxfParser(); }
+            catch (err) { displayError(err.message); return; }
+
+            displayInfo('Đang đọc file...');
+            const text = await file.text();
+
+            displayInfo('Đang phân tích DXF...');
+            let dxf;
+            try {
+                const parser = new DxfParser();
+                dxf = parser.parseSync(text);
+            } catch (err) {
+                console.error(err);
+                displayError('Không parse được DXF: ' + (err.message || err));
+                return;
+            }
+
+            const entities = _parseDxfEntities(dxf);
+            if (!entities.length) { displayError('DXF không có entity hỗ trợ (LINE/POLYLINE/CIRCLE/TEXT)'); return; }
+
+            const bounds = _computeCadBounds(entities);
+            const layers = [...new Set(entities.map(e => e.layer || '0'))];
+
+            _cadEntities = entities;
+            _cadMeta = {
+                filename: file.name,
+                uploadedAt: new Date().toISOString(),
+                zone: meridianDeg,
+                k0,
+                layers,
+                entityCount: entities.length,
+                bounds
+            };
+            _cadVisible = true;
+
+            // Cache
+            await _idbSetCad(currentSheet, { entities, meta: _cadMeta });
+
+            _renderCadLayer(true);
+            _closeCadUpload();
+            displayInfo(`Đã tải ${entities.length} đối tượng CAD`);
+        }
+
+        function _toggleCad() {
+            if (!_cadLayer) return;
+            _cadVisible = !_cadVisible;
+            if (_cadVisible) _cadLayer.addTo(map);
+            else map.removeLayer(_cadLayer);
+            const btn = document.getElementById('btnCadToggle');
+            if (btn) btn.textContent = _cadVisible ? '👁 Ẩn' : '👁 Hiện';
+        }
+
+        async function _removeCad() {
+            if (!_cadMeta) return;
+            if (!confirm(`Gỡ bản vẽ "${_cadMeta.filename}" khỏi ${currentSheet}?`)) return;
+            if (_cadLayer) { map.removeLayer(_cadLayer); _cadLayer = null; }
+            _cadEntities = []; _cadMeta = null;
+            await _idbDelCad(currentSheet);
+            const infoBox = document.getElementById('cadInfoBox');
+            const toggle = document.getElementById('btnCadToggle');
+            if (infoBox) infoBox.style.display = 'none';
+            if (toggle) toggle.disabled = true;
+            displayInfo('Đã gỡ bản vẽ CAD');
+        }
+
+        async function _loadCachedCad(sheetName) {
+            // Cleanup CAD hiện tại
+            if (_cadLayer) { map.removeLayer(_cadLayer); _cadLayer = null; }
+            _cadEntities = []; _cadMeta = null;
+            const infoBox = document.getElementById('cadInfoBox');
+            const toggle = document.getElementById('btnCadToggle');
+            if (infoBox) infoBox.style.display = 'none';
+            if (toggle) toggle.disabled = true;
+
+            const cached = await _idbGetCad(sheetName);
+            if (!cached || !cached.entities || !cached.meta) return;
+            _cadEntities = cached.entities;
+            _cadMeta = cached.meta;
+            _cadVisible = true;
+            _renderCadLayer(false);
+        }
+
         function getSameNameMarkers(name) {
             if (!name) return [];
             const normalizedBase = normalizeMarkerBaseName(name);
@@ -3459,7 +4002,9 @@
             const soLuongDen = row[21] || '';
             const cfg = TYPE_CONFIG[type] || { color: '#94a3b8', bg: '#f1f5f9', label: 'Không xác định', emoji: '💡' };
 
-            const _imgUrls = imageValue ? imageValue.split(';').map(function(s){return s.trim();}).filter(Boolean) : [];
+            const _imgUrls = imageValue
+                ? imageValue.split(';').map(function(s){return _migrateDriveUrl(s.trim());}).filter(Boolean)
+                : [];
             const _img0 = _imgUrls[0] || '';
             const avatarHtml = _img0
                 ? `<img class="pc-avatar" src="${_img0}" style="cursor:zoom-in" onerror="this.outerHTML='<div class=\\'pc-avatar-ph\\'>${cfg.emoji}</div>'" loading="lazy">`
@@ -5305,6 +5850,15 @@
             return m[1].toLowerCase()==='jpg' ? 'jpeg' : m[1].toLowerCase();
         }
 
+        // Migrate URL cũ (drive.google.com/uc?export=view&id=X) sang format mới (lh3.googleusercontent.com/d/X)
+        // vì Google đã deprecate /uc?export=view từ 2024 — không load được trong <img>.
+        function _migrateDriveUrl(url) {
+            if (!url || typeof url !== 'string') return url;
+            const m = url.match(/drive\.google\.com\/uc\?export=view&id=([\w-]+)/);
+            if (m) return 'https://lh3.googleusercontent.com/d/' + m[1];
+            return url;
+        }
+
         function sanitizeFileName(name) {
             return (name||'marker').toString().trim().toLowerCase().replace(/\s+/g,'-').replace(/[^a-z0-9\-_.]/g,'').replace(/\-+/g,'-').replace(/^[-_.]+|[-_.]+$/g,'')||'marker';
         }
@@ -5693,6 +6247,8 @@
             currentSheet = sheetName;
             addMarkersToMap([]); // xóa markers hiện tại
             await loadFromCSVWithCache(sheetName, page.csvUrl);
+            // Load CAD overlay cache theo địa bàn (P17)
+            if (typeof _loadCachedCad === 'function') await _loadCachedCad(sheetName);
             // Cập nhật label địa bàn
             const lbl = document.getElementById('currentDistrictLabel');
             if (lbl) {
@@ -6036,9 +6592,11 @@
                 const loaiCapEl = document.getElementById('markerLoaiCapInput');
                 if (loaiCapEl) loaiCapEl.value = row[22] === 'ngam' ? 'ngam' : 'noi';
 
-                // Ảnh hiện có — restore vào 3 slots
+                // Ảnh hiện có — restore vào 3 slots (auto-migrate URL cũ nếu có)
                 const imgVal = row[12] || '';
-                const _slots = imgVal ? imgVal.split(';').map(function(s){return s.trim();}) : [];
+                const _slots = imgVal
+                    ? imgVal.split(';').map(function(s){return _migrateDriveUrl(s.trim());})
+                    : [];
                 markerImageDataUrls = [_slots[0]||'', _slots[1]||'', _slots[2]||''];
                 _renderImageSlots();
 
@@ -6856,6 +7414,12 @@
                     // Sync accuracy threshold slider
                     const sl = document.getElementById('gpsAccThresholdSlider');
                     if (sl) { sl.value = _gpsAccThreshold; _onGpsThresholdInput(_gpsAccThreshold); }
+                    // Sync rotation slider theo state hiện tại
+                    const rotSl = document.getElementById('panelRotSlider');
+                    const rotDisp = document.getElementById('panelRotDisplay');
+                    const rotVal = ((_currentMapRotation % 360) + 360) % 360;
+                    if (rotSl) rotSl.value = rotVal;
+                    if (rotDisp) rotDisp.textContent = rotVal + '°';
                     if (typeof $!=='undefined' && $.fn.modal) {
                         $('#controlsModal').modal({ backdrop:true, keyboard:true, show:true });
                     } else {

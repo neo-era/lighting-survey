@@ -152,13 +152,13 @@ Tự động cập nhật tại 2 điểm: `saveMarkerPopup()` (thêm/sửa mark
 
 | Cache name      | Chiến lược   | Nội dung                                          |
 |-----------------|--------------|---------------------------------------------------|
-| `lighting-survey-v6` | Network-first | `index.html`, `.html` (luôn lấy code mới)   |
-| `lighting-survey-v6` | Cache-first  | Icon/ảnh tĩnh (pre-cache khi install)             |
+| `lighting-survey-v8` | Network-first | `index.html`, `.html` (luôn lấy code mới)   |
+| `lighting-survey-v8` | Cache-first  | Icon/ảnh tĩnh (pre-cache khi install)             |
 | `map-tiles-v1`  | Cache-first  | Tile bản đồ OSM/Google/CartoDB (tối đa 300 tile)  |
 | `cdn-libs-v1`   | Cache-first  | Toàn bộ CDN JS/CSS/fonts (jQuery, Leaflet, v.v.)  |
 
 - Google Sheets CSV + GAS URL: **luôn fetch mới**, không cache
-- **Bump cache name** (`v6` → `v7`, v.v.) mỗi khi cần xóa cache cũ hoàn toàn
+- **Bump cache name** (`v6` → `v7` → `v8`, v.v.) mỗi khi cần xóa cache cũ hoàn toàn
 - Đăng ký trong `index.html` (cuối body):
 ```javascript
 if ('serviceWorker' in navigator) {
@@ -471,12 +471,18 @@ Leaflet: ground_per_px = earthCirc × cos(lat) / (256 × 2^Z)
     rotationDelayMs: 150,
     svgCableDelayMs: 100,
     overlayDelayMs:  300,
-    captureScale: 2,
-    jpegQuality:  0.93,
+    captureScale: 3,     // 2 làm chữ bể vì stretch 2×; 3 → stretch 1.38× cho A3 300 DPI
+    jpegQuality:  0.95,  // không còn dùng cho PDF (đã đổi PNG), giữ cho code khác nếu có
     tileLoadTimeoutMs: 5000
 }
 ```
 Mọi magic number trong luồng in tham chiếu qua object này — dễ tune.
+
+**Text sharpness fix (2026-07-11)**:
+- `captureScale: 2 → 3` — tăng resolution capture (1200×800 × 3 = 3600×2400 px), stretch lên A3 300 DPI (4960×3508) chỉ còn 1.38× thay vì 2.07× → chữ sắc.
+- Đổi `toDataURL('image/jpeg') → toDataURL('image/png')` + `doc.addImage(..., 'PNG', ...)` — JPEG chroma subsampling tạo halo mờ quanh text, PNG lossless giữ edge sắc.
+- Overlay thêm CSS `text-rendering:geometricPrecision; -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale` — hint browser render glyph mượt.
+- Trade-off: PDF nặng hơn ~2-3× (~3MB → ~8-10MB), export chậm hơn (~5s → ~10-15s), memory peak ~40MB → ~90MB (có thể fail trên mobile cũ — nếu cần detect `isMobile` để dùng scale 2).
 
 ---
 
@@ -1011,23 +1017,46 @@ Refactor lớn: **topbar chỉ còn nút hamburger**, gỡ hoàn toàn `#bottomA
 - Nút "Vị trí" — user dùng widget zoom bên phải hoặc "Thêm marker" (auto get GPS)
 - `--bottombar-h: 0px` để map dùng full chiều cao
 
-### Chức năng xoay bản đồ — ĐÃ GỠ (2026-06-18)
+### Chức năng xoay bản đồ — ĐÃ BẬT LẠI (2026-07-11)
 
-Gỡ hoàn toàn xoay bản đồ. Còn lại chỉ là dead code an toàn để không phá print cleanup.
+Xoay 2D bằng CSS transform trên `.leaflet-map-pane`. Slider `[0°, 359°]` trong ☰ panel (section "Xoay bản đồ" ngay dưới "Tỷ lệ bản đồ").
 
-**Gỡ**:
-- Compass SVG + nút ↺↻ + label angle trong MapTools widget
-- CSS hover `#mapRotLeft/Right/Reset`
-- Keyboard shortcuts `[` `]` `\`
-- Slider "Xoay bản đồ" trong print modal (giữ hidden `#pdRotation=0` cho code đọc)
-- Rotation buttons trong print preview bar
+**UI trong ☰ panel**:
+- Slider 0-359° + nút `↺ 0°` reset
+- 4 nút quick snap: `B (0°)` `Đ (90°)` `N (180°)` `T (270°)`
+- Badge `panelRotDisplay` hiển thị góc hiện tại (xanh dương, monospace)
 
-**Giữ (dead code an toàn)**:
-- `_applyMapRotation(angle)`, `_clearMapRotation()`, `_updateCompassUI()` — có null-guard, no-op khi `_currentMapRotation=0`
-- `_rotateMap`, `_rotateMapFree`, `_resetMapRotation` — không caller nhưng khai báo còn
-- `_currentMapRotation` init 0, không có UI set khác
+**Handlers**:
+- `_onRotSliderChange(v)` — wire slider oninput
+- `_setRotation(angle)` — 4 nút hướng
+- `_resetRotSlider()` — nút ↺
 
-Print flow vẫn đọc `pdRotation` → luôn `0` → không apply rotation → cleanup paths gọi `_clearMapRotation` an toàn.
+**Core (index.html)**:
+- `_applyMapRotation(angle)` — set CSS `transform: rotate(θ)` trên `.leaflet-map-pane`
+- `_applyRotationCore(angle)` — helper thực thi (gọi cả trong hook)
+- `_clearMapRotation()` — reset về 0
+- `_installRotationHook()` — hook 1 lần `map.on('move viewreset zoomanim')` re-apply rotation, vì Leaflet ghi đè `pane.style.transform` khi pan/zoom
+- `_setRotationTileBuffer(active)` — monkey-patch `L.GridLayer.prototype._pxBoundsToTileRange` để mở rộng bounds 60% mỗi bên khi rotate → tránh tam giác trắng ở 4 góc chéo
+
+**2 bug quan trọng đã fix**:
+
+1. **Origin lệch tâm**: dùng `L.DomUtil.getPosition(pane)` thay vì `pane.getBoundingClientRect()`. `getBoundingClientRect()` của pane đã rotate trả về AABB của hình xoay (rộng và lệch) → tính origin sai. `L.DomUtil.getPosition` trả translate Leaflet đã lưu, không bị CSS rotate ảnh hưởng.
+   ```js
+   const panePos = L.DomUtil.getPosition(pane);
+   const size = map.getSize();
+   const ox = size.x/2 - panePos.x;
+   const oy = size.y/2 - panePos.y;
+   pane.style.transformOrigin = `${ox}px ${oy}px`;
+   ```
+
+2. **Mất tile 4 góc**: Leaflet chỉ load tile trong viewport gốc; sau rotate, diagonal = √2 cạnh → 4 tam giác chưa có tile. Fix: monkey-patch `_pxBoundsToTileRange` mở rộng 60% mỗi bên khi rotate. Reset về gốc (`_origPxBoundsToTileRange`) khi rotation = 0.
+
+**Limitation đã biết** (Leaflet không "biết" mình bị rotate):
+- Click bản đồ để thêm marker → `containerPointToLatLng` không tính rotation → lat/lon lệch
+- Kéo marker → drop tại vị trí sai so với con trỏ
+- Label tên tủ (zoom cao) → chữ xoay theo, khó đọc
+
+**Print flow tương thích**: `pdRotation` vẫn hidden = 0. Print luôn north-up. User rotate map chỉ để xem, khi export PDF tự unrotate.
 
 ### Chỉnh sửa marker — `_editingRow`
 
@@ -1081,6 +1110,30 @@ Client không giữ token. Luồng:
 2. Client tạo Excel base64 (ExcelJS → fallback XLSX.js)
 3. Client POST `{ action: 'upload_to_github', path, content }` lên GAS
 4. GAS đọc `GITHUB_TOKEN` từ Script Properties → gọi GitHub API
+
+### Ảnh — Google Drive URL migration (2026-07-11)
+
+**Vấn đề**: Google Drive **đã deprecate URL format `drive.google.com/uc?export=view&id=<ID>`** từ 2024 — thẻ `<img>` không load được, hiện placeholder.
+
+**Fix**: Helper global `_migrateDriveUrl(url)` transparent chuyển đổi khi RENDER:
+```js
+function _migrateDriveUrl(url) {
+    if (!url || typeof url !== 'string') return url;
+    const m = url.match(/drive\.google\.com\/uc\?export=view&id=([\w-]+)/);
+    if (m) return 'https://lh3.googleusercontent.com/d/' + m[1];
+    return url;
+}
+```
+- `drive.google.com/uc?export=view&id=X` → `lh3.googleusercontent.com/d/X`
+- Data trong sheet **KHÔNG bị sửa** — chỉ migrate lúc display
+
+**Áp dụng ở 2 chỗ**:
+| Vị trí | Chức năng |
+|---|---|
+| `createMarkerPopupContent` | Popup marker — avatar chính + strip ảnh phụ |
+| `openEditMarker` | Restore 3 slot khi Sửa marker |
+
+**Upload mới**: GAS `handleImageUpload` đã dùng URL mới format (`lh3.googleusercontent.com/d/<fileId>`) upload lên folder Drive `1i32dWpWSSoW61MIUD1qDJZne2FBiofOr` qua `DriveApp.getFolderById()`.
 
 ### Tìm kiếm — text normalization
 `searchMarkers()` (topbar → giờ trong ☰ panel) và `_filterTuOptions()` (filter tủ) dùng chung 2 helper:

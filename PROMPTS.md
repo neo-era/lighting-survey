@@ -4460,4 +4460,760 @@ Sau khi xong:
 Báo cáo lỗi sau mỗi phase, dừng nếu test fail.
 ```
 
+---
+
+## Session 2026-07-11 — Rotation + PDF sharpness + Drive URL migration
+
+### P14 — Bật lại xoay bản đồ 2D ✅
+
+**Trạng thái**: đã implement, đang thử nghiệm.
+
+**Đã làm**:
+- Thêm section "Xoay bản đồ" vào ☰ panel (slider 0-359° + 4 nút quick B/Đ/N/T + reset)
+- Wire `_onRotSliderChange`, `_setRotation`, `_resetRotSlider`
+- Rewrite `_applyMapRotation` để dùng `L.DomUtil.getPosition(pane)` thay `getBoundingClientRect()` — fix bug xoay lệch tâm
+- Thêm `_installRotationHook()` hook `map.on('move viewreset zoomanim')` re-apply rotation — Leaflet ghi đè transform khi pan/zoom sẽ bị wipe
+- Thêm `_setRotationTileBuffer(active)` monkey-patch `L.GridLayer.prototype._pxBoundsToTileRange` mở rộng bounds 60% khi rotate → fix tam giác trắng 4 góc chéo
+- Sync slider ↔ `_currentMapRotation` khi mở ☰ modal
+
+**Limitation đã biết** (chưa fix):
+- Click bản đồ để thêm marker → tọa độ lệch vì `containerPointToLatLng` không tính rotation
+- Kéo marker → drop tại vị trí sai so với con trỏ
+- Label tên tủ ở zoom cao → chữ bị xoay theo, khó đọc
+
+Nếu limitation trở thành vấn đề thực tế, cần patch `map.mouseEventToContainerPoint` để bù rotation.
+
+---
+
+### P15 — Chữ PDF bể → sắc nét ✅
+
+**Nguyên nhân**: html2canvas capture ở `captureScale=2` (~2400×1700px), jsPDF stretch lên A3 300 DPI (~4960×3508) = **2.07× upscale** → text mờ/bể.
+
+**Fix**:
+1. `PRINT_CONFIG.captureScale: 2 → 3` (capture 3600×2400, stretch chỉ 1.38×)
+2. `PRINT_CONFIG.jpegQuality: 0.93 → 0.95` (giữ cho code khác nếu có, PDF đã đổi PNG)
+3. `canvas.toDataURL('image/jpeg') → 'image/png'` — JPEG chroma subsampling tạo halo mờ quanh text
+4. `doc.addImage(imgData, 'PNG', 0, 0, pw, ph, undefined, 'FAST')` — PNG lossless
+5. `#printOverlay` thêm CSS `text-rendering:geometricPrecision`, `-webkit-font-smoothing:antialiased`, `-moz-osx-font-smoothing:grayscale`
+
+**Trade-off**:
+| | Trước | Sau |
+|---|---|---|
+| Chất lượng chữ | Bể, halo mờ | Sắc, không halo |
+| Kích thước PDF | ~3 MB | ~8-10 MB |
+| Thời gian export | ~5s | ~10-15s |
+| Memory peak | ~40 MB | ~90 MB (mobile cũ có thể fail) |
+
+**TODO nếu cần**: detect `isMobile` → dùng scale 2 trên mobile, scale 3 desktop.
+
+---
+
+### P16 — Drive URL migration ✅
+
+**Nguyên nhân**: Google đã deprecate `https://drive.google.com/uc?export=view&id=<ID>` từ 2024. Tag `<img>` không load được → placeholder.
+
+**Fix**: Thêm helper global `_migrateDriveUrl(url)`:
+```js
+function _migrateDriveUrl(url) {
+    if (!url || typeof url !== 'string') return url;
+    const m = url.match(/drive\.google\.com\/uc\?export=view&id=([\w-]+)/);
+    if (m) return 'https://lh3.googleusercontent.com/d/' + m[1];
+    return url;
+}
+```
+
+**Áp dụng**:
+| Vị trí | Mô tả |
+|---|---|
+| `createMarkerPopupContent` | Split `imageValue` bằng `;` rồi map qua `_migrateDriveUrl` — avatar + strip ảnh phụ |
+| `openEditMarker` | Split `row[12]` rồi map qua `_migrateDriveUrl` — restore 3 slot khi Sửa |
+
+Data trong sheet KHÔNG bị sửa — migrate transparent lúc render. Nếu Google đổi format tiếp, chỉ cần sửa `_migrateDriveUrl`.
+
+---
+
+### SW cache: v7 → v8
+
+Bump `sw.js` cache name để force clients re-fetch code mới (rotation UI + print PNG + drive URL migration).
+
+---
+
+## Tính năng 12 — Overlay bản vẽ CAD (DXF) lên bản đồ (giống Nuwa)
+
+Mục tiêu: cho phép user tải bản vẽ AutoCAD (DXF) lên → hiển thị đúng vị trí trên Leaflet, toggle layer, snap marker về đỉnh CAD, stake-out điều hướng RTK.
+
+Chia 4 phase độc lập — chạy tuần tự P17 → P18 → P19 → P20. Mỗi phase có deliverable dùng được.
+
+---
+
+### P17 — Phase 1: MVP hiển thị DXF overlay (3-5 ngày)
+
+```
+Task: Thêm chức năng tải và hiển thị bản vẽ DXF trên Leaflet map, đúng vị trí theo tọa độ VN-2000.
+
+## Prerequisites
+- File index.html đã có convertLatLonToVn2000() và IndexedDB cache helpers (idbGet/idbSet/idbOpen)
+- Leaflet + L.SVG đã load
+
+## 1. Thêm thư viện dxf-parser
+
+Load lazy khi user click nút "Tải bản vẽ" (không add vào bundle chính):
+```js
+async function _loadDxfParser() {
+    if (window.DxfParser) return;
+    return new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = 'https://cdn.jsdelivr.net/npm/dxf-parser@1.1.2/dist/parser.js';
+        s.onload = resolve;
+        s.onerror = () => { s.remove(); reject(new Error('Không tải được dxf-parser')); };
+        setTimeout(() => reject(new Error('Timeout tải dxf-parser')), 15000);
+        document.head.appendChild(s);
+    });
+}
+```
+
+## 2. Thêm helper convertVn2000ToLatLon (đảo ngược công thức Gauss-Krüger)
+
+Hiện app đã có convertLatLonToVn2000 (múi 6°, ellipsoid GRS80). Viết reverse dùng công thức Redfearn hoặc iterative:
+```js
+function convertVn2000ToLatLon(x, y, centralMeridianDeg) {
+    // Input: x=Northing (m), y=Easting (m), centralMeridianDeg (105/105.5/105.75)
+    // Output: {lat, lon} degrees
+    // Iterative approach: bắt đầu guess lat/lon từ zone → convertLatLonToVn2000 → so sánh → Newton refine
+    // Đủ tolerance 1cm sau ~5 iterations
+}
+```
+Test: chọn 1 marker có VN-2000 trong sheet → convert ngược → so sánh lat/lon gốc, sai số < 0.5m.
+
+## 3. State + IndexedDB store
+
+```js
+let _cadLayer = null;           // L.LayerGroup chứa SVG overlay
+let _cadEntities = [];          // parsed entities từ DXF
+let _cadMeta = null;            // {filename, uploadedAt, zone, layers, bounds}
+let _cadVisible = true;
+
+// IndexedDB store mới: 'cad-drawings' — key: sheetName, value: {dxfText, meta}
+```
+
+## 4. UI trong ☰ panel
+
+Thêm section mới sau "Xuất dữ liệu":
+```html
+<div class="ctrl-section">
+    <div class="ctrl-title">Bản vẽ CAD</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+        <button class="ctrl-btn" onclick="_openCadUpload()">📐 Tải DXF</button>
+        <button class="ctrl-btn outline" onclick="_toggleCad()" id="btnCadToggle" disabled>👁 Ẩn/Hiện</button>
+    </div>
+    <div id="cadInfoBox" style="display:none;margin-top:6px;font-size:11px;color:var(--text-muted);">
+        <div id="cadFilename"></div>
+        <div id="cadEntityCount"></div>
+        <button class="ctrl-btn outline" onclick="_removeCad()" style="width:100%;margin-top:4px;">🗑 Gỡ bản vẽ</button>
+    </div>
+</div>
+```
+
+## 5. Upload modal — chọn file + zone
+
+Modal đơn giản với:
+- Input file accept=".dxf"
+- Select "Kinh tuyến trung tâm" (105° / 105.5° / 105.75°) — default theo currentSheet:
+  - HCM (Quan*/PhuNhuan/BinhThanh/TanBinh/TanPhu): 105°
+  - Bình Dương (BauBang/TruVanTho/BenCat): 105.5°
+  - Long An (CanGiuoc): 105.75°
+- Nút "Tải lên"
+
+## 6. Parse DXF → entities
+
+```js
+async function _uploadCad(file, centralMeridianDeg) {
+    displayInfo('Đang phân tích DXF...');
+    await _loadDxfParser();
+    const text = await file.text();
+    const parser = new DxfParser();
+    const dxf = parser.parseSync(text);
+    
+    // Extract entities: LINE, LWPOLYLINE, POLYLINE, CIRCLE, ARC, TEXT
+    const entities = [];
+    (dxf.entities || []).forEach(e => {
+        if (e.type === 'LINE') entities.push({
+            type: 'line', layer: e.layer, color: e.color,
+            points: [{x:e.vertices[0].x, y:e.vertices[0].y}, {x:e.vertices[1].x, y:e.vertices[1].y}]
+        });
+        else if (e.type === 'LWPOLYLINE' || e.type === 'POLYLINE') entities.push({
+            type: 'polyline', layer: e.layer, color: e.color,
+            points: e.vertices.map(v => ({x:v.x, y:v.y}))
+        });
+        else if (e.type === 'CIRCLE') entities.push({
+            type: 'circle', layer: e.layer, color: e.color,
+            center: {x:e.center.x, y:e.center.y}, radius: e.radius
+        });
+        else if (e.type === 'TEXT' || e.type === 'MTEXT') entities.push({
+            type: 'text', layer: e.layer, color: e.color,
+            position: {x:e.position.x, y:e.position.y},
+            text: e.text || e.string || '', height: e.textHeight || 2.5
+        });
+        // Skip ARC, HATCH, BLOCK cho MVP
+    });
+    
+    _cadEntities = entities;
+    _cadMeta = {
+        filename: file.name,
+        uploadedAt: new Date().toISOString(),
+        zone: centralMeridianDeg,
+        layers: [...new Set(entities.map(e => e.layer))],
+        entityCount: entities.length
+    };
+    
+    // Cache
+    await idbSet('cad-drawings', currentSheet, { dxfText: text, entities, meta: _cadMeta });
+    
+    _renderCadLayer();
+    displayInfo(`Đã tải ${entities.length} đối tượng CAD`);
+}
+```
+
+## 7. Render entities → SVG overlay
+
+Convert VN-2000 XY → lat/lon → L.polyline / L.circle / L.marker (text as divIcon):
+```js
+function _renderCadLayer() {
+    if (_cadLayer) map.removeLayer(_cadLayer);
+    _cadLayer = L.layerGroup();
+    
+    const zone = _cadMeta.zone;
+    _cadEntities.forEach(e => {
+        const dxfColor = _dxfColorToHex(e.color);
+        if (e.type === 'line' || e.type === 'polyline') {
+            const latlngs = e.points.map(p => {
+                const { lat, lon } = convertVn2000ToLatLon(p.x, p.y, zone);
+                return [lat, lon];
+            });
+            L.polyline(latlngs, { color: dxfColor, weight: 1.5, opacity: 0.8, interactive: false })
+                .addTo(_cadLayer);
+        } else if (e.type === 'circle') {
+            const { lat, lon } = convertVn2000ToLatLon(e.center.x, e.center.y, zone);
+            L.circle([lat, lon], { radius: e.radius, color: dxfColor, weight: 1, fillOpacity: 0.1 })
+                .addTo(_cadLayer);
+        } else if (e.type === 'text') {
+            const { lat, lon } = convertVn2000ToLatLon(e.position.x, e.position.y, zone);
+            const icon = L.divIcon({
+                className: 'cad-text-label',
+                html: `<span style="color:${dxfColor};font-size:10px;white-space:nowrap;">${e.text}</span>`,
+                iconAnchor: [0, 0]
+            });
+            L.marker([lat, lon], { icon, interactive: false }).addTo(_cadLayer);
+        }
+    });
+    
+    if (_cadVisible) _cadLayer.addTo(map);
+    
+    // Fit view lên bounds CAD nếu là lần đầu load
+    if (_cadEntities.length > 0) {
+        // Compute bounds từ mọi entity
+        // map.fitBounds(bounds.pad(0.05));
+    }
+    
+    // UI update
+    document.getElementById('btnCadToggle').disabled = false;
+    document.getElementById('cadInfoBox').style.display = 'block';
+    document.getElementById('cadFilename').textContent = _cadMeta.filename;
+    document.getElementById('cadEntityCount').textContent = `${_cadMeta.entityCount} đối tượng`;
+}
+```
+
+## 8. DXF color index → hex
+
+DXF dùng bảng màu 256 index. Bảng gần đúng cho ~16 màu đầu (1=red, 2=yellow, 3=green, 4=cyan, 5=blue, 6=magenta, 7=white/black, ...):
+```js
+const _DXF_COLORS = ['#000000','#ff0000','#ffff00','#00ff00','#00ffff','#0000ff','#ff00ff','#000000','#808080','#c0c0c0'];
+function _dxfColorToHex(idx) { return _DXF_COLORS[idx] || '#333'; }
+```
+
+## 9. Load từ cache khi switchDistrict
+
+Trong `switchDistrict()`, sau khi load CSV:
+```js
+const cached = await idbGet('cad-drawings', sheetName);
+if (cached) {
+    _cadEntities = cached.entities;
+    _cadMeta = cached.meta;
+    _renderCadLayer();
+} else {
+    _cadLayer = null;
+    _cadEntities = [];
+    _cadMeta = null;
+    document.getElementById('cadInfoBox').style.display = 'none';
+    document.getElementById('btnCadToggle').disabled = true;
+}
+```
+
+## 10. Toggle + Remove
+
+```js
+function _toggleCad() {
+    if (!_cadLayer) return;
+    _cadVisible = !_cadVisible;
+    if (_cadVisible) _cadLayer.addTo(map); else map.removeLayer(_cadLayer);
+}
+async function _removeCad() {
+    if (!confirm('Gỡ bản vẽ CAD khỏi bản đồ?')) return;
+    if (_cadLayer) map.removeLayer(_cadLayer);
+    await idbDel('cad-drawings', currentSheet);
+    _cadLayer = null; _cadEntities = []; _cadMeta = null;
+    document.getElementById('cadInfoBox').style.display = 'none';
+    document.getElementById('btnCadToggle').disabled = true;
+}
+```
+
+## Testing checklist
+
+- [ ] Upload 1 file DXF nhỏ (< 1MB) từ CAD lighting → hiển thị đúng vị trí trên Google Maps overlay
+- [ ] Verify convertVn2000ToLatLon: pick 1 pole trong sheet → convert VN-2000 back → sai số < 0.5m
+- [ ] Zoom in / out → SVG scale mượt, không blur
+- [ ] Toggle ẩn/hiện → layer add/remove khỏi map
+- [ ] Refresh app → bản vẽ tự load từ cache IndexedDB
+- [ ] Switch district → bản vẽ đúng tương ứng với sheet
+- [ ] File 5MB (~5k entity): parse < 3s, render < 1s
+- [ ] File > 10MB: dùng Web Worker cho parse (nếu block UI > 2s)
+
+## Deliverable
+
+User có thể:
+1. Tải file DXF từ máy tính
+2. Chọn kinh tuyến trung tâm
+3. Xem bản vẽ overlay đúng vị trí trên bản đồ
+4. Ẩn/hiện overlay
+5. Bản vẽ persist qua session (IndexedDB)
+```
+
+---
+
+### P18 — Phase 2: Layer control (1-2 ngày)
+
+```
+Task: Cho phép user toggle bật/tắt từng layer trong bản vẽ CAD, đổi màu/độ dày, filter theo pattern.
+
+## Prerequisites
+- P17 (Phase 1) đã xong: _cadEntities có field .layer
+
+## 1. State layers
+
+```js
+let _cadLayerVisibility = {};  // { 'LAYER_NAME': true/false }
+let _cadLayerStyle = {};       // { 'LAYER_NAME': { color, weight, opacity } }
+```
+
+Load state từ localStorage khi restore cache: `cad_layers_<sheetName>`.
+
+## 2. Panel layer control
+
+Modal mới (mở từ nút mới "Lớp CAD" trong info box):
+```
+┌─ Lớp CAD (VD: 12 lớp) ─────────┐
+│ 🔍 [Tìm layer name______]      │
+│ ─────────────────────────────  │
+│ ☑ POLE           [🎨 red]  245│
+│ ☑ CABLE_UNDER    [🎨 blue]  87│
+│ ☐ GRID           [🎨 gray]  50│
+│ ☑ TEXT_LABEL     [🎨 —  ]   14│
+│ ...                            │
+│ [Chọn tất cả] [Bỏ chọn tất cả]│
+│ [Áp dụng]                     │
+└─────────────────────────────────┘
+```
+
+Mỗi row: checkbox + tên layer + swatch màu (click → color picker) + count entity + optional weight slider.
+
+## 3. Render layer với style riêng
+
+Sửa `_renderCadLayer()` để check visibility + apply style:
+```js
+_cadEntities.forEach(e => {
+    if (_cadLayerVisibility[e.layer] === false) return;
+    const style = _cadLayerStyle[e.layer] || {};
+    const color = style.color || _dxfColorToHex(e.color);
+    const weight = style.weight || 1.5;
+    const opacity = style.opacity ?? 0.8;
+    // ... render với color/weight/opacity mới
+});
+```
+
+## 4. Filter search
+
+Ô search filter theo pattern (normalized):
+```js
+function _filterCadLayers(query) {
+    const rows = document.querySelectorAll('#cadLayerPanel .layer-row');
+    const q = normalizeTextSearchable(query);
+    rows.forEach(r => {
+        const name = normalizeTextSearchable(r.dataset.layer);
+        r.style.display = name.includes(q) ? '' : 'none';
+    });
+}
+```
+
+## 5. Preset filter
+
+Nút quick preset: "Chỉ hiện Trụ", "Chỉ hiện Cáp", "Ẩn TEXT" — match layer name pattern định sẵn (regex):
+```js
+const CAD_PRESETS = {
+    poles:   { showRegex: /POLE|TRU|LAMP/i, hideRegex: /GRID|BORDER/i },
+    cables:  { showRegex: /CABLE|CAP|WIRE/i },
+    hideText:{ hideRegex: /TEXT|LABEL|DIM/i },
+};
+```
+
+## 6. Persist selection
+
+Sau mỗi thay đổi: `localStorage.setItem('cad_layers_' + currentSheet, JSON.stringify({visibility, style}))`.
+Restore trong `_renderCadLayer` init.
+
+## Testing checklist
+
+- [ ] Panel layer hiện đầy đủ list từ `_cadMeta.layers`, số entity đúng
+- [ ] Uncheck 1 layer → entities layer đó biến mất, không render
+- [ ] Đổi màu 1 layer → tất cả entity thuộc layer đó đổi màu
+- [ ] Filter search → hiện đúng subset row
+- [ ] Preset "Chỉ Trụ" → chỉ layer match regex hiện
+- [ ] Refresh app → visibility state khôi phục đúng
+- [ ] Layer count đúng khi có > 20 layer
+
+## Deliverable
+
+User có thể:
+1. Xem danh sách tất cả layer trong bản vẽ
+2. Ẩn/hiện từng layer
+3. Đổi màu + độ dày từng layer
+4. Filter theo pattern
+5. Áp dụng preset nhanh
+6. State persist qua session
+```
+
+---
+
+### P19 — Phase 3: Calibration + Snap to CAD vertex (2-3 ngày)
+
+```
+Task: Cho phép calibrate bản vẽ CAD chưa có tọa độ đúng (align 2 điểm map vs CAD), và snap marker mới về đỉnh CAD gần nhất.
+
+## Prerequisites
+- P17 (Phase 1) đã xong
+- Đã có helper `haversineM(lat1,lon1,lat2,lon2)` trong index.html
+
+## 1. Calibration mode
+
+**Vấn đề**: file CAD từ khảo sát cũ có thể ở tọa độ local (0,0 nội bộ) hoặc lệch zone. Cần map 2 điểm CAD ↔ 2 điểm real-world để tính affine transform.
+
+**UI flow**:
+1. Nút "🎯 Calibrate" trong info box (chỉ hiện khi loaded)
+2. Modal hướng dẫn: "Click 2 điểm trên bản đồ + nhập tọa độ CAD tương ứng"
+3. User click point A trên map → nhập X_cad, Y_cad point A
+4. User click point B trên map → nhập X_cad, Y_cad point B
+5. App tính affine (scale + rotate + translate) → apply lên toàn bộ entities
+
+**Tính affine 2D từ 2 điểm** (tương tự Helmert transformation):
+```js
+function _computeAffine2D(cad1, cad2, real1, real2) {
+    // cad = {x, y}, real = {lat, lon} → chuyển real về VN-2000
+    const r1 = convertLatLonToVn2000(real1.lat, real1.lon);
+    const r2 = convertLatLonToVn2000(real2.lat, real2.lon);
+    const dCadX = cad2.x - cad1.x, dCadY = cad2.y - cad1.y;
+    const dRealX = r2.x - r1.x,    dRealY = r2.y - r1.y;
+    const cadLen = Math.hypot(dCadX, dCadY);
+    const realLen = Math.hypot(dRealX, dRealY);
+    const scale = realLen / cadLen;
+    const angleCad = Math.atan2(dCadY, dCadX);
+    const angleReal = Math.atan2(dRealY, dRealX);
+    const rotate = angleReal - angleCad;
+    // Translate: after scale+rotate cad1 → real1
+    const cos = Math.cos(rotate), sin = Math.sin(rotate);
+    const tx = r1.x - scale * (cos*cad1.x - sin*cad1.y);
+    const ty = r1.y - scale * (sin*cad1.x + cos*cad1.y);
+    return { scale, rotate, tx, ty };
+}
+
+function _applyAffine(cadPoint, affine) {
+    const { scale, rotate, tx, ty } = affine;
+    const cos = Math.cos(rotate), sin = Math.sin(rotate);
+    return {
+        x: scale * (cos*cadPoint.x - sin*cadPoint.y) + tx,
+        y: scale * (sin*cadPoint.x + cos*cadPoint.y) + ty
+    };
+}
+```
+
+Sau calibration → lưu `_cadMeta.affine = {...}` → mỗi lần convert cần apply affine trước khi chạy convertVn2000ToLatLon.
+
+## 2. Snap to CAD vertex
+
+**Mục đích**: khi user click Thêm marker gần 1 đỉnh CAD (< 5m), marker tự dịch về đỉnh đó → độ chính xác 1cm.
+
+**Preprocess**: build spatial index từ tất cả vertex CAD:
+```js
+let _cadVertexIndex = [];  // [{lat, lon, layer, entityIdx}]
+
+function _buildVertexIndex() {
+    _cadVertexIndex = [];
+    _cadEntities.forEach((e, i) => {
+        const points = e.points || (e.center ? [e.center] : []) || (e.position ? [e.position] : []);
+        points.forEach(p => {
+            const { lat, lon } = convertVn2000ToLatLon(p.x, p.y, _cadMeta.zone);
+            _cadVertexIndex.push({ lat, lon, layer: e.layer, entityIdx: i });
+        });
+    });
+}
+```
+
+Gọi sau `_renderCadLayer()`.
+
+**Snap trong luồng thêm marker**:
+```js
+function _snapToNearestCadVertex(lat, lon, maxDistM = 5) {
+    if (!_cadVertexIndex.length) return null;
+    let best = null, bestDist = maxDistM;
+    for (const v of _cadVertexIndex) {
+        const d = haversineM(lat, lon, v.lat, v.lon);
+        if (d < bestDist) { best = v; bestDist = d; }
+    }
+    return best ? { lat: best.lat, lon: best.lon, distM: bestDist } : null;
+}
+```
+
+Trong `saveMarkerPopup()` hoặc `showMarkerPopupAt()`:
+```js
+const snap = _snapToNearestCadVertex(lat, lon);
+if (snap) {
+    // Toast: "Đã snap về đỉnh CAD (cách 0.3m). [Hoàn tác]"
+    lat = snap.lat; lon = snap.lon;
+}
+```
+
+## 3. UI snap toggle
+
+Trong ☰ panel, thêm checkbox "Snap về đỉnh CAD (5m)":
+```html
+<label class="ctrl-radio">
+    <input type="checkbox" id="cadSnapToggle" onchange="_toggleCadSnap(this.checked)">
+    <span>Snap về đỉnh CAD gần nhất (≤ 5m)</span>
+</label>
+```
+
+State: `_cadSnapEnabled = false` (default off), persist localStorage.
+Slider chỉnh khoảng cách max (1-20m).
+
+## 4. Visualization snap
+
+Khi snap active + hover chuột gần đỉnh CAD → highlight đỉnh đó với marker tạm (chấm tím pulse). Optional cho polish.
+
+## Testing checklist
+
+- [ ] Calibration: pick 2 điểm → toàn bộ CAD dịch chuyển đúng, không lệch scale
+- [ ] Verify affine: 1 vertex CAD gần trụ đã đo → khoảng cách sau calibrate < 5cm
+- [ ] Vertex index build: 5000 entity → < 500ms
+- [ ] Snap khi thêm marker: click cách đỉnh 3m → tọa độ marker khớp đỉnh chính xác
+- [ ] Snap ngoài phạm vi 5m → không snap, marker giữ tọa độ user click
+- [ ] Toggle snap off → thêm marker bình thường
+- [ ] Slider maxDist: 20m thấy snap sang đỉnh xa hơn
+
+## Deliverable
+
+User có thể:
+1. Calibrate bản vẽ CAD lệch/chưa georef bằng 2 điểm
+2. Bật/tắt snap về đỉnh CAD khi thêm marker
+3. Chỉnh khoảng cách snap max
+4. Thêm marker chính xác 1cm khi đứng gần đỉnh CAD (với RTK)
+```
+
+---
+
+### P20 — Phase 4: Stake-out điều hướng RTK (3-5 ngày, tùy chọn)
+
+```
+Task: Chọn 1 đỉnh CAD làm target → hiển thị mũi tên + khoảng cách + góc bearing từ vị trí RTK hiện tại đến đỉnh đó (realtime), tự trigger create marker khi đứng đúng vị trí.
+
+## Prerequisites
+- P17 + P18 + P19 (Phase 1-3) đã xong
+- Feature 11 (GPS_MODES + getBestFix) đã có
+- User đang dùng RTK Tersus Luka (Phase 4 không đáng làm cho phone GPS)
+
+## 1. State stake-out
+
+```js
+let _stakeoutTarget = null;     // {lat, lon, cadEntity} — đỉnh CAD đang target
+let _stakeoutWatchId = null;    // watchPosition ID
+let _stakeoutMinDistM = 0.05;   // ngưỡng auto-create marker (5cm cho RTK Fixed)
+```
+
+## 2. Kích hoạt stake-out
+
+**Luồng chọn target**:
+1. User bật mode "Stake-out" từ ☰ panel → toast "Click 1 đỉnh CAD để làm target"
+2. Cursor crosshair trên map
+3. User click gần đỉnh CAD → snap về đỉnh gần nhất → set `_stakeoutTarget`
+4. UI floating bar hiện đè lên bản đồ
+
+```html
+<div id="stakeoutBar" style="position:fixed;top:60px;left:50%;transform:translateX(-50%);
+    background:rgba(30,41,59,.95);color:#fff;padding:10px 16px;border-radius:12px;
+    display:flex;gap:16px;align-items:center;z-index:9500;box-shadow:0 4px 12px rgba(0,0,0,.3);">
+    <div id="stakeoutArrow" style="font-size:32px;">↑</div>
+    <div>
+        <div id="stakeoutDist" style="font-size:20px;font-weight:800;">— m</div>
+        <div id="stakeoutBearing" style="font-size:12px;opacity:.7;">Đi hướng ...</div>
+    </div>
+    <button onclick="_stopStakeout()" style="background:#dc2626;color:#fff;border:none;
+        padding:6px 12px;border-radius:6px;cursor:pointer;">✗ Dừng</button>
+</div>
+```
+
+## 3. Realtime tracking
+
+Dùng `navigator.geolocation.watchPosition` với GPS_MODES config hiện tại:
+```js
+function _startStakeout(target) {
+    _stakeoutTarget = target;
+    const cfg = GPS_MODES[currentGpsMode];
+    _stakeoutWatchId = navigator.geolocation.watchPosition(
+        pos => _updateStakeout(pos, target),
+        err => console.error('stakeout err', err),
+        { enableHighAccuracy: true, maximumAge: 0, timeout: cfg.maxWaitMs }
+    );
+    document.getElementById('stakeoutBar').style.display = 'flex';
+}
+
+function _updateStakeout(pos, target) {
+    const dist = haversineM(pos.coords.latitude, pos.coords.longitude, target.lat, target.lon);
+    const bearing = _computeBearing(pos.coords.latitude, pos.coords.longitude, target.lat, target.lon);
+    
+    // UI update
+    document.getElementById('stakeoutDist').textContent = 
+        dist < 1 ? `${(dist*100).toFixed(1)} cm` : `${dist.toFixed(2)} m`;
+    document.getElementById('stakeoutBearing').textContent = _bearingLabel(bearing);
+    
+    // Xoay mũi tên theo bearing (compass-relative — user hướng lên = 0° device compass)
+    // Tạm dùng bearing absolute, sau này cần device orientation:
+    document.getElementById('stakeoutArrow').style.transform = `rotate(${bearing}deg)`;
+    
+    // Ngưỡng đạt → rung + toast + optional auto-create marker
+    if (dist <= _stakeoutMinDistM) {
+        _onStakeoutReached(target, pos);
+    }
+}
+
+function _computeBearing(lat1, lon1, lat2, lon2) {
+    const φ1 = lat1 * Math.PI/180, φ2 = lat2 * Math.PI/180;
+    const Δλ = (lon2 - lon1) * Math.PI/180;
+    const y = Math.sin(Δλ) * Math.cos(φ2);
+    const x = Math.cos(φ1)*Math.sin(φ2) - Math.sin(φ1)*Math.cos(φ2)*Math.cos(Δλ);
+    return ((Math.atan2(y, x) * 180/Math.PI) + 360) % 360;
+}
+
+function _bearingLabel(deg) {
+    const dirs = ['B','ĐB','Đ','ĐN','N','TN','T','TB'];
+    return `${dirs[Math.round(deg/45) % 8]} (${Math.round(deg)}°)`;
+}
+```
+
+## 4. Rung + âm thanh khi đạt
+
+```js
+function _onStakeoutReached(target, pos) {
+    if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+    displayInfo(`Đã đến đích! Sai số ${(haversineM(...) * 100).toFixed(1)} cm`);
+    // Beep: mini audio hoặc SpeechSynthesisUtterance
+    if (window.speechSynthesis) {
+        const u = new SpeechSynthesisUtterance('Đã đến vị trí');
+        u.lang = 'vi-VN';
+        speechSynthesis.speak(u);
+    }
+    // Optional: auto-open thêm marker popup với tọa độ target đã fill sẵn
+    // hoặc chờ user manual confirm
+}
+```
+
+## 5. Danh sách target hàng loạt (batch stake-out)
+
+Cho phép user chọn N đỉnh cùng lúc → xong 1 tự next sang cái tiếp theo:
+```js
+let _stakeoutQueue = [];  // [{lat, lon, label}]
+let _stakeoutCurrentIdx = 0;
+```
+
+UI: sau khi đạt target hiện tại → toast "3/12 xong. [Next] [Skip] [Dừng]".
+
+Filter target: từ layer CAD nào (vd chỉ layer POLE) → skip TEXT.
+
+## 6. Device orientation (compass) — optional advanced
+
+Mũi tên hiện xoay theo bearing absolute (Bắc = 0°). Để chỉ đúng hướng đi so với **hướng điện thoại đang nhìn**, cần trừ đi `deviceOrientation.alpha`:
+
+```js
+window.addEventListener('deviceorientationabsolute', (e) => {
+    _deviceHeading = e.alpha; // 0 = user quay Bắc
+}, true);
+
+// Trong _updateStakeout:
+const relativeBearing = (bearing - _deviceHeading + 360) % 360;
+document.getElementById('stakeoutArrow').style.transform = `rotate(${relativeBearing}deg)`;
+```
+
+Chỉ hoạt động khi permission granted (iOS 13+ cần requestPermission).
+
+## 7. Cleanup
+
+```js
+function _stopStakeout() {
+    if (_stakeoutWatchId !== null) navigator.geolocation.clearWatch(_stakeoutWatchId);
+    _stakeoutWatchId = null;
+    _stakeoutTarget = null;
+    document.getElementById('stakeoutBar').style.display = 'none';
+}
+```
+
+Auto-cleanup khi user đổi tab, đóng popup, hoặc switchDistrict.
+
+## Testing checklist
+
+- [ ] Chọn target: click gần đỉnh CAD → snap chính xác về đỉnh
+- [ ] Realtime dist cập nhật < 1s khi user di chuyển (RTK Fixed cần)
+- [ ] Bearing chỉ đúng hướng: đứng phía Nam target 5m, mũi tên chỉ Bắc
+- [ ] Ngưỡng 5cm → rung + toast "đã đến"
+- [ ] Auto-open form thêm marker với tọa độ đúng
+- [ ] Test batch queue 5 target → next tự động
+- [ ] Test compass mode (nếu device support)
+- [ ] Test dừng giữa chừng → cleanup sạch
+- [ ] Phone GPS mode: ngưỡng auto lên 3m (không phải 5cm)
+
+## Deliverable
+
+User có thể:
+1. Chọn 1 đỉnh CAD làm target stake-out
+2. Xem realtime khoảng cách + hướng đi
+3. Rung + âm báo khi đạt đúng vị trí
+4. Auto-tạo marker mới tại vị trí target
+5. Batch stake-out nhiều target liên tiếp
+6. Compass mode chỉ hướng theo device orientation
+
+**Lưu ý**: Phase 4 chỉ đáng làm nếu user thực sự dùng RTK trong field. Với phone GPS 3m accuracy, stake-out không có ý nghĩa thực tế (không phân biệt được đỉnh CAD kế nhau).
+```
+
+---
+
+### Ước tính công sức tổng thể
+
+| Phase | Deliverable | Effort | Blocker |
+|---|---|---|---|
+| P17 | Overlay DXF cơ bản | 3-5 ngày | — |
+| P18 | Layer control | 1-2 ngày | Cần P17 xong |
+| P19 | Calibration + Snap | 2-3 ngày | Cần P17 xong (P18 optional) |
+| P20 | Stake-out RTK | 3-5 ngày | Cần P17-P19 xong |
+| **Total** | Full CAD workflow | **10-15 ngày** | Không |
+
+**Alternative đơn giản hơn**: nếu chỉ cần hiển thị bản vẽ (không snap, không stake-out), pre-convert DXF → GeoJSON offline bằng QGIS → dùng `L.geoJson()` — **1 ngày code**. Đánh đổi: user không tự upload được, phải qua QGIS.
+
+Chọn phù hợp workflow thực tế: P17 alone nếu chỉ để tham khảo trực quan, đủ P17+P19 nếu cần chính xác cao, làm hết P17-P20 nếu dùng RTK để stake-out thực sự.
+```
+
 
