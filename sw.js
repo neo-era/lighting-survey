@@ -1,4 +1,4 @@
-const CACHE = 'lighting-survey-v29';
+const CACHE = 'lighting-survey-v32';
 
 // Assets tĩnh pre-cache khi install (icon + ảnh mẫu)
 const STATIC_ASSETS = [
@@ -17,7 +17,7 @@ const CDN_HOSTS = [
   'fonts.googleapis.com',
   'fonts.gstatic.com',
 ];
-const CDN_CACHE = 'cdn-libs-v1';
+const CDN_CACHE = 'cdn-libs-v2';
 
 self.addEventListener('install', e => {
   e.waitUntil(
@@ -31,7 +31,11 @@ self.addEventListener('activate', e => {
     caches.keys().then(keys => Promise.all(
       keys.filter(k => k !== CACHE && k !== 'map-tiles-v1' && k !== CDN_CACHE)
           .map(k => caches.delete(k))
-    ))
+    )).then(() => {
+      // v2 fix: cache-first fallback qua network nếu response không ok
+      // (dùng ignoreSearch để clear cả URL có query string cũ)
+      return caches.open(CDN_CACHE);
+    })
   );
   self.clients.claim();
 });

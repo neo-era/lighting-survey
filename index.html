@@ -366,6 +366,67 @@
                       transition: background .15s; margin-bottom: 4px; }
         .ctrl-radio:hover { background: var(--surface-2); }
 
+        /* ── Collapsible sections trong ☰ panel ─────────────────────────── */
+        .ctrl-section[data-collapsible] .ctrl-title {
+            cursor: pointer;
+            user-select: none;
+            padding-right: 22px;
+            position: relative;
+            transition: color .15s;
+        }
+        .ctrl-section[data-collapsible] .ctrl-title:hover { color: #2563eb; }
+        .ctrl-section[data-collapsible] .ctrl-title::after {
+            content: '▾';
+            position: absolute;
+            right: 4px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #94a3b8;
+            font-size: 12px;
+            transition: transform .2s ease-out;
+        }
+        .ctrl-section[data-collapsible][data-collapsed="true"] .ctrl-title::after {
+            transform: translateY(-50%) rotate(-90deg);
+        }
+        .ctrl-section[data-collapsible][data-collapsed="true"] > *:not(.ctrl-title) {
+            display: none !important;
+        }
+        .ctrl-section[data-collapsible][data-collapsed="false"] > *:not(.ctrl-title) {
+            animation: sectionExpand .2s ease-out;
+        }
+        @keyframes sectionExpand {
+            from { opacity: 0; transform: translateY(-4px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        /* Compact spacing khi có nhiều collapsed sections */
+        .ctrl-section[data-collapsible][data-collapsed="true"] { margin-bottom: 4px !important; }
+        .ctrl-section[data-collapsible][data-collapsed="true"] + .ctrl-divider { margin: 2px -16px !important; }
+        /* Quick-access tabs row */
+        .ctrl-quick-tabs {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 6px;
+            margin-bottom: 8px;
+            padding: 6px 0;
+            border-bottom: 1px solid var(--border);
+        }
+        .ctrl-quick-tab {
+            padding: 8px 4px;
+            border-radius: 8px;
+            background: #f8fafc;
+            text-align: center;
+            font-size: 10px;
+            font-weight: 700;
+            color: #64748b;
+            cursor: pointer;
+            border: 1px solid transparent;
+            transition: all .15s;
+        }
+        .ctrl-quick-tab:hover { background: #eff6ff; color: #2563eb; }
+        .ctrl-quick-tab .qt-icon { font-size: 20px; display: block; margin-bottom: 2px; }
+        .ctrl-quick-tab.active { background: #dbeafe; color: #1e40af; border-color: #3b82f6; }
+
+
         /* P20 — Stake-out target marker pulse */
         @keyframes stakeoutPulse {
             0%, 100% { transform: scale(1); box-shadow: 0 0 12px rgba(220,38,38,.5); }
@@ -1165,9 +1226,18 @@
                         <div id="myNhiemVuList" style="max-height:220px;overflow-y:auto;"></div>
                     </div>
 
+                    <!-- Expand/Collapse quick actions -->
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;padding:6px 10px;background:#f8fafc;border-radius:8px;font-size:11px;">
+                        <span style="color:#64748b;font-weight:600;">💡 Click tiêu đề để thu/mở section</span>
+                        <div style="display:flex;gap:4px;">
+                            <button onclick="_expandAllSections()" style="background:#eff6ff;color:#2563eb;border:0;padding:3px 8px;border-radius:4px;cursor:pointer;font-size:10px;font-weight:700;">☰ Mở hết</button>
+                            <button onclick="_collapseAllSections()" style="background:#fef2f2;color:#dc2626;border:0;padding:3px 8px;border-radius:4px;cursor:pointer;font-size:10px;font-weight:700;">⚊ Thu hết</button>
+                        </div>
+                    </div>
+
                     <!-- Tìm kiếm -->
-                    <div class="ctrl-section">
-                        <div class="ctrl-title">Tìm kiếm</div>
+                    <div class="ctrl-section" id="sec-search">
+                        <div class="ctrl-title">🔍 Tìm kiếm</div>
                         <div style="display:flex;gap:6px;">
                             <input type="text" id="searchInput" class="ctrl-input"
                                    placeholder="Tên trụ, ID hoặc tọa độ lat,lon..."
@@ -1203,13 +1273,14 @@
                     <div class="ctrl-divider"></div>
 
                     <!-- Điều hướng -->
-                    <div class="ctrl-section">
-                        <div class="ctrl-title">Điều hướng</div>
+                    <div class="ctrl-section" id="sec-nav">
+                        <div class="ctrl-title">🗺 Điều hướng</div>
                         <select id="pages" class="ctrl-input" onchange="navigateToPage()" style="margin-bottom:0;">
                             <option value="" selected>-- Chọn trang --</option>
                             <option value="https://neo-era.github.io/camera/" id="pageOptCamera" style="display:none">Quản lý camera</option>
                             <option value="https://neo-era.github.io/dentat/dentat.html" id="pageOptDenTat" style="display:none">Quản lý đèn tắt/sự cố</option>
                             <option value="https://neo-era.github.io/lighting-survey/huongdan.html">Hướng dẫn sử dụng</option>
+                            <option value="tutorial.html">🎬 Video Tutorial</option>
                             <option value="lichsu.html" id="pageOptLichSu" style="display:none">Lịch sử thao tác</option>
                         </select>
                         <div id="currentDistrictLabel"
@@ -1222,9 +1293,9 @@
                     <div class="ctrl-divider"></div>
 
                     <!-- Tỷ lệ bản đồ -->
-                    <div class="ctrl-section">
+                    <div class="ctrl-section" id="sec-scale">
                         <div class="ctrl-title" style="display:flex;align-items:center;justify-content:space-between;">
-                            <span>Tỷ lệ bản đồ <span style="font-size:9px;font-weight:600;color:var(--text-muted);text-transform:none;letter-spacing:0;">(A3)</span></span>
+                            <span>📏 Tỷ lệ bản đồ <span style="font-size:9px;font-weight:600;color:var(--text-muted);text-transform:none;letter-spacing:0;">(A3)</span></span>
                             <span id="panelZoomDisplay" style="font-size:10px;font-weight:700;color:#2563eb;font-family:monospace;letter-spacing:0;text-transform:none;background:#eff6ff;border:1px solid #bfdbfe;border-radius:5px;padding:2px 8px;">Z 10</span>
                         </div>
                         <select id="mapScaleSelect" onchange="_applyMapScale(this.value)"
@@ -1251,9 +1322,9 @@
                     <div class="ctrl-divider"></div>
 
                     <!-- Xoay bản đồ (compass rotate 2D) -->
-                    <div class="ctrl-section">
+                    <div class="ctrl-section" id="sec-rotate">
                         <div class="ctrl-title" style="display:flex;align-items:center;justify-content:space-between;">
-                            <span>Xoay bản đồ</span>
+                            <span>🧭 Xoay bản đồ</span>
                             <span id="panelRotDisplay" style="font-size:10px;font-weight:700;color:#2563eb;font-family:monospace;letter-spacing:0;text-transform:none;background:#eff6ff;border:1px solid #bfdbfe;border-radius:5px;padding:2px 8px;">0°</span>
                         </div>
                         <div style="display:flex;align-items:center;gap:8px;">
@@ -1274,9 +1345,9 @@
                     <div class="ctrl-divider"></div>
 
                     <!-- Thiết bị GPS (Tính năng 11) — segmented horizontal -->
-                    <div class="ctrl-section">
+                    <div class="ctrl-section" id="sec-gps">
                         <div class="ctrl-title" style="display:flex;align-items:center;justify-content:space-between;">
-                            <span>Thiết bị GPS</span>
+                            <span>📱 Thiết bị GPS</span>
                             <a href="huongdan.html#s15" target="_blank" style="font-size:10px;font-weight:600;color:var(--primary);text-decoration:none;text-transform:none;letter-spacing:0;">📖 Hướng dẫn RTK</a>
                         </div>
                         <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
@@ -1312,8 +1383,8 @@
                     <div class="ctrl-divider"></div>
 
                     <!-- Đồng bộ -->
-                    <div class="ctrl-section">
-                        <div class="ctrl-title">Vị trí &amp; Đồng bộ</div>
+                    <div class="ctrl-section" id="sec-position">
+                        <div class="ctrl-title">🎯 Vị trí &amp; Đồng bộ</div>
                         <div class="ctrl-btn-grid">
                             <button id="editPositionBtn" onclick="toggleEditPositionMode()" class="ctrl-btn outline">
                                 <i class="fa fa-arrows"></i>
@@ -1341,8 +1412,8 @@
                     <div class="ctrl-divider"></div>
 
                     <!-- Xuất dữ liệu (4 nút trong 2x2 grid compact) -->
-                    <div class="ctrl-section">
-                        <div class="ctrl-title">Xuất dữ liệu</div>
+                    <div class="ctrl-section" id="sec-export">
+                        <div class="ctrl-title">📤 Xuất dữ liệu</div>
                         <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
                             <button onclick="showReportModal()" class="ctrl-btn primary" style="margin-bottom:0;font-size:12px;padding:8px;">
                                 <i class="fa fa-bar-chart"></i> Báo cáo
@@ -1370,8 +1441,8 @@
                     <div class="ctrl-divider"></div>
 
                     <!-- Bản vẽ CAD (P17 — DXF overlay) -->
-                    <div class="ctrl-section">
-                        <div class="ctrl-title">Bản vẽ CAD</div>
+                    <div class="ctrl-section" id="sec-cad">
+                        <div class="ctrl-title">📐 Bản vẽ CAD</div>
                         <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
                             <button onclick="_openCadUpload()" class="ctrl-btn primary" style="margin-bottom:0;font-size:12px;padding:8px;">
                                 📐 Tải DXF
@@ -1429,8 +1500,8 @@
                     <div class="ctrl-divider"></div>
 
                     <!-- GitHub (input + 2 nút compact) -->
-                    <div class="ctrl-section">
-                        <div class="ctrl-title">GitHub Sync</div>
+                    <div class="ctrl-section" id="sec-github">
+                        <div class="ctrl-title">🐙 GitHub Sync</div>
                         <input type="text" id="githubPathInput" class="ctrl-input" placeholder="data/khaosat.xlsx" style="margin-bottom:6px;padding:6px 10px;font-size:13px;">
                         <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
                             <button onclick="saveMarkerData()" class="ctrl-btn success" style="margin-bottom:0;font-size:12px;padding:8px;">
@@ -2974,6 +3045,70 @@
             _clearMapRotation();
         }
 
+        // ── Collapsible sections trong ☰ panel — tối ưu UX ──────────────
+        // High = mở sẵn, Low = thu gọn mặc định
+        const _SECTION_PRIORITY = {
+            'sec-search':    'high',
+            'sec-nav':       'high',
+            'sec-scale':     'med',
+            'sec-rotate':    'low',
+            'sec-gps':       'med',
+            'sec-position':  'med',
+            'sec-export':    'med',
+            'sec-cad':       'low',
+            'sec-github':    'low'
+        };
+
+        function _initCollapsibleSections() {
+            if (_initCollapsibleSections._done) return;
+            _initCollapsibleSections._done = true;
+            const stored = JSON.parse(localStorage.getItem('ctrl_collapsed_state') || '{}');
+            Object.entries(_SECTION_PRIORITY).forEach(([id, prio]) => {
+                const sec = document.getElementById(id);
+                if (!sec) return;
+                sec.setAttribute('data-collapsible', 'true');
+                // Nếu user đã set state → dùng, không thì default theo priority
+                const userState = stored[id];
+                const defaultCollapsed = (prio === 'low');
+                const collapsed = userState !== undefined ? userState : defaultCollapsed;
+                sec.setAttribute('data-collapsed', collapsed ? 'true' : 'false');
+                const title = sec.querySelector('.ctrl-title');
+                if (title && !title._collapsibleWired) {
+                    title._collapsibleWired = true;
+                    title.addEventListener('click', (e) => {
+                        // Không toggle nếu click vào link/input trong title
+                        if (e.target.tagName === 'A' || e.target.tagName === 'INPUT' ||
+                            e.target.tagName === 'SELECT' || e.target.closest('a')) return;
+                        const cur = sec.getAttribute('data-collapsed') === 'true';
+                        sec.setAttribute('data-collapsed', cur ? 'false' : 'true');
+                        _saveCollapsedState();
+                    });
+                }
+            });
+        }
+
+        function _saveCollapsedState() {
+            const state = {};
+            document.querySelectorAll('.ctrl-section[data-collapsible]').forEach(sec => {
+                state[sec.id] = sec.getAttribute('data-collapsed') === 'true';
+            });
+            try { localStorage.setItem('ctrl_collapsed_state', JSON.stringify(state)); } catch {}
+        }
+
+        function _expandAllSections() {
+            document.querySelectorAll('.ctrl-section[data-collapsible]').forEach(sec => {
+                sec.setAttribute('data-collapsed', 'false');
+            });
+            _saveCollapsedState();
+        }
+
+        function _collapseAllSections() {
+            document.querySelectorAll('.ctrl-section[data-collapsible]').forEach(sec => {
+                sec.setAttribute('data-collapsed', 'true');
+            });
+            _saveCollapsedState();
+        }
+
         // Wire slider "Xoay bản đồ" trong ☰ panel
         function _onRotSliderChange(v) {
             const angle = parseInt(v, 10) || 0;
@@ -4086,17 +4221,37 @@
         }
 
         // ── LAZY LOAD ExcelJS (chỉ tải khi user xuất Excel/báo cáo) ──────────
+        // Fallback 3 CDN — nếu SW cache 1 CDN lỗi, chuyển CDN khác.
         let _excelJsPromise = null;
         function _loadExcelJS() {
             if (typeof ExcelJS !== 'undefined') return Promise.resolve();
             if (_excelJsPromise) return _excelJsPromise;
-            _excelJsPromise = new Promise((resolve, reject) => {
-                const s = document.createElement('script');
-                s.src = 'https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.3.1/exceljs.min.js';
-                s.onload = resolve;
-                s.onerror = () => { _excelJsPromise = null; reject(new Error('Không tải được ExcelJS')); };
-                document.head.appendChild(s);
-            });
+            const cdns = [
+                'https://cdn.jsdelivr.net/npm/exceljs@4.3.1/dist/exceljs.min.js',
+                'https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.3.1/exceljs.min.js',
+                'https://unpkg.com/exceljs@4.3.1/dist/exceljs.min.js'
+            ];
+            _excelJsPromise = (async () => {
+                let lastErr = null;
+                for (const url of cdns) {
+                    try {
+                        await new Promise((resolve, reject) => {
+                            const s = document.createElement('script');
+                            s.src = url;
+                            s.onload = () => { console.log('[ExcelJS] loaded from', url); resolve(); };
+                            s.onerror = () => { s.remove(); reject(new Error('CDN failed: ' + url)); };
+                            setTimeout(() => reject(new Error('Timeout: ' + url)), 15000);
+                            document.head.appendChild(s);
+                        });
+                        if (typeof ExcelJS !== 'undefined') return;
+                    } catch (err) {
+                        console.warn('[ExcelJS] CDN failed:', url, err.message);
+                        lastErr = err;
+                    }
+                }
+                _excelJsPromise = null;
+                throw new Error('Không tải được ExcelJS từ mọi CDN: ' + (lastErr && lastErr.message || 'unknown'));
+            })();
             return _excelJsPromise;
         }
 
@@ -7921,7 +8076,8 @@
 
                     markerImageDataUrls = ['', '', ''];
                     const updMarker = addMarkerRowToMap(_editingRow);
-                    if (updMarker) { map.setView([updMarker.getLatLng().lat, updMarker.getLatLng().lng], map.getZoom()); updMarker.openPopup(); }
+                    if (updMarker) map.setView([updMarker.getLatLng().lat, updMarker.getLatLng().lng], map.getZoom());
+                    // Không tự mở popup sau khi lưu — user chủ động click nếu muốn xem
                     const rowRef = _editingRow; // lưu trước khi hideMarkerPopup() reset _editingRow = null
                     hideMarkerPopup();
                     syncRowToGAS(rowRef, { oldTenTru: oldName, imageSlots: _pendingImgSlots });
@@ -7937,7 +8093,8 @@
                     loadedData.push(newRow); newMarkerRows.push(newRow);
                     markerImageDataUrls = ['', '', ''];
                     const newMarker = addMarkerRowToMap(newRow);
-                    if (newMarker) { map.setView([newMarker.getLatLng().lat, newMarker.getLatLng().lng], 19); newMarker.openPopup(); }
+                    if (newMarker) map.setView([newMarker.getLatLng().lat, newMarker.getLatLng().lng], 19);
+                    // Không tự mở popup sau khi lưu — user chủ động click nếu muốn xem
                     hideMarkerPopup();
                     pendingNewMarker = true; addMarkerMode = true; pendingMarkerLocation = null;
                     updateAddMarkerButton();
@@ -10904,6 +11061,8 @@
                     const rotVal = ((_currentMapRotation % 360) + 360) % 360;
                     if (rotSl) rotSl.value = rotVal;
                     if (rotDisp) rotDisp.textContent = rotVal + '°';
+                    // ✨ Init collapsible sections
+                    _initCollapsibleSections();
                     if (typeof $!=='undefined' && $.fn.modal) {
                         $('#controlsModal').modal({ backdrop:true, keyboard:true, show:true });
                     } else {
