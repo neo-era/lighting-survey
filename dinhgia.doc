@@ -1,0 +1,318 @@
+<html xmlns:o="urn:schemas-microsoft-com:office:office"
+      xmlns:w="urn:schemas-microsoft-com:office:word"
+      xmlns="http://www.w3.org/TR/REC-html40">
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<title>Báo giá phần mềm Lighting Survey</title>
+<!--[if gte mso 9]>
+<xml>
+<w:WordDocument>
+<w:View>Print</w:View>
+<w:Zoom>100</w:Zoom>
+<w:DoNotOptimizeForBrowser/>
+</w:WordDocument>
+</xml>
+<![endif]-->
+<style>
+@page {
+    size: A4;
+    margin: 2cm 2cm 2cm 2cm;
+    mso-page-orientation: portrait;
+}
+body {
+    font-family: 'Times New Roman', serif;
+    font-size: 12pt;
+    line-height: 1.5;
+    color: #000;
+}
+h1 { font-size: 18pt; text-align: center; margin: 10pt 0; }
+h2 { font-size: 14pt; color: #1e40af; border-bottom: 2px solid #1e40af; padding-bottom: 3pt; margin-top: 18pt; }
+h3 { font-size: 12pt; color: #1e293b; margin-top: 12pt; }
+h4 { font-size: 12pt; color: #1e40af; margin-top: 10pt; }
+table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 8pt 0;
+    font-size: 11pt;
+}
+th, td {
+    border: 1px solid #666;
+    padding: 6pt 8pt;
+    vertical-align: top;
+}
+th {
+    background-color: #e0e7ff;
+    font-weight: bold;
+    text-align: left;
+}
+.center { text-align: center; }
+.right { text-align: right; }
+.bold { font-weight: bold; }
+.big { font-size: 14pt; font-weight: bold; color: #b91c1c; }
+.note {
+    background-color: #fef3c7;
+    border-left: 4pt solid #f59e0b;
+    padding: 8pt 12pt;
+    margin: 8pt 0;
+}
+.rec {
+    background-color: #dcfce7;
+    border-left: 4pt solid #16a34a;
+    padding: 8pt 12pt;
+    margin: 8pt 0;
+    font-weight: bold;
+}
+.header-block {
+    text-align: center;
+    margin-bottom: 20pt;
+}
+.header-block .cty { font-size: 13pt; font-weight: bold; }
+.header-block .slogan { font-style: italic; font-size: 10pt; color: #666; }
+.signature-block {
+    margin-top: 40pt;
+    width: 100%;
+}
+.signature-block td {
+    border: none;
+    text-align: center;
+    vertical-align: top;
+    width: 50%;
+    padding-top: 8pt;
+}
+.signature-block .role { font-weight: bold; }
+.signature-block .name-line { margin-top: 60pt; font-weight: bold; }
+ul { margin: 4pt 0; padding-left: 18pt; }
+li { margin-bottom: 3pt; }
+</style>
+</head>
+<body>
+
+<div class="header-block">
+<div class="cty">CÔNG TY / CÁ NHÂN CUNG CẤP</div>
+<div>Địa chỉ: __________________________________________</div>
+<div>MST: ______________ &nbsp;|&nbsp; Điện thoại: ______________ &nbsp;|&nbsp; Email: maivulam2020@gmail.com</div>
+</div>
+
+<div class="right">
+<em>Địa điểm, ngày ___ tháng ___ năm 2026</em>
+</div>
+
+<h1>BÁO GIÁ CUNG CẤP PHẦN MỀM<br/>KHẢO SÁT VÀ QUẢN LÝ HỆ THỐNG CHIẾU SÁNG CÔNG CỘNG</h1>
+
+<p><b>Số:</b> BG-LS-2026/___</p>
+
+<p><b>Kính gửi:</b> PHÒNG KINH TẾ VÀ HẠ TẦNG HUYỆN CẦN GIUỘC — TỈNH LONG AN</p>
+
+<p><b>V/v:</b> Chào giá cung cấp phần mềm <i>Lighting Survey</i> — hệ thống khảo sát và quản lý mạng lưới chiếu sáng công cộng, tích hợp bản đồ số, RTK GNSS và xuất bản vẽ kỹ thuật.</p>
+
+<p><b>Quy mô sử dụng:</b> 05 người dùng (01 quản trị + 04 khảo sát viên)</p>
+
+<hr/>
+
+<h2>I. GIỚI THIỆU PHẦN MỀM</h2>
+
+<p><b>Lighting Survey</b> là ứng dụng web (PWA) chuyên dụng cho công tác khảo sát, quản lý và báo cáo hệ thống chiếu sáng công cộng đô thị, được phát triển và Việt hóa hoàn toàn theo tiêu chuẩn Việt Nam (VN-2000).</p>
+
+<h3>Tính năng chính</h3>
+<ul>
+<li><b>Bản đồ số Google Maps</b> hiển thị vị trí toàn bộ trụ đèn / tủ điều khiển / cáp nguồn</li>
+<li><b>6 loại đối tượng</b>: Trụ STK, Trụ trang trí, Trụ HTLT, Trụ TTLT, Tủ chiếu sáng nổi, Tủ chiếu sáng ngầm</li>
+<li><b>Thêm/sửa/xóa</b> đối tượng trực tiếp trên bản đồ, đính kèm ảnh chụp hiện trường (tối đa 3 ảnh/trụ)</li>
+<li><b>Định vị GPS 2 chế độ</b>: Phone GPS (±3–10m) hoặc RTK Tersus Luka (±1–5cm) qua mock location</li>
+<li><b>Xuất bản vẽ kỹ thuật A3/A4</b> có tỉ lệ chuẩn (1:200 → 1:25000), title block đầy đủ chữ ký, đường cáp nét đứt, bảng ký hiệu và bảng thống kê</li>
+<li><b>Xuất báo cáo Excel</b> chi tiết + tổng hợp theo loại đối tượng</li>
+<li><b>Xuất file CAD (DXF)</b> với tọa độ VN-2000 chuẩn</li>
+<li><b>Overlay bản vẽ CAD quy hoạch</b> lên nền bản đồ (giống thiết bị RTK Nuwa)</li>
+<li><b>Đa địa bàn</b>: hỗ trợ 15 tỉnh/quận (bao gồm sẵn <b>Cần Giuộc</b>)</li>
+<li><b>Phân quyền</b> đa cấp: admin / user / user1 / demo</li>
+<li><b>Lịch sử thao tác</b>: ghi lại mọi thay đổi, phục vụ tra soát</li>
+<li><b>PWA offline</b>: cài đặt như app điện thoại, chạy được ngoài đồng không có sóng</li>
+<li><b>Đồng bộ tự động</b> lên Google Sheets + GitHub</li>
+</ul>
+
+<h3>Ưu điểm cạnh tranh</h3>
+<table>
+<tr><th>Tiêu chí</th><th>Lighting Survey</th><th>Phần mềm nước ngoài</th></tr>
+<tr><td>Giao diện tiếng Việt</td><td>100% Việt hóa</td><td>Thường tiếng Anh</td></tr>
+<tr><td>Hệ tọa độ VN-2000</td><td>Native, tự động chuyển đổi</td><td>Phải cấu hình phức tạp</td></tr>
+<tr><td>Chi phí vận hành</td><td><b>0 VND/tháng</b> (Google free tier)</td><td>$100–500 USD/tháng</td></tr>
+<tr><td>Hỗ trợ RTK GNSS</td><td>Có (Tersus Luka)</td><td>Có nhưng đắt</td></tr>
+<tr><td>Cài đặt điện thoại</td><td>PWA — 1 chạm</td><td>Cài app store</td></tr>
+</table>
+
+<hr/>
+
+<h2>II. CÁC GÓI DỊCH VỤ ĐỀ XUẤT</h2>
+
+<h3>🥉 Gói CƠ BẢN — 68.000.000 VND</h3>
+<p><i>Bàn giao + Setup + Training online tối thiểu</i></p>
+<ul>
+<li>Bàn giao toàn bộ mã nguồn phần mềm</li>
+<li>Setup 1 lần: Google Spreadsheet + Google Apps Script + GitHub Pages</li>
+<li>Cấu hình sẵn địa bàn Cần Giuộc (kinh tuyến 105.75°, VN-2000)</li>
+<li>Tích hợp bản vẽ quy hoạch xã Cần Giuộc lên nền bản đồ</li>
+<li>Tạo 05 tài khoản: 01 admin + 04 user (thêm/sửa/xóa/kéo marker)</li>
+<li>Cài đặt PWA lên 05 thiết bị của khách hàng</li>
+<li>Đào tạo online 02 giờ qua Zoom + tài liệu Việt hóa</li>
+<li>Hỗ trợ email/Zalo 01 tháng sau bàn giao</li>
+</ul>
+
+<h3>🥈 Gói CHUẨN — 92.000.000 VND &nbsp;⭐ KHUYẾN NGHỊ</h3>
+<p><i>Bao trọn gói vận hành + đào tạo tại địa bàn</i></p>
+<p>Bao gồm tất cả trong Gói Cơ Bản, cộng thêm:</p>
+<ul>
+<li>Onsite training 01 ngày tại Phòng KTHT Cần Giuộc cho 05 nhân sự</li>
+<li>Import dữ liệu ban đầu: số hóa 100–200 trụ đèn hiện hữu từ hồ sơ giấy</li>
+<li>Custom template báo cáo Excel theo mẫu của Phòng</li>
+<li>Tùy chỉnh khung tên bản vẽ in ra: logo huyện + tên Phòng + chức danh ký duyệt</li>
+<li>Cấu hình email liên hệ + số điện thoại + thông tin công ty vào PDF footer</li>
+<li>Hỗ trợ hotline/Zalo 06 tháng, phản hồi trong 24 giờ</li>
+<li>Bảo hành 06 tháng — sửa lỗi phát sinh miễn phí</li>
+</ul>
+
+<h3>🥇 Gói CAO CẤP — 148.000.000 VND</h3>
+<p><i>Đầy đủ + hỗ trợ RTK hardware + dài hạn</i></p>
+<p>Bao gồm tất cả trong Gói Chuẩn, cộng thêm:</p>
+<ul>
+<li>Onsite training 02 ngày + tài liệu quy trình vận hành in ấn</li>
+<li>Setup RTK Tersus Luka (nếu có hardware): Nuwa + NTRIP config + test đạt FIXED</li>
+<li>Tài khoản NTRIP miễn phí 12 tháng (VNGeodetic hoặc CORS Long An)</li>
+<li>Tùy chỉnh 3–5 tính năng theo yêu cầu</li>
+<li>Hỗ trợ hotline 12 tháng (điện thoại + email + Zalo)</li>
+<li>02 lượt onsite/năm</li>
+<li>Bảo hành 12 tháng</li>
+<li>Free upgrade tính năng mới trong 12 tháng</li>
+</ul>
+
+<hr/>
+
+<h2>III. BẢNG SO SÁNH GÓI</h2>
+
+<table>
+<tr>
+<th style="width:38%;">Hạng mục</th>
+<th class="center" style="width:20%;">Cơ Bản</th>
+<th class="center" style="width:20%;">Chuẩn ⭐</th>
+<th class="center" style="width:22%;">Cao Cấp</th>
+</tr>
+<tr><td>Bàn giao mã nguồn + setup</td><td class="center">✓</td><td class="center">✓</td><td class="center">✓</td></tr>
+<tr><td>Cấu hình 05 tài khoản</td><td class="center">✓</td><td class="center">✓</td><td class="center">✓</td></tr>
+<tr><td>Bản vẽ CAD Cần Giuộc</td><td class="center">✓</td><td class="center">✓</td><td class="center">✓</td></tr>
+<tr><td>Training</td><td class="center">Online 2h</td><td class="center">Onsite 1 ngày</td><td class="center">Onsite 2 ngày</td></tr>
+<tr><td>Import dữ liệu ban đầu</td><td class="center">—</td><td class="center">100–200 trụ</td><td class="center">Không giới hạn</td></tr>
+<tr><td>Custom template báo cáo</td><td class="center">—</td><td class="center">✓</td><td class="center">✓</td></tr>
+<tr><td>Khung tên PDF có logo</td><td class="center">—</td><td class="center">✓</td><td class="center">✓</td></tr>
+<tr><td>Setup RTK hardware</td><td class="center">—</td><td class="center">—</td><td class="center">✓</td></tr>
+<tr><td>NTRIP miễn phí</td><td class="center">—</td><td class="center">—</td><td class="center">12 tháng</td></tr>
+<tr><td>Custom tính năng</td><td class="center">—</td><td class="center">—</td><td class="center">3–5 mục</td></tr>
+<tr><td>Thời gian hỗ trợ</td><td class="center">1 tháng</td><td class="center">6 tháng</td><td class="center">12 tháng</td></tr>
+<tr><td>Thời gian bảo hành</td><td class="center">1 tháng</td><td class="center">6 tháng</td><td class="center">12 tháng</td></tr>
+<tr><th>TỔNG GIÁ (VNĐ, đã VAT)</th><th class="center">68.000.000</th><th class="center">92.000.000</th><th class="center">148.000.000</th></tr>
+</table>
+
+<hr/>
+
+<h2>IV. ĐIỀU KHOẢN THANH TOÁN</h2>
+
+<h4>Gói Cơ Bản &amp; Chuẩn (dưới 100 triệu — mua sắm trực tiếp theo Nghị định 24/2024)</h4>
+<table>
+<tr><th style="width:15%;">Đợt</th><th style="width:15%;">Tỷ lệ</th><th>Thời điểm</th></tr>
+<tr><td class="center">1</td><td class="center">30%</td><td>Sau khi ký hợp đồng</td></tr>
+<tr><td class="center">2</td><td class="center">60%</td><td>Sau khi nghiệm thu, bàn giao mã nguồn + tài khoản</td></tr>
+<tr><td class="center">3</td><td class="center">10%</td><td>Sau khi hết thời gian bảo hành</td></tr>
+</table>
+
+<h4>Gói Cao Cấp (trên 100 triệu — chào hàng cạnh tranh theo Luật Đấu Thầu)</h4>
+<table>
+<tr><th style="width:15%;">Đợt</th><th style="width:15%;">Tỷ lệ</th><th>Thời điểm</th></tr>
+<tr><td class="center">1</td><td class="center">30%</td><td>Sau khi ký hợp đồng</td></tr>
+<tr><td class="center">2</td><td class="center">40%</td><td>Sau nghiệm thu bước 1 (setup + training)</td></tr>
+<tr><td class="center">3</td><td class="center">20%</td><td>Sau 06 tháng vận hành ổn định</td></tr>
+<tr><td class="center">4</td><td class="center">10%</td><td>Sau khi hết thời gian bảo hành 12 tháng</td></tr>
+</table>
+
+<p><b>Hình thức thanh toán:</b> Chuyển khoản qua tài khoản ngân hàng của Bên cung cấp (thông tin ghi trên hợp đồng).</p>
+
+<hr/>
+
+<h2>V. TIẾN ĐỘ TRIỂN KHAI (Gói Chuẩn)</h2>
+
+<table>
+<tr><th style="width:15%;">Tuần</th><th>Công việc</th></tr>
+<tr><td class="center">Tuần 1</td><td>Ký hợp đồng, tạm ứng 30%, khảo sát yêu cầu chi tiết</td></tr>
+<tr><td class="center">Tuần 2</td><td>Setup Google Spreadsheet + GAS + GitHub Pages, tạo 05 tài khoản</td></tr>
+<tr><td class="center">Tuần 3</td><td>Custom template báo cáo Excel + khung tên PDF</td></tr>
+<tr><td class="center">Tuần 4</td><td>Import bản vẽ CAD quy hoạch + dữ liệu 100–200 trụ ban đầu</td></tr>
+<tr><td class="center">Tuần 5</td><td>Onsite training tại Phòng KTHT (01 ngày)</td></tr>
+<tr><td class="center">Tuần 6</td><td>Nghiệm thu, thanh toán đợt 2 (60%)</td></tr>
+<tr><td class="center">Tuần 7–30</td><td>Vận hành, hỗ trợ hotline 06 tháng</td></tr>
+</table>
+
+<p><b>Tổng thời gian triển khai:</b> 06 tuần (~1,5 tháng)</p>
+
+<hr/>
+
+<h2>VI. HẠNG MỤC KHÔNG BAO GỒM (Add-on)</h2>
+
+<table>
+<tr><th>Dịch vụ</th><th class="right">Đơn giá (VNĐ)</th></tr>
+<tr><td>Onsite bổ sung ngoài gói</td><td class="right">3.500.000/ngày</td></tr>
+<tr><td>Custom tính năng lớn (VD: tích hợp API thu phí, kết nối SCADA)</td><td class="right">Báo giá riêng</td></tr>
+<tr><td>Hardware RTK Tersus Luka</td><td class="right">82.000.000–95.000.000 (thị trường)</td></tr>
+<tr><td>Đào tạo bổ sung</td><td class="right">2.000.000/buổi</td></tr>
+<tr><td>Migration dữ liệu &gt; 500 điểm từ file cũ</td><td class="right">15.000.000–30.000.000</td></tr>
+</table>
+
+<hr/>
+
+<h2>VII. KHUYẾN NGHỊ</h2>
+
+<div class="rec">
+Đề xuất Phòng KTHT lựa chọn <b>Gói CHUẨN (92.000.000 VND)</b> vì các lý do:
+<ol>
+<li><b>Vẫn dưới 100 triệu</b> → thủ tục mua sắm trực tiếp, không cần đấu thầu → duyệt nhanh trong 1–2 tuần.</li>
+<li><b>Onsite training 01 ngày</b> đủ cho 05 người thành thạo vận hành.</li>
+<li><b>Hỗ trợ 06 tháng</b> đủ để vận hành 01 chu kỳ khảo sát đầu năm 2026.</li>
+<li><b>Custom template + khung tên PDF</b> — bắt buộc cho báo cáo hành chính có ký duyệt.</li>
+<li>Nếu sau 06 tháng phát sinh nhu cầu → nâng cấp lên Gói Cao Cấp với chi phí chênh <b>56.000.000 VND</b>.</li>
+</ol>
+</div>
+
+<div class="note">
+<b>Lưu ý:</b> Báo giá có hiệu lực trong 30 ngày kể từ ngày phát hành. Sau thời hạn này, giá có thể được điều chỉnh theo biến động thị trường và tỷ giá.
+</div>
+
+<hr/>
+
+<h2>VIII. THÔNG TIN LIÊN HỆ</h2>
+
+<table>
+<tr><td style="width:25%;"><b>Người liên hệ:</b></td><td>Mai Vũ Lâm</td></tr>
+<tr><td><b>Email:</b></td><td>maivulam2020@gmail.com</td></tr>
+<tr><td><b>Điện thoại:</b></td><td>__________________________________</td></tr>
+<tr><td><b>Zalo:</b></td><td>__________________________________</td></tr>
+<tr><td><b>Website / Demo:</b></td><td>https://neo-era.github.io/lighting-survey/</td></tr>
+</table>
+
+<table class="signature-block">
+<tr>
+<td>
+<div class="role">ĐẠI DIỆN BÊN MUA</div>
+<div><i>Phòng Kinh tế và Hạ tầng huyện Cần Giuộc</i></div>
+<div><i>(Ký, ghi rõ họ tên, đóng dấu)</i></div>
+<div class="name-line">......................................</div>
+</td>
+<td>
+<div class="role">ĐẠI DIỆN BÊN CUNG CẤP</div>
+<div><i>Ký, ghi rõ họ tên, đóng dấu</i></div>
+<div class="name-line">MAI VŨ LÂM</div>
+</td>
+</tr>
+</table>
+
+<p style="margin-top:30pt;font-size:9pt;color:#666;text-align:center;">
+<i>File này là bản dự thảo, chưa có đóng dấu công ty. Vui lòng liên hệ để nhận bản chính thức có mã số thuế và tài khoản ngân hàng.</i>
+</p>
+
+</body>
+</html>

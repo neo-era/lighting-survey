@@ -2397,3 +2397,370 @@ timeout ngắn (8s) + không hiện UI.
 - [x] (P13c) `startTrackingCurrentLocation` dùng GPS_MODES config ✅
 - [x] (P13c) huongdan.html section "Cấu hình GPS" (Phone + RTK Tersus) ✅ (đã thêm từ trước trong session)
 - [x] (P13c) Update bảng schema cột sheet trong tài liệu — 25 cột ✅
+
+---
+
+## Roadmap 2026 — Kế hoạch hoàn thiện product
+
+Phần mềm hiện tại đạt **~75% completeness** cho product khảo sát chiếu sáng chuyên nghiệp. Roadmap dưới đây bổ sung 5 nhóm tính năng còn thiếu, chia theo priority + effort. Mỗi tính năng có prompt implement riêng (P21-P42) trong `prompts.md`.
+
+### Overview nhóm tính năng
+
+| Nhóm | Tính năng | Trạng thái | Q ưu tiên |
+|---|---|:---:|:---:|
+| **Vận hành** (13) | Ticketing, Bảo trì, Task, Notification | ⏳ | Q1 |
+| **Analytics** (14) | Dashboard, Mẫu NN, Email report, Chữ ký số | ⏳ | Q1-Q2 |
+| **Tích hợp** (15) | Zalo OA, REST API, SCADA, SMS | ⏳ | Q2 |
+| **Field nâng cao** (16) | Voice, QR, Polygon, Đo | ⏳ | Q2-Q3 |
+| **DevOps** (17) | Tests, Sentry, CI, Modularize | ⏳ | Q1 |
+| **SaaS** (18) | CLI, Multi-tenant, Billing, Verticals | ⏳ | Q3-Q4 |
+
+Xem `prompts.md` § "Session Tính năng 13-18" cho bộ prompt implement từng phần.
+
+---
+
+## Tính năng 13 — Quản lý vận hành
+
+### 13.1 Ticketing sự cố (`SuCo`)
+
+**Mục tiêu**: Ghi nhận báo cáo hư hỏng/sự cố từ khảo sát viên hoặc dân, gán cho nhân sự xử lý, tracking đến khi đóng.
+
+**Sheet mới**: `SuCo` — 12 cột
+
+| Idx | Cột | Mô tả |
+|---|---|---|
+| 0 | ID | `SC_2026_001` tự sinh |
+| 1 | Marker ID | Liên kết với trụ (ID hoặc tên) |
+| 2 | Loại sự cố | `chay`/`toi`/`nghieng`/`gay`/`mat_cap`/`khac` |
+| 3 | Mức độ | `khẩn`/`cao`/`trung`/`thấp` |
+| 4 | Mô tả | Text |
+| 5 | Ảnh | URLs cách nhau `;` |
+| 6 | Người báo | Username |
+| 7 | Người xử lý | Username (nullable, admin gán) |
+| 8 | Trạng thái | `moi`/`dang_xu_ly`/`da_xu_ly`/`da_dong` |
+| 9 | Thời gian tạo | ISO timestamp |
+| 10 | Thời gian đóng | ISO timestamp |
+| 11 | Ghi chú xử lý | Text |
+
+**UI**: 
+- Nút 🚨 trên popup marker → mở form báo sự cố
+- Trang `/admin/su-co` list + filter + assign
+- Badge đỏ trên topbar khi có sự cố mới chưa xử lý
+- Marker hiển thị glow đỏ khi có sự cố `moi` hoặc `dang_xu_ly` chưa đóng
+
+**Prompt**: P21 trong `prompts.md`
+
+### 13.2 Lịch bảo trì (`BaoTri`)
+
+**Mục tiêu**: Lên lịch bảo trì định kỳ (thay bóng đèn, kiểm tra tủ điện, đo cáp), nhắc nhở khi đến hạn.
+
+**Sheet mới**: `BaoTri` — 10 cột
+
+| Idx | Cột |
+|---|---|
+| 0 | ID |
+| 1 | Marker ID |
+| 2 | Loại bảo trì (`thay_den`/`kiem_tra_tu`/`do_cap`/`ve_sinh`) |
+| 3 | Chu kỳ (tháng, VD 6, 12, 24) |
+| 4 | Lần cuối thực hiện |
+| 5 | Lần tới (auto tính) |
+| 6 | Nhân sự phụ trách |
+| 7 | Trạng thái (`chờ`/`đang`/`xong`/`trễ`) |
+| 8 | Ghi chú |
+| 9 | Ảnh sau bảo trì |
+
+**Logic**:
+- Cron mỗi ngày (GAS trigger): check `Lần tới < today + 7 ngày` → status `trễ` (nếu đã qua) hoặc `sắp đến` → notification
+- Dashboard hiển thị số bảo trì trễ/tuần này
+
+**Prompt**: P22
+
+### 13.3 Assign task + Workflow duyệt
+
+**Mục tiêu**: Admin gán task (khảo sát khu vực X) cho user, user submit → admin approve.
+
+**Sheet mới**: `NhiemVu` — 9 cột (ID, người giao, người nhận, mô tả, khu vực, deadline, status, kết quả, thời gian đóng)
+
+**Workflow**:
+```
+draft → assigned → in_progress → submitted → approved / rejected → closed
+```
+
+**UI**: Trang `/admin/nhiem-vu` (admin) + section "Nhiệm vụ của tôi" trong ☰ panel (user).
+
+**Prompt**: P23
+
+### 13.4 Notification Push
+
+**Mục tiêu**: Notify user khi có sự cố mới / task gán / bảo trì đến hạn.
+
+**Cơ chế**:
+- **Browser Push API** (chỉ Chrome/Edge, cần HTTPS)
+- **Fallback**: Poll GAS mỗi 60s, hiện toast trên UI
+- **Zalo OA** (integrated ở tính năng 15.1)
+
+Client subscribe → GAS lưu endpoint → khi có event trigger send.
+
+**Prompt**: P24
+
+---
+
+## Tính năng 14 — Analytics & Báo cáo chính thức
+
+### 14.1 Dashboard KPI
+
+**Mục tiêu**: Trang `/admin/dashboard` với biểu đồ và số liệu tổng quan.
+
+**5 KPI chính**:
+1. Tổng số trụ / tủ theo địa bàn (bar chart)
+2. Tỷ lệ trụ đã khảo sát vs chưa (donut)
+3. Số sự cố mới / đang xử lý / đã xong (bar 30 ngày)
+4. Số bảo trì đến hạn tuần này (số + badge)
+5. Hiệu suất khảo sát viên (bar: số marker tạo/tuần)
+
+**Thư viện**: Chart.js 4 (lazy load, ~150KB gzipped)
+
+**Prompt**: P25
+
+### 14.2 Báo cáo theo mẫu Nhà nước (TT06/2016, TCVN 7722)
+
+**Mục tiêu**: Xuất báo cáo Excel/PDF theo mẫu chuẩn cho phòng KTHT.
+
+**3 mẫu bắt buộc**:
+1. **Báo cáo tháng** — số trụ, số sự cố, số bảo trì thực hiện
+2. **Báo cáo tình hình chiếu sáng** (theo TT06/2016, Bộ Xây dựng)
+3. **Danh mục thiết bị** (theo TCVN 7722, TT39/2009)
+
+Mỗi mẫu có template Excel riêng với logo, header, footer chuẩn. Admin config được logo + tên phòng.
+
+**Prompt**: P26
+
+### 14.3 Email report định kỳ
+
+**Mục tiêu**: Tự động gửi báo cáo tháng qua email cho lãnh đạo.
+
+**Cơ chế**:
+- GAS trigger cron ngày mùng 1 mỗi tháng
+- Tạo báo cáo tháng trước → attach PDF vào email
+- Gửi qua Gmail API (dùng account chạy GAS)
+- Config danh sách người nhận trong sheet `Setting`
+
+**Prompt**: P27
+
+### 14.4 Chữ ký số (Digital Signature)
+
+**Mục tiêu**: Ký PDF bản vẽ bằng chứng thư số (USB token / cloud CA VN).
+
+**Cơ chế**:
+- Client tạo PDF → server-side sign qua library `pdf-lib` + private key
+- Support **VNPT-CA**, **BKAV-CA**, **FPT-CA** (3 CA lớn nhất VN)
+- Chứng thư gắn vào cuối PDF, verify được bằng Adobe Reader
+
+**Prompt**: P28
+
+---
+
+## Tính năng 15 — Tích hợp bên ngoài
+
+### 15.1 Zalo Official Account integration
+
+**Mục tiêu**: Dân báo sự cố qua Zalo OA → auto-tạo ticket trong app.
+
+**Cơ chế**:
+- Đăng ký **Zalo Official Account** (miễn phí cấp thấp)
+- User chat với OA → chọn "Báo sự cố" → gửi ảnh + vị trí
+- Webhook từ Zalo → GAS endpoint → tạo row trong `SuCo`
+- Admin nhận notification, xử lý → gửi phản hồi qua Zalo
+
+**Prompt**: P29
+
+### 15.2 REST API
+
+**Mục tiêu**: Cho hệ thống khác (SCADA, ERP) đọc/ghi dữ liệu.
+
+**Endpoints**:
+```
+GET  /api/markers?district=Quan1     → list
+POST /api/markers                     → create
+GET  /api/su-co?status=moi           → filter
+POST /api/reports/monthly            → trigger report
+```
+
+**Auth**: API key (Bearer token) sinh cho từng client, có rate limit.
+
+**Prompt**: P30
+
+### 15.3 SCADA/IoT read (optional, cho city)
+
+Chỉ implement nếu có khách hàng cụ thể yêu cầu — chi phí lớn, ROI thấp cho MVP.
+
+### 15.4 SMS gateway
+
+Notify qua SMS khi có sự cố khẩn cấp. Dùng **Twilio** (~$0.05/SMS) hoặc **Viettel SMS Brandname** (~250 VND/SMS).
+
+---
+
+## Tính năng 16 — Field Survey nâng cao
+
+### 16.1 Voice note trên marker
+
+**Mục tiêu**: Ghi âm ghi chú nhanh khi tay đang cầm thiết bị/RTK.
+
+**Cơ chế**:
+- MediaRecorder API → Blob → upload GDrive
+- Marker có cột mới `Ghi âm` (URL)
+- Popup có nút play
+
+**Prompt**: P31
+
+### 16.2 QR/Barcode scan tag trụ
+
+**Mục tiêu**: Nhiều trụ có dán tag QR/số hiệu → scan để nhập nhanh ID.
+
+**Thư viện**: `html5-qrcode` (~30KB, dùng camera phone)
+
+**Prompt**: P32
+
+### 16.3 Vẽ vùng polygon (khu vực chiếu sáng)
+
+**Mục tiêu**: Vẽ vùng polygon để đánh dấu "khu vực đã khảo sát" hoặc "cụm dân cư".
+
+**Cơ chế**: Leaflet Draw plugin → lưu GeoJSON vào sheet `Vung`
+
+**Prompt**: P33
+
+### 16.4 Đo khoảng cách trên bản đồ
+
+**Mục tiêu**: Click 2 điểm trên map → hiện khoảng cách + đường đi.
+
+**Prompt**: P34
+
+---
+
+## Tính năng 17 — DevOps & Quality
+
+### 17.1 Smoke tests với Playwright
+
+**Mục tiêu**: 5 test critical flow chạy tự động trên PR.
+
+**Tests**:
+1. Login admin + user
+2. Add marker mới với ảnh
+3. Sửa marker + sync
+4. Xuất PDF bản vẽ
+5. Switch district + load CAD
+
+**CI**: GitHub Actions chạy trên mỗi PR, block merge nếu fail.
+
+**Prompt**: P35
+
+### 17.2 Sentry monitoring
+
+**Mục tiêu**: Track lỗi production, giảm MTTR.
+
+**Setup**: 
+- Free tier 5k errors/tháng
+- Instrument client-side: `window.onerror` + `sw.js` fetch errors
+- Filter noise (adblock, extensions)
+
+**Prompt**: P36
+
+### 17.3 Progressive module extraction
+
+**Mục tiêu**: Split `index.html` 7000 dòng thành modules.
+
+**Thứ tự**:
+1. `lib/vn2000.js` — conversions
+2. `lib/utils.js` — haversine, format, sanitize
+3. `lib/dxf.js` — CAD helpers
+4. `modules/print.js` — PDF export
+5. `modules/excel.js` — Excel export
+6. `modules/cable.js` — sơ đồ cáp
+
+Dùng ES modules native (`<script type="module">`), không cần build tool ban đầu.
+
+**Prompt**: P37
+
+### 17.4 Unit tests với Vitest
+
+**Mục tiêu**: Coverage 80% pure functions.
+
+Tests cho:
+- `convertLatLonToVn2000` + reverse
+- `haversineM`
+- `_cleanMText` MTEXT parser
+- `normalizeTextSearchable`
+- `averageFixes` MAD filter
+
+**Prompt**: P38
+
+---
+
+## Tính năng 18 — SaaS Foundation
+
+### 18.1 CLI onboarding tool
+
+**Mục tiêu**: Setup khách hàng mới trong 5 phút thay 4-8 giờ.
+
+**Interface**:
+```bash
+npx lighting-survey-setup
+? Tên khách hàng: Cần Giuộc
+? Google account: admin@cangiuoc.gov.vn
+? Danh sách địa bàn: Chọn từ preset
+✓ Tạo Google Sheet + share với admin
+✓ Deploy GAS + set Script Properties
+✓ Tạo GitHub repo + Pages
+✓ Send email hướng dẫn user
+
+Thời gian: 3 phút
+```
+
+**Auth**: OAuth Google API (Sheets + Drive + Apps Script scope).
+
+**Prompt**: P39
+
+### 18.2 Multi-tenant Supabase
+
+**Mục tiêu**: Chuyển từ instance-per-customer sang single instance multi-tenant.
+
+**Schema**:
+```sql
+tenants (id, name, plan, created_at)
+users (id, tenant_id, email, role)
+markers (id, tenant_id, ...25 columns...)
+su_co (id, tenant_id, ...)
+```
+
+Row Level Security (RLS) enforce `tenant_id = auth.tenant_id`.
+
+**Prompt**: P40
+
+### 18.3 Billing với Payos
+
+**Mục tiêu**: Subscription tự động cho SaaS.
+
+**3 tier**:
+- **Free**: 2 user, 1 địa bàn, 200 marker
+- **Pro**: 500k VND/tháng, 10 user, unlimited marker
+- **Enterprise**: 1.5M/tháng, unlimited user, custom template
+
+**Payment**: Payos VN (1.5% + 500đ/giao dịch, hỗ trợ VNPay/Momo/thẻ).
+
+**Prompt**: P41
+
+### 18.4 Vertical expansion
+
+**Mục tiêu**: Mở rộng từ chiếu sáng sang các asset type khác.
+
+**Wave 1** (Q4 2026):
+- 🚦 Đèn tín hiệu giao thông
+- 📹 Camera an ninh
+
+**Wave 2** (Q1 2027):
+- 🚰 Trụ nước sinh hoạt
+- 📡 Trụ viễn thông
+
+Với architecture modular (17.3), thêm mỗi vertical chỉ cần config `TYPE_CONFIG` + template báo cáo.
+
+**Prompt**: P42

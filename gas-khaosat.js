@@ -35,6 +35,20 @@ const HEADER_SUCO = [
   'Trạng thái', 'Người xử lý', 'Ghi chú xử lý'
 ];
 
+// P22: Header sheet BaoTri (lịch bảo trì định kỳ) — 10 cột khớp client
+const HEADER_BAOTRI = [
+  'ID', 'Tên trụ', 'Loại bảo trì', 'Chu kỳ (tháng)',
+  'Lần cuối', 'Lần tới', 'Nhân sự phụ trách',
+  'Trạng thái', 'Ghi chú', 'Ảnh sau bảo trì'
+];
+
+// P23: Header sheet NhiemVu (giao nhiệm vụ) — 9 cột khớp client
+const HEADER_NHIEMVU = [
+  'ID', 'Người giao', 'Người nhận', 'Mô tả',
+  'Khu vực', 'Deadline', 'Trạng thái',
+  'Kết quả', 'Thời gian đóng'
+];
+
 // Map key payload JS → tên cột trong Sheet
 const FIELD_MAP = {
   'id':          'ID',
@@ -388,6 +402,17 @@ function doPost(e) {
     if (data.action === 'report_suco')  return handleReportSuCo(data);
     if (data.action === 'update_suco')  return handleUpdateSuCo(data);
 
+    // P22: Lịch bảo trì
+    if (data.action === 'create_bao_tri')   return handleCreateBaoTri(data);
+    if (data.action === 'complete_bao_tri') return handleCompleteBaoTri(data);
+
+    // P23: Nhiệm vụ
+    if (data.action === 'create_nhiem_vu')        return handleCreateNhiemVu(data);
+    if (data.action === 'update_nhiem_vu_status') return handleUpdateNhiemVuStatus(data);
+
+    // P27: Email báo cáo định kỳ (test manual)
+    if (data.action === 'send_monthly_report') return handleSendMonthlyReport(data);
+
     return jsonResponse({ status: 'error', message: 'action không hợp lệ: ' + data.action });
   } catch (err) {
     return jsonResponse({ status: 'error', message: err.message });
@@ -507,8 +532,11 @@ function buildFieldValues(data) {
 // ── HEALTH CHECK ───────────────────────────────────────────────────────────
 
 function doGet(e) {
+  var params = (e && e.parameter) || {};
+  // P30: REST API endpoint — nếu request có api_key thì route qua handleApiCall
+  if (params.api_key) return handleApiCall(params);
   ensureHeader(getSheet());
-  return jsonResponse({ status: 'ok', message: 'KhaoSat GAS v2 — login ready, header ensured' });
+  return jsonResponse({ status: 'ok', message: 'KhaoSat GAS v3 — login + API ready' });
 }
 
 // ── CHUẨN HÓA TỌA ĐỘ ─────────────────────────────────────────────────────
@@ -1055,6 +1083,883 @@ function handleUpdateSuCo(data) {
     }
   }
   return jsonResponse({ status: 'error', message: 'Không tìm thấy sự cố ID: ' + data.id });
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// ── P22: LỊCH BẢO TRÌ (sheet BaoTri) ────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════
+
+function ensureHeaderBaoTri(sheet) {
+  var lastCol = sheet.getLastColumn();
+  if (lastCol === 0 || sheet.getLastRow() === 0) {
+    sheet.appendRow(HEADER_BAOTRI);
+    sheet.getRange(1, 1, 1, HEADER_BAOTRI.length)
+      .setFontWeight('bold').setBackground('#dbeafe').setHorizontalAlignment('center');
+    sheet.setFrozenRows(1);
+    return;
+  }
+  var existing = sheet.getRange(1, 1, 1, lastCol).getValues()[0].map(function(h){ return String(h); });
+  HEADER_BAOTRI.forEach(function(h) {
+    if (existing.indexOf(h) === -1) {
+      var col = sheet.getLastColumn() + 1;
+      sheet.getRange(1, col).setValue(h).setFontWeight('bold').setBackground('#dbeafe');
+    }
+  });
+}
+
+function getBaoTriSheet() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('BaoTri');
+  if (!sheet) sheet = ss.insertSheet('BaoTri');
+  ensureHeaderBaoTri(sheet);
+  return sheet;
+}
+
+/**
+ * Chạy 1 lần từ Apps Script Editor để khởi tạo sheet BaoTri với header.
+ * Sau khi chạy: File → Share → Publish to web → chọn sheet BaoTri → CSV → Publish
+ *               → copy URL → paste vào BAOTRI_CSV_URL trong index.html
+ * Cách chạy: chọn hàm này → nhấn Run (▶)
+ */
+function initBaoTriSheet() {
+  var sheet = getBaoTriSheet();
+  Logger.log('✓ Sheet BaoTri đã sẵn sàng với ' + HEADER_BAOTRI.length + ' cột');
+  Logger.log('  URL sheet: ' + SpreadsheetApp.getActiveSpreadsheet().getUrl() + '#gid=' + sheet.getSheetId());
+  Logger.log('  Bước tiếp: File → Share → Publish to web → chọn BaoTri → CSV → copy URL → paste vào BAOTRI_CSV_URL trong index.html');
+}
+
+// Cộng N tháng vào 1 ISO date (YYYY-MM-DD) → trả về YYYY-MM-DD
+function _addMonthsIso(isoDate, months) {
+  var d = new Date(isoDate);
+  d.setMonth(d.getMonth() + parseInt(months, 10));
+  var y = d.getFullYear(),
+      m = String(d.getMonth() + 1).padStart(2, '0'),
+      day = String(d.getDate()).padStart(2, '0');
+  return y + '-' + m + '-' + day;
+}
+
+function handleCreateBaoTri(data) {
+  try {
+    var sheet = getBaoTriSheet();
+    var year = new Date().getFullYear();
+    // Sinh ID: BT_YYYY_NNN (auto-increment theo số hàng)
+    var nextNum = String(sheet.getLastRow()).padStart(3, '0');
+    var id = 'BT_' + year + '_' + nextNum;
+
+    // Nếu lanToi client chưa gửi hoặc rỗng → tự tính từ lanCuoi + chuKy
+    var lanToi = data.lanToi;
+    if (!lanToi && data.lanCuoi && data.chuKy) {
+      lanToi = _addMonthsIso(data.lanCuoi, data.chuKy);
+    }
+
+    sheet.appendRow([
+      id,
+      data.tenTru      || '',
+      data.loai        || '',
+      data.chuKy       || 12,
+      data.lanCuoi     || '',
+      lanToi           || '',
+      data.phuTrach    || '',
+      data.trangThai   || 'cho',
+      data.ghiChu      || '',
+      ''  // Ảnh sau bảo trì — chưa có khi tạo
+    ]);
+    return jsonResponse({ status: 'ok', id: id, lanToi: lanToi });
+  } catch (err) {
+    return jsonResponse({ status: 'error', message: 'BaoTri create lỗi: ' + err.message });
+  }
+}
+
+function handleCompleteBaoTri(data) {
+  try {
+    var sheet = getBaoTriSheet();
+    var lastRow = sheet.getLastRow();
+    if (lastRow < 2) return jsonResponse({ status: 'error', message: 'Sheet BaoTri trống' });
+
+    var idCol = 0, chuKyCol = 3, lanCuoiCol = 4, lanToiCol = 5, statusCol = 7;
+    var allData = sheet.getRange(2, 1, lastRow - 1, HEADER_BAOTRI.length).getValues();
+
+    for (var i = 0; i < allData.length; i++) {
+      if (String(allData[i][idCol]) !== String(data.id)) continue;
+      var rowNum = i + 2;
+      var lanCuoi = data.lanCuoi || new Date().toISOString().slice(0, 10);
+      var chuKy = parseInt(allData[i][chuKyCol]) || 12;
+      var nextLanToi = _addMonthsIso(lanCuoi, chuKy);
+
+      sheet.getRange(rowNum, lanCuoiCol + 1).setValue(lanCuoi);
+      sheet.getRange(rowNum, lanToiCol + 1).setValue(nextLanToi);
+      // Trạng thái reset về "cho" cho chu kỳ tiếp theo (KHÔNG dùng 'hoan_thanh'
+      // để lịch tiếp tục xuất hiện trong list bảo trì định kỳ)
+      sheet.getRange(rowNum, statusCol + 1).setValue('cho');
+
+      // Log lịch sử (optional, nếu có nguoiHoanThanh)
+      if (data.nguoiHoanThanh) {
+        try {
+          var ss = SpreadsheetApp.getActiveSpreadsheet();
+          var logSheet = ss.getSheetByName('LichSu');
+          if (logSheet) {
+            logSheet.appendRow([
+              data.thoiGianHoanThanh || new Date().toISOString(),
+              data.nguoiHoanThanh,
+              'complete_bao_tri',
+              String(data.id),
+              String(allData[i][1] || ''),  // Tên trụ
+              'Bảo trì hoàn thành, chu kỳ tiếp: ' + nextLanToi
+            ]);
+          }
+        } catch (_) {}
+      }
+      return jsonResponse({ status: 'ok', nextLanToi: nextLanToi });
+    }
+    return jsonResponse({ status: 'error', message: 'Không tìm thấy BaoTri ID: ' + data.id });
+  } catch (err) {
+    return jsonResponse({ status: 'error', message: 'BaoTri complete lỗi: ' + err.message });
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// ── P23: NHIỆM VỤ (sheet NhiemVu) ───────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════
+
+function ensureHeaderNhiemVu(sheet) {
+  var lastCol = sheet.getLastColumn();
+  if (lastCol === 0 || sheet.getLastRow() === 0) {
+    sheet.appendRow(HEADER_NHIEMVU);
+    sheet.getRange(1, 1, 1, HEADER_NHIEMVU.length)
+      .setFontWeight('bold').setBackground('#ede9fe').setHorizontalAlignment('center');
+    sheet.setFrozenRows(1);
+    return;
+  }
+  var existing = sheet.getRange(1, 1, 1, lastCol).getValues()[0].map(function(h){ return String(h); });
+  HEADER_NHIEMVU.forEach(function(h) {
+    if (existing.indexOf(h) === -1) {
+      var col = sheet.getLastColumn() + 1;
+      sheet.getRange(1, col).setValue(h).setFontWeight('bold').setBackground('#ede9fe');
+    }
+  });
+}
+
+function getNhiemVuSheet() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('NhiemVu');
+  if (!sheet) sheet = ss.insertSheet('NhiemVu');
+  ensureHeaderNhiemVu(sheet);
+  return sheet;
+}
+
+/**
+ * Chạy 1 lần từ Apps Script Editor để khởi tạo sheet NhiemVu với header.
+ * Sau khi chạy: publish CSV → paste URL vào NHIEMVU_CSV_URL trong index.html
+ */
+function initNhiemVuSheet() {
+  var sheet = getNhiemVuSheet();
+  Logger.log('✓ Sheet NhiemVu đã sẵn sàng với ' + HEADER_NHIEMVU.length + ' cột');
+  Logger.log('  URL sheet: ' + SpreadsheetApp.getActiveSpreadsheet().getUrl() + '#gid=' + sheet.getSheetId());
+  Logger.log('  Bước tiếp: File → Share → Publish to web → chọn NhiemVu → CSV → copy URL → paste vào NHIEMVU_CSV_URL trong index.html');
+}
+
+/**
+ * Chạy 1 lần để khởi tạo CẢ 2 sheet BaoTri + NhiemVu + SuCo cùng lúc.
+ * Sau khi chạy → publish 3 CSV URL → paste vào 3 constant trong index.html.
+ */
+function initAllOperationSheets() {
+  Logger.log('═══ Khởi tạo sheet vận hành ═══');
+  try { getBaoTriSheet(); Logger.log('✓ BaoTri (P22)'); } catch (e) { Logger.log('❌ BaoTri: ' + e.message); }
+  try { getNhiemVuSheet(); Logger.log('✓ NhiemVu (P23)'); } catch (e) { Logger.log('❌ NhiemVu: ' + e.message); }
+  // SuCo đã tạo tự động qua handleReportSuCo, nhưng init trước cho gọn
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var sc = ss.getSheetByName('SuCo');
+    if (!sc) { sc = ss.insertSheet('SuCo'); }
+    ensureHeaderSuCo(sc);
+    Logger.log('✓ SuCo (P21)');
+  } catch (e) { Logger.log('❌ SuCo: ' + e.message); }
+  Logger.log('═══════════════════════════════');
+  Logger.log('Hoàn tất. Tiếp theo: publish 3 CSV → paste vào SUCO_CSV_URL / BAOTRI_CSV_URL / NHIEMVU_CSV_URL trong index.html');
+}
+
+// Validate status transition: from → to (chỉ cho phép các bước hợp lệ)
+function _validateNvTransition(fromStatus, toStatus) {
+  var allowed = {
+    'draft':       ['assigned'],
+    'assigned':    ['in_progress'],
+    'in_progress': ['submitted'],
+    'submitted':   ['approved', 'rejected'],
+    'approved':    ['closed'],
+    'rejected':    ['submitted', 'closed'],  // Cho phép nộp lại HOẶC đóng
+    'closed':      []
+  };
+  var validTargets = allowed[fromStatus] || [];
+  return validTargets.indexOf(toStatus) !== -1;
+}
+
+function handleCreateNhiemVu(data) {
+  try {
+    var sheet = getNhiemVuSheet();
+    var year = new Date().getFullYear();
+    var nextNum = String(sheet.getLastRow()).padStart(3, '0');
+    var id = 'NV_' + year + '_' + nextNum;
+
+    sheet.appendRow([
+      id,
+      data.nguoiGiao   || '',
+      data.nguoiNhan   || '',
+      data.moTa        || '',
+      data.khuVuc      || '',
+      data.deadline    || '',
+      data.status      || 'assigned',
+      '',   // Kết quả — chưa có khi tạo
+      ''    // Thời gian đóng
+    ]);
+
+    // Log
+    try {
+      var ss = SpreadsheetApp.getActiveSpreadsheet();
+      var logSheet = ss.getSheetByName('LichSu');
+      if (logSheet) {
+        logSheet.appendRow([
+          data.thoiGianTao || new Date().toISOString(),
+          data.nguoiGiao || '',
+          'create_nhiem_vu',
+          id,
+          data.nguoiNhan || '',
+          'Giao cho: ' + (data.nguoiNhan || '') + ' · Deadline: ' + (data.deadline || '')
+        ]);
+      }
+    } catch (_) {}
+
+    return jsonResponse({ status: 'ok', id: id });
+  } catch (err) {
+    return jsonResponse({ status: 'error', message: 'NhiemVu create lỗi: ' + err.message });
+  }
+}
+
+function handleUpdateNhiemVuStatus(data) {
+  try {
+    var sheet = getNhiemVuSheet();
+    var lastRow = sheet.getLastRow();
+    if (lastRow < 2) return jsonResponse({ status: 'error', message: 'Sheet NhiemVu trống' });
+
+    var idCol = 0, statusCol = 6, ketQuaCol = 7, closeTimeCol = 8;
+    var allData = sheet.getRange(2, 1, lastRow - 1, HEADER_NHIEMVU.length).getValues();
+
+    for (var i = 0; i < allData.length; i++) {
+      if (String(allData[i][idCol]) !== String(data.id)) continue;
+      var rowNum = i + 2;
+      var currentStatus = String(allData[i][statusCol] || '').trim();
+      var newStatus = String(data.newStatus || '').trim();
+
+      // Validate transition (bảo mật server-side — client không được bypass)
+      if (!_validateNvTransition(currentStatus, newStatus)) {
+        return jsonResponse({
+          status: 'error',
+          message: 'Không thể chuyển từ "' + currentStatus + '" sang "' + newStatus + '"'
+        });
+      }
+
+      // Update status
+      sheet.getRange(rowNum, statusCol + 1).setValue(newStatus);
+
+      // Update kết quả nếu client gửi (khi user submit hoặc admin duyệt/từ chối)
+      if (data.ketQua !== undefined && data.ketQua !== '') {
+        sheet.getRange(rowNum, ketQuaCol + 1).setValue(data.ketQua);
+      }
+      // Ghi chú duyệt (nếu có) — append vào kết quả với dấu ngăn cách
+      if (data.ghiChuDuyet !== undefined && data.ghiChuDuyet !== '') {
+        var currentKQ = String(allData[i][ketQuaCol] || '');
+        var newKQ = currentKQ +
+          (currentKQ ? '\n' : '') +
+          '[' + newStatus + ' by ' + (data.nguoiDuyet || '?') + '] ' + data.ghiChuDuyet;
+        sheet.getRange(rowNum, ketQuaCol + 1).setValue(newKQ);
+      }
+      // Thời gian đóng — chỉ set khi status = closed
+      if (newStatus === 'closed') {
+        sheet.getRange(rowNum, closeTimeCol + 1).setValue(data.thoiGian || new Date().toISOString());
+      }
+
+      // Log
+      try {
+        var ss = SpreadsheetApp.getActiveSpreadsheet();
+        var logSheet = ss.getSheetByName('LichSu');
+        if (logSheet) {
+          logSheet.appendRow([
+            data.thoiGian || new Date().toISOString(),
+            data.nguoiDuyet || allData[i][2] || '',
+            'update_nhiem_vu',
+            String(data.id),
+            String(allData[i][2] || ''),  // Người nhận
+            currentStatus + ' → ' + newStatus
+          ]);
+        }
+      } catch (_) {}
+
+      return jsonResponse({ status: 'ok', newStatus: newStatus });
+    }
+    return jsonResponse({ status: 'error', message: 'Không tìm thấy NhiemVu ID: ' + data.id });
+  } catch (err) {
+    return jsonResponse({ status: 'error', message: 'NhiemVu update lỗi: ' + err.message });
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// ── P27: EMAIL REPORT ĐỊNH KỲ (cron mỗi tháng) ─────────────────────────
+// ══════════════════════════════════════════════════════════════════════════
+
+const HEADER_SETTING = ['Key', 'Value', 'Ghi chú'];
+
+const DEFAULT_SETTINGS = {
+  'email_recipients':  { value: 'admin@example.com,truongphong@example.com', note: 'Email nhận báo cáo (cách nhau bằng dấu phẩy)' },
+  'email_enabled':     { value: 'true',                                       note: 'true = bật gửi tự động, false = tắt' },
+  'donvi_name':        { value: 'Huyện Cần Giuộc',                            note: 'Tên đơn vị hành chính' },
+  'phong_name':        { value: 'Phòng Kinh tế và Hạ tầng',                  note: 'Tên phòng ban' },
+  'nguoi_ky':          { value: 'Nguyễn Văn A',                              note: 'Tên người ký duyệt' },
+  'chuc_vu':           { value: 'Trưởng phòng',                              note: 'Chức vụ người ký' }
+};
+
+function initSettingSheet() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('Setting');
+  if (!sheet) {
+    sheet = ss.insertSheet('Setting');
+    sheet.appendRow(HEADER_SETTING);
+    sheet.getRange(1, 1, 1, HEADER_SETTING.length)
+      .setFontWeight('bold').setBackground('#fbbf24').setHorizontalAlignment('center');
+    sheet.setFrozenRows(1);
+  }
+  // Bổ sung default nếu key chưa có
+  var lastRow = sheet.getLastRow();
+  var existing = new Set();
+  if (lastRow >= 2) {
+    var data = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
+    data.forEach(function(r) { if (r[0]) existing.add(String(r[0]).trim()); });
+  }
+  Object.keys(DEFAULT_SETTINGS).forEach(function(key) {
+    if (!existing.has(key)) {
+      var cfg = DEFAULT_SETTINGS[key];
+      sheet.appendRow([key, cfg.value, cfg.note]);
+    }
+  });
+  sheet.autoResizeColumns(1, 3);
+  return sheet;
+}
+
+function getSetting(key) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('Setting');
+  if (!sheet || sheet.getLastRow() < 2) {
+    var def = DEFAULT_SETTINGS[key];
+    return def ? def.value : '';
+  }
+  var data = sheet.getRange(2, 1, sheet.getLastRow() - 1, 2).getValues();
+  for (var i = 0; i < data.length; i++) {
+    if (String(data[i][0]).trim() === key) return String(data[i][1] || '').trim();
+  }
+  var d = DEFAULT_SETTINGS[key];
+  return d ? d.value : '';
+}
+
+// Aggregate data từ tất cả sheet cho báo cáo tháng
+function _aggregateMonthlyReport(from, to) {
+  var fromDate = new Date(from);
+  var toDate = new Date(to);
+  toDate.setHours(23, 59, 59);
+
+  var districts = ['DanhSachTru', 'Quan1', 'Quan3', 'Quan5', 'Quan8', 'Quan10', 'Quan11',
+                    'PhuNhuan', 'BinhThanh', 'TanBinh', 'TanPhu',
+                    'BauBang', 'TruVanTho', 'BenCat', 'CanGiuoc'];
+
+  var totalMarkers = 0, totalWithImage = 0;
+  var byDistrict = [];
+  var byType = {};
+
+  districts.forEach(function(d) {
+    try {
+      var sheet = getSheet(d);
+      if (!sheet || sheet.getLastRow() < 2) return;
+      var lastCol = Math.min(sheet.getLastColumn(), 22);
+      var data = sheet.getRange(2, 1, sheet.getLastRow() - 1, lastCol).getValues();
+      var districtCount = 0, districtWithImage = 0;
+      data.forEach(function(r) {
+        if (!r[1]) return;
+        totalMarkers++; districtCount++;
+        if (r[12] && String(r[12]).trim()) { totalWithImage++; districtWithImage++; }
+        var type = parseInt(r[6]) || 0;
+        byType[type] = (byType[type] || 0) + 1;
+      });
+      if (districtCount > 0) byDistrict.push({
+        name: d, count: districtCount, withImage: districtWithImage
+      });
+    } catch (_) {}
+  });
+
+  // SuCo trong kỳ (Thời gian phát sinh trong from-to)
+  var suCoInMonth = [];
+  try {
+    var suCoSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('SuCo');
+    if (suCoSheet && suCoSheet.getLastRow() >= 2) {
+      var suCoData = suCoSheet.getRange(2, 1, suCoSheet.getLastRow() - 1, 17).getValues();
+      suCoData.forEach(function(r) {
+        var tg = new Date(r[1]);
+        if (isNaN(tg.getTime())) return;
+        if (tg < fromDate || tg > toDate) return;
+        suCoInMonth.push({
+          id: r[0], time: String(r[1]).slice(0, 16).replace('T', ' '),
+          tenTru: r[2], loai: r[9], mucDo: r[10], trangThai: r[14]
+        });
+      });
+    }
+  } catch (_) {}
+
+  // BaoTri hoàn thành trong kỳ (Lần cuối trong from-to)
+  var baoTriInMonth = [];
+  try {
+    var btSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('BaoTri');
+    if (btSheet && btSheet.getLastRow() >= 2) {
+      var btData = btSheet.getRange(2, 1, btSheet.getLastRow() - 1, 10).getValues();
+      btData.forEach(function(r) {
+        var lc = new Date(r[4]);
+        if (isNaN(lc.getTime())) return;
+        if (lc < fromDate || lc > toDate) return;
+        baoTriInMonth.push({
+          id: r[0], tenTru: r[1], loai: r[2],
+          chuKy: r[3], lanCuoi: r[4], phuTrach: r[6]
+        });
+      });
+    }
+  } catch (_) {}
+
+  // NhiemVu closed/approved trong kỳ
+  var nhiemVuInMonth = [];
+  try {
+    var nvSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('NhiemVu');
+    if (nvSheet && nvSheet.getLastRow() >= 2) {
+      var nvData = nvSheet.getRange(2, 1, nvSheet.getLastRow() - 1, 9).getValues();
+      nvData.forEach(function(r) {
+        var status = String(r[6] || '');
+        if (status !== 'closed' && status !== 'approved') return;
+        var closeTime = r[8] ? new Date(r[8]) : null;
+        if (!closeTime || isNaN(closeTime.getTime())) return;
+        if (closeTime < fromDate || closeTime > toDate) return;
+        nhiemVuInMonth.push({
+          id: r[0], nguoiNhan: r[2], moTa: r[3], status: status
+        });
+      });
+    }
+  } catch (_) {}
+
+  return {
+    totalMarkers: totalMarkers,
+    totalWithImage: totalWithImage,
+    byDistrict: byDistrict,
+    byType: byType,
+    suCo: suCoInMonth,
+    baoTri: baoTriInMonth,
+    nhiemVu: nhiemVuInMonth
+  };
+}
+
+// Build HTML email body
+function _buildReportHtmlEmail(report, from, to, monthLabel) {
+  var donVi = getSetting('donvi_name');
+  var phong = getSetting('phong_name');
+  var nguoi = getSetting('nguoi_ky');
+  var chucVu = getSetting('chuc_vu');
+  var coveragePct = report.totalMarkers > 0
+    ? ((report.totalWithImage / report.totalMarkers) * 100).toFixed(1) : '0';
+
+  var html = '<div style="font-family:Arial,sans-serif;max-width:800px;margin:0 auto;padding:20px;color:#1e293b;">';
+  html += '<div style="text-align:center;margin-bottom:8px;font-weight:bold;font-size:13px;">' + donVi.toUpperCase() + '</div>';
+  html += '<div style="text-align:center;margin-bottom:20px;font-weight:bold;font-size:13px;">' + phong.toUpperCase() + '</div>';
+  html += '<h2 style="text-align:center;color:#1e40af;margin:0;">BÁO CÁO CHIẾU SÁNG CÔNG CỘNG</h2>';
+  html += '<div style="text-align:center;font-style:italic;color:#64748b;margin:6px 0 24px;">Kỳ báo cáo: ' + from + ' → ' + to + '</div>';
+
+  // 4 tile số
+  html += '<table width="100%" cellpadding="0" cellspacing="8" style="border-collapse:separate;margin-bottom:20px;"><tr>';
+  html += _htmlTile('💡', report.totalMarkers, 'Tổng trụ / tủ', '#2563eb');
+  html += _htmlTile('📷', report.totalWithImage, 'Có ảnh (' + coveragePct + '%)', '#10b981');
+  html += _htmlTile('⚠️', report.suCo.length, 'Sự cố phát sinh', '#dc2626');
+  html += _htmlTile('🔧', report.baoTri.length, 'Bảo trì thực hiện', '#f59e0b');
+  html += '</tr></table>';
+
+  // Bảng theo địa bàn
+  html += '<h3 style="color:#1e40af;border-bottom:2px solid #1e40af;padding-bottom:4px;">1. Số lượng theo địa bàn</h3>';
+  html += '<table width="100%" style="border-collapse:collapse;font-size:13px;"><thead><tr style="background:#e0e7ff;">';
+  ['Địa bàn', 'Số trụ/tủ', 'Có ảnh', 'Tỷ lệ'].forEach(function(h) {
+    html += '<th style="border:1px solid #94a3b8;padding:6px;">' + h + '</th>';
+  });
+  html += '</tr></thead><tbody>';
+  report.byDistrict.forEach(function(d) {
+    var pct = d.count > 0 ? ((d.withImage / d.count) * 100).toFixed(1) : '0';
+    html += '<tr>';
+    html += '<td style="border:1px solid #cbd5e1;padding:5px;"><b>' + d.name + '</b></td>';
+    html += '<td style="border:1px solid #cbd5e1;padding:5px;text-align:center;">' + d.count + '</td>';
+    html += '<td style="border:1px solid #cbd5e1;padding:5px;text-align:center;">' + d.withImage + '</td>';
+    html += '<td style="border:1px solid #cbd5e1;padding:5px;text-align:center;">' + pct + '%</td>';
+    html += '</tr>';
+  });
+  html += '</tbody></table>';
+
+  // Sự cố
+  if (report.suCo.length > 0) {
+    html += '<h3 style="color:#dc2626;border-bottom:2px solid #dc2626;padding-bottom:4px;">2. Sự cố phát sinh trong kỳ (' + report.suCo.length + ')</h3>';
+    html += '<table width="100%" style="border-collapse:collapse;font-size:12px;"><thead><tr style="background:#fee2e2;">';
+    ['ID', 'Thời gian', 'Tên trụ', 'Loại', 'Mức độ', 'Trạng thái'].forEach(function(h) {
+      html += '<th style="border:1px solid #94a3b8;padding:4px;">' + h + '</th>';
+    });
+    html += '</tr></thead><tbody>';
+    report.suCo.slice(0, 50).forEach(function(sc) {
+      html += '<tr>';
+      html += '<td style="border:1px solid #cbd5e1;padding:3px;font-family:monospace;font-size:10px;">' + sc.id + '</td>';
+      html += '<td style="border:1px solid #cbd5e1;padding:3px;font-size:11px;">' + sc.time + '</td>';
+      html += '<td style="border:1px solid #cbd5e1;padding:3px;"><b>' + sc.tenTru + '</b></td>';
+      html += '<td style="border:1px solid #cbd5e1;padding:3px;">' + sc.loai + '</td>';
+      html += '<td style="border:1px solid #cbd5e1;padding:3px;">' + (sc.mucDo === 'Khẩn cấp' ? '<b style="color:#dc2626">⚡ Khẩn cấp</b>' : sc.mucDo) + '</td>';
+      html += '<td style="border:1px solid #cbd5e1;padding:3px;">' + sc.trangThai + '</td>';
+      html += '</tr>';
+    });
+    html += '</tbody></table>';
+    if (report.suCo.length > 50) html += '<div style="font-style:italic;font-size:11px;color:#64748b;margin-top:4px;">... và ' + (report.suCo.length - 50) + ' sự cố nữa (xem chi tiết trong app)</div>';
+  }
+
+  // Bảo trì
+  if (report.baoTri.length > 0) {
+    html += '<h3 style="color:#f59e0b;border-bottom:2px solid #f59e0b;padding-bottom:4px;">3. Bảo trì thực hiện trong kỳ (' + report.baoTri.length + ')</h3>';
+    html += '<table width="100%" style="border-collapse:collapse;font-size:12px;"><thead><tr style="background:#fef3c7;">';
+    ['ID', 'Tên trụ', 'Loại BT', 'Chu kỳ', 'Ngày TH', 'Nhân sự'].forEach(function(h) {
+      html += '<th style="border:1px solid #94a3b8;padding:4px;">' + h + '</th>';
+    });
+    html += '</tr></thead><tbody>';
+    report.baoTri.slice(0, 50).forEach(function(bt) {
+      html += '<tr>';
+      html += '<td style="border:1px solid #cbd5e1;padding:3px;font-family:monospace;font-size:10px;">' + bt.id + '</td>';
+      html += '<td style="border:1px solid #cbd5e1;padding:3px;"><b>' + bt.tenTru + '</b></td>';
+      html += '<td style="border:1px solid #cbd5e1;padding:3px;">' + bt.loai + '</td>';
+      html += '<td style="border:1px solid #cbd5e1;padding:3px;text-align:center;">' + bt.chuKy + 't</td>';
+      html += '<td style="border:1px solid #cbd5e1;padding:3px;font-family:monospace;font-size:11px;">' + bt.lanCuoi + '</td>';
+      html += '<td style="border:1px solid #cbd5e1;padding:3px;">' + bt.phuTrach + '</td>';
+      html += '</tr>';
+    });
+    html += '</tbody></table>';
+  }
+
+  // Nhiệm vụ
+  if (report.nhiemVu.length > 0) {
+    html += '<h3 style="color:#8b5cf6;border-bottom:2px solid #8b5cf6;padding-bottom:4px;">4. Nhiệm vụ hoàn thành trong kỳ (' + report.nhiemVu.length + ')</h3>';
+    html += '<table width="100%" style="border-collapse:collapse;font-size:12px;"><thead><tr style="background:#ede9fe;">';
+    ['ID', 'Người nhận', 'Mô tả', 'Trạng thái'].forEach(function(h) {
+      html += '<th style="border:1px solid #94a3b8;padding:4px;">' + h + '</th>';
+    });
+    html += '</tr></thead><tbody>';
+    report.nhiemVu.slice(0, 30).forEach(function(nv) {
+      html += '<tr>';
+      html += '<td style="border:1px solid #cbd5e1;padding:3px;font-family:monospace;font-size:10px;">' + nv.id + '</td>';
+      html += '<td style="border:1px solid #cbd5e1;padding:3px;"><b>' + nv.nguoiNhan + '</b></td>';
+      html += '<td style="border:1px solid #cbd5e1;padding:3px;">' + String(nv.moTa).slice(0, 100) + '</td>';
+      html += '<td style="border:1px solid #cbd5e1;padding:3px;">' + (nv.status === 'approved' ? '✅ Duyệt' : '🔒 Đóng') + '</td>';
+      html += '</tr>';
+    });
+    html += '</tbody></table>';
+  }
+
+  // Ký duyệt
+  html += '<div style="margin-top:40px;text-align:right;">';
+  html += '<div style="font-style:italic;">' + donVi + ', ngày ' + to.slice(8, 10) + ' tháng ' + to.slice(5, 7) + ' năm ' + to.slice(0, 4) + '</div>';
+  html += '<div style="font-weight:bold;margin-top:12px;">' + chucVu.toUpperCase() + '</div>';
+  html += '<div style="font-style:italic;font-size:11px;">(Ký, ghi rõ họ tên, đóng dấu)</div>';
+  html += '<div style="height:60px;"></div>';
+  html += '<div style="font-weight:bold;font-size:13px;">' + nguoi + '</div>';
+  html += '</div>';
+
+  html += '<div style="text-align:center;margin-top:30px;padding:10px;background:#f1f5f9;border-radius:6px;font-size:11px;color:#94a3b8;">📧 Báo cáo tự động tạo bởi <b>Lighting Survey</b> — Không cần trả lời email này</div>';
+  html += '</div>';
+  return html;
+}
+
+function _htmlTile(icon, value, label, color) {
+  return '<td style="padding:14px;border-left:4px solid ' + color + ';background:#f8fafc;border-radius:6px;text-align:center;width:25%;vertical-align:middle;">'
+    + '<div style="font-size:28px;">' + icon + '</div>'
+    + '<div style="font-size:26px;font-weight:900;color:' + color + ';font-family:monospace;line-height:1;margin-top:4px;">' + value + '</div>'
+    + '<div style="font-size:11px;color:#64748b;margin-top:4px;font-weight:600;">' + label + '</div>'
+    + '</td>';
+}
+
+/**
+ * Main entry — gọi từ cron trigger 6am ngày 1 hàng tháng.
+ * Có thể chạy tay để test.
+ */
+function sendMonthlyReport() {
+  try {
+    initSettingSheet();
+    var enabled = getSetting('email_enabled').toLowerCase();
+    if (enabled !== 'true' && enabled !== '1') {
+      Logger.log('❌ Email disabled trong Setting (email_enabled = ' + enabled + ')');
+      return { status: 'skipped', reason: 'disabled' };
+    }
+    var recipients = getSetting('email_recipients');
+    if (!recipients) {
+      Logger.log('❌ Không có email_recipients trong Setting');
+      return { status: 'error', reason: 'no_recipients' };
+    }
+
+    // Kỳ báo cáo = tháng trước
+    var now = new Date();
+    var lastMonthFirst = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    var lastMonthLast = new Date(now.getFullYear(), now.getMonth(), 0);
+    var from = Utilities.formatDate(lastMonthFirst, 'GMT+7', 'yyyy-MM-dd');
+    var to = Utilities.formatDate(lastMonthLast, 'GMT+7', 'yyyy-MM-dd');
+    var monthLabel = Utilities.formatDate(lastMonthFirst, 'GMT+7', 'MM/yyyy');
+
+    Logger.log('Aggregating data từ ' + from + ' đến ' + to);
+    var report = _aggregateMonthlyReport(from, to);
+
+    var html = _buildReportHtmlEmail(report, from, to, monthLabel);
+    var subject = 'Báo cáo chiếu sáng tháng ' + monthLabel + ' — ' + getSetting('donvi_name');
+
+    GmailApp.sendEmail(
+      recipients,
+      subject,
+      'Vui lòng bật HTML email để xem báo cáo đầy đủ.\n\nTóm tắt:\n' +
+        '- Tổng trụ/tủ: ' + report.totalMarkers + '\n' +
+        '- Sự cố phát sinh: ' + report.suCo.length + '\n' +
+        '- Bảo trì thực hiện: ' + report.baoTri.length + '\n' +
+        '- Nhiệm vụ hoàn thành: ' + report.nhiemVu.length,
+      {
+        htmlBody: html,
+        name: getSetting('phong_name')
+      }
+    );
+
+    Logger.log('✓ Đã gửi báo cáo tháng ' + monthLabel + ' đến: ' + recipients);
+    return { status: 'ok', recipients: recipients, monthLabel: monthLabel };
+  } catch (err) {
+    Logger.log('❌ Lỗi gửi báo cáo: ' + err.message);
+    return { status: 'error', message: err.message };
+  }
+}
+
+/**
+ * Test ngay — không đợi ngày 1. Chạy tay từ Editor.
+ */
+function sendMonthlyReportNow() {
+  var result = sendMonthlyReport();
+  Logger.log('Kết quả: ' + JSON.stringify(result));
+  return result;
+}
+
+/**
+ * Setup cron trigger 6am ngày 1 hàng tháng.
+ * Chạy 1 lần từ Editor — sau đó GAS tự chạy hàng tháng.
+ */
+function setupMonthlyReportTrigger() {
+  // Xóa trigger cũ (nếu có) để tránh duplicate
+  var triggers = ScriptApp.getProjectTriggers();
+  var removed = 0;
+  triggers.forEach(function(t) {
+    if (t.getHandlerFunction() === 'sendMonthlyReport') {
+      ScriptApp.deleteTrigger(t);
+      removed++;
+    }
+  });
+  // Tạo trigger mới
+  ScriptApp.newTrigger('sendMonthlyReport')
+    .timeBased()
+    .onMonthDay(1)
+    .atHour(6)
+    .create();
+  Logger.log('✓ Trigger đã setup — sendMonthlyReport chạy 6:00 sáng ngày 1 hàng tháng');
+  if (removed > 0) Logger.log('  (đã xóa ' + removed + ' trigger cũ)');
+  Logger.log('  Danh sách trigger hiện tại:');
+  ScriptApp.getProjectTriggers().forEach(function(t, i) {
+    Logger.log('  ' + (i + 1) + '. ' + t.getHandlerFunction() + ' — ' + t.getEventType());
+  });
+}
+
+/**
+ * Xóa trigger email report (nếu muốn tắt hoàn toàn).
+ */
+function removeMonthlyReportTrigger() {
+  var triggers = ScriptApp.getProjectTriggers();
+  var removed = 0;
+  triggers.forEach(function(t) {
+    if (t.getHandlerFunction() === 'sendMonthlyReport') {
+      ScriptApp.deleteTrigger(t);
+      removed++;
+    }
+  });
+  Logger.log('✓ Đã xóa ' + removed + ' trigger sendMonthlyReport');
+}
+
+// Handler cho client call test email
+function handleSendMonthlyReport(data) {
+  var result = sendMonthlyReport();
+  return jsonResponse(result);
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// ── P30: REST API cho hệ thống bên ngoài ────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════
+
+const HEADER_APIKEYS = ['API Key', 'Tên client', 'Permissions', 'Trạng thái', 'Rate limit (req/phút)', 'Tạo lúc'];
+
+function initApiKeysSheet() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('ApiKeys');
+  if (!sheet) {
+    sheet = ss.insertSheet('ApiKeys');
+    sheet.appendRow(HEADER_APIKEYS);
+    sheet.getRange(1, 1, 1, HEADER_APIKEYS.length)
+      .setFontWeight('bold').setBackground('#f97316').setFontColor('#fff').setHorizontalAlignment('center');
+    sheet.setFrozenRows(1);
+    // Insert sample row (deactivated by default)
+    var sampleKey = 'ls_' + Utilities.getUuid().replace(/-/g, '').slice(0, 24);
+    sheet.appendRow([sampleKey, 'sample_client', 'read', 'inactive', 60, new Date().toISOString()]);
+  }
+  return sheet;
+}
+
+// Rotate 1 API key mới cho client
+function generateApiKey(clientName, permissions, rateLimit) {
+  var sheet = initApiKeysSheet();
+  var key = 'ls_' + Utilities.getUuid().replace(/-/g, '').slice(0, 24);
+  sheet.appendRow([
+    key, clientName || 'anonymous',
+    permissions || 'read',
+    'active', rateLimit || 60,
+    new Date().toISOString()
+  ]);
+  Logger.log('✓ Đã tạo API key: ' + key + ' cho client: ' + clientName);
+  return key;
+}
+
+// Validate API key + return { permissions, client, rateLimit } hoặc null
+function _checkApiKey(key) {
+  if (!key) return null;
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('ApiKeys');
+  if (!sheet || sheet.getLastRow() < 2) return null;
+  var data = sheet.getRange(2, 1, sheet.getLastRow() - 1, HEADER_APIKEYS.length).getValues();
+  for (var i = 0; i < data.length; i++) {
+    if (String(data[i][0]).trim() === key.trim() && String(data[i][3]).trim() === 'active') {
+      return {
+        key: data[i][0], client: data[i][1],
+        permissions: String(data[i][2] || '').split(',').map(function(p){ return p.trim(); }),
+        rateLimit: parseInt(data[i][4]) || 60
+      };
+    }
+  }
+  return null;
+}
+
+// Simple rate limiting với cache 60s
+var _rateCache = {};
+function _checkRateLimit(apiKey, limit) {
+  var now = Date.now();
+  var window = 60000; // 1 phút
+  if (!_rateCache[apiKey]) _rateCache[apiKey] = [];
+  // Xóa timestamps cũ
+  _rateCache[apiKey] = _rateCache[apiKey].filter(function(ts) { return (now - ts) < window; });
+  if (_rateCache[apiKey].length >= limit) return false;
+  _rateCache[apiKey].push(now);
+  return true;
+}
+
+// Main API handler — gọi từ doGet(?api_key=...&action=...)
+function handleApiCall(params) {
+  var apiKey = params.api_key;
+  var apiAction = String(params.api_action || '').trim();
+  if (!apiKey) return jsonResponse({ error: 'Missing api_key' }, 401);
+  var auth = _checkApiKey(apiKey);
+  if (!auth) return jsonResponse({ error: 'Invalid or inactive API key' }, 401);
+  if (!_checkRateLimit(apiKey, auth.rateLimit)) {
+    return jsonResponse({ error: 'Rate limit exceeded (' + auth.rateLimit + ' req/min)' }, 429);
+  }
+
+  try {
+    switch (apiAction) {
+      case 'list_markers': {
+        if (!auth.permissions.includes('read') && !auth.permissions.includes('*')) {
+          return jsonResponse({ error: 'Permission denied: needs read' }, 403);
+        }
+        var district = String(params.district || 'DanhSachTru').trim();
+        var limit = Math.min(parseInt(params.limit) || 100, 500);
+        var sheet = getSheet(district);
+        if (!sheet || sheet.getLastRow() < 2) return jsonResponse({ status: 'ok', count: 0, markers: [] });
+        var data = sheet.getRange(2, 1, Math.min(sheet.getLastRow() - 1, limit), 22).getValues();
+        var markers = data.map(function(r) {
+          return {
+            id: r[0], tenTru: r[1], lat: r[2], lon: r[3],
+            loai: r[6], tuDieuKhien: r[7],
+            loaiDen: r[10], congSuat: r[11],
+            duong: r[17], phuongXa: r[18]
+          };
+        }).filter(function(m) { return m.tenTru; });
+        return jsonResponse({ status: 'ok', district: district, count: markers.length, markers: markers });
+      }
+
+      case 'get_marker': {
+        if (!auth.permissions.includes('read') && !auth.permissions.includes('*')) {
+          return jsonResponse({ error: 'Permission denied' }, 403);
+        }
+        var district2 = String(params.district || 'DanhSachTru').trim();
+        var mid = String(params.id || params.tenTru || '').trim();
+        if (!mid) return jsonResponse({ error: 'Missing id or tenTru' }, 400);
+        var sheet2 = getSheet(district2);
+        if (!sheet2 || sheet2.getLastRow() < 2) return jsonResponse({ status: 'ok', marker: null });
+        var data2 = sheet2.getRange(2, 1, sheet2.getLastRow() - 1, 22).getValues();
+        for (var i = 0; i < data2.length; i++) {
+          if (String(data2[i][0]) === mid || String(data2[i][1]) === mid) {
+            var r = data2[i];
+            return jsonResponse({ status: 'ok', marker: {
+              id: r[0], tenTru: r[1], lat: r[2], lon: r[3], loai: r[6],
+              tuDieuKhien: r[7], loaiTru: r[8], loaiCan: r[9], loaiDen: r[10],
+              congSuat: r[11], hinhAnh: r[12], capNhat: r[13],
+              maPE: r[16], duong: r[17], phuongXa: r[18]
+            } });
+          }
+        }
+        return jsonResponse({ status: 'ok', marker: null });
+      }
+
+      case 'list_su_co': {
+        if (!auth.permissions.includes('read') && !auth.permissions.includes('*')) {
+          return jsonResponse({ error: 'Permission denied' }, 403);
+        }
+        var statusFilter = String(params.status || '').trim();
+        var scSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('SuCo');
+        if (!scSheet || scSheet.getLastRow() < 2) return jsonResponse({ status: 'ok', count: 0, incidents: [] });
+        var scData = scSheet.getRange(2, 1, scSheet.getLastRow() - 1, 17).getValues();
+        var incidents = scData.map(function(r) {
+          return { id: r[0], thoiGian: r[1], tenTru: r[2], loai: r[9], mucDo: r[10], trangThai: r[14] };
+        }).filter(function(sc) { return !statusFilter || sc.trangThai === statusFilter; });
+        return jsonResponse({ status: 'ok', count: incidents.length, incidents: incidents });
+      }
+
+      case 'stats': {
+        if (!auth.permissions.includes('read') && !auth.permissions.includes('*')) {
+          return jsonResponse({ error: 'Permission denied' }, 403);
+        }
+        var districts = ['DanhSachTru', 'Quan1', 'Quan3', 'Quan5', 'Quan8', 'Quan10', 'Quan11',
+                          'PhuNhuan', 'BinhThanh', 'TanBinh', 'TanPhu',
+                          'BauBang', 'TruVanTho', 'BenCat', 'CanGiuoc'];
+        var totalStats = { totalMarkers: 0, byDistrict: {} };
+        districts.forEach(function(d) {
+          try {
+            var s = getSheet(d);
+            if (s && s.getLastRow() > 1) {
+              var cnt = s.getLastRow() - 1;
+              totalStats.totalMarkers += cnt;
+              totalStats.byDistrict[d] = cnt;
+            }
+          } catch (_) {}
+        });
+        return jsonResponse({ status: 'ok', stats: totalStats });
+      }
+
+      default:
+        return jsonResponse({ error: 'Unknown api_action: ' + apiAction + '. Available: list_markers, get_marker, list_su_co, stats' }, 400);
+    }
+  } catch (err) {
+    return jsonResponse({ error: 'API error: ' + err.message }, 500);
+  }
 }
 
 // ── IMPORT MÃ PE TỪ FILE PHÂN CẤP BC-BB-TVT ────────────────────────────────

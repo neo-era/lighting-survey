@@ -4790,7 +4790,7 @@ User có thể:
 
 ---
 
-### P18 — Phase 2: Layer control (1-2 ngày)
+### P18 — Phase 2: Layer control (1-2 ngày) ✅ DONE 2026-07-12
 
 ```
 Task: Cho phép user toggle bật/tắt từng layer trong bản vẽ CAD, đổi màu/độ dày, filter theo pattern.
@@ -4893,7 +4893,7 @@ User có thể:
 
 ---
 
-### P19 — Phase 3: Calibration + Snap to CAD vertex (2-3 ngày)
+### P19 — Phase 3: Calibration + Snap to CAD vertex (2-3 ngày) ✅ DONE 2026-07-12
 
 ```
 Task: Cho phép calibrate bản vẽ CAD chưa có tọa độ đúng (align 2 điểm map vs CAD), và snap marker mới về đỉnh CAD gần nhất.
@@ -5028,7 +5028,7 @@ User có thể:
 
 ---
 
-### P20 — Phase 4: Stake-out điều hướng RTK (3-5 ngày, tùy chọn)
+### P20 — Phase 4: Stake-out điều hướng RTK (3-5 ngày, tùy chọn) ✅ DONE 2026-07-12
 
 ```
 Task: Chọn 1 đỉnh CAD làm target → hiển thị mũi tên + khoảng cách + góc bearing từ vị trí RTK hiện tại đến đỉnh đó (realtime), tự trigger create marker khi đứng đúng vị trí.
@@ -5215,5 +5215,1529 @@ User có thể:
 
 Chọn phù hợp workflow thực tế: P17 alone nếu chỉ để tham khảo trực quan, đủ P17+P19 nếu cần chính xác cao, làm hết P17-P20 nếu dùng RTK để stake-out thực sự.
 ```
+
+---
+
+# Session Tính năng 13-18 — Roadmap 2026
+
+Bộ 22 prompt (P21-P42) implement 6 nhóm tính năng còn thiếu. Xem `CLAUDE.md` § "Roadmap 2026" cho design docs.
+
+---
+
+## Nhóm 13 — Quản lý vận hành
+
+### P21 — Ticketing sự cố ✅ DONE 2026-07-12 (core từ trước + polish admin panel)
+
+```
+Task: Thêm chức năng báo cáo & xử lý sự cố trên trụ đèn / tủ điện.
+
+## Data model
+
+Tạo sheet mới `SuCo` với 12 cột (xem CLAUDE.md § 13.1 for schema chi tiết).
+GAS `getSheet('SuCo')` — nếu chưa có thì tạo mới với header.
+
+## UI Client
+
+### 1. Nút báo sự cố trong popup marker
+
+Trong `createMarkerPopupContent(row)`, thêm nút:
+```html
+<button onclick="_openSuCoForm('${row[0]}', '${row[1]}')" class="pc-btn pc-btn-danger">
+    🚨 Báo sự cố
+</button>
+```
+
+### 2. Modal báo sự cố `#suCoForm`
+
+Fields:
+- Loại sự cố (radio): 💡 Chảy bóng / 🌑 Tối đèn / ⚡ Nghiêng trụ / 💥 Gãy trụ / 🔌 Mất cáp / ❓ Khác
+- Mức độ (segmented): 🔴 Khẩn / 🟠 Cao / 🟡 Trung / 🟢 Thấp
+- Mô tả (textarea)
+- Chụp ảnh (3 slot, reuse `handleMarkerImageFile`)
+- Nút "Gửi" / "Hủy"
+
+### 3. Sync GAS
+
+```js
+async function _submitSuCo(data) {
+    const payload = {
+        action: 'create_su_co',
+        sheet: currentSheet,
+        markerId: data.markerId,
+        loai: data.loai,
+        mucDo: data.mucDo,
+        moTa: data.moTa,
+        anh: data.anhUrls.join(';'),
+        nguoiBao: currentUser.username,
+        thoiGianTao: new Date().toISOString()
+    };
+    return fetch(KHAOSAT_GAS_URL, { method: 'POST', body: JSON.stringify(payload) });
+}
+```
+
+### 4. GAS handler
+
+```js
+function handleCreateSuCo(data) {
+    const sheet = getSuCoSheet();  // auto-create with header nếu chưa có
+    const id = 'SC_' + new Date().getFullYear() + '_' + String(sheet.getLastRow()).padStart(3, '0');
+    sheet.appendRow([id, data.markerId, data.loai, data.mucDo, data.moTa, data.anh,
+                     data.nguoiBao, '', 'moi', data.thoiGianTao, '', '']);
+    return { ok: true, id };
+}
+```
+
+### 5. Hiển thị sự cố trên marker
+
+Trong `addMarkerRowToMap`, check nếu marker có sự cố `moi`/`dang_xu_ly` → thêm CSS class `has-issue` cho icon (glow đỏ).
+
+Load danh sách sự cố khi load app (from CSV publish của sheet SuCo). Store trong `_suCoByMarkerId` map.
+
+### 6. Trang admin quản lý
+
+Section mới trong ☰ panel "Sự cố" (chỉ admin) → mở overlay list:
+- Filter theo status/loại/địa bàn
+- Click row → mở chi tiết + assign nhân sự + chuyển status
+- Nút "Đóng sự cố" khi hoàn thành
+
+### 7. Badge topbar
+
+Query GAS count `su_co` với status = 'moi' → hiện badge số trên nút ☰ nếu có mới.
+
+## Testing checklist
+
+- [ ] Sheet SuCo tự động tạo lần đầu gọi
+- [ ] Báo sự cố từ popup → GAS tạo row đúng ID format `SC_2026_001`
+- [ ] Marker glow đỏ nếu có sự cố chưa xử lý
+- [ ] Admin thấy list + có thể assign + chuyển status
+- [ ] Badge count update sau reload
+- [ ] User thường không thấy option "Đóng sự cố" (chỉ admin)
+
+## Deliverable
+
+User có thể báo sự cố với 1 click, admin có dashboard xử lý tập trung.
+```
+
+---
+
+### P22 — Lịch bảo trì định kỳ ✅ DONE 2026-07-12 (client-side, cần GAS + BAOTRI_CSV_URL)
+
+```
+Task: Thêm chức năng lên lịch bảo trì và nhắc nhở tự động.
+
+## Data model
+
+Sheet `BaoTri` (xem CLAUDE.md § 13.2).
+
+## UI
+
+### 1. Tạo lịch bảo trì (admin)
+
+Popup marker → tab "Bảo trì" (chỉ admin thấy) → form:
+- Loại bảo trì (dropdown)
+- Chu kỳ (số tháng)
+- Lần cuối thực hiện (date)
+- Nhân sự phụ trách (dropdown users)
+
+### 2. Auto tính "Lần tới"
+
+Client-side: `lanToi = lanCuoi + chuKy tháng`.
+Save vào GAS via `create_bao_tri` action.
+
+### 3. GAS cron trigger
+
+```js
+// Chạy 06:00 mỗi ngày
+function checkMaintenanceSchedule() {
+    const sheet = getSheet('BaoTri');
+    const rows = sheet.getRange(2, 1, sheet.getLastRow()-1, 10).getValues();
+    const today = new Date();
+    const alerts = [];
+    rows.forEach((r, i) => {
+        const lanToi = new Date(r[5]);
+        const daysToGo = (lanToi - today) / 86400000;
+        if (daysToGo < 0 && r[7] !== 'xong') {
+            // Trễ
+            sheet.getRange(i+2, 8).setValue('trễ');
+            alerts.push({ id: r[0], marker: r[1], phuTrach: r[6], daysLate: Math.abs(daysToGo) });
+        } else if (daysToGo < 7 && r[7] === 'chờ') {
+            alerts.push({ id: r[0], marker: r[1], phuTrach: r[6], daysToGo });
+        }
+    });
+    if (alerts.length) sendMaintenanceEmail(alerts);
+}
+```
+
+Setup trigger: `Extensions → Apps Script → Triggers → Add → checkMaintenanceSchedule → time-driven → day → 6am`.
+
+### 4. Hiển thị lịch bảo trì
+
+Trang `/admin/bao-tri` list + calendar view (dùng FullCalendar.js hoặc simple table).
+
+Marker có lịch bảo trì sắp đến → icon overlay 🔧 nhỏ.
+
+### 5. Mark done
+
+Sau khi bảo trì, admin click "Hoàn thành" → update `Lần cuối = today`, `Lần tới = today + chuKy tháng`, `Status = xong` → sau đó reset về `chờ` cho chu kỳ mới.
+
+## Testing checklist
+
+- [ ] Tạo lịch → Lần tới tính đúng
+- [ ] GAS trigger chạy 6am hàng ngày (kiểm tra Executions log)
+- [ ] Marker trễ hạn có status `trễ` sau 1 ngày trôi qua
+- [ ] Email alert gửi đúng danh sách nhân sự phụ trách
+- [ ] Icon 🔧 hiện trên marker có lịch < 7 ngày
+
+## Deliverable
+
+Admin không cần nhớ lịch bảo trì thủ công. Trễ hạn tự alert.
+```
+
+---
+
+### P23 — Assign task + Workflow duyệt ✅ DONE 2026-07-12 (client-side, cần GAS + NHIEMVU_CSV_URL)
+
+```
+Task: Admin gán nhiệm vụ cho user, user submit → admin approve.
+
+## Data model
+
+Sheet `NhiemVu` 9 cột: ID, người giao, người nhận, mô tả, khu vực, deadline, status, kết quả, thời gian đóng.
+
+Status: draft → assigned → in_progress → submitted → approved / rejected → closed.
+
+## UI
+
+### 1. Admin trang "Nhiệm vụ"
+
+Trong ☰ panel (admin only) → nút "Quản lý nhiệm vụ" → overlay:
+- Danh sách nhiệm vụ + filter theo status/người nhận
+- Nút "+ Tạo nhiệm vụ" → modal form: mô tả, khu vực (polygon từ tính năng 16.3 hoặc list địa bàn), deadline, người nhận
+- Click row → chi tiết + timeline change status
+
+### 2. User section "Nhiệm vụ của tôi"
+
+Trong ☰ panel → section mới hiện chỉ khi user có nhiệm vụ:
+- List 3 nhiệm vụ active
+- Nút "Xem tất cả" → overlay
+- Nút "Bắt đầu" (assigned → in_progress)
+- Nút "Nộp báo cáo" (in_progress → submitted) với textarea kết quả + ảnh
+
+### 3. GAS actions
+
+- `create_nhiem_vu`
+- `update_nhiem_vu_status` (validate transitions)
+- `approve_nhiem_vu` / `reject_nhiem_vu` (chỉ admin)
+
+### 4. Notification
+
+Khi assign → notify user (dùng 13.4).
+Khi user submit → notify admin.
+
+## Testing checklist
+
+- [ ] Admin tạo nhiệm vụ, user thấy trong section của mình
+- [ ] User bắt đầu → status thay đổi
+- [ ] User submit kết quả → admin approve/reject
+- [ ] Rejected nhiệm vụ quay về `in_progress` cho user làm lại
+- [ ] Log history transitions
+
+## Deliverable
+
+Workflow phân công công việc rõ ràng, tracking được.
+```
+
+---
+
+### P24 — Notification Push ✅ DONE 2026-07-12 (polling + in-app; browser push future)
+
+```
+Task: Notify user khi có sự cố / task / bảo trì mới.
+
+## 3 kênh
+
+### 1. Browser Push (Chrome/Edge/Safari 16+)
+
+```js
+async function _subscribePush() {
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: VAPID_PUBLIC_KEY
+    });
+    await fetch(GAS_URL, { method:'POST', body: JSON.stringify({
+        action: 'register_push', endpoint: JSON.stringify(sub), user: currentUser.username
+    })});
+}
+```
+
+VAPID keys: sinh 1 lần bằng `web-push` npm (`npx web-push generate-vapid-keys`), lưu vào GAS Script Properties.
+
+GAS gửi push qua `UrlFetchApp.fetch(sub.endpoint, ...)` với payload + VAPID auth.
+
+### 2. Polling fallback
+
+Chrome iOS chưa support push → poll `GAS getNotifications(user)` mỗi 60s khi tab visible.
+
+Nếu có notification mới → hiện toast + đánh chuông (Audio API play file `.mp3` ngắn 500ms).
+
+### 3. Zalo OA (integrated ở P29)
+
+Nếu user đã link Zalo với account → gửi qua Zalo message.
+
+## Testing checklist
+
+- [ ] Grant permission → subscribe → GAS lưu endpoint
+- [ ] Admin trigger notification → push đến user trong 5s
+- [ ] Fallback polling: notification xuất hiện trong 60s
+- [ ] Notification click → mở đúng trang (sự cố / task / bảo trì)
+- [ ] Test trên Android Chrome + iOS Safari
+
+## Deliverable
+
+User không cần refresh liên tục để check task.
+```
+
+---
+
+## Nhóm 14 — Analytics & Báo cáo
+
+### P25 — Dashboard KPI ✅ DONE 2026-07-12
+
+```
+Task: Trang dashboard với 5 KPI + biểu đồ.
+
+## UI
+
+Trang `/admin/dashboard` (mới), chỉ admin. Nút "Dashboard" trong ☰ panel.
+
+### Layout
+
+```
+┌─────────────────────────────────────┐
+│  📊 DASHBOARD LAVIPCO — 2026-Q1     │
+│                                      │
+│  ┌─────┐ ┌─────┐ ┌─────┐ ┌─────┐   │
+│  │ 1234│ │ 12  │ │ 45  │ │ 78% │   │  ← 4 tile số
+│  │ Trụ │ │Tủ  │ │ SC  │ │ Done│   │
+│  └─────┘ └─────┘ └─────┘ └─────┘   │
+│                                      │
+│  ┌───────────────────────────────┐ │
+│  │ Bar chart: Trụ theo địa bàn   │ │  ← Chart 1
+│  └───────────────────────────────┘ │
+│                                      │
+│  ┌─────────────┐ ┌─────────────┐   │
+│  │Donut % done │ │Bar SC 30days│   │  ← Chart 2+3
+│  └─────────────┘ └─────────────┘   │
+│                                      │
+│  ┌───────────────────────────────┐ │
+│  │Bar: Hiệu suất user (top 10)   │ │  ← Chart 4
+│  └───────────────────────────────┘ │
+└─────────────────────────────────────┘
+```
+
+## Data
+
+Aggregate client-side từ `loadedData` (all districts) + fetch `SuCo`, `BaoTri`, `NhiemVu`.
+
+## Chart.js setup
+
+Lazy load Chart.js UMD từ CDN (~150KB):
+```js
+async function _loadChartJs() {
+    if (window.Chart) return;
+    await new Promise((res, rej) => {
+        const s = document.createElement('script');
+        s.src = 'https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js';
+        s.onload = res; s.onerror = rej;
+        document.head.appendChild(s);
+    });
+}
+```
+
+## Testing checklist
+
+- [ ] 4 tile số update realtime từ data hiện tại
+- [ ] Bar chart địa bàn correct count
+- [ ] Donut % done = (số trụ có ảnh) / total
+- [ ] SC 30 ngày lấy đúng từ sheet SuCo
+- [ ] Top 10 user tính từ `Người KS` column
+- [ ] Charts responsive trên mobile
+
+## Deliverable
+
+Admin thấy tổng quan trong 5 giây, không cần phân tích thủ công.
+```
+
+---
+
+### P26 — Báo cáo theo mẫu Nhà nước (TT06/2016) ✅ DONE 2026-07-12
+
+```
+Task: Xuất báo cáo Excel đúng mẫu TT06/2016 của Bộ Xây dựng.
+
+## 3 mẫu
+
+### Mẫu 1: Báo cáo tháng (BC-CHIEUSANG-M-2026-01.xlsx)
+
+Header: logo huyện + tên phòng + tháng + năm.
+5 sheet:
+1. Tổng hợp — số trụ theo loại
+2. Sự cố — list SC trong tháng
+3. Bảo trì — list BT thực hiện
+4. Nhân sự — hiệu suất
+5. Ký duyệt — chỗ ký lãnh đạo
+
+### Mẫu 2: Báo cáo TT06/2016 (BC-TT06-2026-Q1.xlsx)
+
+Theo phụ lục Thông tư 06/2016/TT-BXD:
+- Danh sách hệ thống chiếu sáng đô thị theo cấp đường
+- Chỉ tiêu kỹ thuật (độ rọi, độ đồng đều)
+- Tình trạng vận hành
+
+### Mẫu 3: Danh mục thiết bị (DM-TCVN7722.xlsx)
+
+Theo TCVN 7722-1:2007 và TT39/2009/TT-BXD:
+- Danh sách trụ, loại, công suất, năm lắp đặt
+- Chứng nhận xuất xưởng
+- Bảo hành + bảo trì
+
+## Code
+
+```js
+async function exportBaoCaoTT06(from, to) {
+    const template = await fetch('templates/bc_tt06.xlsx').then(r => r.arrayBuffer());
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(template);
+    
+    // Fill cells
+    const ws = wb.getWorksheet(1);
+    ws.getCell('B3').value = getSetting('company_name');
+    ws.getCell('B4').value = `Từ ${from} đến ${to}`;
+    // ... fill data rows
+    
+    const buf = await wb.xlsx.writeBuffer();
+    // Save file
+}
+```
+
+Templates lưu trong repo `/templates/*.xlsx` — thiết kế 1 lần trong Excel với style, header, footer.
+
+## UI
+
+Section mới "Báo cáo chính thức" trong ☰ panel admin:
+- Dropdown chọn mẫu
+- Chọn khoảng thời gian
+- Nút "Tạo báo cáo" → download file
+
+## Testing checklist
+
+- [ ] Templates load được (fetch OK)
+- [ ] Fill data đúng cells
+- [ ] Excel mở trong Word/Excel không lỗi format
+- [ ] Header/footer preserved
+- [ ] Ký duyệt sheet có sẵn chỗ trống ký
+
+## Deliverable
+
+Admin xuất báo cáo hành chính chỉ với vài click, đúng mẫu Nhà nước.
+```
+
+---
+
+### P27 — Email report định kỳ ✅ DONE 2026-07-12
+
+```
+Task: GAS tự gửi báo cáo tháng qua email vào ngày 1 tháng sau.
+
+## GAS setup
+
+### 1. Cron trigger
+
+Extensions → Apps Script → Triggers:
+- Function: `sendMonthlyReport`
+- Type: Time-driven
+- Day of month: 1
+- Time: 6am
+
+### 2. Function `sendMonthlyReport()`
+
+```js
+function sendMonthlyReport() {
+    const now = new Date();
+    const lastMonth = new Date(now.getFullYear(), now.getMonth()-1, 1);
+    const from = Utilities.formatDate(lastMonth, 'GMT+7', 'yyyy-MM-dd');
+    const to = Utilities.formatDate(new Date(now.getFullYear(), now.getMonth(), 0), 'GMT+7', 'yyyy-MM-dd');
+    
+    // Aggregate data
+    const data = aggregateMonthlyData(from, to);
+    
+    // Generate PDF (server-side dùng Google Doc API hoặc HTML → PDF via UrlFetchApp)
+    const pdfBlob = generateReportPdf(data);
+    
+    // Get recipient list from Setting sheet
+    const recipients = getSetting('email_recipients').split(',');
+    
+    GmailApp.sendEmail(
+        recipients.join(','),
+        `Báo cáo chiếu sáng tháng ${from} - ${to}`,
+        `Báo cáo đính kèm.`,
+        { attachments: [pdfBlob.setName(`BC-CS-${from}.pdf`)] }
+    );
+}
+```
+
+### 3. Cấu hình recipients
+
+Trong sheet `Setting`:
+```
+email_recipients | admin@abc.gov.vn,truongphong@xyz.gov.vn
+```
+
+## Testing checklist
+
+- [ ] Run manual `sendMonthlyReport()` → email đến đúng list
+- [ ] PDF attachment mở được, format đúng
+- [ ] Cron trigger fire đúng ngày 1
+- [ ] Log Executions không error
+
+## Deliverable
+
+Lãnh đạo tự động nhận báo cáo tháng vào ngày 1, không cần request thủ công.
+```
+
+---
+
+### P28 — Chữ ký số PDF
+
+```
+Task: Ký PDF bản vẽ bằng chứng thư số (VNPT-CA / BKAV-CA / FPT-CA).
+
+## Cơ chế
+
+Client-side ký PDF là bất khả thi (private key phải trong USB token / cloud CA). Solution:
+
+### Option A: USB Token
+
+User dùng phần mềm VNPT-CA Signer / Foxit → mở PDF exported → ký tay → save.
+→ App không can thiệp, chỉ xuất PDF sẵn có ô ký.
+
+### Option B: Cloud CA (khuyến nghị)
+
+Tích hợp API của VNPT eSign / BKAV Cloud Sign:
+```js
+async function signPdfViaCloud(pdfBlob) {
+    const uploadRes = await fetch('https://api.vnpt-esign.com/upload', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${CLIENT_SECRET}` },
+        body: pdfBlob
+    });
+    const { fileId } = await uploadRes.json();
+    // User authenticate via SMS OTP
+    // Return signed PDF URL
+    return signedPdfUrl;
+}
+```
+
+Chi phí: ~2000-5000 VND/lần ký. Cần đăng ký doanh nghiệp với CA.
+
+### Option C: PDF-lib client-side signature (visual only)
+
+Không phải chữ ký số pháp lý, chỉ là hình chữ ký insert. Dùng khi không cần compliance.
+
+## Recommendation
+
+Option A cho MVP (không code gì), Option B cho enterprise (60h implement).
+
+## Testing checklist
+
+- [ ] Option A: PDF export có ô trống ký + tên chức vụ
+- [ ] Option B: sign flow end-to-end, verify chữ ký trong Adobe Reader
+
+## Deliverable
+
+Bản vẽ có chữ ký hợp lệ để lưu hồ sơ chính thức.
+```
+
+---
+
+## Nhóm 15 — Tích hợp bên ngoài
+
+### P29 — Zalo Official Account integration
+
+```
+Task: Cho phép dân báo sự cố qua Zalo OA → auto-tạo ticket.
+
+## Setup Zalo OA
+
+1. Đăng ký OA tại https://oa.zalo.me
+2. Xác thực doanh nghiệp
+3. Lấy `oa_id` + `access_token`
+
+## Webhook Zalo → GAS
+
+Config webhook URL trong Zalo Developer: `<GAS_WEB_APP_URL>?action=zalo_webhook`
+
+GAS `doPost` handler:
+```js
+function handleZaloWebhook(payload) {
+    if (payload.event_name === 'user_send_text') {
+        // User gửi tin nhắn — trigger menu button "Báo sự cố"
+    }
+    if (payload.event_name === 'user_submit_form') {
+        // Form data: description, image, location
+        const suCoRow = createSuCoFromZalo(payload);
+        replyZaloUser(payload.user_id, `Đã ghi nhận sự cố ${suCoRow.id}. Cảm ơn bạn!`);
+    }
+    return { ok: true };
+}
+```
+
+## Zalo template menu
+
+Tạo template trong OA Console:
+- Button "🚨 Báo sự cố" → mở form nhập
+- Form có: mô tả, ảnh upload, geolocation
+
+## Reply mechanism
+
+```js
+function replyZaloUser(userId, text) {
+    UrlFetchApp.fetch('https://openapi.zalo.me/v2.0/oa/message', {
+        method: 'POST',
+        headers: { 'access_token': ZALO_TOKEN },
+        payload: JSON.stringify({
+            recipient: { user_id: userId },
+            message: { text }
+        })
+    });
+}
+```
+
+## Testing checklist
+
+- [ ] Webhook nhận event khi user gửi tin
+- [ ] Form submit tạo row trong SuCo với `nguoiBao = 'zalo_' + user_id`
+- [ ] Reply message về user
+- [ ] Admin nhận notification sự cố mới có source = Zalo
+
+## Deliverable
+
+Dân chỉ cần Zalo, không cần cài app. Sự cố tự động vào hệ thống.
+```
+
+---
+
+### P30 — REST API cho hệ thống ngoài
+
+```
+Task: Expose REST API cho SCADA / ERP đọc/ghi data.
+
+## GAS endpoints
+
+Extend `doGet` + `doPost`:
+
+```
+GET  ?action=api_list_markers&district=Quan1&api_key=xxx
+GET  ?action=api_get_marker&id=Q1_001&api_key=xxx
+POST ?action=api_create_marker + payload
+GET  ?action=api_list_su_co&status=moi
+POST ?action=api_reports_monthly
+```
+
+## Auth
+
+Sheet `ApiKeys`: 4 cột (key, tên client, permissions, active).
+
+Middleware:
+```js
+function checkApiKey(key) {
+    const sheet = getSheet('ApiKeys');
+    const rows = sheet.getDataRange().getValues();
+    const row = rows.find(r => r[0] === key && r[3] === 'active');
+    if (!row) throw new Error('Invalid API key');
+    return { client: row[1], permissions: row[2].split(',') };
+}
+```
+
+## Rate limit
+
+Simple: sheet log requests, count last 60s per key. Deny if > 60 req/min.
+
+## Docs
+
+Tạo file `api-docs.html` — swagger-like doc với examples curl.
+
+## Testing checklist
+
+- [ ] curl GET list_markers → JSON valid
+- [ ] Invalid API key → 401
+- [ ] Rate limit exceed → 429
+- [ ] POST create_marker → row appear trong sheet
+- [ ] Postman collection test all endpoints
+
+## Deliverable
+
+Bên thứ 3 có thể query/write data programmatically.
+```
+
+---
+
+## Nhóm 16 — Field Survey nâng cao
+
+### P31 — Voice note trên marker
+
+```
+Task: Ghi âm ghi chú, đính vào marker.
+
+## Data model
+
+Thêm cột 26: `Ghi âm` — URL Google Drive.
+
+## UI popup marker
+
+Button 🎙 "Ghi âm" → hiển thị recorder:
+- Nút to `● Rec` (max 60s)
+- Đếm timer
+- Nút `⏹ Dừng` → auto upload
+
+## Code
+
+```js
+let _mediaRecorder = null, _audioChunks = [];
+
+async function _startVoiceRecord() {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    _mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+    _audioChunks = [];
+    _mediaRecorder.ondataavailable = e => _audioChunks.push(e.data);
+    _mediaRecorder.onstop = async () => {
+        const blob = new Blob(_audioChunks, { type: 'audio/webm' });
+        const dataUrl = await blobToDataUrl(blob);
+        const url = await uploadAudioToDrive(dataUrl);
+        // Save to row[25]
+    };
+    _mediaRecorder.start();
+    setTimeout(() => _mediaRecorder.state === 'recording' && _mediaRecorder.stop(), 60000);
+}
+```
+
+GAS `handleAudioUpload` tương tự `handleImageUpload` nhưng ext `.webm`.
+
+## Playback
+
+Popup marker có audio nếu `row[25]`:
+```html
+<audio controls src="${row[25]}" style="width:100%;height:32px;"></audio>
+```
+
+## Testing checklist
+
+- [ ] Grant mic permission → record 3s → playback ok
+- [ ] Upload lên Drive, URL public accessible
+- [ ] Playback trên mobile Safari/Chrome
+- [ ] Max 60s auto stop
+- [ ] Size < 500KB cho 60s (webm codec)
+
+## Deliverable
+
+Khảo sát viên ghi note nhanh không cần gõ.
+```
+
+---
+
+### P32 — QR/Barcode scan
+
+```
+Task: Scan tag QR/barcode trên trụ để nhập nhanh ID.
+
+## Thư viện
+
+`html5-qrcode` (30KB, lazy load):
+```js
+async function _loadQrLib() {
+    if (window.Html5Qrcode) return;
+    const s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js';
+    await new Promise((r, e) => { s.onload = r; s.onerror = e; document.head.appendChild(s); });
+}
+```
+
+## UI
+
+Trong marker form, nút "📷 Scan QR" cạnh field "Tên trụ":
+```js
+async function _startQrScan(inputEl) {
+    await _loadQrLib();
+    document.getElementById('qrScannerContainer').style.display = 'block';
+    const scanner = new Html5Qrcode('qrScanner');
+    await scanner.start(
+        { facingMode: 'environment' },
+        { fps: 10, qrbox: { width: 250, height: 250 } },
+        (decodedText) => {
+            inputEl.value = decodedText;
+            scanner.stop();
+            document.getElementById('qrScannerContainer').style.display = 'none';
+        },
+        (err) => {} // ignore no-scan
+    );
+}
+```
+
+## Testing checklist
+
+- [ ] Grant camera permission
+- [ ] Scan QR code từ ảnh in → decode đúng
+- [ ] Scan barcode Code128 → decode đúng
+- [ ] Auto-stop sau khi scan thành công
+- [ ] Test trên iOS Safari + Android Chrome
+
+## Deliverable
+
+Nhập tên trụ nhanh gấp 3-5 lần, không nhầm.
+```
+
+---
+
+### P33 — Vẽ vùng polygon
+
+```
+Task: Vẽ polygon "khu vực đã khảo sát" hoặc "cụm dân cư".
+
+## Thư viện
+
+Leaflet.Draw (chuẩn):
+```html
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet-draw@1.0.4/dist/leaflet.draw.css">
+<script src="https://cdn.jsdelivr.net/npm/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
+```
+
+## Data model
+
+Sheet `Vung` — 6 cột: ID, tên, loại (`da_khao_sat`/`cum_dan_cu`/`khac`), GeoJSON polygon, người tạo, thời gian.
+
+## UI
+
+Section trong ☰ panel "Vẽ vùng":
+- Nút "+ Vẽ vùng mới" → activate Leaflet.Draw polygon tool
+- User click các điểm → hoàn thành → prompt name + type
+- Save vào sheet
+- Danh sách vùng đã vẽ → toggle visible
+
+## Code
+
+```js
+const drawnItems = new L.FeatureGroup().addTo(map);
+const drawControl = new L.Control.Draw({
+    edit: { featureGroup: drawnItems },
+    draw: { polygon: true, marker: false, circle: false, rectangle: false, polyline: false }
+});
+
+map.on(L.Draw.Event.CREATED, async (e) => {
+    const layer = e.layer;
+    drawnItems.addLayer(layer);
+    const geojson = layer.toGeoJSON();
+    const name = prompt('Tên vùng:');
+    if (name) await saveVungToGas({ name, geojson });
+});
+```
+
+## Testing checklist
+
+- [ ] Vẽ polygon 4-5 điểm → complete
+- [ ] Save GeoJSON vào sheet Vung
+- [ ] Reload → polygon restore đúng vị trí
+- [ ] Toggle visible → add/remove khỏi map
+- [ ] Sửa polygon (edit mode) → update GAS
+
+## Deliverable
+
+Admin có thể đánh dấu vùng địa lý rõ ràng.
+```
+
+---
+
+### P34 — Đo khoảng cách trên bản đồ
+
+```
+Task: Click 2 điểm → hiện khoảng cách + đường thẳng.
+
+## UI
+
+Nút "📏 Đo" trong ☰ panel → activate mode:
+- Cursor crosshair
+- Click 1 → điểm A với marker tạm
+- Click 2 → điểm B, vẽ polyline, hiện distance tooltip
+- Click tiếp → reset cặp mới
+- Click nút "Đo" lần nữa hoặc ESC → tắt mode
+
+## Code
+
+```js
+let _measureMode = false, _measurePoints = [], _measureLine = null, _measureLabel = null;
+
+function _toggleMeasureMode() {
+    _measureMode = !_measureMode;
+    document.getElementById('btnMeasure').classList.toggle('active', _measureMode);
+    map.getContainer().style.cursor = _measureMode ? 'crosshair' : '';
+    if (!_measureMode) _clearMeasure();
+}
+
+map.on('click', (e) => {
+    if (!_measureMode) return;
+    _measurePoints.push(e.latlng);
+    if (_measurePoints.length === 2) {
+        const [a, b] = _measurePoints;
+        const dist = haversineM(a.lat, a.lng, b.lat, b.lng);
+        if (_measureLine) map.removeLayer(_measureLine);
+        _measureLine = L.polyline([a, b], { color:'#dc2626', weight: 3 }).addTo(map);
+        const midLat = (a.lat + b.lat) / 2, midLon = (a.lng + b.lng) / 2;
+        _measureLabel = L.marker([midLat, midLon], {
+            icon: L.divIcon({
+                className: 'measure-label',
+                html: `<div style="background:#fff;border:1px solid #dc2626;padding:2px 6px;border-radius:4px;font-weight:700;color:#dc2626;">${dist < 1000 ? dist.toFixed(1)+'m' : (dist/1000).toFixed(2)+'km'}</div>`
+            })
+        }).addTo(map);
+        _measurePoints = [];
+    }
+});
+```
+
+## Testing checklist
+
+- [ ] Click 2 điểm → hiện line + label distance
+- [ ] Distance < 1000m dùng đơn vị mét
+- [ ] Distance >= 1000m dùng km với 2 chữ số
+- [ ] ESC hoặc click nút tắt mode
+- [ ] Reset khi click cặp mới
+
+## Deliverable
+
+Đo khoảng cách nhanh không cần công cụ ngoài.
+```
+
+---
+
+## Nhóm 17 — DevOps & Quality
+
+### P35 — Smoke tests với Playwright
+
+```
+Task: Setup Playwright + 5 test critical flow + CI GitHub Actions.
+
+## Setup
+
+```bash
+npm init -y
+npm i -D @playwright/test
+npx playwright install chromium
+```
+
+`playwright.config.ts`:
+```ts
+export default {
+    testDir: './tests',
+    use: {
+        baseURL: 'http://localhost:5500',
+        headless: true,
+        screenshot: 'only-on-failure'
+    },
+    webServer: {
+        command: 'npx live-server --port=5500',
+        port: 5500
+    }
+};
+```
+
+## Test files
+
+### `tests/auth.spec.ts`
+
+```ts
+import { test, expect } from '@playwright/test';
+
+test('admin login', async ({ page }) => {
+    await page.goto('/');
+    await page.fill('#lUsername', 'admin');
+    await page.fill('#lPassword', 'ADMIN_PASSWORD');
+    await page.click('#loginBtn');
+    await expect(page.locator('#topbarUserName')).toContainText('Admin');
+});
+
+test('user login + role restrictions', async ({ page }) => {
+    // Login user
+    // Check no admin buttons visible
+});
+```
+
+### `tests/marker.spec.ts`
+
+Add marker + edit + delete flow.
+
+### `tests/print.spec.ts`
+
+Export PDF drawing.
+
+### `tests/district.spec.ts`
+
+Switch district + verify markers reload.
+
+### `tests/cad.spec.ts`
+
+Load DXF overlay + toggle.
+
+## GitHub Actions
+
+`.github/workflows/test.yml`:
+```yaml
+on: [push, pull_request]
+jobs:
+    test:
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+            - uses: actions/setup-node@v4
+            - run: npm ci
+            - run: npx playwright install --with-deps chromium
+            - run: npx playwright test
+            - uses: actions/upload-artifact@v4
+                if: failure()
+                with:
+                    name: playwright-report
+                    path: playwright-report/
+```
+
+## Testing checklist
+
+- [ ] `npm test` local pass
+- [ ] Push PR → GitHub Actions run tự động
+- [ ] Fail case → screenshot uploaded làm artifact
+- [ ] Timeout hợp lý (không quá 5 phút)
+
+## Deliverable
+
+Regression bug giảm 70%, tự tin refactor.
+```
+
+---
+
+### P36 — Sentry monitoring
+
+```
+Task: Track lỗi production real-time.
+
+## Setup
+
+Sign up sentry.io free tier (5k errors/tháng).
+
+Add snippet vào `<head>` của index.html:
+```html
+<script src="https://browser.sentry-cdn.com/7.100.0/bundle.min.js"
+        integrity="sha384-..." crossorigin="anonymous"></script>
+<script>
+Sentry.init({
+    dsn: 'https://YOUR_DSN@sentry.io/xxx',
+    tracesSampleRate: 0.1,
+    environment: location.hostname === 'neo-era.github.io' ? 'production' : 'dev',
+    ignoreErrors: [
+        'ResizeObserver loop',
+        'Non-Error promise rejection captured',
+        /extension\/\//
+    ]
+});
+</script>
+```
+
+## Instrument key operations
+
+```js
+try {
+    await syncRowToGAS(row);
+} catch (err) {
+    Sentry.captureException(err, {
+        extra: { row: row.slice(0, 5), currentSheet }
+    });
+    throw err;
+}
+```
+
+## Filter noise
+
+- Adblock errors
+- Extension conflicts
+- Network offline (expected)
+
+## Testing checklist
+
+- [ ] Trigger error test → Sentry dashboard shows
+- [ ] Stack trace symbolicated (source maps)
+- [ ] Environment tag đúng
+- [ ] Free tier không vượt quota
+
+## Deliverable
+
+Bug production được phát hiện trong phút chứ không phải tuần.
+```
+
+---
+
+### P37 — Progressive module extraction
+
+```
+Task: Chia index.html 7000 dòng thành modules.
+
+## Thứ tự extract (theo priority)
+
+### Wave 1: Pure utility (không phụ thuộc DOM)
+
+Files: `lib/vn2000.js`, `lib/utils.js`, `lib/dxf.js`
+
+```js
+// lib/vn2000.js
+export function convertLatLonToVn2000(lat, lon) { ... }
+export function convertVn2000ToLatLon(x, y, mer, k0) { ... }
+```
+
+Trong index.html:
+```html
+<script type="module">
+import { convertLatLonToVn2000 } from './lib/vn2000.js';
+window.convertLatLonToVn2000 = convertLatLonToVn2000; // expose global tạm cho code cũ
+</script>
+```
+
+### Wave 2: Feature modules (có state)
+
+Files: `modules/print.js`, `modules/cable.js`, `modules/cad.js`, `modules/excel.js`
+
+Mỗi module export `init(mapInstance)` function + hooks.
+
+### Wave 3: UI components
+
+Files: `components/markerPopup.js`, `components/searchBar.js`
+
+## Không dùng build tool ban đầu
+
+ES modules native đủ. Nếu sau muốn optimize → chuyển sang Vite (2 giờ setup).
+
+## Testing checklist
+
+- [ ] Sau extract từng module, chức năng giữ nguyên
+- [ ] Console không error import
+- [ ] `sw.js` cache tất cả modules
+- [ ] Load time không tăng > 20%
+
+## Deliverable
+
+Codebase dễ maintain, mỗi module < 500 dòng.
+```
+
+---
+
+### P38 — Unit tests với Vitest
+
+```
+Task: Test coverage 80% pure functions.
+
+## Setup
+
+```bash
+npm i -D vitest
+```
+
+`vitest.config.js`:
+```js
+export default {
+    test: {
+        environment: 'jsdom',
+        coverage: { provider: 'v8', reporter: ['text', 'html'] }
+    }
+};
+```
+
+## Test cases
+
+### `tests/unit/vn2000.test.js`
+
+```js
+import { describe, it, expect } from 'vitest';
+import { convertLatLonToVn2000, convertVn2000ToLatLon } from '../lib/vn2000.js';
+
+describe('VN-2000 conversion', () => {
+    it('forward + reverse roundtrip', () => {
+        const original = { lat: 10.601, lon: 106.664 };
+        const { x, y } = convertLatLonToVn2000(original.lat, original.lon);
+        const back = convertVn2000ToLatLon(x, y, 105, 0.9996);
+        expect(back.lat).toBeCloseTo(original.lat, 5);
+        expect(back.lon).toBeCloseTo(original.lon, 5);
+    });
+});
+```
+
+### `tests/unit/utils.test.js`
+
+- `haversineM(a, b, c, d)` — 5 test cases
+- `_cleanMText(text)` — 10 case: MTEXT groups, %%c, %%NNN
+- `normalizeTextSearchable(text)` — accent removal, đ→d
+
+### `tests/unit/gps.test.js`
+
+- `averageFixes(fixes)` — MAD outlier filter
+
+## GitHub Actions
+
+Add to existing `test.yml`:
+```yaml
+- run: npm run test:unit
+- uses: codecov/codecov-action@v4
+```
+
+## Testing checklist
+
+- [ ] `npm run test:unit` local pass
+- [ ] Coverage report generate
+- [ ] Codecov badge trong README
+- [ ] Coverage > 80% cho lib/*.js
+
+## Deliverable
+
+Bug math được catch ngay khi thay đổi công thức.
+```
+
+---
+
+## Nhóm 18 — SaaS Foundation
+
+### P39 — CLI onboarding tool
+
+```
+Task: Setup khách hàng mới trong 5 phút.
+
+## Package
+
+Tạo repo mới `lighting-survey-setup`, publish npm.
+
+`bin/setup.js`:
+```js
+#!/usr/bin/env node
+import { prompt } from 'inquirer';
+import { google } from 'googleapis';
+import { Octokit } from '@octokit/rest';
+
+const answers = await prompt([
+    { name: 'name', message: 'Tên khách hàng:' },
+    { name: 'email', message: 'Google admin account:' },
+    { name: 'districts', type: 'checkbox', choices: DISTRICTS },
+    { name: 'githubOrg', message: 'GitHub org (optional):' }
+]);
+
+// 1. Google OAuth flow
+const auth = await googleAuth();
+
+// 2. Tạo Spreadsheet + share
+const sheets = google.sheets({ version: 'v4', auth });
+const spreadsheet = await sheets.spreadsheets.create({
+    requestBody: { properties: { title: `LightingSurvey_${answers.name}` } }
+});
+await sheets.spreadsheets.batchUpdate({
+    spreadsheetId: spreadsheet.data.spreadsheetId,
+    requestBody: {
+        requests: answers.districts.map(d => ({ addSheet: { properties: { title: d } } }))
+    }
+});
+
+// 3. Deploy GAS
+// Google Apps Script API - deployment.create()
+
+// 4. Tạo GitHub repo + Pages
+const octokit = new Octokit({ auth: GITHUB_TOKEN });
+await octokit.repos.createForAuthenticatedUser({
+    name: `lighting-survey-${answers.name.toLowerCase()}`,
+    homepage: `https://${answers.githubOrg}.github.io/lighting-survey-${answers.name.toLowerCase()}/`
+});
+
+// 5. Push template code + update config
+// git clone template → sed replace URLs → git push
+
+// 6. Enable GitHub Pages
+await octokit.repos.createPagesSite({ ... });
+
+// 7. Email hướng dẫn
+console.log('✓ Setup xong! URL: https://...');
+```
+
+## Testing checklist
+
+- [ ] End-to-end setup 1 khách mới thành công
+- [ ] Thời gian < 5 phút
+- [ ] Có thể re-run nếu step fail (idempotent)
+- [ ] Rollback khi lỗi giữa chừng
+
+## Deliverable
+
+Onboard khách hàng mới 5 phút thay 4-8 giờ.
+```
+
+---
+
+### P40 — Multi-tenant Supabase
+
+```
+Task: Chuyển từ Google Sheets → Supabase PostgreSQL, multi-tenant.
+
+## Schema
+
+```sql
+CREATE TABLE tenants (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name TEXT NOT NULL,
+    plan TEXT DEFAULT 'free',
+    created_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE users (
+    id UUID PRIMARY KEY,
+    tenant_id UUID REFERENCES tenants,
+    email TEXT UNIQUE,
+    role TEXT,
+    displayed_name TEXT,
+    vung TEXT[]  -- array of allowed sheet names
+);
+
+CREATE TABLE markers (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    tenant_id UUID REFERENCES tenants,
+    district TEXT,
+    ten_tru TEXT,
+    lat FLOAT8,
+    lon FLOAT8,
+    -- ... 22 cột còn lại của schema
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX idx_markers_tenant_district ON markers(tenant_id, district);
+```
+
+## Row Level Security
+
+```sql
+ALTER TABLE markers ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY tenant_isolation ON markers
+    USING (tenant_id = (auth.jwt()->>'tenant_id')::uuid);
+```
+
+## Auth
+
+Supabase Auth (email + password).
+
+## Client rewrite
+
+Thay `syncRowToGAS` bằng:
+```js
+const { data, error } = await supabase.from('markers').upsert(row).select();
+```
+
+## Migration
+
+Script chuyển data từ Google Sheet → Supabase:
+```js
+// migrate.js
+const rows = await fetchAllRowsFromGoogleSheet();
+for (const row of rows) {
+    await supabase.from('markers').insert({ ...row, tenant_id: TENANT_ID });
+}
+```
+
+## Testing checklist
+
+- [ ] Insert marker isolated theo tenant
+- [ ] Query cross-tenant fail (RLS)
+- [ ] Auth flow email + password work
+- [ ] Migration 1000 rows < 5 phút
+- [ ] Realtime subscribe update markers
+
+## Deliverable
+
+Multi-tenant true SaaS, scale > 100 tenants dễ dàng.
+```
+
+---
+
+### P41 — Billing với Payos
+
+```
+Task: Subscription tự động.
+
+## Setup Payos
+
+1. Đăng ký tài khoản business payos.vn
+2. Get API key + partner code
+3. Config webhook URL
+
+## 3 Tier
+
+Sheet `plans`:
+| id | name | price_vnd | max_users | max_markers | features |
+|---|---|---|---|---|---|
+| free | Free | 0 | 2 | 200 | basic |
+| pro | Pro | 500000 | 10 | unlimited | +cad,+api |
+| enterprise | Enterprise | 1500000 | -1 | unlimited | +signature,+custom |
+
+## Flow
+
+1. Tenant upgrade → chọn plan → tạo Payos payment link
+2. Redirect user đến Payos → thanh toán VNPay/Momo/thẻ
+3. Payos webhook → update tenant plan
+4. Enforce limits client-side + server-side
+
+## Client
+
+```js
+async function upgradePlan(planId) {
+    const res = await fetch('/api/upgrade', { method:'POST', body: JSON.stringify({ planId }) });
+    const { paymentUrl } = await res.json();
+    window.location.href = paymentUrl;
+}
+```
+
+## Server
+
+```js
+// Create Payos link
+const link = await payos.createPaymentLink({
+    orderCode: Date.now(),
+    amount: plan.price_vnd,
+    description: `Upgrade ${plan.name}`,
+    returnUrl: 'https://app.com/billing/success',
+    cancelUrl: 'https://app.com/billing/cancel'
+});
+return { paymentUrl: link.checkoutUrl };
+
+// Webhook
+if (payload.success) {
+    await db.tenants.update({ where: { id: tenantId }, data: { plan: planId } });
+}
+```
+
+## Testing checklist
+
+- [ ] Tạo link → redirect Payos
+- [ ] Thanh toán test success → webhook fire → plan update
+- [ ] Cancel → tenant giữ plan cũ
+- [ ] Enforce limits: free tenant thêm marker 201 → deny
+- [ ] Invoice email tự động
+
+## Deliverable
+
+SaaS auto revenue, không cần bill thủ công.
+```
+
+---
+
+### P42 — Vertical expansion — Đèn tín hiệu giao thông
+
+```
+Task: Extend product sang khảo sát đèn tín hiệu giao thông (traffic lights).
+
+## Concept
+
+Tận dụng 80% architecture hiện có, chỉ thay:
+- `TYPE_CONFIG` mới (6 loại đèn tín hiệu)
+- Custom form fields
+- Custom template báo cáo
+
+## New TYPE_CONFIG
+
+```js
+const TRAFFIC_LIGHT_TYPES = {
+    1: { label: 'Đèn tín hiệu chính (3 màu)', color: '#ef4444' },
+    2: { label: 'Đèn xoay 4 hướng', color: '#f59e0b' },
+    3: { label: 'Đèn cho người đi bộ', color: '#10b981' },
+    4: { label: 'Đèn cảnh báo (vàng nhấp nháy)', color: '#eab308' },
+    5: { label: 'Tủ điều khiển tín hiệu', color: '#2563eb' },
+    6: { label: 'Camera giám sát giao thông', color: '#8b5cf6' }
+};
+```
+
+## New fields trong sheet
+
+- Chu kỳ đèn (giây)
+- Kiểu đồng bộ (fixed/adaptive/vehicle-actuated)
+- Kết nối với TCC (Trung tâm điều khiển)
+- Model camera nếu có
+
+## Product variant
+
+Tạo repo `neo-era/traffic-light-survey` fork từ lighting-survey:
+- Change TYPE_CONFIG
+- Change UI labels
+- Change báo cáo template
+- Same auth + map + PDF export code
+
+## Marketing
+
+Target: Sở GTVT, ban ATGT, phòng CSGT
+
+## Testing checklist
+
+- [ ] Fork repo build được
+- [ ] All existing flow (add, edit, export) work với new types
+- [ ] Report template có logo ban ATGT
+- [ ] Deploy demo lên GitHub Pages riêng
+
+## Deliverable
+
+Mở market thứ 2 với effort 40h thay vì build từ đầu 500h.
+```
+
+---
+
+## Ước tính effort tổng
+
+| Prompt | Effort | Priority |
+|---|---|:---:|
+| P21 Ticketing | 40h | 🔴 |
+| P22 Bảo trì | 25h | 🔴 |
+| P23 Task workflow | 30h | 🟠 |
+| P24 Notification | 20h | 🟠 |
+| P25 Dashboard | 30h | 🟠 |
+| P26 Báo cáo NN | 40h | 🔴 |
+| P27 Email report | 15h | 🟠 |
+| P28 Chữ ký số | 40h | 🟢 |
+| P29 Zalo OA | 50h | 🟠 |
+| P30 REST API | 30h | 🟠 |
+| P31 Voice note | 15h | 🟢 |
+| P32 QR scan | 10h | 🟢 |
+| P33 Polygon | 15h | 🟢 |
+| P34 Đo khoảng cách | 8h | 🟢 |
+| P35 Playwright tests | 40h | 🔴 |
+| P36 Sentry | 15h | 🟠 |
+| P37 Module extraction | 60h | 🟠 |
+| P38 Unit tests | 25h | 🟠 |
+| P39 CLI onboarding | 50h | 🟢 |
+| P40 Multi-tenant | 250h | 🟢 |
+| P41 Billing | 80h | 🟢 |
+| P42 Vertical | 40h | 🟢 |
+| **TỔNG** | **~930h** | **~23 tuần** |
+
+## Thứ tự thực hiện đề xuất
+
+**Q1 2026 (2 tháng)** — Hoàn thiện quản lý vận hành:
+- P35 Tests → P21 Ticketing → P22 Bảo trì → P36 Sentry
+
+**Q2 2026 (2 tháng)** — Báo cáo + Analytics:
+- P25 Dashboard → P26 Báo cáo NN → P27 Email → P24 Notification
+
+**Q3 2026 (2 tháng)** — Tích hợp + Field:
+- P29 Zalo → P30 API → P32 QR → P34 Đo → P31 Voice
+
+**Q4 2026 (3 tháng)** — SaaS foundation:
+- P37 Modularize → P39 CLI → P28 Chữ ký → P40 Multi-tenant (nếu đủ khách) → P41 Billing
+
+**2027+** — Vertical:
+- P42 → mở rộng đèn tín hiệu → nước → viễn thông
+
 
 
