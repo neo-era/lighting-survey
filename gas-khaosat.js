@@ -255,6 +255,436 @@ function handleGitHubUpload(filePath, contentBase64, message) {
 
 // ── MAIN HANDLER ───────────────────────────────────────────────────────────
 
+// ══════════════════════════════════════════════════════════════════════════
+// ── BẢO MẬT: Password hashing (PBKDF2-SHA256) + Rate limiting ──────────
+// ══════════════════════════════════════════════════════════════════════════
+// Format hash lưu trong sheet: pbkdf2sha256$50000$<salt>$<hash_base64>
+// Backward compat: nếu password chưa có "$" → plaintext (auto-migrate lần login đầu)
+
+const PASSWORD_ALGO = 'pbkdf2sha256';
+// 10000 iterations = ~0.2s/hash trên GAS. Giảm từ 50000 do timeout khi migrate nhiều user.
+// Format hash tự lưu iterations → mỗi user có thể khác value mà vẫn verify được.
+const PBKDF_ITERATIONS = 10000;
+const LOGIN_ATTEMPT_WINDOW_MS = 5 * 60 * 1000;  // 5 phút
+const LOGIN_ATTEMPT_MAX = 10;                    // 10 attempts / 5 phút / user
+
+// Pepper — secret shared trong Script Properties (tùy chọn, bảo mật thêm 1 lớp)
+function _getPepper() {
+  return PropertiesService.getScriptProperties().getProperty('PASSWORD_PEPPER') || '';
+}
+
+// Generate salt bảo mật dùng Utilities.getUuid (backed by Java SecureRandom)
+function _generateSalt() {
+  var uuid1 = Utilities.getUuid().replace(/-/g, '');
+  var uuid2 = Utilities.getUuid().replace(/-/g, '');
+  return (uuid1 + uuid2).slice(0, 16);
+}
+
+// Iterated SHA-256 (PBKDF2-like)
+function _hashPassword(password, salt, iterations) {
+  iterations = iterations || PBKDF_ITERATIONS;
+  var pepper = _getPepper();
+  var current = String(password) + pepper + String(salt);
+  for (var i = 0; i < iterations; i++) {
+    var bytes = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, current);
+    current = Utilities.base64Encode(bytes);
+  }
+  return current;
+}
+
+function _encodePasswordHash(password) {
+  var salt = _generateSalt();
+  var hash = _hashPassword(password, salt);
+  return PASSWORD_ALGO + '$' + PBKDF_ITERATIONS + '$' + salt + '$' + hash;
+}
+
+function _verifyPassword(password, storedHash) {
+  if (!storedHash) return { ok: false, needsMigration: false };
+  // Backward compat — nếu password chưa hash (không có "$")
+  if (String(storedHash).indexOf('$') === -1) {
+    var isMatch = String(password) === String(storedHash);
+    return { ok: isMatch, needsMigration: isMatch };
+  }
+  var parts = String(storedHash).split('$');
+  if (parts.length !== 4 || parts[0] !== PASSWORD_ALGO) {
+    return { ok: false, needsMigration: false };
+  }
+  var iterations = parseInt(parts[1]) || PBKDF_ITERATIONS;
+  var salt = parts[2];
+  var expectedHash = parts[3];
+  var computedHash = _hashPassword(password, salt, iterations);
+  var ok = computedHash === expectedHash;
+  // Downgrade-on-verify: nếu hash cũ dùng iterations cao (50000) → re-hash với PBKDF_ITERATIONS mới (10000)
+  // → lần login kế tiếp nhanh hơn 5×
+  var needsRehash = ok && iterations > PBKDF_ITERATIONS;
+  return { ok: ok, needsMigration: false, needsRehash: needsRehash };
+}
+
+// Rate limiting — chống brute force login (cache in-memory, reset khi GAS cold start)
+var _loginAttempts = {};
+function _checkLoginRateLimit(username) {
+  var key = String(username || '').toLowerCase();
+  var now = Date.now();
+  if (!_loginAttempts[key]) _loginAttempts[key] = [];
+  // Xóa attempts cũ
+  _loginAttempts[key] = _loginAttempts[key].filter(function(ts) {
+    return (now - ts) < LOGIN_ATTEMPT_WINDOW_MS;
+  });
+  if (_loginAttempts[key].length >= LOGIN_ATTEMPT_MAX) {
+    return { allowed: false, remainingSec: Math.ceil((LOGIN_ATTEMPT_WINDOW_MS - (now - _loginAttempts[key][0])) / 1000) };
+  }
+  return { allowed: true };
+}
+
+function _recordLoginAttempt(username) {
+  var key = String(username || '').toLowerCase();
+  if (!_loginAttempts[key]) _loginAttempts[key] = [];
+  _loginAttempts[key].push(Date.now());
+}
+
+function _clearLoginAttempts(username) {
+  var key = String(username || '').toLowerCase();
+  delete _loginAttempts[key];
+}
+
+/**
+ * Migrate password plaintext → PBKDF2 hash.
+ * ⚡ SAFE: Có timeout guard 5 phút. Chạy lại khi bị dừng — tự động resume từ hàng chưa migrate.
+ * Password đã hash tự động skip.
+ *
+ * Cách chạy: chọn hàm này → ▶ Run → xem log
+ *   → nếu vẫn còn user chưa migrate → chạy lại lần nữa
+ */
+function migrateAllPasswords() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('TaiKhoan');
+  if (!sheet) { Logger.log('❌ Sheet TaiKhoan không tồn tại'); return; }
+  var lastRow = sheet.getLastRow();
+  if (lastRow < 2) { Logger.log('❌ TaiKhoan trống'); return; }
+
+  var rows = sheet.getRange(2, 1, lastRow - 1, 2).getValues();
+  var migrated = 0, skipped = 0, empty = 0, remaining = 0;
+  var startTime = new Date().getTime();
+  var TIMEOUT_MS = 5 * 60 * 1000;  // Dừng sau 5 phút để tránh GAS kill (limit 6 phút)
+
+  Logger.log('═══ Bắt đầu migrate password ═══');
+  Logger.log('Iterations: ' + PBKDF_ITERATIONS);
+  Logger.log('Pepper: ' + (_getPepper() ? 'CÓ' : 'CHƯA SET'));
+  Logger.log('Timeout guard: 5 phút — chạy lại lần nữa nếu còn user chưa xong');
+  Logger.log('');
+
+  for (var i = 0; i < rows.length; i++) {
+    var username = String(rows[i][0] || '').trim();
+    var password = String(rows[i][1] || '').trim();
+    if (!username) continue;
+    if (!password) { Logger.log('⏭  ' + username + ': password trống, skip'); empty++; continue; }
+    if (password.indexOf('$') !== -1 && password.indexOf(PASSWORD_ALGO) === 0) {
+      // Đã hash — skip (không log để đỡ dài)
+      skipped++;
+      continue;
+    }
+
+    // Check timeout — dừng SỚM để có thời gian flush log
+    var elapsed = new Date().getTime() - startTime;
+    if (elapsed > TIMEOUT_MS) {
+      remaining = rows.length - i;
+      Logger.log('');
+      Logger.log('⏱ Dừng do gần timeout. Còn ' + remaining + ' user chưa migrate.');
+      Logger.log('👉 Chạy lại migrateAllPasswords() để tiếp tục.');
+      break;
+    }
+
+    var iterStart = new Date().getTime();
+    var hashed = _encodePasswordHash(password);
+    sheet.getRange(i + 2, 2).setValue(hashed);
+    var iterMs = new Date().getTime() - iterStart;
+    Logger.log('✓ ' + username + ': migrated (' + iterMs + 'ms)');
+    migrated++;
+  }
+
+  Logger.log('');
+  Logger.log('═══════════════════════════');
+  Logger.log('Kết quả: ' + migrated + ' migrated, ' + skipped + ' skipped (đã hash), ' + empty + ' rỗng');
+  if (remaining > 0) {
+    Logger.log('⚠ Còn ' + remaining + ' user — CHẠY LẠI hàm này');
+  } else {
+    Logger.log('✅ HOÀN TẤT — tất cả user đã có hash. Test login với password cũ để verify.');
+  }
+}
+
+/**
+ * Đếm số user chưa được hash (dùng để check trước/sau migrate).
+ */
+function countUnhashedPasswords() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('TaiKhoan');
+  if (!sheet || sheet.getLastRow() < 2) { Logger.log('TaiKhoan trống'); return; }
+  var rows = sheet.getRange(2, 1, sheet.getLastRow() - 1, 2).getValues();
+  var hashed = 0, plain = 0, empty = 0, plainList = [];
+  rows.forEach(function(r) {
+    var u = String(r[0] || '').trim();
+    var p = String(r[1] || '').trim();
+    if (!u) return;
+    if (!p) { empty++; return; }
+    if (p.indexOf(PASSWORD_ALGO) === 0) hashed++;
+    else { plain++; plainList.push(u); }
+  });
+  Logger.log('═══ Password status ═══');
+  Logger.log('🔒 Hashed: ' + hashed);
+  Logger.log('⚠ Plaintext: ' + plain + (plainList.length ? ' (' + plainList.join(', ') + ')' : ''));
+  Logger.log('❌ Trống: ' + empty);
+}
+
+/**
+ * Tạo pepper mới (chỉ chạy 1 lần khi setup ban đầu).
+ * ⚠ QUAN TRỌNG: Nếu đổi pepper sau khi đã có user → toàn bộ password bị invalid.
+ *   Phải chạy lại migrateAllPasswords() (nhưng plaintext cũ đã mất — không thể revert).
+ *
+ * Cách chạy: chọn hàm này → ▶ Run 1 LẦN DUY NHẤT khi setup mới.
+ */
+function generateAndSavePepper() {
+  var existing = PropertiesService.getScriptProperties().getProperty('PASSWORD_PEPPER');
+  if (existing) {
+    Logger.log('⚠ PASSWORD_PEPPER đã tồn tại — KHÔNG override để tránh vô hiệu password.');
+    Logger.log('  Nếu muốn reset, xóa Property "PASSWORD_PEPPER" trong Script Properties trước.');
+    return;
+  }
+  var pepper = _generateSalt() + _generateSalt();
+  PropertiesService.getScriptProperties().setProperty('PASSWORD_PEPPER', pepper);
+  Logger.log('✓ PASSWORD_PEPPER đã lưu vào Script Properties');
+  Logger.log('  Bước tiếp: chạy migrateAllPasswords() để hash password hiện có');
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// ── QUẢN LÝ TÀI KHOẢN (admin only) ─────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════
+
+// Helper: verify admin credentials trong request
+function _requireAdmin(data) {
+  var adminAuth = data.adminAuth || {};
+  var adminUser = String(adminAuth.username || '').trim();
+  var adminPass = String(adminAuth.password || '');
+  if (!adminUser || !adminPass) {
+    return { ok: false, error: 'Thiếu adminAuth' };
+  }
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('TaiKhoan');
+  if (!sheet || sheet.getLastRow() < 2) return { ok: false, error: 'TaiKhoan trống' };
+  var rows = sheet.getRange(2, 1, sheet.getLastRow() - 1, 5).getValues();
+  for (var i = 0; i < rows.length; i++) {
+    var dn = String(rows[i][0] || '').trim();
+    var storedHash = String(rows[i][1] || '').trim();
+    if (dn.toLowerCase() !== adminUser.toLowerCase()) continue;
+    var v = _verifyPassword(adminPass, storedHash);
+    if (!v.ok) return { ok: false, error: 'Password admin sai' };
+    var role = String(rows[i][3] || '').trim().toLowerCase();
+    if (role !== 'admin') return { ok: false, error: 'Cần quyền admin (hiện là ' + role + ')' };
+    return { ok: true, adminUser: dn };
+  }
+  return { ok: false, error: 'Không tìm thấy admin user' };
+}
+
+function handleListUsers(data) {
+  var auth = _requireAdmin(data);
+  if (!auth.ok) return jsonResponse({ status: 'error', message: auth.error });
+
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('TaiKhoan');
+  if (!sheet || sheet.getLastRow() < 2) return jsonResponse({ status: 'ok', users: [] });
+
+  var rows = sheet.getRange(2, 1, sheet.getLastRow() - 1, 5).getValues();
+  var users = rows.map(function(r) {
+    var hashStr = String(r[1] || '').trim();
+    return {
+      username:    String(r[0] || '').trim(),
+      hasPassword: !!hashStr,
+      isHashed:    hashStr.indexOf(PASSWORD_ALGO) === 0,   // true nếu đã hash
+      displayName: String(r[2] || '').trim(),
+      role:        String(r[3] || 'user').trim(),
+      vung:        String(r[4] || '').trim()
+    };
+  }).filter(function(u) { return u.username; });
+  return jsonResponse({ status: 'ok', count: users.length, users: users });
+}
+
+function handleCreateUser(data) {
+  var auth = _requireAdmin(data);
+  if (!auth.ok) return jsonResponse({ status: 'error', message: auth.error });
+
+  var newUser = data.newUser || {};
+  var username    = String(newUser.username    || '').trim();
+  var password    = String(newUser.password    || '');
+  var displayName = String(newUser.displayName || '').trim();
+  var role        = String(newUser.role        || 'user').trim().toLowerCase();
+  var vung        = String(newUser.vung        || '').trim();
+
+  if (!username) return jsonResponse({ status: 'error', message: 'Thiếu username' });
+  if (!password) return jsonResponse({ status: 'error', message: 'Thiếu password' });
+  if (password.length < 6) return jsonResponse({ status: 'error', message: 'Password ≥ 6 ký tự' });
+  if (!['admin','user','user1','demo'].includes(role)) {
+    return jsonResponse({ status: 'error', message: 'Role không hợp lệ (admin/user/user1/demo)' });
+  }
+
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('TaiKhoan');
+  if (!sheet) return jsonResponse({ status: 'error', message: 'Sheet TaiKhoan không tồn tại' });
+
+  // Check duplicate username
+  if (sheet.getLastRow() >= 2) {
+    var existing = sheet.getRange(2, 1, sheet.getLastRow() - 1, 1).getValues();
+    for (var i = 0; i < existing.length; i++) {
+      if (String(existing[i][0]).trim().toLowerCase() === username.toLowerCase()) {
+        return jsonResponse({ status: 'error', message: 'Username đã tồn tại: ' + username });
+      }
+    }
+  }
+
+  sheet.appendRow([
+    username,
+    _encodePasswordHash(password),
+    displayName || username,
+    role,
+    vung
+  ]);
+
+  // Log
+  try {
+    var logSheet = ss.getSheetByName('LichSu');
+    if (logSheet) {
+      logSheet.appendRow([
+        new Date().toISOString(), auth.adminUser, 'create_user',
+        username, displayName, 'role=' + role + ', vung=' + (vung || 'all')
+      ]);
+    }
+  } catch (_) {}
+
+  return jsonResponse({ status: 'ok', username: username });
+}
+
+function handleUpdateUser(data) {
+  var auth = _requireAdmin(data);
+  if (!auth.ok) return jsonResponse({ status: 'error', message: auth.error });
+
+  var target = String(data.targetUsername || '').trim();
+  if (!target) return jsonResponse({ status: 'error', message: 'Thiếu targetUsername' });
+
+  var updates = data.updates || {};
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('TaiKhoan');
+  if (!sheet) return jsonResponse({ status: 'error', message: 'Sheet TaiKhoan không tồn tại' });
+
+  var rows = sheet.getRange(2, 1, sheet.getLastRow() - 1, 5).getValues();
+  for (var i = 0; i < rows.length; i++) {
+    if (String(rows[i][0]).trim().toLowerCase() !== target.toLowerCase()) continue;
+    var rowNum = i + 2;
+    var changes = [];
+    if (updates.displayName !== undefined) {
+      sheet.getRange(rowNum, 3).setValue(String(updates.displayName).trim());
+      changes.push('displayName');
+    }
+    if (updates.role !== undefined) {
+      var role = String(updates.role).trim().toLowerCase();
+      if (!['admin','user','user1','demo'].includes(role)) {
+        return jsonResponse({ status: 'error', message: 'Role không hợp lệ' });
+      }
+      // Không cho phép admin tự demote chính mình (avoid lockout)
+      if (target.toLowerCase() === auth.adminUser.toLowerCase() && role !== 'admin') {
+        return jsonResponse({ status: 'error', message: 'Không thể tự demote chính mình' });
+      }
+      sheet.getRange(rowNum, 4).setValue(role);
+      changes.push('role→' + role);
+    }
+    if (updates.vung !== undefined) {
+      sheet.getRange(rowNum, 5).setValue(String(updates.vung).trim());
+      changes.push('vung');
+    }
+
+    // Log
+    try {
+      var logSheet = ss.getSheetByName('LichSu');
+      if (logSheet) {
+        logSheet.appendRow([
+          new Date().toISOString(), auth.adminUser, 'update_user',
+          target, String(rows[i][2] || ''), changes.join(', ')
+        ]);
+      }
+    } catch (_) {}
+
+    return jsonResponse({ status: 'ok', changes: changes });
+  }
+  return jsonResponse({ status: 'error', message: 'Không tìm thấy user: ' + target });
+}
+
+function handleResetPassword(data) {
+  var auth = _requireAdmin(data);
+  if (!auth.ok) return jsonResponse({ status: 'error', message: auth.error });
+
+  var target = String(data.targetUsername || '').trim();
+  var newPassword = String(data.newPassword || '');
+  if (!target) return jsonResponse({ status: 'error', message: 'Thiếu targetUsername' });
+  if (!newPassword) return jsonResponse({ status: 'error', message: 'Thiếu newPassword' });
+  if (newPassword.length < 6) return jsonResponse({ status: 'error', message: 'Password ≥ 6 ký tự' });
+
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('TaiKhoan');
+  if (!sheet) return jsonResponse({ status: 'error', message: 'Sheet TaiKhoan không tồn tại' });
+
+  var rows = sheet.getRange(2, 1, sheet.getLastRow() - 1, 1).getValues();
+  for (var i = 0; i < rows.length; i++) {
+    if (String(rows[i][0]).trim().toLowerCase() !== target.toLowerCase()) continue;
+    sheet.getRange(i + 2, 2).setValue(_encodePasswordHash(newPassword));
+    // Clear login attempts
+    _clearLoginAttempts(target);
+    // Log
+    try {
+      var logSheet = ss.getSheetByName('LichSu');
+      if (logSheet) {
+        logSheet.appendRow([
+          new Date().toISOString(), auth.adminUser, 'reset_password',
+          target, '', 'admin reset'
+        ]);
+      }
+    } catch (_) {}
+    return jsonResponse({ status: 'ok' });
+  }
+  return jsonResponse({ status: 'error', message: 'Không tìm thấy user: ' + target });
+}
+
+function handleDeleteUser(data) {
+  var auth = _requireAdmin(data);
+  if (!auth.ok) return jsonResponse({ status: 'error', message: auth.error });
+
+  var target = String(data.targetUsername || '').trim();
+  if (!target) return jsonResponse({ status: 'error', message: 'Thiếu targetUsername' });
+  if (target.toLowerCase() === auth.adminUser.toLowerCase()) {
+    return jsonResponse({ status: 'error', message: 'Không thể tự xóa chính mình' });
+  }
+
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('TaiKhoan');
+  if (!sheet) return jsonResponse({ status: 'error', message: 'Sheet TaiKhoan không tồn tại' });
+
+  var rows = sheet.getRange(2, 1, sheet.getLastRow() - 1, 3).getValues();
+  for (var i = 0; i < rows.length; i++) {
+    if (String(rows[i][0]).trim().toLowerCase() !== target.toLowerCase()) continue;
+    var displayName = String(rows[i][2] || '');
+    sheet.deleteRow(i + 2);
+    _clearLoginAttempts(target);
+    // Log
+    try {
+      var logSheet = ss.getSheetByName('LichSu');
+      if (logSheet) {
+        logSheet.appendRow([
+          new Date().toISOString(), auth.adminUser, 'delete_user',
+          target, displayName, 'admin xóa'
+        ]);
+      }
+    } catch (_) {}
+    return jsonResponse({ status: 'ok' });
+  }
+  return jsonResponse({ status: 'error', message: 'Không tìm thấy user: ' + target });
+}
+
 // ── ĐỔI THÔNG TIN TÀI KHOẢN ───────────────────────────────────────────────
 
 function handleChangeCredentials(data) {
@@ -270,22 +700,31 @@ function handleChangeCredentials(data) {
   const newUsername = String(data.newUsername || '').trim();
   const newPassword = String(data.newPassword || '');
 
+  if (newPassword && newPassword.length < 6) {
+    return jsonResponse({ status: 'error', message: 'Mật khẩu mới phải có ít nhất 6 ký tự' });
+  }
+
   const rows = sheet.getRange(2, 1, lastRow - 1, 2).getValues();
   for (var i = 0; i < rows.length; i++) {
     var dn = String(rows[i][0] || '').trim();
-    var mk = String(rows[i][1] || '').trim();
-    if (dn.toLowerCase() === username.toLowerCase() && mk === currentPassword) {
-      var rowNum = i + 2;
-      if (newUsername && newUsername !== dn) {
-        sheet.getRange(rowNum, 1).setValue(newUsername);
-      }
-      if (newPassword) {
-        sheet.getRange(rowNum, 2).setValue(newPassword);
-      }
-      return jsonResponse({ status: 'ok', newUsername: newUsername || dn });
+    var storedHash = String(rows[i][1] || '').trim();
+    if (dn.toLowerCase() !== username.toLowerCase()) continue;
+
+    var verifyResult = _verifyPassword(currentPassword, storedHash);
+    if (!verifyResult.ok) {
+      return jsonResponse({ status: 'error', message: 'Mật khẩu hiện tại không đúng' });
     }
+
+    var rowNum = i + 2;
+    if (newUsername && newUsername !== dn) {
+      sheet.getRange(rowNum, 1).setValue(newUsername);
+    }
+    if (newPassword) {
+      sheet.getRange(rowNum, 2).setValue(_encodePasswordHash(newPassword));
+    }
+    return jsonResponse({ status: 'ok', newUsername: newUsername || dn });
   }
-  return jsonResponse({ status: 'error', message: 'Mật khẩu hiện tại không đúng' });
+  return jsonResponse({ status: 'error', message: 'Không tìm thấy tài khoản' });
 }
 
 // ── ĐĂNG NHẬP ──────────────────────────────────────────────────────────────
@@ -298,25 +737,60 @@ function handleLogin(username, password) {
   const lastRow = sheet.getLastRow();
   if (lastRow < 2) return jsonResponse({ status: 'error', message: 'Sai tên đăng nhập hoặc mật khẩu' });
 
-  const rows = sheet.getRange(2, 1, lastRow - 1, 5).getValues();
-  // Cột: A=tenDangNhap, B=matKhau, C=hoTen, D=vaiTro, E=vung (phân tách bằng dấu phẩy)
-  for (const row of rows) {
-    const dn = String(row[0] || '').trim();
-    const mk = String(row[1] || '').trim();
-    if (dn.toLowerCase() === username.toLowerCase() && mk === password) {
-      const vungRaw = String(row[4] || '').trim();
-      const vung = vungRaw ? vungRaw.split(',').map(function(s){ return s.trim(); }).filter(Boolean) : [];
-      return jsonResponse({
-        status: 'ok',
-        user: {
-          username:    dn,
-          displayName: String(row[2] || dn).trim(),
-          role:        String(row[3] || 'user').trim(),
-          vung:        vung   // [] = được phép tất cả địa bàn
-        }
-      });
-    }
+  // Rate limiting — chống brute force
+  var rateCheck = _checkLoginRateLimit(username);
+  if (!rateCheck.allowed) {
+    return jsonResponse({
+      status: 'error',
+      message: 'Quá nhiều lần thử. Đợi ' + rateCheck.remainingSec + ' giây rồi thử lại.'
+    });
   }
+
+  const rows = sheet.getRange(2, 1, lastRow - 1, 5).getValues();
+  // Cột: A=tenDangNhap, B=matKhau (hoặc hash), C=hoTen, D=vaiTro, E=vung
+  for (var i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    const dn = String(row[0] || '').trim();
+    const storedHash = String(row[1] || '').trim();
+    if (dn.toLowerCase() !== username.toLowerCase()) continue;
+
+    var verifyResult = _verifyPassword(password, storedHash);
+    if (!verifyResult.ok) {
+      _recordLoginAttempt(username);
+      break; // username đúng nhưng password sai → don't leak "user exists"
+    }
+
+    // Login thành công — clear attempts
+    _clearLoginAttempts(username);
+
+    // Auto-migrate plaintext password → hash sau login đầu tiên
+    // HOẶC downgrade hash iterations cao (50000) → PBKDF_ITERATIONS mới (10000) để login nhanh hơn
+    if (verifyResult.needsMigration || verifyResult.needsRehash) {
+      try {
+        var newHash = _encodePasswordHash(password);
+        sheet.getRange(i + 2, 2).setValue(newHash);
+        Logger.log(
+          (verifyResult.needsMigration ? 'Auto-migrated' : 'Auto-rehashed')
+          + ' password cho user: ' + dn
+        );
+      } catch (e) {
+        Logger.log('Auto-rehash lỗi cho ' + dn + ': ' + e.message);
+      }
+    }
+
+    const vungRaw = String(row[4] || '').trim();
+    const vung = vungRaw ? vungRaw.split(',').map(function(s){ return s.trim(); }).filter(Boolean) : [];
+    return jsonResponse({
+      status: 'ok',
+      user: {
+        username:    dn,
+        displayName: String(row[2] || dn).trim(),
+        role:        String(row[3] || 'user').trim(),
+        vung:        vung
+      }
+    });
+  }
+  // Password sai hoặc user không tồn tại — trả về cùng message để không leak
   return jsonResponse({ status: 'error', message: 'Sai tên đăng nhập hoặc mật khẩu' });
 }
 
@@ -412,6 +886,13 @@ function doPost(e) {
 
     // P27: Email báo cáo định kỳ (test manual)
     if (data.action === 'send_monthly_report') return handleSendMonthlyReport(data);
+
+    // Quản lý tài khoản (admin only)
+    if (data.action === 'list_users')       return handleListUsers(data);
+    if (data.action === 'create_user')      return handleCreateUser(data);
+    if (data.action === 'update_user')      return handleUpdateUser(data);
+    if (data.action === 'reset_password')   return handleResetPassword(data);
+    if (data.action === 'delete_user')      return handleDeleteUser(data);
 
     return jsonResponse({ status: 'error', message: 'action không hợp lệ: ' + data.action });
   } catch (err) {

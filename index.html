@@ -1633,6 +1633,15 @@
                   <option value="positron">Positron (sáng)</option>
                 </select>
               </div>
+              <div class="pd-item">
+                <div class="pd-label">Chất lượng in</div>
+                <select id="pdQuality" class="pd-ctrl" title="Scale cao = nét hơn nhưng dễ crash mobile">
+                  <option value="auto" selected>🤖 Auto (khuyến nghị)</option>
+                  <option value="3">💎 Cao (scale 3× · ~90MB)</option>
+                  <option value="2">⚖ Vừa (scale 2× · ~40MB)</option>
+                  <option value="1">🪶 Thấp (scale 1× · ~10MB)</option>
+                </select>
+              </div>
             </div>
             <div class="pd-row">
               <div class="pd-item" style="flex:2">
@@ -2121,6 +2130,99 @@
         </div>
     </div>
 
+    <!-- ═══ ADMIN USERS MODAL ═══ -->
+    <div class="modal fade" id="adminUsersModal" tabindex="-1" role="dialog" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-xl" role="document">
+            <div class="modal-content">
+                <div class="modal-header" style="background:linear-gradient(135deg,#7c3aed,#ec4899);color:#fff;border-bottom:0;">
+                    <h5 class="modal-title" style="color:#fff;font-weight:800;">👥 Quản lý tài khoản</h5>
+                    <button type="button" class="close" data-dismiss="modal" style="color:#fff;text-shadow:none;opacity:.9;"><span>&times;</span></button>
+                </div>
+                <div class="modal-body p-0">
+                    <div id="adminUsersContent" style="max-height:75vh;overflow-y:auto;padding:16px;">
+                        <div style="text-align:center;padding:40px;color:#94a3b8;">Đang tải...</div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Đóng</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══ CREATE USER MODAL ═══ -->
+    <div class="modal fade" id="createUserModal" tabindex="-1" role="dialog" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered" role="document">
+            <div class="modal-content">
+                <div class="modal-header" style="background:#eff6ff;border-bottom:2px solid #2563eb;">
+                    <h5 class="modal-title">➕ Tạo tài khoản mới</h5>
+                    <button type="button" class="close" data-dismiss="modal"><span>&times;</span></button>
+                </div>
+                <div class="modal-body">
+                    <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;">Username <span style="color:#dc2626;">*</span></label>
+                    <input type="text" id="cuUsername" class="form-control form-control-sm" style="margin-bottom:10px;font-size:13px;" placeholder="Không dấu, không space" autocomplete="off">
+
+                    <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;">Password <span style="color:#dc2626;">*</span></label>
+                    <input type="text" id="cuPassword" class="form-control form-control-sm" style="margin-bottom:10px;font-size:13px;" placeholder="≥ 6 ký tự" autocomplete="new-password">
+
+                    <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;">Họ tên</label>
+                    <input type="text" id="cuDisplayName" class="form-control form-control-sm" style="margin-bottom:10px;font-size:13px;" placeholder="Nguyễn Văn A">
+
+                    <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;">Vai trò</label>
+                    <select id="cuRole" class="form-control form-control-sm" style="margin-bottom:10px;font-size:13px;">
+                        <option value="admin">👑 admin — toàn quyền</option>
+                        <option value="user" selected>👤 user — thêm/sửa/xóa</option>
+                        <option value="user1">👁 user1 — chỉ thêm/sửa</option>
+                        <option value="demo">🔒 demo — chỉ xem</option>
+                    </select>
+
+                    <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;">Vùng (địa bàn cho phép)</label>
+                    <input type="text" id="cuVung" class="form-control form-control-sm" style="font-size:13px;" placeholder="Vd: Quan1,Quan3 (trống = tất cả)">
+                    <div style="font-size:11px;color:#64748b;margin-top:4px;">Cách nhau bằng dấu phẩy. Để trống = user thấy tất cả địa bàn.</div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Hủy</button>
+                    <button type="button" id="btnSaveCreateUser" class="btn btn-primary" onclick="saveCreateUser()">💾 Tạo</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══ EDIT USER MODAL ═══ -->
+    <div class="modal fade" id="editUserModal" tabindex="-1" role="dialog" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered" role="document">
+            <div class="modal-content">
+                <div class="modal-header" style="background:#fef3c7;border-bottom:2px solid #f59e0b;">
+                    <h5 class="modal-title">✏️ Sửa tài khoản</h5>
+                    <button type="button" class="close" data-dismiss="modal"><span>&times;</span></button>
+                </div>
+                <div class="modal-body">
+                    <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;">Username (không sửa được)</label>
+                    <input type="text" id="euUsername" class="form-control form-control-sm" style="margin-bottom:10px;font-size:13px;background:#f1f5f9;" readonly>
+
+                    <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;">Họ tên</label>
+                    <input type="text" id="euDisplayName" class="form-control form-control-sm" style="margin-bottom:10px;font-size:13px;">
+
+                    <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;">Vai trò</label>
+                    <select id="euRole" class="form-control form-control-sm" style="margin-bottom:10px;font-size:13px;">
+                        <option value="admin">👑 admin</option>
+                        <option value="user">👤 user</option>
+                        <option value="user1">👁 user1</option>
+                        <option value="demo">🔒 demo</option>
+                    </select>
+
+                    <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;">Vùng</label>
+                    <input type="text" id="euVung" class="form-control form-control-sm" style="font-size:13px;" placeholder="Vd: Quan1,Quan3">
+                    <div style="font-size:11px;color:#64748b;margin-top:6px;">💡 Đổi password: dùng nút 🔑 trong danh sách</div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Hủy</button>
+                    <button type="button" id="btnSaveEditUser" class="btn btn-warning" onclick="saveEditUser()">💾 Lưu</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- ═══ P25: DASHBOARD KPI MODAL ═══ -->
     <div class="modal fade" id="dashboardModal" tabindex="-1" role="dialog" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered modal-xl" role="document">
@@ -2456,7 +2558,7 @@
         // ── PERSIST FORM FIELD CỦA MODAL "IN BẢN VẼ" ───────────────────
         // Lưu/khôi phục các tùy chọn user đã chọn lần trước (trừ pdNgay — luôn lấy hôm nay)
         // pdTenTu cố ý KHÔNG persist — luôn lấy từ filter tủ điều khiển khi mở modal
-        const _PD_FIELDS = ['pdTuSelect','pdScale','pdPaper','pdTileStyle','pdRotation','pdSoBanVe','pdTongBanVe','pdNguoiLap','pdCVPhuTrach','pdCSKhuVuc','pdDonVi1','pdDonVi2','pdDonVi2Sub'];
+        const _PD_FIELDS = ['pdTuSelect','pdScale','pdPaper','pdTileStyle','pdQuality','pdRotation','pdSoBanVe','pdTongBanVe','pdNguoiLap','pdCVPhuTrach','pdCSKhuVuc','pdDonVi1','pdDonVi2','pdDonVi2Sub'];
         function _savePdFields() {
             _PD_FIELDS.forEach(id => {
                 const el = document.getElementById(id);
@@ -2907,7 +3009,9 @@
             overlayDelayMs:  300,
             // html2canvas: scale 3 = pin-sharp cho A3 300 DPI (capture ~3600×2550 → 4960×3508 stretch chỉ 1.38×);
             // scale 2 làm text bể vì stretch 2×. PNG lossless để tránh JPEG artifact quanh text.
-            captureScale: 3,
+            // ⚠ Mobile: dùng captureScaleMobile để tránh OOM (scale 3 = ~90MB peak, mobile cũ có thể crash tab).
+            captureScale:       3,     // Desktop — chữ pin-sharp
+            captureScaleMobile: 2,     // Mobile — chữ hơi bể nhưng không crash
             jpegQuality:  0.95,
             // Timeout chờ tile layer load (fallback nếu network treo)
             tileLoadTimeoutMs: 5000
@@ -3623,11 +3727,35 @@
                 }
 
                 // 5. Capture map (bao gồm SVG cáp + overlay bên trong #map)
-                displayInfo('Đang chụp bản vẽ...');
+                // Chọn scale theo priority:
+                //   1. User chọn manual trong dropdown pdQuality (nếu ≠ 'auto')
+                //   2. Auto: mobile/low-mem device → scale mobile, desktop → scale full
+                const _isLowMemDevice = (typeof navigator !== 'undefined') && (
+                    (navigator.deviceMemory && navigator.deviceMemory <= 4) ||  // <=4GB RAM
+                    (navigator.connection && navigator.connection.effectiveType === 'slow-2g')
+                );
+                const _userQuality = (document.getElementById('pdQuality') || {}).value || 'auto';
+                let _printScale;
+                let _scaleReason;
+                if (_userQuality !== 'auto') {
+                    _printScale = parseInt(_userQuality) || PRINT_CONFIG.captureScale;
+                    _scaleReason = 'user chọn ' + _userQuality + '×';
+                } else if (isMobile || _isLowMemDevice) {
+                    _printScale = PRINT_CONFIG.captureScaleMobile;
+                    _scaleReason = 'auto mobile/low-mem';
+                } else {
+                    _printScale = PRINT_CONFIG.captureScale;
+                    _scaleReason = 'auto desktop';
+                }
+                displayInfo(`Đang chụp bản vẽ... (scale ${_printScale}× · ${_scaleReason})`);
+                console.log('[print] scale =', _printScale,
+                    '· reason =', _scaleReason,
+                    '· isMobile =', isMobile,
+                    '· deviceMemory =', (navigator.deviceMemory || 'unknown') + 'GB');
                 const canvas = await window.html2canvas(mapEl, {
                     useCORS: true,
                     allowTaint: false,
-                    scale: PRINT_CONFIG.captureScale,
+                    scale: _printScale,
                     logging: false,
                     ignoreElements: el =>
                         el.classList && (
@@ -3658,6 +3786,33 @@
 
             } catch (err) {
                 console.error('exportDrawingPDF:', err);
+                // Detect Out-Of-Memory hoặc canvas allocation failure
+                var msg = String(err.message || err).toLowerCase();
+                var isOOM = msg.includes('out of memory') ||
+                            msg.includes('cannot allocate') ||
+                            msg.includes('canvas') ||
+                            msg.includes('exceeds') ||
+                            msg.includes('maximum');
+                if (isOOM && !window._pdfRetryLowScale) {
+                    window._pdfRetryLowScale = true;
+                    displayError(
+                        '⚠ Máy hết bộ nhớ. Thử lại với scale thấp hơn?\n' +
+                        'Nhấn OK để tự động thử lại với chất lượng thấp hơn (chữ có thể hơi bể nhưng không crash).'
+                    );
+                    // Fallback: giảm scale xuống 1 rồi retry
+                    var oldScale = PRINT_CONFIG.captureScale;
+                    var oldScaleM = PRINT_CONFIG.captureScaleMobile;
+                    PRINT_CONFIG.captureScale = 1;
+                    PRINT_CONFIG.captureScaleMobile = 1;
+                    setTimeout(() => {
+                        exportDrawingPDF().finally(() => {
+                            PRINT_CONFIG.captureScale = oldScale;
+                            PRINT_CONFIG.captureScaleMobile = oldScaleM;
+                            window._pdfRetryLowScale = false;
+                        });
+                    }, 1000);
+                    return;
+                }
                 displayError('Lỗi xuất PDF: ' + (err.message || err));
             } finally {
                 // Cleanup — mỗi step độc lập, 1 fail không chặn các step khác
@@ -3804,35 +3959,51 @@
             btn.disabled = true; btn.textContent = '⏳ Đang đăng nhập...';
             if (cancelBtn) cancelBtn.style.display = 'none';
             _loginCtrl = new AbortController();
-            const tid = setTimeout(() => ctrl.abort(), 25000);
-            // Hiện nút Hủy sau 4 giây (GAS cold start có thể mất 10-20 giây)
+            const ctrl = _loginCtrl;
+            // Tăng timeout lên 60s — GAS cold start + PBKDF2 verify + auto-migrate
+            // plaintext password có thể mất 30-40s trong lần login đầu tiên
+            const tid = setTimeout(() => ctrl.abort(), 60000);
+            // Hiện nút Hủy sau 4 giây
             const cancelTid = setTimeout(() => {
                 if (cancelBtn) {
                     cancelBtn.style.display = 'inline-block';
-                    errEl.textContent = 'Máy chủ đang khởi động, vui lòng chờ...';
+                    errEl.textContent = 'Máy chủ đang khởi động (có thể mất 30-40 giây lần đầu)...';
                 }
             }, 4000);
-            const ctrl = _loginCtrl;
+            // Hiển thị progress rõ hơn sau 15s
+            const progressTid = setTimeout(() => {
+                errEl.textContent = 'Vẫn đang xử lý — vui lòng chờ thêm ...';
+            }, 15000);
+            const startTime = Date.now();
             try {
                 const res = await fetch(KHAOSAT_GAS_URL, {
                     method: 'POST',
                     body: JSON.stringify({ action: 'login', username, password }),
                     signal: ctrl.signal
                 });
-                clearTimeout(tid); clearTimeout(cancelTid);
+                clearTimeout(tid); clearTimeout(cancelTid); clearTimeout(progressTid);
                 if (!res.ok) throw new Error('HTTP ' + res.status);
                 const data = await res.json();
                 if (data.status === 'ok') {
+                    const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+                    console.log('[login] OK sau ' + elapsed + 's');
                     currentUser = data.user;
                     localStorage.setItem('ks_user', JSON.stringify(currentUser));
+                    // Cache password trong memory (KHÔNG localStorage) để dùng cho admin actions
+                    // Refresh → mất, phải relogin (an toàn hơn lưu persistent)
+                    if (currentUser.role === 'admin') {
+                        window._adminAuth = { username: username, password: password };
+                    }
                     _showApp();
                 } else {
                     errEl.textContent = data.message || 'Sai tên đăng nhập hoặc mật khẩu';
                 }
             } catch(e) {
-                clearTimeout(tid); clearTimeout(cancelTid);
+                clearTimeout(tid); clearTimeout(cancelTid); clearTimeout(progressTid);
+                const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+                console.log('[login] Lỗi sau ' + elapsed + 's:', e.message);
                 errEl.textContent = e.name === 'AbortError'
-                    ? 'Đã hủy hoặc máy chủ quá chậm — vui lòng thử lại.'
+                    ? `Máy chủ quá chậm (${elapsed}s). Bấm Đăng nhập lại — lần sau sẽ nhanh hơn (GAS đã warm-up).`
                     : 'Lỗi kết nối: ' + e.message;
             } finally {
                 _loginCtrl = null;
@@ -3964,7 +4135,7 @@
         function _buildDistrictOptions() {
             const sel = document.getElementById('pages');
             if (!sel) return;
-            [...sel.options].filter(o => o.value.startsWith('district_') || o.value === 'suco' || o.value === 'baotri' || o.value === 'nhiemvu' || o.value === 'dashboard' || o.value === 'baocao').forEach(o => o.remove());
+            [...sel.options].filter(o => o.value.startsWith('district_') || o.value === 'suco' || o.value === 'baotri' || o.value === 'nhiemvu' || o.value === 'dashboard' || o.value === 'baocao' || o.value === 'admin_users').forEach(o => o.remove());
             const firstOpt = sel.options[0];
             _allowedPages().forEach(page => {
                 const opt = document.createElement('option');
@@ -3998,6 +4169,11 @@
                 bcOpt.value = 'baocao';
                 bcOpt.textContent = '📑 Báo cáo Nhà nước';
                 sel.appendChild(bcOpt);
+                // Quản lý tài khoản
+                const auOpt = document.createElement('option');
+                auOpt.value = 'admin_users';
+                auOpt.textContent = '👥 Quản lý tài khoản';
+                sel.appendChild(auOpt);
             }
         }
 
@@ -8613,6 +8789,11 @@
                 setTimeout(() => { if (s) s.value = prev; }, 0);
                 return;
             }
+            if (val === 'admin_users') {
+                showAdminUsersModal();
+                setTimeout(() => { if (s) s.value = prev; }, 0);
+                return;
+            }
             if (val.startsWith('district_')) {
                 switchDistrict(val.replace('district_', ''));
                 return;
@@ -10236,6 +10417,233 @@
 
         // ── P25: DASHBOARD KPI ─────────────────────────────────────────────
         let _dashboardCharts = {}; // chartId → Chart instance để destroy khi rerender
+
+        // ══════════════════════════════════════════════════════════════
+        // ── QUẢN LÝ TÀI KHOẢN (admin only) ──────────────────────────
+        // ══════════════════════════════════════════════════════════════
+        let _adminUsersList = [];
+
+        async function showAdminUsersModal() {
+            if (!currentUser || currentUser.role !== 'admin') {
+                displayError('Chỉ admin mới xem được'); return;
+            }
+            if (!window._adminAuth) {
+                displayError('Cần đăng nhập lại để có quyền quản lý (bấm Đăng xuất → đăng nhập lại)');
+                return;
+            }
+            $('#adminUsersModal').modal('show');
+            await _loadAdminUsers();
+        }
+
+        async function _loadAdminUsers() {
+            const container = document.getElementById('adminUsersContent');
+            container.innerHTML = '<div style="text-align:center;padding:40px;color:#94a3b8;">Đang tải...</div>';
+            try {
+                const resp = await fetch(KHAOSAT_GAS_URL, {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        action: 'list_users',
+                        adminAuth: window._adminAuth
+                    })
+                });
+                const data = await resp.json();
+                if (data.status !== 'ok') throw new Error(data.message || 'Lỗi tải');
+                _adminUsersList = data.users || [];
+                _renderAdminUsersTable();
+            } catch (err) {
+                container.innerHTML = `<div style="padding:20px;color:#dc2626;">Lỗi: ${err.message}</div>`;
+            }
+        }
+
+        function _renderAdminUsersTable() {
+            const container = document.getElementById('adminUsersContent');
+            const q = normalizeTextSearchable((document.getElementById('auSearch') || {}).value || '');
+            const fRole = (document.getElementById('auFilterRole') || {}).value || '';
+            let users = _adminUsersList.slice();
+            if (fRole) users = users.filter(u => u.role === fRole);
+            if (q) users = users.filter(u => normalizeTextSearchable(u.username + ' ' + u.displayName + ' ' + u.vung).includes(q));
+
+            const roleColor = {
+                admin: '#dc2626', user: '#059669', user1: '#f59e0b', demo: '#64748b'
+            };
+            const cnt = { admin: 0, user: 0, user1: 0, demo: 0 };
+            _adminUsersList.forEach(u => { if (cnt[u.role] != null) cnt[u.role]++; });
+
+            let html = `
+                <div style="display:flex;gap:8px;flex-wrap:wrap;padding:10px;background:#f8fafc;border-radius:8px;margin-bottom:10px;font-size:12px;">
+                    <span style="background:#fee2e2;color:#dc2626;padding:4px 10px;border-radius:6px;font-weight:700;">👑 Admin: ${cnt.admin}</span>
+                    <span style="background:#dcfce7;color:#059669;padding:4px 10px;border-radius:6px;font-weight:700;">👤 User: ${cnt.user}</span>
+                    <span style="background:#fef3c7;color:#f59e0b;padding:4px 10px;border-radius:6px;font-weight:700;">👁 User1: ${cnt.user1}</span>
+                    <span style="background:#f1f5f9;color:#64748b;padding:4px 10px;border-radius:6px;font-weight:700;">🔒 Demo: ${cnt.demo}</span>
+                    <span style="color:#64748b;padding:4px 10px;margin-left:auto;">Hiển thị ${users.length}/${_adminUsersList.length}</span>
+                </div>
+                <div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap;align-items:center;">
+                    <button onclick="_openCreateUserModal()" class="btn btn-sm btn-primary" style="font-size:12px;">+ Thêm tài khoản</button>
+                    <input type="search" id="auSearch" placeholder="🔍 Tìm username, tên, vùng..."
+                           oninput="_renderAdminUsersTable()"
+                           value="${((document.getElementById('auSearch')||{}).value || '').replace(/"/g,'&quot;')}"
+                           style="flex:1;min-width:180px;padding:6px 10px;border:1.5px solid #cbd5e1;border-radius:6px;font-size:12px;">
+                    <select id="auFilterRole" onchange="_renderAdminUsersTable()"
+                            style="padding:6px 10px;border:1.5px solid #cbd5e1;border-radius:6px;font-size:12px;">
+                        <option value="">Mọi vai trò</option>
+                        <option value="admin" ${fRole==='admin'?'selected':''}>👑 Admin</option>
+                        <option value="user" ${fRole==='user'?'selected':''}>👤 User</option>
+                        <option value="user1" ${fRole==='user1'?'selected':''}>👁 User1</option>
+                        <option value="demo" ${fRole==='demo'?'selected':''}>🔒 Demo</option>
+                    </select>
+                    <button onclick="_loadAdminUsers()" class="btn btn-sm btn-outline-secondary" style="font-size:11px;">🔄</button>
+                </div>
+                <table class="table table-sm table-bordered" style="font-size:12px;">
+                    <thead style="background:#f8fafc;font-weight:700;position:sticky;top:0;">
+                        <tr><th>Username</th><th>Họ tên</th><th>Vai trò</th><th>Vùng</th><th>Password</th><th>Hành động</th></tr>
+                    </thead><tbody>`;
+            for (const u of users) {
+                const isCurrent = currentUser && u.username.toLowerCase() === currentUser.username.toLowerCase();
+                const pwStatus = u.hasPassword
+                    ? (u.isHashed ? '<span style="color:#059669;">🔒 Hashed</span>' : '<span style="color:#f59e0b;">⚠ Plaintext</span>')
+                    : '<span style="color:#dc2626;">❌ Trống</span>';
+                html += `<tr ${isCurrent ? 'style="background:#eff6ff;"' : ''}>
+                    <td><b>${u.username}</b> ${isCurrent ? '<span style="font-size:9px;color:#2563eb;">(bạn)</span>' : ''}</td>
+                    <td>${u.displayName || '<i style="color:#94a3b8;">chưa có</i>'}</td>
+                    <td><span style="color:${roleColor[u.role]||'#64748b'};font-weight:700;">${u.role}</span></td>
+                    <td style="font-family:monospace;font-size:11px;">${u.vung || '<i style="color:#94a3b8;">tất cả</i>'}</td>
+                    <td>${pwStatus}</td>
+                    <td style="white-space:nowrap;">
+                        <button class="btn btn-xs btn-outline-warning" onclick="_openEditUserModal('${u.username}')" title="Sửa" style="font-size:10px;padding:2px 6px;">✏️</button>
+                        <button class="btn btn-xs btn-outline-primary" onclick="_resetUserPassword('${u.username}')" title="Reset password" style="font-size:10px;padding:2px 6px;">🔑</button>
+                        ${!isCurrent ? `<button class="btn btn-xs btn-outline-danger" onclick="_deleteUser('${u.username}')" title="Xóa" style="font-size:10px;padding:2px 6px;">🗑</button>` : ''}
+                    </td>
+                </tr>`;
+            }
+            html += '</tbody></table>';
+            container.innerHTML = html;
+        }
+
+        function _openCreateUserModal() {
+            document.getElementById('cuUsername').value = '';
+            document.getElementById('cuPassword').value = '';
+            document.getElementById('cuDisplayName').value = '';
+            document.getElementById('cuRole').value = 'user';
+            document.getElementById('cuVung').value = '';
+            $('#createUserModal').modal('show');
+        }
+
+        async function saveCreateUser() {
+            const newUser = {
+                username:    document.getElementById('cuUsername').value.trim(),
+                password:    document.getElementById('cuPassword').value,
+                displayName: document.getElementById('cuDisplayName').value.trim(),
+                role:        document.getElementById('cuRole').value,
+                vung:        document.getElementById('cuVung').value.trim()
+            };
+            if (!newUser.username || !newUser.password) { displayError('Cần username + password'); return; }
+            if (newUser.password.length < 6) { displayError('Password ≥ 6 ký tự'); return; }
+            const btn = document.getElementById('btnSaveCreateUser');
+            if (btn) { btn.disabled = true; btn.textContent = '⏳...'; }
+            try {
+                const resp = await fetch(KHAOSAT_GAS_URL, {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        action: 'create_user',
+                        adminAuth: window._adminAuth,
+                        newUser
+                    })
+                });
+                const data = await resp.json();
+                if (data.status !== 'ok') throw new Error(data.message || 'Lỗi tạo');
+                $('#createUserModal').modal('hide');
+                displayInfo(`✅ Đã tạo user: ${newUser.username}`);
+                setTimeout(_loadAdminUsers, 400);
+            } catch (err) {
+                displayError('Lỗi: ' + err.message);
+            } finally {
+                if (btn) { btn.disabled = false; btn.textContent = '💾 Tạo'; }
+            }
+        }
+
+        function _openEditUserModal(username) {
+            const u = _adminUsersList.find(x => x.username === username);
+            if (!u) return;
+            document.getElementById('euUsername').value = u.username;
+            document.getElementById('euDisplayName').value = u.displayName;
+            document.getElementById('euRole').value = u.role;
+            document.getElementById('euVung').value = u.vung;
+            $('#editUserModal').modal('show');
+        }
+
+        async function saveEditUser() {
+            const username = document.getElementById('euUsername').value;
+            const updates = {
+                displayName: document.getElementById('euDisplayName').value.trim(),
+                role:        document.getElementById('euRole').value,
+                vung:        document.getElementById('euVung').value.trim()
+            };
+            const btn = document.getElementById('btnSaveEditUser');
+            if (btn) { btn.disabled = true; btn.textContent = '⏳...'; }
+            try {
+                const resp = await fetch(KHAOSAT_GAS_URL, {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        action: 'update_user',
+                        adminAuth: window._adminAuth,
+                        targetUsername: username,
+                        updates
+                    })
+                });
+                const data = await resp.json();
+                if (data.status !== 'ok') throw new Error(data.message || 'Lỗi update');
+                $('#editUserModal').modal('hide');
+                displayInfo(`✅ Cập nhật: ${data.changes.join(', ')}`);
+                setTimeout(_loadAdminUsers, 400);
+            } catch (err) {
+                displayError('Lỗi: ' + err.message);
+            } finally {
+                if (btn) { btn.disabled = false; btn.textContent = '💾 Lưu'; }
+            }
+        }
+
+        async function _resetUserPassword(username) {
+            const newPass = prompt(`Reset password cho "${username}":\n(≥ 6 ký tự)`, '');
+            if (!newPass) return;
+            if (newPass.length < 6) { displayError('Password ≥ 6 ký tự'); return; }
+            try {
+                const resp = await fetch(KHAOSAT_GAS_URL, {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        action: 'reset_password',
+                        adminAuth: window._adminAuth,
+                        targetUsername: username,
+                        newPassword: newPass
+                    })
+                });
+                const data = await resp.json();
+                if (data.status !== 'ok') throw new Error(data.message || 'Lỗi reset');
+                displayInfo(`✅ Đã reset password cho ${username}`);
+                setTimeout(_loadAdminUsers, 400);
+            } catch (err) {
+                displayError('Lỗi: ' + err.message);
+            }
+        }
+
+        async function _deleteUser(username) {
+            if (!confirm(`Xóa tài khoản "${username}"?\n\nHành động này KHÔNG THỂ hoàn tác.`)) return;
+            try {
+                const resp = await fetch(KHAOSAT_GAS_URL, {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        action: 'delete_user',
+                        adminAuth: window._adminAuth,
+                        targetUsername: username
+                    })
+                });
+                const data = await resp.json();
+                if (data.status !== 'ok') throw new Error(data.message || 'Lỗi xóa');
+                displayInfo(`🗑 Đã xóa: ${username}`);
+                setTimeout(_loadAdminUsers, 400);
+            } catch (err) {
+                displayError('Lỗi: ' + err.message);
+            }
+        }
 
         async function showDashboardModal() {
             $('#dashboardModal').modal('show');
