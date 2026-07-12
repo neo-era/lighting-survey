@@ -263,8 +263,8 @@
     <h4 style="margin-top:14px;color:#1e40af;">👥 Phân quyền 4 vai trò</h4>
     <ul>
       <li><strong>admin</strong>: đầy đủ + xem lịch sử thao tác</li>
-      <li><strong>user</strong>: thêm/sửa/xóa + GitHub sync</li>
-      <li><strong>user1</strong>: thêm/sửa, không được xóa</li>
+      <li><strong>user</strong>: thêm/sửa/xóa/kéo marker (không GitHub sync)</li>
+      <li><strong>user1</strong>: thêm/sửa (không xóa, không kéo marker, không GitHub sync)</li>
       <li><strong>demo</strong>: chỉ xem bản đồ</li>
       <li>Đổi tên đăng nhập / mật khẩu trực tiếp trong app (nút 🔑)</li>
     </ul>
@@ -342,8 +342,8 @@
         <th>Vai trò</th><th>Xem bản đồ</th><th>Thêm / Sửa</th><th>Xóa</th><th>Kéo marker</th><th>GitHub sync</th><th>Camera / Đèn tắt</th>
       </tr>
       <tr><td><span class="badge badge-red">admin</span></td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td></tr>
-      <tr><td><span class="badge badge-blue">user</span></td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="no">✗</td></tr>
-      <tr><td><span class="badge badge-green">user1</span></td><td class="yes">✓</td><td class="yes">✓</td><td class="no">✗</td><td class="yes">✓</td><td class="yes">✓</td><td class="no">✗</td></tr>
+      <tr><td><span class="badge badge-blue">user</span></td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="no">✗</td><td class="no">✗</td></tr>
+      <tr><td><span class="badge badge-green">user1</span></td><td class="yes">✓</td><td class="yes">✓</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td></tr>
       <tr><td><span class="badge badge-gray">demo</span></td><td class="yes">✓</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td></tr>
     </table>
 
@@ -516,7 +516,7 @@
     </div>
     <div class="note note-warn">
       <span class="note-icon">🔒</span>
-      <div>Chỉ tài khoản admin / user / user1 mới kéo được marker. Tài khoản <code>demo</code> không thể kéo.</div>
+      <div>Chỉ tài khoản <code>admin</code> và <code>user</code> mới kéo được marker. Tài khoản <code>user1</code> và <code>demo</code> không thể kéo.</div>
     </div>
   </section>
 

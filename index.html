@@ -4091,11 +4091,14 @@
         }
 
         // ── PHÂN QUYỀN ──────────────────────────────────────────────────────
-        // admin / user  → Read + Write + Delete
-        // user1         → Read + Write
-        // demo          → Read only
+        // admin       → tất cả (edit + delete + drag + github sync)
+        // user        → edit + delete + drag  (KHÔNG github sync)
+        // user1       → edit                  (KHÔNG delete, KHÔNG drag, KHÔNG github sync)
+        // demo        → chỉ xem
         function canEdit()   { const r = currentUser && currentUser.role; return r === 'admin' || r === 'user' || r === 'user1'; }
         function canDelete() { const r = currentUser && currentUser.role; return r === 'admin' || r === 'user'; }
+        function canDrag()   { const r = currentUser && currentUser.role; return r === 'admin' || r === 'user'; }
+        function canGithubSync() { const r = currentUser && currentUser.role; return r === 'admin'; }
 
         function _applyRoleUI() {
             const edit = canEdit();
@@ -4104,9 +4107,12 @@
             // Ẩn nút Thêm marker với vai trò demo
             const addBtn = document.getElementById('addMarkerBtn');
             if (addBtn) addBtn.style.display = edit ? '' : 'none';
-            // Ẩn nút GitHub sync với vai trò demo
-            const ghBtn = document.getElementById('githubSyncBtn');
-            if (ghBtn) ghBtn.style.display = edit ? '' : 'none';
+            // GitHub sync — chỉ admin (ẩn cả section "🐙 GitHub Sync" cho gọn)
+            const ghSec = document.getElementById('sec-github');
+            if (ghSec) ghSec.style.display = canGithubSync() ? '' : 'none';
+            // Nút chỉnh vị trí — chỉ admin/user (không user1/demo)
+            const dragBtn = document.getElementById('editPositionBtn');
+            if (dragBtn) dragBtn.style.display = canDrag() ? '' : 'none';
             // Hiện role badge trên topbar tooltip
             const chip = document.getElementById('topbarUser');
             if (chip && currentUser) {
@@ -6621,8 +6627,8 @@
         }
 
         function toggleEditPositionMode() {
-            if (!canEdit()) {
-                displayError('Tài khoản hiện tại không có quyền chỉnh vị trí.');
+            if (!canDrag()) {
+                displayError('Tài khoản hiện tại không có quyền kéo marker.');
                 return;
             }
             editPositionMode = !editPositionMode;
@@ -6735,7 +6741,7 @@
             } else {
                 icon = customIcons.default;
             }
-            const marker = L.marker([lat, lon], { icon, draggable: editPositionMode && canEdit() });
+            const marker = L.marker([lat, lon], { icon, draggable: editPositionMode && canDrag() });
             marker._rowRef = row;
 
             marker.bindPopup('', { minWidth: 280 });
@@ -8577,6 +8583,7 @@
 
         async function updateGitHubExcel() {
             try {
+                if (!canGithubSync()) { displayError('Tài khoản hiện tại không có quyền GitHub sync.'); return; }
                 if (!KHAOSAT_GAS_URL) { displayError('Chưa cấu hình GAS URL.'); return; }
                 try { await _loadExcelJS(); } catch(_) { /* fallback sang XLSX.js bên dưới */ }
                 const pathInput = document.getElementById('githubPathInput');
