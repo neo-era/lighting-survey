@@ -413,6 +413,107 @@ function migrateAllPasswords() {
 }
 
 /**
+ * ⚡ RESET tất cả password về value mặc định "Lavipco@2025" với hash 10000 iterations.
+ *
+ * Dùng khi: user cũ đã hash với 50000 iterations → login mỗi lần chờ 50s → cần reset toàn bộ.
+ *
+ * ⚠ TẤT CẢ password cũ sẽ bị mất — user PHẢI login với password mặc định rồi tự đổi.
+ *
+ * Cách chạy: chọn hàm này → ▶ Run → xem log
+ */
+function resetAllPasswordsToDefault() {
+  var DEFAULT_PASSWORD = 'Lavipco@2025';
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('TaiKhoan');
+  if (!sheet) { Logger.log('❌ Sheet TaiKhoan không tồn tại'); return; }
+  var lastRow = sheet.getLastRow();
+  if (lastRow < 2) { Logger.log('❌ TaiKhoan trống'); return; }
+
+  var rows = sheet.getRange(2, 1, lastRow - 1, 2).getValues();
+  var reset = 0, empty = 0;
+  var startTime = new Date().getTime();
+  var TIMEOUT_MS = 5 * 60 * 1000;
+
+  Logger.log('═══ Reset tất cả password về mặc định ═══');
+  Logger.log('Password mặc định: "' + DEFAULT_PASSWORD + '"');
+  Logger.log('Iterations mới: ' + PBKDF_ITERATIONS);
+  Logger.log('');
+
+  // Hash 1 lần dùng cho tất cả (mỗi user vẫn có salt riêng nên hash cuối vẫn unique)
+  for (var i = 0; i < rows.length; i++) {
+    var username = String(rows[i][0] || '').trim();
+    if (!username) { empty++; continue; }
+
+    var elapsed = new Date().getTime() - startTime;
+    if (elapsed > TIMEOUT_MS) {
+      Logger.log('⏱ Dừng do gần timeout. Còn ' + (rows.length - i) + ' user. Chạy lại để tiếp tục.');
+      break;
+    }
+
+    var hashed = _encodePasswordHash(DEFAULT_PASSWORD);
+    sheet.getRange(i + 2, 2).setValue(hashed);
+    Logger.log('✓ ' + username + ': reset');
+    reset++;
+  }
+
+  Logger.log('');
+  Logger.log('═══════════════════════════');
+  Logger.log('✅ Đã reset ' + reset + ' user về password: "' + DEFAULT_PASSWORD + '"');
+  Logger.log('👉 Gửi thông báo cho user login với password này rồi tự đổi qua UI.');
+}
+
+/**
+ * ⚡ Rehash password từ 50000 iterations → 10000 iterations DÙNG PASSWORD ĐÃ BIẾT.
+ *
+ * Trick: nếu bạn nhớ password của user, có thể verify hash cũ (chậm 50s) → rehash 10000 (nhanh 200ms).
+ * KHÔNG cần user tự login.
+ *
+ * Chỉ dùng khi admin quen thân với user và biết password của họ.
+ * Cách dùng: sửa mảng KNOWN_PASSWORDS bên dưới → chạy hàm này.
+ */
+function rehashKnownPasswords() {
+  // ⚠ EDIT array này với danh sách { username, password } bạn nhớ
+  var KNOWN_PASSWORDS = [
+    // { username: 'admin', password: 'Lavipco@2025' },
+    // { username: 'lamvt', password: 'password_cua_lam' },
+  ];
+
+  if (KNOWN_PASSWORDS.length === 0) {
+    Logger.log('❌ KNOWN_PASSWORDS trống. Edit array trong hàm này trước khi chạy.');
+    return;
+  }
+
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('TaiKhoan');
+  if (!sheet) { Logger.log('❌ Sheet TaiKhoan không tồn tại'); return; }
+  var lastRow = sheet.getLastRow();
+  var rows = sheet.getRange(2, 1, lastRow - 1, 2).getValues();
+
+  var ok = 0, wrongPassword = 0, notFound = 0;
+
+  KNOWN_PASSWORDS.forEach(function(entry) {
+    var idx = -1;
+    for (var i = 0; i < rows.length; i++) {
+      if (String(rows[i][0]).trim().toLowerCase() === entry.username.toLowerCase()) { idx = i; break; }
+    }
+    if (idx === -1) { Logger.log('❌ ' + entry.username + ': không tìm thấy'); notFound++; return; }
+
+    var storedHash = String(rows[idx][1] || '').trim();
+    var v = _verifyPassword(entry.password, storedHash);
+    if (!v.ok) { Logger.log('❌ ' + entry.username + ': password sai (không match hash hiện tại)'); wrongPassword++; return; }
+
+    var newHash = _encodePasswordHash(entry.password);
+    sheet.getRange(idx + 2, 2).setValue(newHash);
+    Logger.log('✓ ' + entry.username + ': rehashed');
+    ok++;
+  });
+
+  Logger.log('');
+  Logger.log('═══════════════════════════');
+  Logger.log('Kết quả: ' + ok + ' rehashed, ' + wrongPassword + ' sai password, ' + notFound + ' không tìm thấy');
+}
+
+/**
  * Đếm số user chưa được hash (dùng để check trước/sau migrate).
  */
 function countUnhashedPasswords() {
@@ -420,19 +521,32 @@ function countUnhashedPasswords() {
   var sheet = ss.getSheetByName('TaiKhoan');
   if (!sheet || sheet.getLastRow() < 2) { Logger.log('TaiKhoan trống'); return; }
   var rows = sheet.getRange(2, 1, sheet.getLastRow() - 1, 2).getValues();
-  var hashed = 0, plain = 0, empty = 0, plainList = [];
+  var byIters = {}, plain = 0, empty = 0, plainList = [], slowList = [];
   rows.forEach(function(r) {
     var u = String(r[0] || '').trim();
     var p = String(r[1] || '').trim();
     if (!u) return;
     if (!p) { empty++; return; }
-    if (p.indexOf(PASSWORD_ALGO) === 0) hashed++;
-    else { plain++; plainList.push(u); }
+    if (p.indexOf(PASSWORD_ALGO) === 0) {
+      var parts = p.split('$');
+      var iters = parseInt(parts[1]) || 0;
+      byIters[iters] = (byIters[iters] || 0) + 1;
+      if (iters > PBKDF_ITERATIONS) slowList.push(u + ' (' + iters + ')');
+    } else { plain++; plainList.push(u); }
   });
   Logger.log('═══ Password status ═══');
-  Logger.log('🔒 Hashed: ' + hashed);
+  Object.keys(byIters).sort().forEach(function(k) {
+    Logger.log('🔒 Hashed ' + k + ' iters: ' + byIters[k] + (parseInt(k) > PBKDF_ITERATIONS ? ' ⚠ SLOW' : ' ✓ FAST'));
+  });
   Logger.log('⚠ Plaintext: ' + plain + (plainList.length ? ' (' + plainList.join(', ') + ')' : ''));
   Logger.log('❌ Trống: ' + empty);
+  Logger.log('Target iterations: ' + PBKDF_ITERATIONS);
+  if (slowList.length > 0) {
+    Logger.log('');
+    Logger.log('👉 User cần rehash (login lần đầu sẽ chậm 5-10s, sau đó nhanh):');
+    slowList.forEach(function(u) { Logger.log('   - ' + u); });
+    Logger.log('   HOẶC: chạy resetAllPasswordsToDefault() để reset toàn bộ nhanh.');
+  }
 }
 
 /**
