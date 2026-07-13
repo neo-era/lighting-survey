@@ -4460,4 +4460,2284 @@ Sau khi xong:
 Báo cáo lỗi sau mỗi phase, dừng nếu test fail.
 ```
 
+---
+
+## Session 2026-07-11 — Rotation + PDF sharpness + Drive URL migration
+
+### P14 — Bật lại xoay bản đồ 2D ✅
+
+**Trạng thái**: đã implement, đang thử nghiệm.
+
+**Đã làm**:
+- Thêm section "Xoay bản đồ" vào ☰ panel (slider 0-359° + 4 nút quick B/Đ/N/T + reset)
+- Wire `_onRotSliderChange`, `_setRotation`, `_resetRotSlider`
+- Rewrite `_applyMapRotation` để dùng `L.DomUtil.getPosition(pane)` thay `getBoundingClientRect()` — fix bug xoay lệch tâm
+- Thêm `_installRotationHook()` hook `map.on('move viewreset zoomanim')` re-apply rotation — Leaflet ghi đè transform khi pan/zoom sẽ bị wipe
+- Thêm `_setRotationTileBuffer(active)` monkey-patch `L.GridLayer.prototype._pxBoundsToTileRange` mở rộng bounds 60% khi rotate → fix tam giác trắng 4 góc chéo
+- Sync slider ↔ `_currentMapRotation` khi mở ☰ modal
+
+**Limitation đã biết** (chưa fix):
+- Click bản đồ để thêm marker → tọa độ lệch vì `containerPointToLatLng` không tính rotation
+- Kéo marker → drop tại vị trí sai so với con trỏ
+- Label tên tủ ở zoom cao → chữ bị xoay theo, khó đọc
+
+Nếu limitation trở thành vấn đề thực tế, cần patch `map.mouseEventToContainerPoint` để bù rotation.
+
+---
+
+### P15 — Chữ PDF bể → sắc nét ✅
+
+**Nguyên nhân**: html2canvas capture ở `captureScale=2` (~2400×1700px), jsPDF stretch lên A3 300 DPI (~4960×3508) = **2.07× upscale** → text mờ/bể.
+
+**Fix**:
+1. `PRINT_CONFIG.captureScale: 2 → 3` (capture 3600×2400, stretch chỉ 1.38×)
+2. `PRINT_CONFIG.jpegQuality: 0.93 → 0.95` (giữ cho code khác nếu có, PDF đã đổi PNG)
+3. `canvas.toDataURL('image/jpeg') → 'image/png'` — JPEG chroma subsampling tạo halo mờ quanh text
+4. `doc.addImage(imgData, 'PNG', 0, 0, pw, ph, undefined, 'FAST')` — PNG lossless
+5. `#printOverlay` thêm CSS `text-rendering:geometricPrecision`, `-webkit-font-smoothing:antialiased`, `-moz-osx-font-smoothing:grayscale`
+
+**Trade-off**:
+| | Trước | Sau |
+|---|---|---|
+| Chất lượng chữ | Bể, halo mờ | Sắc, không halo |
+| Kích thước PDF | ~3 MB | ~8-10 MB |
+| Thời gian export | ~5s | ~10-15s |
+| Memory peak | ~40 MB | ~90 MB (mobile cũ có thể fail) |
+
+**TODO nếu cần**: detect `isMobile` → dùng scale 2 trên mobile, scale 3 desktop.
+
+---
+
+### P16 — Drive URL migration ✅
+
+**Nguyên nhân**: Google đã deprecate `https://drive.google.com/uc?export=view&id=<ID>` từ 2024. Tag `<img>` không load được → placeholder.
+
+**Fix**: Thêm helper global `_migrateDriveUrl(url)`:
+```js
+function _migrateDriveUrl(url) {
+    if (!url || typeof url !== 'string') return url;
+    const m = url.match(/drive\.google\.com\/uc\?export=view&id=([\w-]+)/);
+    if (m) return 'https://lh3.googleusercontent.com/d/' + m[1];
+    return url;
+}
+```
+
+**Áp dụng**:
+| Vị trí | Mô tả |
+|---|---|
+| `createMarkerPopupContent` | Split `imageValue` bằng `;` rồi map qua `_migrateDriveUrl` — avatar + strip ảnh phụ |
+| `openEditMarker` | Split `row[12]` rồi map qua `_migrateDriveUrl` — restore 3 slot khi Sửa |
+
+Data trong sheet KHÔNG bị sửa — migrate transparent lúc render. Nếu Google đổi format tiếp, chỉ cần sửa `_migrateDriveUrl`.
+
+---
+
+### SW cache: v7 → v8
+
+Bump `sw.js` cache name để force clients re-fetch code mới (rotation UI + print PNG + drive URL migration).
+
+---
+
+## Tính năng 12 — Overlay bản vẽ CAD (DXF) lên bản đồ (giống Nuwa)
+
+Mục tiêu: cho phép user tải bản vẽ AutoCAD (DXF) lên → hiển thị đúng vị trí trên Leaflet, toggle layer, snap marker về đỉnh CAD, stake-out điều hướng RTK.
+
+Chia 4 phase độc lập — chạy tuần tự P17 → P18 → P19 → P20. Mỗi phase có deliverable dùng được.
+
+---
+
+### P17 — Phase 1: MVP hiển thị DXF overlay (3-5 ngày)
+
+```
+Task: Thêm chức năng tải và hiển thị bản vẽ DXF trên Leaflet map, đúng vị trí theo tọa độ VN-2000.
+
+## Prerequisites
+- File index.html đã có convertLatLonToVn2000() và IndexedDB cache helpers (idbGet/idbSet/idbOpen)
+- Leaflet + L.SVG đã load
+
+## 1. Thêm thư viện dxf-parser
+
+Load lazy khi user click nút "Tải bản vẽ" (không add vào bundle chính):
+```js
+async function _loadDxfParser() {
+    if (window.DxfParser) return;
+    return new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = 'https://cdn.jsdelivr.net/npm/dxf-parser@1.1.2/dist/parser.js';
+        s.onload = resolve;
+        s.onerror = () => { s.remove(); reject(new Error('Không tải được dxf-parser')); };
+        setTimeout(() => reject(new Error('Timeout tải dxf-parser')), 15000);
+        document.head.appendChild(s);
+    });
+}
+```
+
+## 2. Thêm helper convertVn2000ToLatLon (đảo ngược công thức Gauss-Krüger)
+
+Hiện app đã có convertLatLonToVn2000 (múi 6°, ellipsoid GRS80). Viết reverse dùng công thức Redfearn hoặc iterative:
+```js
+function convertVn2000ToLatLon(x, y, centralMeridianDeg) {
+    // Input: x=Northing (m), y=Easting (m), centralMeridianDeg (105/105.5/105.75)
+    // Output: {lat, lon} degrees
+    // Iterative approach: bắt đầu guess lat/lon từ zone → convertLatLonToVn2000 → so sánh → Newton refine
+    // Đủ tolerance 1cm sau ~5 iterations
+}
+```
+Test: chọn 1 marker có VN-2000 trong sheet → convert ngược → so sánh lat/lon gốc, sai số < 0.5m.
+
+## 3. State + IndexedDB store
+
+```js
+let _cadLayer = null;           // L.LayerGroup chứa SVG overlay
+let _cadEntities = [];          // parsed entities từ DXF
+let _cadMeta = null;            // {filename, uploadedAt, zone, layers, bounds}
+let _cadVisible = true;
+
+// IndexedDB store mới: 'cad-drawings' — key: sheetName, value: {dxfText, meta}
+```
+
+## 4. UI trong ☰ panel
+
+Thêm section mới sau "Xuất dữ liệu":
+```html
+<div class="ctrl-section">
+    <div class="ctrl-title">Bản vẽ CAD</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+        <button class="ctrl-btn" onclick="_openCadUpload()">📐 Tải DXF</button>
+        <button class="ctrl-btn outline" onclick="_toggleCad()" id="btnCadToggle" disabled>👁 Ẩn/Hiện</button>
+    </div>
+    <div id="cadInfoBox" style="display:none;margin-top:6px;font-size:11px;color:var(--text-muted);">
+        <div id="cadFilename"></div>
+        <div id="cadEntityCount"></div>
+        <button class="ctrl-btn outline" onclick="_removeCad()" style="width:100%;margin-top:4px;">🗑 Gỡ bản vẽ</button>
+    </div>
+</div>
+```
+
+## 5. Upload modal — chọn file + zone
+
+Modal đơn giản với:
+- Input file accept=".dxf"
+- Select "Kinh tuyến trung tâm" (105° / 105.5° / 105.75°) — default theo currentSheet:
+  - HCM (Quan*/PhuNhuan/BinhThanh/TanBinh/TanPhu): 105°
+  - Bình Dương (BauBang/TruVanTho/BenCat): 105.5°
+  - Long An (CanGiuoc): 105.75°
+- Nút "Tải lên"
+
+## 6. Parse DXF → entities
+
+```js
+async function _uploadCad(file, centralMeridianDeg) {
+    displayInfo('Đang phân tích DXF...');
+    await _loadDxfParser();
+    const text = await file.text();
+    const parser = new DxfParser();
+    const dxf = parser.parseSync(text);
+    
+    // Extract entities: LINE, LWPOLYLINE, POLYLINE, CIRCLE, ARC, TEXT
+    const entities = [];
+    (dxf.entities || []).forEach(e => {
+        if (e.type === 'LINE') entities.push({
+            type: 'line', layer: e.layer, color: e.color,
+            points: [{x:e.vertices[0].x, y:e.vertices[0].y}, {x:e.vertices[1].x, y:e.vertices[1].y}]
+        });
+        else if (e.type === 'LWPOLYLINE' || e.type === 'POLYLINE') entities.push({
+            type: 'polyline', layer: e.layer, color: e.color,
+            points: e.vertices.map(v => ({x:v.x, y:v.y}))
+        });
+        else if (e.type === 'CIRCLE') entities.push({
+            type: 'circle', layer: e.layer, color: e.color,
+            center: {x:e.center.x, y:e.center.y}, radius: e.radius
+        });
+        else if (e.type === 'TEXT' || e.type === 'MTEXT') entities.push({
+            type: 'text', layer: e.layer, color: e.color,
+            position: {x:e.position.x, y:e.position.y},
+            text: e.text || e.string || '', height: e.textHeight || 2.5
+        });
+        // Skip ARC, HATCH, BLOCK cho MVP
+    });
+    
+    _cadEntities = entities;
+    _cadMeta = {
+        filename: file.name,
+        uploadedAt: new Date().toISOString(),
+        zone: centralMeridianDeg,
+        layers: [...new Set(entities.map(e => e.layer))],
+        entityCount: entities.length
+    };
+    
+    // Cache
+    await idbSet('cad-drawings', currentSheet, { dxfText: text, entities, meta: _cadMeta });
+    
+    _renderCadLayer();
+    displayInfo(`Đã tải ${entities.length} đối tượng CAD`);
+}
+```
+
+## 7. Render entities → SVG overlay
+
+Convert VN-2000 XY → lat/lon → L.polyline / L.circle / L.marker (text as divIcon):
+```js
+function _renderCadLayer() {
+    if (_cadLayer) map.removeLayer(_cadLayer);
+    _cadLayer = L.layerGroup();
+    
+    const zone = _cadMeta.zone;
+    _cadEntities.forEach(e => {
+        const dxfColor = _dxfColorToHex(e.color);
+        if (e.type === 'line' || e.type === 'polyline') {
+            const latlngs = e.points.map(p => {
+                const { lat, lon } = convertVn2000ToLatLon(p.x, p.y, zone);
+                return [lat, lon];
+            });
+            L.polyline(latlngs, { color: dxfColor, weight: 1.5, opacity: 0.8, interactive: false })
+                .addTo(_cadLayer);
+        } else if (e.type === 'circle') {
+            const { lat, lon } = convertVn2000ToLatLon(e.center.x, e.center.y, zone);
+            L.circle([lat, lon], { radius: e.radius, color: dxfColor, weight: 1, fillOpacity: 0.1 })
+                .addTo(_cadLayer);
+        } else if (e.type === 'text') {
+            const { lat, lon } = convertVn2000ToLatLon(e.position.x, e.position.y, zone);
+            const icon = L.divIcon({
+                className: 'cad-text-label',
+                html: `<span style="color:${dxfColor};font-size:10px;white-space:nowrap;">${e.text}</span>`,
+                iconAnchor: [0, 0]
+            });
+            L.marker([lat, lon], { icon, interactive: false }).addTo(_cadLayer);
+        }
+    });
+    
+    if (_cadVisible) _cadLayer.addTo(map);
+    
+    // Fit view lên bounds CAD nếu là lần đầu load
+    if (_cadEntities.length > 0) {
+        // Compute bounds từ mọi entity
+        // map.fitBounds(bounds.pad(0.05));
+    }
+    
+    // UI update
+    document.getElementById('btnCadToggle').disabled = false;
+    document.getElementById('cadInfoBox').style.display = 'block';
+    document.getElementById('cadFilename').textContent = _cadMeta.filename;
+    document.getElementById('cadEntityCount').textContent = `${_cadMeta.entityCount} đối tượng`;
+}
+```
+
+## 8. DXF color index → hex
+
+DXF dùng bảng màu 256 index. Bảng gần đúng cho ~16 màu đầu (1=red, 2=yellow, 3=green, 4=cyan, 5=blue, 6=magenta, 7=white/black, ...):
+```js
+const _DXF_COLORS = ['#000000','#ff0000','#ffff00','#00ff00','#00ffff','#0000ff','#ff00ff','#000000','#808080','#c0c0c0'];
+function _dxfColorToHex(idx) { return _DXF_COLORS[idx] || '#333'; }
+```
+
+## 9. Load từ cache khi switchDistrict
+
+Trong `switchDistrict()`, sau khi load CSV:
+```js
+const cached = await idbGet('cad-drawings', sheetName);
+if (cached) {
+    _cadEntities = cached.entities;
+    _cadMeta = cached.meta;
+    _renderCadLayer();
+} else {
+    _cadLayer = null;
+    _cadEntities = [];
+    _cadMeta = null;
+    document.getElementById('cadInfoBox').style.display = 'none';
+    document.getElementById('btnCadToggle').disabled = true;
+}
+```
+
+## 10. Toggle + Remove
+
+```js
+function _toggleCad() {
+    if (!_cadLayer) return;
+    _cadVisible = !_cadVisible;
+    if (_cadVisible) _cadLayer.addTo(map); else map.removeLayer(_cadLayer);
+}
+async function _removeCad() {
+    if (!confirm('Gỡ bản vẽ CAD khỏi bản đồ?')) return;
+    if (_cadLayer) map.removeLayer(_cadLayer);
+    await idbDel('cad-drawings', currentSheet);
+    _cadLayer = null; _cadEntities = []; _cadMeta = null;
+    document.getElementById('cadInfoBox').style.display = 'none';
+    document.getElementById('btnCadToggle').disabled = true;
+}
+```
+
+## Testing checklist
+
+- [ ] Upload 1 file DXF nhỏ (< 1MB) từ CAD lighting → hiển thị đúng vị trí trên Google Maps overlay
+- [ ] Verify convertVn2000ToLatLon: pick 1 pole trong sheet → convert VN-2000 back → sai số < 0.5m
+- [ ] Zoom in / out → SVG scale mượt, không blur
+- [ ] Toggle ẩn/hiện → layer add/remove khỏi map
+- [ ] Refresh app → bản vẽ tự load từ cache IndexedDB
+- [ ] Switch district → bản vẽ đúng tương ứng với sheet
+- [ ] File 5MB (~5k entity): parse < 3s, render < 1s
+- [ ] File > 10MB: dùng Web Worker cho parse (nếu block UI > 2s)
+
+## Deliverable
+
+User có thể:
+1. Tải file DXF từ máy tính
+2. Chọn kinh tuyến trung tâm
+3. Xem bản vẽ overlay đúng vị trí trên bản đồ
+4. Ẩn/hiện overlay
+5. Bản vẽ persist qua session (IndexedDB)
+```
+
+---
+
+### P18 — Phase 2: Layer control (1-2 ngày) ✅ DONE 2026-07-12
+
+```
+Task: Cho phép user toggle bật/tắt từng layer trong bản vẽ CAD, đổi màu/độ dày, filter theo pattern.
+
+## Prerequisites
+- P17 (Phase 1) đã xong: _cadEntities có field .layer
+
+## 1. State layers
+
+```js
+let _cadLayerVisibility = {};  // { 'LAYER_NAME': true/false }
+let _cadLayerStyle = {};       // { 'LAYER_NAME': { color, weight, opacity } }
+```
+
+Load state từ localStorage khi restore cache: `cad_layers_<sheetName>`.
+
+## 2. Panel layer control
+
+Modal mới (mở từ nút mới "Lớp CAD" trong info box):
+```
+┌─ Lớp CAD (VD: 12 lớp) ─────────┐
+│ 🔍 [Tìm layer name______]      │
+│ ─────────────────────────────  │
+│ ☑ POLE           [🎨 red]  245│
+│ ☑ CABLE_UNDER    [🎨 blue]  87│
+│ ☐ GRID           [🎨 gray]  50│
+│ ☑ TEXT_LABEL     [🎨 —  ]   14│
+│ ...                            │
+│ [Chọn tất cả] [Bỏ chọn tất cả]│
+│ [Áp dụng]                     │
+└─────────────────────────────────┘
+```
+
+Mỗi row: checkbox + tên layer + swatch màu (click → color picker) + count entity + optional weight slider.
+
+## 3. Render layer với style riêng
+
+Sửa `_renderCadLayer()` để check visibility + apply style:
+```js
+_cadEntities.forEach(e => {
+    if (_cadLayerVisibility[e.layer] === false) return;
+    const style = _cadLayerStyle[e.layer] || {};
+    const color = style.color || _dxfColorToHex(e.color);
+    const weight = style.weight || 1.5;
+    const opacity = style.opacity ?? 0.8;
+    // ... render với color/weight/opacity mới
+});
+```
+
+## 4. Filter search
+
+Ô search filter theo pattern (normalized):
+```js
+function _filterCadLayers(query) {
+    const rows = document.querySelectorAll('#cadLayerPanel .layer-row');
+    const q = normalizeTextSearchable(query);
+    rows.forEach(r => {
+        const name = normalizeTextSearchable(r.dataset.layer);
+        r.style.display = name.includes(q) ? '' : 'none';
+    });
+}
+```
+
+## 5. Preset filter
+
+Nút quick preset: "Chỉ hiện Trụ", "Chỉ hiện Cáp", "Ẩn TEXT" — match layer name pattern định sẵn (regex):
+```js
+const CAD_PRESETS = {
+    poles:   { showRegex: /POLE|TRU|LAMP/i, hideRegex: /GRID|BORDER/i },
+    cables:  { showRegex: /CABLE|CAP|WIRE/i },
+    hideText:{ hideRegex: /TEXT|LABEL|DIM/i },
+};
+```
+
+## 6. Persist selection
+
+Sau mỗi thay đổi: `localStorage.setItem('cad_layers_' + currentSheet, JSON.stringify({visibility, style}))`.
+Restore trong `_renderCadLayer` init.
+
+## Testing checklist
+
+- [ ] Panel layer hiện đầy đủ list từ `_cadMeta.layers`, số entity đúng
+- [ ] Uncheck 1 layer → entities layer đó biến mất, không render
+- [ ] Đổi màu 1 layer → tất cả entity thuộc layer đó đổi màu
+- [ ] Filter search → hiện đúng subset row
+- [ ] Preset "Chỉ Trụ" → chỉ layer match regex hiện
+- [ ] Refresh app → visibility state khôi phục đúng
+- [ ] Layer count đúng khi có > 20 layer
+
+## Deliverable
+
+User có thể:
+1. Xem danh sách tất cả layer trong bản vẽ
+2. Ẩn/hiện từng layer
+3. Đổi màu + độ dày từng layer
+4. Filter theo pattern
+5. Áp dụng preset nhanh
+6. State persist qua session
+```
+
+---
+
+### P19 — Phase 3: Calibration + Snap to CAD vertex (2-3 ngày) ✅ DONE 2026-07-12
+
+```
+Task: Cho phép calibrate bản vẽ CAD chưa có tọa độ đúng (align 2 điểm map vs CAD), và snap marker mới về đỉnh CAD gần nhất.
+
+## Prerequisites
+- P17 (Phase 1) đã xong
+- Đã có helper `haversineM(lat1,lon1,lat2,lon2)` trong index.html
+
+## 1. Calibration mode
+
+**Vấn đề**: file CAD từ khảo sát cũ có thể ở tọa độ local (0,0 nội bộ) hoặc lệch zone. Cần map 2 điểm CAD ↔ 2 điểm real-world để tính affine transform.
+
+**UI flow**:
+1. Nút "🎯 Calibrate" trong info box (chỉ hiện khi loaded)
+2. Modal hướng dẫn: "Click 2 điểm trên bản đồ + nhập tọa độ CAD tương ứng"
+3. User click point A trên map → nhập X_cad, Y_cad point A
+4. User click point B trên map → nhập X_cad, Y_cad point B
+5. App tính affine (scale + rotate + translate) → apply lên toàn bộ entities
+
+**Tính affine 2D từ 2 điểm** (tương tự Helmert transformation):
+```js
+function _computeAffine2D(cad1, cad2, real1, real2) {
+    // cad = {x, y}, real = {lat, lon} → chuyển real về VN-2000
+    const r1 = convertLatLonToVn2000(real1.lat, real1.lon);
+    const r2 = convertLatLonToVn2000(real2.lat, real2.lon);
+    const dCadX = cad2.x - cad1.x, dCadY = cad2.y - cad1.y;
+    const dRealX = r2.x - r1.x,    dRealY = r2.y - r1.y;
+    const cadLen = Math.hypot(dCadX, dCadY);
+    const realLen = Math.hypot(dRealX, dRealY);
+    const scale = realLen / cadLen;
+    const angleCad = Math.atan2(dCadY, dCadX);
+    const angleReal = Math.atan2(dRealY, dRealX);
+    const rotate = angleReal - angleCad;
+    // Translate: after scale+rotate cad1 → real1
+    const cos = Math.cos(rotate), sin = Math.sin(rotate);
+    const tx = r1.x - scale * (cos*cad1.x - sin*cad1.y);
+    const ty = r1.y - scale * (sin*cad1.x + cos*cad1.y);
+    return { scale, rotate, tx, ty };
+}
+
+function _applyAffine(cadPoint, affine) {
+    const { scale, rotate, tx, ty } = affine;
+    const cos = Math.cos(rotate), sin = Math.sin(rotate);
+    return {
+        x: scale * (cos*cadPoint.x - sin*cadPoint.y) + tx,
+        y: scale * (sin*cadPoint.x + cos*cadPoint.y) + ty
+    };
+}
+```
+
+Sau calibration → lưu `_cadMeta.affine = {...}` → mỗi lần convert cần apply affine trước khi chạy convertVn2000ToLatLon.
+
+## 2. Snap to CAD vertex
+
+**Mục đích**: khi user click Thêm marker gần 1 đỉnh CAD (< 5m), marker tự dịch về đỉnh đó → độ chính xác 1cm.
+
+**Preprocess**: build spatial index từ tất cả vertex CAD:
+```js
+let _cadVertexIndex = [];  // [{lat, lon, layer, entityIdx}]
+
+function _buildVertexIndex() {
+    _cadVertexIndex = [];
+    _cadEntities.forEach((e, i) => {
+        const points = e.points || (e.center ? [e.center] : []) || (e.position ? [e.position] : []);
+        points.forEach(p => {
+            const { lat, lon } = convertVn2000ToLatLon(p.x, p.y, _cadMeta.zone);
+            _cadVertexIndex.push({ lat, lon, layer: e.layer, entityIdx: i });
+        });
+    });
+}
+```
+
+Gọi sau `_renderCadLayer()`.
+
+**Snap trong luồng thêm marker**:
+```js
+function _snapToNearestCadVertex(lat, lon, maxDistM = 5) {
+    if (!_cadVertexIndex.length) return null;
+    let best = null, bestDist = maxDistM;
+    for (const v of _cadVertexIndex) {
+        const d = haversineM(lat, lon, v.lat, v.lon);
+        if (d < bestDist) { best = v; bestDist = d; }
+    }
+    return best ? { lat: best.lat, lon: best.lon, distM: bestDist } : null;
+}
+```
+
+Trong `saveMarkerPopup()` hoặc `showMarkerPopupAt()`:
+```js
+const snap = _snapToNearestCadVertex(lat, lon);
+if (snap) {
+    // Toast: "Đã snap về đỉnh CAD (cách 0.3m). [Hoàn tác]"
+    lat = snap.lat; lon = snap.lon;
+}
+```
+
+## 3. UI snap toggle
+
+Trong ☰ panel, thêm checkbox "Snap về đỉnh CAD (5m)":
+```html
+<label class="ctrl-radio">
+    <input type="checkbox" id="cadSnapToggle" onchange="_toggleCadSnap(this.checked)">
+    <span>Snap về đỉnh CAD gần nhất (≤ 5m)</span>
+</label>
+```
+
+State: `_cadSnapEnabled = false` (default off), persist localStorage.
+Slider chỉnh khoảng cách max (1-20m).
+
+## 4. Visualization snap
+
+Khi snap active + hover chuột gần đỉnh CAD → highlight đỉnh đó với marker tạm (chấm tím pulse). Optional cho polish.
+
+## Testing checklist
+
+- [ ] Calibration: pick 2 điểm → toàn bộ CAD dịch chuyển đúng, không lệch scale
+- [ ] Verify affine: 1 vertex CAD gần trụ đã đo → khoảng cách sau calibrate < 5cm
+- [ ] Vertex index build: 5000 entity → < 500ms
+- [ ] Snap khi thêm marker: click cách đỉnh 3m → tọa độ marker khớp đỉnh chính xác
+- [ ] Snap ngoài phạm vi 5m → không snap, marker giữ tọa độ user click
+- [ ] Toggle snap off → thêm marker bình thường
+- [ ] Slider maxDist: 20m thấy snap sang đỉnh xa hơn
+
+## Deliverable
+
+User có thể:
+1. Calibrate bản vẽ CAD lệch/chưa georef bằng 2 điểm
+2. Bật/tắt snap về đỉnh CAD khi thêm marker
+3. Chỉnh khoảng cách snap max
+4. Thêm marker chính xác 1cm khi đứng gần đỉnh CAD (với RTK)
+```
+
+---
+
+### P20 — Phase 4: Stake-out điều hướng RTK (3-5 ngày, tùy chọn) ✅ DONE 2026-07-12
+
+```
+Task: Chọn 1 đỉnh CAD làm target → hiển thị mũi tên + khoảng cách + góc bearing từ vị trí RTK hiện tại đến đỉnh đó (realtime), tự trigger create marker khi đứng đúng vị trí.
+
+## Prerequisites
+- P17 + P18 + P19 (Phase 1-3) đã xong
+- Feature 11 (GPS_MODES + getBestFix) đã có
+- User đang dùng RTK Tersus Luka (Phase 4 không đáng làm cho phone GPS)
+
+## 1. State stake-out
+
+```js
+let _stakeoutTarget = null;     // {lat, lon, cadEntity} — đỉnh CAD đang target
+let _stakeoutWatchId = null;    // watchPosition ID
+let _stakeoutMinDistM = 0.05;   // ngưỡng auto-create marker (5cm cho RTK Fixed)
+```
+
+## 2. Kích hoạt stake-out
+
+**Luồng chọn target**:
+1. User bật mode "Stake-out" từ ☰ panel → toast "Click 1 đỉnh CAD để làm target"
+2. Cursor crosshair trên map
+3. User click gần đỉnh CAD → snap về đỉnh gần nhất → set `_stakeoutTarget`
+4. UI floating bar hiện đè lên bản đồ
+
+```html
+<div id="stakeoutBar" style="position:fixed;top:60px;left:50%;transform:translateX(-50%);
+    background:rgba(30,41,59,.95);color:#fff;padding:10px 16px;border-radius:12px;
+    display:flex;gap:16px;align-items:center;z-index:9500;box-shadow:0 4px 12px rgba(0,0,0,.3);">
+    <div id="stakeoutArrow" style="font-size:32px;">↑</div>
+    <div>
+        <div id="stakeoutDist" style="font-size:20px;font-weight:800;">— m</div>
+        <div id="stakeoutBearing" style="font-size:12px;opacity:.7;">Đi hướng ...</div>
+    </div>
+    <button onclick="_stopStakeout()" style="background:#dc2626;color:#fff;border:none;
+        padding:6px 12px;border-radius:6px;cursor:pointer;">✗ Dừng</button>
+</div>
+```
+
+## 3. Realtime tracking
+
+Dùng `navigator.geolocation.watchPosition` với GPS_MODES config hiện tại:
+```js
+function _startStakeout(target) {
+    _stakeoutTarget = target;
+    const cfg = GPS_MODES[currentGpsMode];
+    _stakeoutWatchId = navigator.geolocation.watchPosition(
+        pos => _updateStakeout(pos, target),
+        err => console.error('stakeout err', err),
+        { enableHighAccuracy: true, maximumAge: 0, timeout: cfg.maxWaitMs }
+    );
+    document.getElementById('stakeoutBar').style.display = 'flex';
+}
+
+function _updateStakeout(pos, target) {
+    const dist = haversineM(pos.coords.latitude, pos.coords.longitude, target.lat, target.lon);
+    const bearing = _computeBearing(pos.coords.latitude, pos.coords.longitude, target.lat, target.lon);
+    
+    // UI update
+    document.getElementById('stakeoutDist').textContent = 
+        dist < 1 ? `${(dist*100).toFixed(1)} cm` : `${dist.toFixed(2)} m`;
+    document.getElementById('stakeoutBearing').textContent = _bearingLabel(bearing);
+    
+    // Xoay mũi tên theo bearing (compass-relative — user hướng lên = 0° device compass)
+    // Tạm dùng bearing absolute, sau này cần device orientation:
+    document.getElementById('stakeoutArrow').style.transform = `rotate(${bearing}deg)`;
+    
+    // Ngưỡng đạt → rung + toast + optional auto-create marker
+    if (dist <= _stakeoutMinDistM) {
+        _onStakeoutReached(target, pos);
+    }
+}
+
+function _computeBearing(lat1, lon1, lat2, lon2) {
+    const φ1 = lat1 * Math.PI/180, φ2 = lat2 * Math.PI/180;
+    const Δλ = (lon2 - lon1) * Math.PI/180;
+    const y = Math.sin(Δλ) * Math.cos(φ2);
+    const x = Math.cos(φ1)*Math.sin(φ2) - Math.sin(φ1)*Math.cos(φ2)*Math.cos(Δλ);
+    return ((Math.atan2(y, x) * 180/Math.PI) + 360) % 360;
+}
+
+function _bearingLabel(deg) {
+    const dirs = ['B','ĐB','Đ','ĐN','N','TN','T','TB'];
+    return `${dirs[Math.round(deg/45) % 8]} (${Math.round(deg)}°)`;
+}
+```
+
+## 4. Rung + âm thanh khi đạt
+
+```js
+function _onStakeoutReached(target, pos) {
+    if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+    displayInfo(`Đã đến đích! Sai số ${(haversineM(...) * 100).toFixed(1)} cm`);
+    // Beep: mini audio hoặc SpeechSynthesisUtterance
+    if (window.speechSynthesis) {
+        const u = new SpeechSynthesisUtterance('Đã đến vị trí');
+        u.lang = 'vi-VN';
+        speechSynthesis.speak(u);
+    }
+    // Optional: auto-open thêm marker popup với tọa độ target đã fill sẵn
+    // hoặc chờ user manual confirm
+}
+```
+
+## 5. Danh sách target hàng loạt (batch stake-out)
+
+Cho phép user chọn N đỉnh cùng lúc → xong 1 tự next sang cái tiếp theo:
+```js
+let _stakeoutQueue = [];  // [{lat, lon, label}]
+let _stakeoutCurrentIdx = 0;
+```
+
+UI: sau khi đạt target hiện tại → toast "3/12 xong. [Next] [Skip] [Dừng]".
+
+Filter target: từ layer CAD nào (vd chỉ layer POLE) → skip TEXT.
+
+## 6. Device orientation (compass) — optional advanced
+
+Mũi tên hiện xoay theo bearing absolute (Bắc = 0°). Để chỉ đúng hướng đi so với **hướng điện thoại đang nhìn**, cần trừ đi `deviceOrientation.alpha`:
+
+```js
+window.addEventListener('deviceorientationabsolute', (e) => {
+    _deviceHeading = e.alpha; // 0 = user quay Bắc
+}, true);
+
+// Trong _updateStakeout:
+const relativeBearing = (bearing - _deviceHeading + 360) % 360;
+document.getElementById('stakeoutArrow').style.transform = `rotate(${relativeBearing}deg)`;
+```
+
+Chỉ hoạt động khi permission granted (iOS 13+ cần requestPermission).
+
+## 7. Cleanup
+
+```js
+function _stopStakeout() {
+    if (_stakeoutWatchId !== null) navigator.geolocation.clearWatch(_stakeoutWatchId);
+    _stakeoutWatchId = null;
+    _stakeoutTarget = null;
+    document.getElementById('stakeoutBar').style.display = 'none';
+}
+```
+
+Auto-cleanup khi user đổi tab, đóng popup, hoặc switchDistrict.
+
+## Testing checklist
+
+- [ ] Chọn target: click gần đỉnh CAD → snap chính xác về đỉnh
+- [ ] Realtime dist cập nhật < 1s khi user di chuyển (RTK Fixed cần)
+- [ ] Bearing chỉ đúng hướng: đứng phía Nam target 5m, mũi tên chỉ Bắc
+- [ ] Ngưỡng 5cm → rung + toast "đã đến"
+- [ ] Auto-open form thêm marker với tọa độ đúng
+- [ ] Test batch queue 5 target → next tự động
+- [ ] Test compass mode (nếu device support)
+- [ ] Test dừng giữa chừng → cleanup sạch
+- [ ] Phone GPS mode: ngưỡng auto lên 3m (không phải 5cm)
+
+## Deliverable
+
+User có thể:
+1. Chọn 1 đỉnh CAD làm target stake-out
+2. Xem realtime khoảng cách + hướng đi
+3. Rung + âm báo khi đạt đúng vị trí
+4. Auto-tạo marker mới tại vị trí target
+5. Batch stake-out nhiều target liên tiếp
+6. Compass mode chỉ hướng theo device orientation
+
+**Lưu ý**: Phase 4 chỉ đáng làm nếu user thực sự dùng RTK trong field. Với phone GPS 3m accuracy, stake-out không có ý nghĩa thực tế (không phân biệt được đỉnh CAD kế nhau).
+```
+
+---
+
+### Ước tính công sức tổng thể
+
+| Phase | Deliverable | Effort | Blocker |
+|---|---|---|---|
+| P17 | Overlay DXF cơ bản | 3-5 ngày | — |
+| P18 | Layer control | 1-2 ngày | Cần P17 xong |
+| P19 | Calibration + Snap | 2-3 ngày | Cần P17 xong (P18 optional) |
+| P20 | Stake-out RTK | 3-5 ngày | Cần P17-P19 xong |
+| **Total** | Full CAD workflow | **10-15 ngày** | Không |
+
+**Alternative đơn giản hơn**: nếu chỉ cần hiển thị bản vẽ (không snap, không stake-out), pre-convert DXF → GeoJSON offline bằng QGIS → dùng `L.geoJson()` — **1 ngày code**. Đánh đổi: user không tự upload được, phải qua QGIS.
+
+Chọn phù hợp workflow thực tế: P17 alone nếu chỉ để tham khảo trực quan, đủ P17+P19 nếu cần chính xác cao, làm hết P17-P20 nếu dùng RTK để stake-out thực sự.
+```
+
+---
+
+# Session Tính năng 13-18 — Roadmap 2026
+
+Bộ 22 prompt (P21-P42) implement 6 nhóm tính năng còn thiếu. Xem `CLAUDE.md` § "Roadmap 2026" cho design docs.
+
+---
+
+## Nhóm 13 — Quản lý vận hành
+
+### P21 — Ticketing sự cố ✅ DONE 2026-07-12 (core từ trước + polish admin panel)
+
+```
+Task: Thêm chức năng báo cáo & xử lý sự cố trên trụ đèn / tủ điện.
+
+## Data model
+
+Tạo sheet mới `SuCo` với 12 cột (xem CLAUDE.md § 13.1 for schema chi tiết).
+GAS `getSheet('SuCo')` — nếu chưa có thì tạo mới với header.
+
+## UI Client
+
+### 1. Nút báo sự cố trong popup marker
+
+Trong `createMarkerPopupContent(row)`, thêm nút:
+```html
+<button onclick="_openSuCoForm('${row[0]}', '${row[1]}')" class="pc-btn pc-btn-danger">
+    🚨 Báo sự cố
+</button>
+```
+
+### 2. Modal báo sự cố `#suCoForm`
+
+Fields:
+- Loại sự cố (radio): 💡 Chảy bóng / 🌑 Tối đèn / ⚡ Nghiêng trụ / 💥 Gãy trụ / 🔌 Mất cáp / ❓ Khác
+- Mức độ (segmented): 🔴 Khẩn / 🟠 Cao / 🟡 Trung / 🟢 Thấp
+- Mô tả (textarea)
+- Chụp ảnh (3 slot, reuse `handleMarkerImageFile`)
+- Nút "Gửi" / "Hủy"
+
+### 3. Sync GAS
+
+```js
+async function _submitSuCo(data) {
+    const payload = {
+        action: 'create_su_co',
+        sheet: currentSheet,
+        markerId: data.markerId,
+        loai: data.loai,
+        mucDo: data.mucDo,
+        moTa: data.moTa,
+        anh: data.anhUrls.join(';'),
+        nguoiBao: currentUser.username,
+        thoiGianTao: new Date().toISOString()
+    };
+    return fetch(KHAOSAT_GAS_URL, { method: 'POST', body: JSON.stringify(payload) });
+}
+```
+
+### 4. GAS handler
+
+```js
+function handleCreateSuCo(data) {
+    const sheet = getSuCoSheet();  // auto-create with header nếu chưa có
+    const id = 'SC_' + new Date().getFullYear() + '_' + String(sheet.getLastRow()).padStart(3, '0');
+    sheet.appendRow([id, data.markerId, data.loai, data.mucDo, data.moTa, data.anh,
+                     data.nguoiBao, '', 'moi', data.thoiGianTao, '', '']);
+    return { ok: true, id };
+}
+```
+
+### 5. Hiển thị sự cố trên marker
+
+Trong `addMarkerRowToMap`, check nếu marker có sự cố `moi`/`dang_xu_ly` → thêm CSS class `has-issue` cho icon (glow đỏ).
+
+Load danh sách sự cố khi load app (from CSV publish của sheet SuCo). Store trong `_suCoByMarkerId` map.
+
+### 6. Trang admin quản lý
+
+Section mới trong ☰ panel "Sự cố" (chỉ admin) → mở overlay list:
+- Filter theo status/loại/địa bàn
+- Click row → mở chi tiết + assign nhân sự + chuyển status
+- Nút "Đóng sự cố" khi hoàn thành
+
+### 7. Badge topbar
+
+Query GAS count `su_co` với status = 'moi' → hiện badge số trên nút ☰ nếu có mới.
+
+## Testing checklist
+
+- [ ] Sheet SuCo tự động tạo lần đầu gọi
+- [ ] Báo sự cố từ popup → GAS tạo row đúng ID format `SC_2026_001`
+- [ ] Marker glow đỏ nếu có sự cố chưa xử lý
+- [ ] Admin thấy list + có thể assign + chuyển status
+- [ ] Badge count update sau reload
+- [ ] User thường không thấy option "Đóng sự cố" (chỉ admin)
+
+## Deliverable
+
+User có thể báo sự cố với 1 click, admin có dashboard xử lý tập trung.
+```
+
+---
+
+### P22 — Lịch bảo trì định kỳ ✅ DONE 2026-07-12 (client-side, cần GAS + BAOTRI_CSV_URL)
+
+```
+Task: Thêm chức năng lên lịch bảo trì và nhắc nhở tự động.
+
+## Data model
+
+Sheet `BaoTri` (xem CLAUDE.md § 13.2).
+
+## UI
+
+### 1. Tạo lịch bảo trì (admin)
+
+Popup marker → tab "Bảo trì" (chỉ admin thấy) → form:
+- Loại bảo trì (dropdown)
+- Chu kỳ (số tháng)
+- Lần cuối thực hiện (date)
+- Nhân sự phụ trách (dropdown users)
+
+### 2. Auto tính "Lần tới"
+
+Client-side: `lanToi = lanCuoi + chuKy tháng`.
+Save vào GAS via `create_bao_tri` action.
+
+### 3. GAS cron trigger
+
+```js
+// Chạy 06:00 mỗi ngày
+function checkMaintenanceSchedule() {
+    const sheet = getSheet('BaoTri');
+    const rows = sheet.getRange(2, 1, sheet.getLastRow()-1, 10).getValues();
+    const today = new Date();
+    const alerts = [];
+    rows.forEach((r, i) => {
+        const lanToi = new Date(r[5]);
+        const daysToGo = (lanToi - today) / 86400000;
+        if (daysToGo < 0 && r[7] !== 'xong') {
+            // Trễ
+            sheet.getRange(i+2, 8).setValue('trễ');
+            alerts.push({ id: r[0], marker: r[1], phuTrach: r[6], daysLate: Math.abs(daysToGo) });
+        } else if (daysToGo < 7 && r[7] === 'chờ') {
+            alerts.push({ id: r[0], marker: r[1], phuTrach: r[6], daysToGo });
+        }
+    });
+    if (alerts.length) sendMaintenanceEmail(alerts);
+}
+```
+
+Setup trigger: `Extensions → Apps Script → Triggers → Add → checkMaintenanceSchedule → time-driven → day → 6am`.
+
+### 4. Hiển thị lịch bảo trì
+
+Trang `/admin/bao-tri` list + calendar view (dùng FullCalendar.js hoặc simple table).
+
+Marker có lịch bảo trì sắp đến → icon overlay 🔧 nhỏ.
+
+### 5. Mark done
+
+Sau khi bảo trì, admin click "Hoàn thành" → update `Lần cuối = today`, `Lần tới = today + chuKy tháng`, `Status = xong` → sau đó reset về `chờ` cho chu kỳ mới.
+
+## Testing checklist
+
+- [ ] Tạo lịch → Lần tới tính đúng
+- [ ] GAS trigger chạy 6am hàng ngày (kiểm tra Executions log)
+- [ ] Marker trễ hạn có status `trễ` sau 1 ngày trôi qua
+- [ ] Email alert gửi đúng danh sách nhân sự phụ trách
+- [ ] Icon 🔧 hiện trên marker có lịch < 7 ngày
+
+## Deliverable
+
+Admin không cần nhớ lịch bảo trì thủ công. Trễ hạn tự alert.
+```
+
+---
+
+### P23 — Assign task + Workflow duyệt ✅ DONE 2026-07-12 (client-side, cần GAS + NHIEMVU_CSV_URL)
+
+```
+Task: Admin gán nhiệm vụ cho user, user submit → admin approve.
+
+## Data model
+
+Sheet `NhiemVu` 9 cột: ID, người giao, người nhận, mô tả, khu vực, deadline, status, kết quả, thời gian đóng.
+
+Status: draft → assigned → in_progress → submitted → approved / rejected → closed.
+
+## UI
+
+### 1. Admin trang "Nhiệm vụ"
+
+Trong ☰ panel (admin only) → nút "Quản lý nhiệm vụ" → overlay:
+- Danh sách nhiệm vụ + filter theo status/người nhận
+- Nút "+ Tạo nhiệm vụ" → modal form: mô tả, khu vực (polygon từ tính năng 16.3 hoặc list địa bàn), deadline, người nhận
+- Click row → chi tiết + timeline change status
+
+### 2. User section "Nhiệm vụ của tôi"
+
+Trong ☰ panel → section mới hiện chỉ khi user có nhiệm vụ:
+- List 3 nhiệm vụ active
+- Nút "Xem tất cả" → overlay
+- Nút "Bắt đầu" (assigned → in_progress)
+- Nút "Nộp báo cáo" (in_progress → submitted) với textarea kết quả + ảnh
+
+### 3. GAS actions
+
+- `create_nhiem_vu`
+- `update_nhiem_vu_status` (validate transitions)
+- `approve_nhiem_vu` / `reject_nhiem_vu` (chỉ admin)
+
+### 4. Notification
+
+Khi assign → notify user (dùng 13.4).
+Khi user submit → notify admin.
+
+## Testing checklist
+
+- [ ] Admin tạo nhiệm vụ, user thấy trong section của mình
+- [ ] User bắt đầu → status thay đổi
+- [ ] User submit kết quả → admin approve/reject
+- [ ] Rejected nhiệm vụ quay về `in_progress` cho user làm lại
+- [ ] Log history transitions
+
+## Deliverable
+
+Workflow phân công công việc rõ ràng, tracking được.
+```
+
+---
+
+### P24 — Notification Push ✅ DONE 2026-07-12 (polling + in-app; browser push future)
+
+```
+Task: Notify user khi có sự cố / task / bảo trì mới.
+
+## 3 kênh
+
+### 1. Browser Push (Chrome/Edge/Safari 16+)
+
+```js
+async function _subscribePush() {
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: VAPID_PUBLIC_KEY
+    });
+    await fetch(GAS_URL, { method:'POST', body: JSON.stringify({
+        action: 'register_push', endpoint: JSON.stringify(sub), user: currentUser.username
+    })});
+}
+```
+
+VAPID keys: sinh 1 lần bằng `web-push` npm (`npx web-push generate-vapid-keys`), lưu vào GAS Script Properties.
+
+GAS gửi push qua `UrlFetchApp.fetch(sub.endpoint, ...)` với payload + VAPID auth.
+
+### 2. Polling fallback
+
+Chrome iOS chưa support push → poll `GAS getNotifications(user)` mỗi 60s khi tab visible.
+
+Nếu có notification mới → hiện toast + đánh chuông (Audio API play file `.mp3` ngắn 500ms).
+
+### 3. Zalo OA (integrated ở P29)
+
+Nếu user đã link Zalo với account → gửi qua Zalo message.
+
+## Testing checklist
+
+- [ ] Grant permission → subscribe → GAS lưu endpoint
+- [ ] Admin trigger notification → push đến user trong 5s
+- [ ] Fallback polling: notification xuất hiện trong 60s
+- [ ] Notification click → mở đúng trang (sự cố / task / bảo trì)
+- [ ] Test trên Android Chrome + iOS Safari
+
+## Deliverable
+
+User không cần refresh liên tục để check task.
+```
+
+---
+
+## Nhóm 14 — Analytics & Báo cáo
+
+### P25 — Dashboard KPI ✅ DONE 2026-07-12
+
+```
+Task: Trang dashboard với 5 KPI + biểu đồ.
+
+## UI
+
+Trang `/admin/dashboard` (mới), chỉ admin. Nút "Dashboard" trong ☰ panel.
+
+### Layout
+
+```
+┌─────────────────────────────────────┐
+│  📊 DASHBOARD LAVIPCO — 2026-Q1     │
+│                                      │
+│  ┌─────┐ ┌─────┐ ┌─────┐ ┌─────┐   │
+│  │ 1234│ │ 12  │ │ 45  │ │ 78% │   │  ← 4 tile số
+│  │ Trụ │ │Tủ  │ │ SC  │ │ Done│   │
+│  └─────┘ └─────┘ └─────┘ └─────┘   │
+│                                      │
+│  ┌───────────────────────────────┐ │
+│  │ Bar chart: Trụ theo địa bàn   │ │  ← Chart 1
+│  └───────────────────────────────┘ │
+│                                      │
+│  ┌─────────────┐ ┌─────────────┐   │
+│  │Donut % done │ │Bar SC 30days│   │  ← Chart 2+3
+│  └─────────────┘ └─────────────┘   │
+│                                      │
+│  ┌───────────────────────────────┐ │
+│  │Bar: Hiệu suất user (top 10)   │ │  ← Chart 4
+│  └───────────────────────────────┘ │
+└─────────────────────────────────────┘
+```
+
+## Data
+
+Aggregate client-side từ `loadedData` (all districts) + fetch `SuCo`, `BaoTri`, `NhiemVu`.
+
+## Chart.js setup
+
+Lazy load Chart.js UMD từ CDN (~150KB):
+```js
+async function _loadChartJs() {
+    if (window.Chart) return;
+    await new Promise((res, rej) => {
+        const s = document.createElement('script');
+        s.src = 'https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js';
+        s.onload = res; s.onerror = rej;
+        document.head.appendChild(s);
+    });
+}
+```
+
+## Testing checklist
+
+- [ ] 4 tile số update realtime từ data hiện tại
+- [ ] Bar chart địa bàn correct count
+- [ ] Donut % done = (số trụ có ảnh) / total
+- [ ] SC 30 ngày lấy đúng từ sheet SuCo
+- [ ] Top 10 user tính từ `Người KS` column
+- [ ] Charts responsive trên mobile
+
+## Deliverable
+
+Admin thấy tổng quan trong 5 giây, không cần phân tích thủ công.
+```
+
+---
+
+### P26 — Báo cáo theo mẫu Nhà nước (TT06/2016) ✅ DONE 2026-07-12
+
+```
+Task: Xuất báo cáo Excel đúng mẫu TT06/2016 của Bộ Xây dựng.
+
+## 3 mẫu
+
+### Mẫu 1: Báo cáo tháng (BC-CHIEUSANG-M-2026-01.xlsx)
+
+Header: logo huyện + tên phòng + tháng + năm.
+5 sheet:
+1. Tổng hợp — số trụ theo loại
+2. Sự cố — list SC trong tháng
+3. Bảo trì — list BT thực hiện
+4. Nhân sự — hiệu suất
+5. Ký duyệt — chỗ ký lãnh đạo
+
+### Mẫu 2: Báo cáo TT06/2016 (BC-TT06-2026-Q1.xlsx)
+
+Theo phụ lục Thông tư 06/2016/TT-BXD:
+- Danh sách hệ thống chiếu sáng đô thị theo cấp đường
+- Chỉ tiêu kỹ thuật (độ rọi, độ đồng đều)
+- Tình trạng vận hành
+
+### Mẫu 3: Danh mục thiết bị (DM-TCVN7722.xlsx)
+
+Theo TCVN 7722-1:2007 và TT39/2009/TT-BXD:
+- Danh sách trụ, loại, công suất, năm lắp đặt
+- Chứng nhận xuất xưởng
+- Bảo hành + bảo trì
+
+## Code
+
+```js
+async function exportBaoCaoTT06(from, to) {
+    const template = await fetch('templates/bc_tt06.xlsx').then(r => r.arrayBuffer());
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(template);
+    
+    // Fill cells
+    const ws = wb.getWorksheet(1);
+    ws.getCell('B3').value = getSetting('company_name');
+    ws.getCell('B4').value = `Từ ${from} đến ${to}`;
+    // ... fill data rows
+    
+    const buf = await wb.xlsx.writeBuffer();
+    // Save file
+}
+```
+
+Templates lưu trong repo `/templates/*.xlsx` — thiết kế 1 lần trong Excel với style, header, footer.
+
+## UI
+
+Section mới "Báo cáo chính thức" trong ☰ panel admin:
+- Dropdown chọn mẫu
+- Chọn khoảng thời gian
+- Nút "Tạo báo cáo" → download file
+
+## Testing checklist
+
+- [ ] Templates load được (fetch OK)
+- [ ] Fill data đúng cells
+- [ ] Excel mở trong Word/Excel không lỗi format
+- [ ] Header/footer preserved
+- [ ] Ký duyệt sheet có sẵn chỗ trống ký
+
+## Deliverable
+
+Admin xuất báo cáo hành chính chỉ với vài click, đúng mẫu Nhà nước.
+```
+
+---
+
+### P27 — Email report định kỳ ✅ DONE 2026-07-12
+
+```
+Task: GAS tự gửi báo cáo tháng qua email vào ngày 1 tháng sau.
+
+## GAS setup
+
+### 1. Cron trigger
+
+Extensions → Apps Script → Triggers:
+- Function: `sendMonthlyReport`
+- Type: Time-driven
+- Day of month: 1
+- Time: 6am
+
+### 2. Function `sendMonthlyReport()`
+
+```js
+function sendMonthlyReport() {
+    const now = new Date();
+    const lastMonth = new Date(now.getFullYear(), now.getMonth()-1, 1);
+    const from = Utilities.formatDate(lastMonth, 'GMT+7', 'yyyy-MM-dd');
+    const to = Utilities.formatDate(new Date(now.getFullYear(), now.getMonth(), 0), 'GMT+7', 'yyyy-MM-dd');
+    
+    // Aggregate data
+    const data = aggregateMonthlyData(from, to);
+    
+    // Generate PDF (server-side dùng Google Doc API hoặc HTML → PDF via UrlFetchApp)
+    const pdfBlob = generateReportPdf(data);
+    
+    // Get recipient list from Setting sheet
+    const recipients = getSetting('email_recipients').split(',');
+    
+    GmailApp.sendEmail(
+        recipients.join(','),
+        `Báo cáo chiếu sáng tháng ${from} - ${to}`,
+        `Báo cáo đính kèm.`,
+        { attachments: [pdfBlob.setName(`BC-CS-${from}.pdf`)] }
+    );
+}
+```
+
+### 3. Cấu hình recipients
+
+Trong sheet `Setting`:
+```
+email_recipients | admin@abc.gov.vn,truongphong@xyz.gov.vn
+```
+
+## Testing checklist
+
+- [ ] Run manual `sendMonthlyReport()` → email đến đúng list
+- [ ] PDF attachment mở được, format đúng
+- [ ] Cron trigger fire đúng ngày 1
+- [ ] Log Executions không error
+
+## Deliverable
+
+Lãnh đạo tự động nhận báo cáo tháng vào ngày 1, không cần request thủ công.
+```
+
+---
+
+### P28 — Chữ ký số PDF
+
+```
+Task: Ký PDF bản vẽ bằng chứng thư số (VNPT-CA / BKAV-CA / FPT-CA).
+
+## Cơ chế
+
+Client-side ký PDF là bất khả thi (private key phải trong USB token / cloud CA). Solution:
+
+### Option A: USB Token
+
+User dùng phần mềm VNPT-CA Signer / Foxit → mở PDF exported → ký tay → save.
+→ App không can thiệp, chỉ xuất PDF sẵn có ô ký.
+
+### Option B: Cloud CA (khuyến nghị)
+
+Tích hợp API của VNPT eSign / BKAV Cloud Sign:
+```js
+async function signPdfViaCloud(pdfBlob) {
+    const uploadRes = await fetch('https://api.vnpt-esign.com/upload', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${CLIENT_SECRET}` },
+        body: pdfBlob
+    });
+    const { fileId } = await uploadRes.json();
+    // User authenticate via SMS OTP
+    // Return signed PDF URL
+    return signedPdfUrl;
+}
+```
+
+Chi phí: ~2000-5000 VND/lần ký. Cần đăng ký doanh nghiệp với CA.
+
+### Option C: PDF-lib client-side signature (visual only)
+
+Không phải chữ ký số pháp lý, chỉ là hình chữ ký insert. Dùng khi không cần compliance.
+
+## Recommendation
+
+Option A cho MVP (không code gì), Option B cho enterprise (60h implement).
+
+## Testing checklist
+
+- [ ] Option A: PDF export có ô trống ký + tên chức vụ
+- [ ] Option B: sign flow end-to-end, verify chữ ký trong Adobe Reader
+
+## Deliverable
+
+Bản vẽ có chữ ký hợp lệ để lưu hồ sơ chính thức.
+```
+
+---
+
+## Nhóm 15 — Tích hợp bên ngoài
+
+### P29 — Zalo Official Account integration
+
+```
+Task: Cho phép dân báo sự cố qua Zalo OA → auto-tạo ticket.
+
+## Setup Zalo OA
+
+1. Đăng ký OA tại https://oa.zalo.me
+2. Xác thực doanh nghiệp
+3. Lấy `oa_id` + `access_token`
+
+## Webhook Zalo → GAS
+
+Config webhook URL trong Zalo Developer: `<GAS_WEB_APP_URL>?action=zalo_webhook`
+
+GAS `doPost` handler:
+```js
+function handleZaloWebhook(payload) {
+    if (payload.event_name === 'user_send_text') {
+        // User gửi tin nhắn — trigger menu button "Báo sự cố"
+    }
+    if (payload.event_name === 'user_submit_form') {
+        // Form data: description, image, location
+        const suCoRow = createSuCoFromZalo(payload);
+        replyZaloUser(payload.user_id, `Đã ghi nhận sự cố ${suCoRow.id}. Cảm ơn bạn!`);
+    }
+    return { ok: true };
+}
+```
+
+## Zalo template menu
+
+Tạo template trong OA Console:
+- Button "🚨 Báo sự cố" → mở form nhập
+- Form có: mô tả, ảnh upload, geolocation
+
+## Reply mechanism
+
+```js
+function replyZaloUser(userId, text) {
+    UrlFetchApp.fetch('https://openapi.zalo.me/v2.0/oa/message', {
+        method: 'POST',
+        headers: { 'access_token': ZALO_TOKEN },
+        payload: JSON.stringify({
+            recipient: { user_id: userId },
+            message: { text }
+        })
+    });
+}
+```
+
+## Testing checklist
+
+- [ ] Webhook nhận event khi user gửi tin
+- [ ] Form submit tạo row trong SuCo với `nguoiBao = 'zalo_' + user_id`
+- [ ] Reply message về user
+- [ ] Admin nhận notification sự cố mới có source = Zalo
+
+## Deliverable
+
+Dân chỉ cần Zalo, không cần cài app. Sự cố tự động vào hệ thống.
+```
+
+---
+
+### P30 — REST API cho hệ thống ngoài ✅ DONE 2026-07-12
+
+```
+Task: Expose REST API cho SCADA / ERP đọc/ghi data.
+
+## GAS endpoints
+
+Extend `doGet` + `doPost`:
+
+```
+GET  ?action=api_list_markers&district=Quan1&api_key=xxx
+GET  ?action=api_get_marker&id=Q1_001&api_key=xxx
+POST ?action=api_create_marker + payload
+GET  ?action=api_list_su_co&status=moi
+POST ?action=api_reports_monthly
+```
+
+## Auth
+
+Sheet `ApiKeys`: 4 cột (key, tên client, permissions, active).
+
+Middleware:
+```js
+function checkApiKey(key) {
+    const sheet = getSheet('ApiKeys');
+    const rows = sheet.getDataRange().getValues();
+    const row = rows.find(r => r[0] === key && r[3] === 'active');
+    if (!row) throw new Error('Invalid API key');
+    return { client: row[1], permissions: row[2].split(',') };
+}
+```
+
+## Rate limit
+
+Simple: sheet log requests, count last 60s per key. Deny if > 60 req/min.
+
+## Docs
+
+Tạo file `api-docs.html` — swagger-like doc với examples curl.
+
+## Testing checklist
+
+- [ ] curl GET list_markers → JSON valid
+- [ ] Invalid API key → 401
+- [ ] Rate limit exceed → 429
+- [ ] POST create_marker → row appear trong sheet
+- [ ] Postman collection test all endpoints
+
+## Deliverable
+
+Bên thứ 3 có thể query/write data programmatically.
+```
+
+---
+
+## Nhóm 16 — Field Survey nâng cao
+
+### P31 — Voice note trên marker ✅ DONE 2026-07-12
+
+```
+Task: Ghi âm ghi chú, đính vào marker.
+
+## Data model
+
+Thêm cột 26: `Ghi âm` — URL Google Drive.
+
+## UI popup marker
+
+Button 🎙 "Ghi âm" → hiển thị recorder:
+- Nút to `● Rec` (max 60s)
+- Đếm timer
+- Nút `⏹ Dừng` → auto upload
+
+## Code
+
+```js
+let _mediaRecorder = null, _audioChunks = [];
+
+async function _startVoiceRecord() {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    _mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+    _audioChunks = [];
+    _mediaRecorder.ondataavailable = e => _audioChunks.push(e.data);
+    _mediaRecorder.onstop = async () => {
+        const blob = new Blob(_audioChunks, { type: 'audio/webm' });
+        const dataUrl = await blobToDataUrl(blob);
+        const url = await uploadAudioToDrive(dataUrl);
+        // Save to row[25]
+    };
+    _mediaRecorder.start();
+    setTimeout(() => _mediaRecorder.state === 'recording' && _mediaRecorder.stop(), 60000);
+}
+```
+
+GAS `handleAudioUpload` tương tự `handleImageUpload` nhưng ext `.webm`.
+
+## Playback
+
+Popup marker có audio nếu `row[25]`:
+```html
+<audio controls src="${row[25]}" style="width:100%;height:32px;"></audio>
+```
+
+## Testing checklist
+
+- [ ] Grant mic permission → record 3s → playback ok
+- [ ] Upload lên Drive, URL public accessible
+- [ ] Playback trên mobile Safari/Chrome
+- [ ] Max 60s auto stop
+- [ ] Size < 500KB cho 60s (webm codec)
+
+## Deliverable
+
+Khảo sát viên ghi note nhanh không cần gõ.
+```
+
+---
+
+### P32 — QR/Barcode scan ✅ DONE 2026-07-12
+
+```
+Task: Scan tag QR/barcode trên trụ để nhập nhanh ID.
+
+## Thư viện
+
+`html5-qrcode` (30KB, lazy load):
+```js
+async function _loadQrLib() {
+    if (window.Html5Qrcode) return;
+    const s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js';
+    await new Promise((r, e) => { s.onload = r; s.onerror = e; document.head.appendChild(s); });
+}
+```
+
+## UI
+
+Trong marker form, nút "📷 Scan QR" cạnh field "Tên trụ":
+```js
+async function _startQrScan(inputEl) {
+    await _loadQrLib();
+    document.getElementById('qrScannerContainer').style.display = 'block';
+    const scanner = new Html5Qrcode('qrScanner');
+    await scanner.start(
+        { facingMode: 'environment' },
+        { fps: 10, qrbox: { width: 250, height: 250 } },
+        (decodedText) => {
+            inputEl.value = decodedText;
+            scanner.stop();
+            document.getElementById('qrScannerContainer').style.display = 'none';
+        },
+        (err) => {} // ignore no-scan
+    );
+}
+```
+
+## Testing checklist
+
+- [ ] Grant camera permission
+- [ ] Scan QR code từ ảnh in → decode đúng
+- [ ] Scan barcode Code128 → decode đúng
+- [ ] Auto-stop sau khi scan thành công
+- [ ] Test trên iOS Safari + Android Chrome
+
+## Deliverable
+
+Nhập tên trụ nhanh gấp 3-5 lần, không nhầm.
+```
+
+---
+
+### P33 — Vẽ vùng polygon ✅ DONE 2026-07-12
+
+```
+Task: Vẽ polygon "khu vực đã khảo sát" hoặc "cụm dân cư".
+
+## Thư viện
+
+Leaflet.Draw (chuẩn):
+```html
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet-draw@1.0.4/dist/leaflet.draw.css">
+<script src="https://cdn.jsdelivr.net/npm/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
+```
+
+## Data model
+
+Sheet `Vung` — 6 cột: ID, tên, loại (`da_khao_sat`/`cum_dan_cu`/`khac`), GeoJSON polygon, người tạo, thời gian.
+
+## UI
+
+Section trong ☰ panel "Vẽ vùng":
+- Nút "+ Vẽ vùng mới" → activate Leaflet.Draw polygon tool
+- User click các điểm → hoàn thành → prompt name + type
+- Save vào sheet
+- Danh sách vùng đã vẽ → toggle visible
+
+## Code
+
+```js
+const drawnItems = new L.FeatureGroup().addTo(map);
+const drawControl = new L.Control.Draw({
+    edit: { featureGroup: drawnItems },
+    draw: { polygon: true, marker: false, circle: false, rectangle: false, polyline: false }
+});
+
+map.on(L.Draw.Event.CREATED, async (e) => {
+    const layer = e.layer;
+    drawnItems.addLayer(layer);
+    const geojson = layer.toGeoJSON();
+    const name = prompt('Tên vùng:');
+    if (name) await saveVungToGas({ name, geojson });
+});
+```
+
+## Testing checklist
+
+- [ ] Vẽ polygon 4-5 điểm → complete
+- [ ] Save GeoJSON vào sheet Vung
+- [ ] Reload → polygon restore đúng vị trí
+- [ ] Toggle visible → add/remove khỏi map
+- [ ] Sửa polygon (edit mode) → update GAS
+
+## Deliverable
+
+Admin có thể đánh dấu vùng địa lý rõ ràng.
+```
+
+---
+
+### P34 — Đo khoảng cách trên bản đồ ✅ DONE 2026-07-12
+
+```
+Task: Click 2 điểm → hiện khoảng cách + đường thẳng.
+
+## UI
+
+Nút "📏 Đo" trong ☰ panel → activate mode:
+- Cursor crosshair
+- Click 1 → điểm A với marker tạm
+- Click 2 → điểm B, vẽ polyline, hiện distance tooltip
+- Click tiếp → reset cặp mới
+- Click nút "Đo" lần nữa hoặc ESC → tắt mode
+
+## Code
+
+```js
+let _measureMode = false, _measurePoints = [], _measureLine = null, _measureLabel = null;
+
+function _toggleMeasureMode() {
+    _measureMode = !_measureMode;
+    document.getElementById('btnMeasure').classList.toggle('active', _measureMode);
+    map.getContainer().style.cursor = _measureMode ? 'crosshair' : '';
+    if (!_measureMode) _clearMeasure();
+}
+
+map.on('click', (e) => {
+    if (!_measureMode) return;
+    _measurePoints.push(e.latlng);
+    if (_measurePoints.length === 2) {
+        const [a, b] = _measurePoints;
+        const dist = haversineM(a.lat, a.lng, b.lat, b.lng);
+        if (_measureLine) map.removeLayer(_measureLine);
+        _measureLine = L.polyline([a, b], { color:'#dc2626', weight: 3 }).addTo(map);
+        const midLat = (a.lat + b.lat) / 2, midLon = (a.lng + b.lng) / 2;
+        _measureLabel = L.marker([midLat, midLon], {
+            icon: L.divIcon({
+                className: 'measure-label',
+                html: `<div style="background:#fff;border:1px solid #dc2626;padding:2px 6px;border-radius:4px;font-weight:700;color:#dc2626;">${dist < 1000 ? dist.toFixed(1)+'m' : (dist/1000).toFixed(2)+'km'}</div>`
+            })
+        }).addTo(map);
+        _measurePoints = [];
+    }
+});
+```
+
+## Testing checklist
+
+- [ ] Click 2 điểm → hiện line + label distance
+- [ ] Distance < 1000m dùng đơn vị mét
+- [ ] Distance >= 1000m dùng km với 2 chữ số
+- [ ] ESC hoặc click nút tắt mode
+- [ ] Reset khi click cặp mới
+
+## Deliverable
+
+Đo khoảng cách nhanh không cần công cụ ngoài.
+```
+
+---
+
+## Nhóm 17 — DevOps & Quality
+
+### P35 — Smoke tests với Playwright ✅ DONE 2026-07-12
+
+```
+Task: Setup Playwright + 5 test critical flow + CI GitHub Actions.
+
+## Setup
+
+```bash
+npm init -y
+npm i -D @playwright/test
+npx playwright install chromium
+```
+
+`playwright.config.ts`:
+```ts
+export default {
+    testDir: './tests',
+    use: {
+        baseURL: 'http://localhost:5500',
+        headless: true,
+        screenshot: 'only-on-failure'
+    },
+    webServer: {
+        command: 'npx live-server --port=5500',
+        port: 5500
+    }
+};
+```
+
+## Test files
+
+### `tests/auth.spec.ts`
+
+```ts
+import { test, expect } from '@playwright/test';
+
+test('admin login', async ({ page }) => {
+    await page.goto('/');
+    await page.fill('#lUsername', 'admin');
+    await page.fill('#lPassword', 'ADMIN_PASSWORD');
+    await page.click('#loginBtn');
+    await expect(page.locator('#topbarUserName')).toContainText('Admin');
+});
+
+test('user login + role restrictions', async ({ page }) => {
+    // Login user
+    // Check no admin buttons visible
+});
+```
+
+### `tests/marker.spec.ts`
+
+Add marker + edit + delete flow.
+
+### `tests/print.spec.ts`
+
+Export PDF drawing.
+
+### `tests/district.spec.ts`
+
+Switch district + verify markers reload.
+
+### `tests/cad.spec.ts`
+
+Load DXF overlay + toggle.
+
+## GitHub Actions
+
+`.github/workflows/test.yml`:
+```yaml
+on: [push, pull_request]
+jobs:
+    test:
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+            - uses: actions/setup-node@v4
+            - run: npm ci
+            - run: npx playwright install --with-deps chromium
+            - run: npx playwright test
+            - uses: actions/upload-artifact@v4
+                if: failure()
+                with:
+                    name: playwright-report
+                    path: playwright-report/
+```
+
+## Testing checklist
+
+- [ ] `npm test` local pass
+- [ ] Push PR → GitHub Actions run tự động
+- [ ] Fail case → screenshot uploaded làm artifact
+- [ ] Timeout hợp lý (không quá 5 phút)
+
+## Deliverable
+
+Regression bug giảm 70%, tự tin refactor.
+```
+
+---
+
+### P36 — Sentry monitoring
+
+```
+Task: Track lỗi production real-time.
+
+## Setup
+
+Sign up sentry.io free tier (5k errors/tháng).
+
+Add snippet vào `<head>` của index.html:
+```html
+<script src="https://browser.sentry-cdn.com/7.100.0/bundle.min.js"
+        integrity="sha384-..." crossorigin="anonymous"></script>
+<script>
+Sentry.init({
+    dsn: 'https://YOUR_DSN@sentry.io/xxx',
+    tracesSampleRate: 0.1,
+    environment: location.hostname === 'neo-era.github.io' ? 'production' : 'dev',
+    ignoreErrors: [
+        'ResizeObserver loop',
+        'Non-Error promise rejection captured',
+        /extension\/\//
+    ]
+});
+</script>
+```
+
+## Instrument key operations
+
+```js
+try {
+    await syncRowToGAS(row);
+} catch (err) {
+    Sentry.captureException(err, {
+        extra: { row: row.slice(0, 5), currentSheet }
+    });
+    throw err;
+}
+```
+
+## Filter noise
+
+- Adblock errors
+- Extension conflicts
+- Network offline (expected)
+
+## Testing checklist
+
+- [ ] Trigger error test → Sentry dashboard shows
+- [ ] Stack trace symbolicated (source maps)
+- [ ] Environment tag đúng
+- [ ] Free tier không vượt quota
+
+## Deliverable
+
+Bug production được phát hiện trong phút chứ không phải tuần.
+```
+
+---
+
+### P37 — Progressive module extraction ✅ DONE 2026-07-12 (partial: lib/vn2000, utils, dxf)
+
+```
+Task: Chia index.html 7000 dòng thành modules.
+
+## Thứ tự extract (theo priority)
+
+### Wave 1: Pure utility (không phụ thuộc DOM)
+
+Files: `lib/vn2000.js`, `lib/utils.js`, `lib/dxf.js`
+
+```js
+// lib/vn2000.js
+export function convertLatLonToVn2000(lat, lon) { ... }
+export function convertVn2000ToLatLon(x, y, mer, k0) { ... }
+```
+
+Trong index.html:
+```html
+<script type="module">
+import { convertLatLonToVn2000 } from './lib/vn2000.js';
+window.convertLatLonToVn2000 = convertLatLonToVn2000; // expose global tạm cho code cũ
+</script>
+```
+
+### Wave 2: Feature modules (có state)
+
+Files: `modules/print.js`, `modules/cable.js`, `modules/cad.js`, `modules/excel.js`
+
+Mỗi module export `init(mapInstance)` function + hooks.
+
+### Wave 3: UI components
+
+Files: `components/markerPopup.js`, `components/searchBar.js`
+
+## Không dùng build tool ban đầu
+
+ES modules native đủ. Nếu sau muốn optimize → chuyển sang Vite (2 giờ setup).
+
+## Testing checklist
+
+- [ ] Sau extract từng module, chức năng giữ nguyên
+- [ ] Console không error import
+- [ ] `sw.js` cache tất cả modules
+- [ ] Load time không tăng > 20%
+
+## Deliverable
+
+Codebase dễ maintain, mỗi module < 500 dòng.
+```
+
+---
+
+### P38 — Unit tests với Vitest ✅ DONE 2026-07-12
+
+```
+Task: Test coverage 80% pure functions.
+
+## Setup
+
+```bash
+npm i -D vitest
+```
+
+`vitest.config.js`:
+```js
+export default {
+    test: {
+        environment: 'jsdom',
+        coverage: { provider: 'v8', reporter: ['text', 'html'] }
+    }
+};
+```
+
+## Test cases
+
+### `tests/unit/vn2000.test.js`
+
+```js
+import { describe, it, expect } from 'vitest';
+import { convertLatLonToVn2000, convertVn2000ToLatLon } from '../lib/vn2000.js';
+
+describe('VN-2000 conversion', () => {
+    it('forward + reverse roundtrip', () => {
+        const original = { lat: 10.601, lon: 106.664 };
+        const { x, y } = convertLatLonToVn2000(original.lat, original.lon);
+        const back = convertVn2000ToLatLon(x, y, 105, 0.9996);
+        expect(back.lat).toBeCloseTo(original.lat, 5);
+        expect(back.lon).toBeCloseTo(original.lon, 5);
+    });
+});
+```
+
+### `tests/unit/utils.test.js`
+
+- `haversineM(a, b, c, d)` — 5 test cases
+- `_cleanMText(text)` — 10 case: MTEXT groups, %%c, %%NNN
+- `normalizeTextSearchable(text)` — accent removal, đ→d
+
+### `tests/unit/gps.test.js`
+
+- `averageFixes(fixes)` — MAD outlier filter
+
+## GitHub Actions
+
+Add to existing `test.yml`:
+```yaml
+- run: npm run test:unit
+- uses: codecov/codecov-action@v4
+```
+
+## Testing checklist
+
+- [ ] `npm run test:unit` local pass
+- [ ] Coverage report generate
+- [ ] Codecov badge trong README
+- [ ] Coverage > 80% cho lib/*.js
+
+## Deliverable
+
+Bug math được catch ngay khi thay đổi công thức.
+```
+
+---
+
+## Nhóm 18 — SaaS Foundation
+
+### P39 — CLI onboarding tool
+
+```
+Task: Setup khách hàng mới trong 5 phút.
+
+## Package
+
+Tạo repo mới `lighting-survey-setup`, publish npm.
+
+`bin/setup.js`:
+```js
+#!/usr/bin/env node
+import { prompt } from 'inquirer';
+import { google } from 'googleapis';
+import { Octokit } from '@octokit/rest';
+
+const answers = await prompt([
+    { name: 'name', message: 'Tên khách hàng:' },
+    { name: 'email', message: 'Google admin account:' },
+    { name: 'districts', type: 'checkbox', choices: DISTRICTS },
+    { name: 'githubOrg', message: 'GitHub org (optional):' }
+]);
+
+// 1. Google OAuth flow
+const auth = await googleAuth();
+
+// 2. Tạo Spreadsheet + share
+const sheets = google.sheets({ version: 'v4', auth });
+const spreadsheet = await sheets.spreadsheets.create({
+    requestBody: { properties: { title: `LightingSurvey_${answers.name}` } }
+});
+await sheets.spreadsheets.batchUpdate({
+    spreadsheetId: spreadsheet.data.spreadsheetId,
+    requestBody: {
+        requests: answers.districts.map(d => ({ addSheet: { properties: { title: d } } }))
+    }
+});
+
+// 3. Deploy GAS
+// Google Apps Script API - deployment.create()
+
+// 4. Tạo GitHub repo + Pages
+const octokit = new Octokit({ auth: GITHUB_TOKEN });
+await octokit.repos.createForAuthenticatedUser({
+    name: `lighting-survey-${answers.name.toLowerCase()}`,
+    homepage: `https://${answers.githubOrg}.github.io/lighting-survey-${answers.name.toLowerCase()}/`
+});
+
+// 5. Push template code + update config
+// git clone template → sed replace URLs → git push
+
+// 6. Enable GitHub Pages
+await octokit.repos.createPagesSite({ ... });
+
+// 7. Email hướng dẫn
+console.log('✓ Setup xong! URL: https://...');
+```
+
+## Testing checklist
+
+- [ ] End-to-end setup 1 khách mới thành công
+- [ ] Thời gian < 5 phút
+- [ ] Có thể re-run nếu step fail (idempotent)
+- [ ] Rollback khi lỗi giữa chừng
+
+## Deliverable
+
+Onboard khách hàng mới 5 phút thay 4-8 giờ.
+```
+
+---
+
+### P40 — Multi-tenant Supabase
+
+```
+Task: Chuyển từ Google Sheets → Supabase PostgreSQL, multi-tenant.
+
+## Schema
+
+```sql
+CREATE TABLE tenants (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name TEXT NOT NULL,
+    plan TEXT DEFAULT 'free',
+    created_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE users (
+    id UUID PRIMARY KEY,
+    tenant_id UUID REFERENCES tenants,
+    email TEXT UNIQUE,
+    role TEXT,
+    displayed_name TEXT,
+    vung TEXT[]  -- array of allowed sheet names
+);
+
+CREATE TABLE markers (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    tenant_id UUID REFERENCES tenants,
+    district TEXT,
+    ten_tru TEXT,
+    lat FLOAT8,
+    lon FLOAT8,
+    -- ... 22 cột còn lại của schema
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX idx_markers_tenant_district ON markers(tenant_id, district);
+```
+
+## Row Level Security
+
+```sql
+ALTER TABLE markers ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY tenant_isolation ON markers
+    USING (tenant_id = (auth.jwt()->>'tenant_id')::uuid);
+```
+
+## Auth
+
+Supabase Auth (email + password).
+
+## Client rewrite
+
+Thay `syncRowToGAS` bằng:
+```js
+const { data, error } = await supabase.from('markers').upsert(row).select();
+```
+
+## Migration
+
+Script chuyển data từ Google Sheet → Supabase:
+```js
+// migrate.js
+const rows = await fetchAllRowsFromGoogleSheet();
+for (const row of rows) {
+    await supabase.from('markers').insert({ ...row, tenant_id: TENANT_ID });
+}
+```
+
+## Testing checklist
+
+- [ ] Insert marker isolated theo tenant
+- [ ] Query cross-tenant fail (RLS)
+- [ ] Auth flow email + password work
+- [ ] Migration 1000 rows < 5 phút
+- [ ] Realtime subscribe update markers
+
+## Deliverable
+
+Multi-tenant true SaaS, scale > 100 tenants dễ dàng.
+```
+
+---
+
+### P41 — Billing với Payos
+
+```
+Task: Subscription tự động.
+
+## Setup Payos
+
+1. Đăng ký tài khoản business payos.vn
+2. Get API key + partner code
+3. Config webhook URL
+
+## 3 Tier
+
+Sheet `plans`:
+| id | name | price_vnd | max_users | max_markers | features |
+|---|---|---|---|---|---|
+| free | Free | 0 | 2 | 200 | basic |
+| pro | Pro | 500000 | 10 | unlimited | +cad,+api |
+| enterprise | Enterprise | 1500000 | -1 | unlimited | +signature,+custom |
+
+## Flow
+
+1. Tenant upgrade → chọn plan → tạo Payos payment link
+2. Redirect user đến Payos → thanh toán VNPay/Momo/thẻ
+3. Payos webhook → update tenant plan
+4. Enforce limits client-side + server-side
+
+## Client
+
+```js
+async function upgradePlan(planId) {
+    const res = await fetch('/api/upgrade', { method:'POST', body: JSON.stringify({ planId }) });
+    const { paymentUrl } = await res.json();
+    window.location.href = paymentUrl;
+}
+```
+
+## Server
+
+```js
+// Create Payos link
+const link = await payos.createPaymentLink({
+    orderCode: Date.now(),
+    amount: plan.price_vnd,
+    description: `Upgrade ${plan.name}`,
+    returnUrl: 'https://app.com/billing/success',
+    cancelUrl: 'https://app.com/billing/cancel'
+});
+return { paymentUrl: link.checkoutUrl };
+
+// Webhook
+if (payload.success) {
+    await db.tenants.update({ where: { id: tenantId }, data: { plan: planId } });
+}
+```
+
+## Testing checklist
+
+- [ ] Tạo link → redirect Payos
+- [ ] Thanh toán test success → webhook fire → plan update
+- [ ] Cancel → tenant giữ plan cũ
+- [ ] Enforce limits: free tenant thêm marker 201 → deny
+- [ ] Invoice email tự động
+
+## Deliverable
+
+SaaS auto revenue, không cần bill thủ công.
+```
+
+---
+
+### P42 — Vertical expansion — Đèn tín hiệu giao thông ✅ DONE 2026-07-12 (config template)
+
+```
+Task: Extend product sang khảo sát đèn tín hiệu giao thông (traffic lights).
+
+## Concept
+
+Tận dụng 80% architecture hiện có, chỉ thay:
+- `TYPE_CONFIG` mới (6 loại đèn tín hiệu)
+- Custom form fields
+- Custom template báo cáo
+
+## New TYPE_CONFIG
+
+```js
+const TRAFFIC_LIGHT_TYPES = {
+    1: { label: 'Đèn tín hiệu chính (3 màu)', color: '#ef4444' },
+    2: { label: 'Đèn xoay 4 hướng', color: '#f59e0b' },
+    3: { label: 'Đèn cho người đi bộ', color: '#10b981' },
+    4: { label: 'Đèn cảnh báo (vàng nhấp nháy)', color: '#eab308' },
+    5: { label: 'Tủ điều khiển tín hiệu', color: '#2563eb' },
+    6: { label: 'Camera giám sát giao thông', color: '#8b5cf6' }
+};
+```
+
+## New fields trong sheet
+
+- Chu kỳ đèn (giây)
+- Kiểu đồng bộ (fixed/adaptive/vehicle-actuated)
+- Kết nối với TCC (Trung tâm điều khiển)
+- Model camera nếu có
+
+## Product variant
+
+Tạo repo `neo-era/traffic-light-survey` fork từ lighting-survey:
+- Change TYPE_CONFIG
+- Change UI labels
+- Change báo cáo template
+- Same auth + map + PDF export code
+
+## Marketing
+
+Target: Sở GTVT, ban ATGT, phòng CSGT
+
+## Testing checklist
+
+- [ ] Fork repo build được
+- [ ] All existing flow (add, edit, export) work với new types
+- [ ] Report template có logo ban ATGT
+- [ ] Deploy demo lên GitHub Pages riêng
+
+## Deliverable
+
+Mở market thứ 2 với effort 40h thay vì build từ đầu 500h.
+```
+
+---
+
+## Ước tính effort tổng
+
+| Prompt | Effort | Priority |
+|---|---|:---:|
+| P21 Ticketing | 40h | 🔴 |
+| P22 Bảo trì | 25h | 🔴 |
+| P23 Task workflow | 30h | 🟠 |
+| P24 Notification | 20h | 🟠 |
+| P25 Dashboard | 30h | 🟠 |
+| P26 Báo cáo NN | 40h | 🔴 |
+| P27 Email report | 15h | 🟠 |
+| P28 Chữ ký số | 40h | 🟢 |
+| P29 Zalo OA | 50h | 🟠 |
+| P30 REST API | 30h | 🟠 |
+| P31 Voice note | 15h | 🟢 |
+| P32 QR scan | 10h | 🟢 |
+| P33 Polygon | 15h | 🟢 |
+| P34 Đo khoảng cách | 8h | 🟢 |
+| P35 Playwright tests | 40h | 🔴 |
+| P36 Sentry | 15h | 🟠 |
+| P37 Module extraction | 60h | 🟠 |
+| P38 Unit tests | 25h | 🟠 |
+| P39 CLI onboarding | 50h | 🟢 |
+| P40 Multi-tenant | 250h | 🟢 |
+| P41 Billing | 80h | 🟢 |
+| P42 Vertical | 40h | 🟢 |
+| **TỔNG** | **~930h** | **~23 tuần** |
+
+## Thứ tự thực hiện đề xuất
+
+**Q1 2026 (2 tháng)** — Hoàn thiện quản lý vận hành:
+- P35 Tests → P21 Ticketing → P22 Bảo trì → P36 Sentry
+
+**Q2 2026 (2 tháng)** — Báo cáo + Analytics:
+- P25 Dashboard → P26 Báo cáo NN → P27 Email → P24 Notification
+
+**Q3 2026 (2 tháng)** — Tích hợp + Field:
+- P29 Zalo → P30 API → P32 QR → P34 Đo → P31 Voice
+
+**Q4 2026 (3 tháng)** — SaaS foundation:
+- P37 Modularize → P39 CLI → P28 Chữ ký → P40 Multi-tenant (nếu đủ khách) → P41 Billing
+
+**2027+** — Vertical:
+- P42 → mở rộng đèn tín hiệu → nước → viễn thông
+
+
 

@@ -35,6 +35,20 @@ const HEADER_SUCO = [
   'Trạng thái', 'Người xử lý', 'Ghi chú xử lý'
 ];
 
+// P22: Header sheet BaoTri (lịch bảo trì định kỳ) — 10 cột khớp client
+const HEADER_BAOTRI = [
+  'ID', 'Tên trụ', 'Loại bảo trì', 'Chu kỳ (tháng)',
+  'Lần cuối', 'Lần tới', 'Nhân sự phụ trách',
+  'Trạng thái', 'Ghi chú', 'Ảnh sau bảo trì'
+];
+
+// P23: Header sheet NhiemVu (giao nhiệm vụ) — 9 cột khớp client
+const HEADER_NHIEMVU = [
+  'ID', 'Người giao', 'Người nhận', 'Mô tả',
+  'Khu vực', 'Deadline', 'Trạng thái',
+  'Kết quả', 'Thời gian đóng'
+];
+
 // Map key payload JS → tên cột trong Sheet
 const FIELD_MAP = {
   'id':          'ID',
@@ -158,15 +172,29 @@ function jsonResponse(obj) {
 // Trả về URL dạng https://drive.google.com/uc?export=view&id=FILE_ID
 // — dùng trực tiếp trong thẻ <img> mà không cần xác thực.
 
+// Folder ID cụ thể trên Google Drive để lưu ảnh khảo sát.
+// Cách lấy: mở folder → URL /folders/<ID> → copy ID.
+// ⚠ Tài khoản deploy GAS phải có quyền EDIT trên folder này.
+const DRIVE_IMAGE_FOLDER_ID = '1i32dWpWSSoW61MIUD1qDJZne2FBiofOr';
+
 function handleImageUpload(imageBase64, soTru, ext) {
   try {
+    if (!imageBase64) return jsonResponse({ status: 'error', message: 'Thiếu dữ liệu ảnh (imageBase64).' });
+
     const ts = Utilities.formatDate(new Date(), 'Asia/Ho_Chi_Minh', "yyyyMMdd'T'HHmmss");
     const safeName = (soTru || 'img').replace(/[^a-zA-Z0-9]/g, '-').toLowerCase();
     const fileName = safeName + '-' + ts + '.' + (ext || 'jpg');
 
-    // Lấy hoặc tạo thư mục KhaoSatAnh
-    const folderIter = DriveApp.getFoldersByName('KhaoSatAnh');
-    const folder = folderIter.hasNext() ? folderIter.next() : DriveApp.createFolder('KhaoSatAnh');
+    // Lấy folder cố định theo ID (chính xác hơn getFoldersByName — không lỗi khi có 2 folder cùng tên)
+    let folder;
+    try {
+      folder = DriveApp.getFolderById(DRIVE_IMAGE_FOLDER_ID);
+    } catch (e) {
+      return jsonResponse({
+        status: 'error',
+        message: 'Không mở được folder Drive (ID: ' + DRIVE_IMAGE_FOLDER_ID + '). Kiểm tra ID + quyền truy cập. ' + e.message
+      });
+    }
 
     // Giải mã base64 → Blob → tạo file
     const mimeType = (ext === 'png') ? 'image/png' : 'image/jpeg';
@@ -176,8 +204,11 @@ function handleImageUpload(imageBase64, soTru, ext) {
     // Cho phép bất kỳ ai có link xem được (không cần đăng nhập)
     file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
 
-    const viewUrl = 'https://drive.google.com/uc?export=view&id=' + file.getId();
-    return jsonResponse({ status: 'ok', path: viewUrl });
+    // URL dùng cho thẻ <img> — googleusercontent.com/d/ hoạt động ổn định hơn drive.google.com/uc
+    // (Google Drive không còn phản hồi /uc?export=view cho public images từ 2024).
+    const fileId = file.getId();
+    const viewUrl = 'https://lh3.googleusercontent.com/d/' + fileId;
+    return jsonResponse({ status: 'ok', path: viewUrl, fileId: fileId });
   } catch (e) {
     return jsonResponse({ status: 'error', message: 'Drive upload lỗi: ' + e.message });
   }
@@ -224,6 +255,550 @@ function handleGitHubUpload(filePath, contentBase64, message) {
 
 // ── MAIN HANDLER ───────────────────────────────────────────────────────────
 
+// ══════════════════════════════════════════════════════════════════════════
+// ── BẢO MẬT: Password hashing (PBKDF2-SHA256) + Rate limiting ──────────
+// ══════════════════════════════════════════════════════════════════════════
+// Format hash lưu trong sheet: pbkdf2sha256$50000$<salt>$<hash_base64>
+// Backward compat: nếu password chưa có "$" → plaintext (auto-migrate lần login đầu)
+
+const PASSWORD_ALGO = 'pbkdf2sha256';
+// 10000 iterations = ~0.2s/hash trên GAS. Giảm từ 50000 do timeout khi migrate nhiều user.
+// Format hash tự lưu iterations → mỗi user có thể khác value mà vẫn verify được.
+const PBKDF_ITERATIONS = 10000;
+const LOGIN_ATTEMPT_WINDOW_MS = 5 * 60 * 1000;  // 5 phút
+const LOGIN_ATTEMPT_MAX = 10;                    // 10 attempts / 5 phút / user
+
+// Pepper — secret shared trong Script Properties (tùy chọn, bảo mật thêm 1 lớp)
+function _getPepper() {
+  return PropertiesService.getScriptProperties().getProperty('PASSWORD_PEPPER') || '';
+}
+
+// Generate salt bảo mật dùng Utilities.getUuid (backed by Java SecureRandom)
+function _generateSalt() {
+  var uuid1 = Utilities.getUuid().replace(/-/g, '');
+  var uuid2 = Utilities.getUuid().replace(/-/g, '');
+  return (uuid1 + uuid2).slice(0, 16);
+}
+
+// Iterated SHA-256 (PBKDF2-like)
+function _hashPassword(password, salt, iterations) {
+  iterations = iterations || PBKDF_ITERATIONS;
+  var pepper = _getPepper();
+  var current = String(password) + pepper + String(salt);
+  for (var i = 0; i < iterations; i++) {
+    var bytes = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, current);
+    current = Utilities.base64Encode(bytes);
+  }
+  return current;
+}
+
+function _encodePasswordHash(password) {
+  var salt = _generateSalt();
+  var hash = _hashPassword(password, salt);
+  return PASSWORD_ALGO + '$' + PBKDF_ITERATIONS + '$' + salt + '$' + hash;
+}
+
+function _verifyPassword(password, storedHash) {
+  if (!storedHash) return { ok: false, needsMigration: false };
+  // Backward compat — nếu password chưa hash (không có "$")
+  if (String(storedHash).indexOf('$') === -1) {
+    var isMatch = String(password) === String(storedHash);
+    return { ok: isMatch, needsMigration: isMatch };
+  }
+  var parts = String(storedHash).split('$');
+  if (parts.length !== 4 || parts[0] !== PASSWORD_ALGO) {
+    return { ok: false, needsMigration: false };
+  }
+  var iterations = parseInt(parts[1]) || PBKDF_ITERATIONS;
+  var salt = parts[2];
+  var expectedHash = parts[3];
+  var computedHash = _hashPassword(password, salt, iterations);
+  var ok = computedHash === expectedHash;
+  // Downgrade-on-verify: nếu hash cũ dùng iterations cao (50000) → re-hash với PBKDF_ITERATIONS mới (10000)
+  // → lần login kế tiếp nhanh hơn 5×
+  var needsRehash = ok && iterations > PBKDF_ITERATIONS;
+  return { ok: ok, needsMigration: false, needsRehash: needsRehash };
+}
+
+// Rate limiting — chống brute force login (cache in-memory, reset khi GAS cold start)
+var _loginAttempts = {};
+function _checkLoginRateLimit(username) {
+  var key = String(username || '').toLowerCase();
+  var now = Date.now();
+  if (!_loginAttempts[key]) _loginAttempts[key] = [];
+  // Xóa attempts cũ
+  _loginAttempts[key] = _loginAttempts[key].filter(function(ts) {
+    return (now - ts) < LOGIN_ATTEMPT_WINDOW_MS;
+  });
+  if (_loginAttempts[key].length >= LOGIN_ATTEMPT_MAX) {
+    return { allowed: false, remainingSec: Math.ceil((LOGIN_ATTEMPT_WINDOW_MS - (now - _loginAttempts[key][0])) / 1000) };
+  }
+  return { allowed: true };
+}
+
+function _recordLoginAttempt(username) {
+  var key = String(username || '').toLowerCase();
+  if (!_loginAttempts[key]) _loginAttempts[key] = [];
+  _loginAttempts[key].push(Date.now());
+}
+
+function _clearLoginAttempts(username) {
+  var key = String(username || '').toLowerCase();
+  delete _loginAttempts[key];
+}
+
+/**
+ * Migrate password plaintext → PBKDF2 hash.
+ * ⚡ SAFE: Có timeout guard 5 phút. Chạy lại khi bị dừng — tự động resume từ hàng chưa migrate.
+ * Password đã hash tự động skip.
+ *
+ * Cách chạy: chọn hàm này → ▶ Run → xem log
+ *   → nếu vẫn còn user chưa migrate → chạy lại lần nữa
+ */
+function migrateAllPasswords() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('TaiKhoan');
+  if (!sheet) { Logger.log('❌ Sheet TaiKhoan không tồn tại'); return; }
+  var lastRow = sheet.getLastRow();
+  if (lastRow < 2) { Logger.log('❌ TaiKhoan trống'); return; }
+
+  var rows = sheet.getRange(2, 1, lastRow - 1, 2).getValues();
+  var migrated = 0, skipped = 0, empty = 0, remaining = 0;
+  var startTime = new Date().getTime();
+  var TIMEOUT_MS = 5 * 60 * 1000;  // Dừng sau 5 phút để tránh GAS kill (limit 6 phút)
+
+  Logger.log('═══ Bắt đầu migrate password ═══');
+  Logger.log('Iterations: ' + PBKDF_ITERATIONS);
+  Logger.log('Pepper: ' + (_getPepper() ? 'CÓ' : 'CHƯA SET'));
+  Logger.log('Timeout guard: 5 phút — chạy lại lần nữa nếu còn user chưa xong');
+  Logger.log('');
+
+  for (var i = 0; i < rows.length; i++) {
+    var username = String(rows[i][0] || '').trim();
+    var password = String(rows[i][1] || '').trim();
+    if (!username) continue;
+    if (!password) { Logger.log('⏭  ' + username + ': password trống, skip'); empty++; continue; }
+    if (password.indexOf('$') !== -1 && password.indexOf(PASSWORD_ALGO) === 0) {
+      // Đã hash — skip (không log để đỡ dài)
+      skipped++;
+      continue;
+    }
+
+    // Check timeout — dừng SỚM để có thời gian flush log
+    var elapsed = new Date().getTime() - startTime;
+    if (elapsed > TIMEOUT_MS) {
+      remaining = rows.length - i;
+      Logger.log('');
+      Logger.log('⏱ Dừng do gần timeout. Còn ' + remaining + ' user chưa migrate.');
+      Logger.log('👉 Chạy lại migrateAllPasswords() để tiếp tục.');
+      break;
+    }
+
+    var iterStart = new Date().getTime();
+    var hashed = _encodePasswordHash(password);
+    sheet.getRange(i + 2, 2).setValue(hashed);
+    var iterMs = new Date().getTime() - iterStart;
+    Logger.log('✓ ' + username + ': migrated (' + iterMs + 'ms)');
+    migrated++;
+  }
+
+  Logger.log('');
+  Logger.log('═══════════════════════════');
+  Logger.log('Kết quả: ' + migrated + ' migrated, ' + skipped + ' skipped (đã hash), ' + empty + ' rỗng');
+  if (remaining > 0) {
+    Logger.log('⚠ Còn ' + remaining + ' user — CHẠY LẠI hàm này');
+  } else {
+    Logger.log('✅ HOÀN TẤT — tất cả user đã có hash. Test login với password cũ để verify.');
+  }
+}
+
+/**
+ * ⚡ RESET tất cả password về value mặc định "Lavipco@2025" với hash 10000 iterations.
+ *
+ * Dùng khi: user cũ đã hash với 50000 iterations → login mỗi lần chờ 50s → cần reset toàn bộ.
+ *
+ * ⚠ TẤT CẢ password cũ sẽ bị mất — user PHẢI login với password mặc định rồi tự đổi.
+ *
+ * Cách chạy: chọn hàm này → ▶ Run → xem log
+ */
+function resetAllPasswordsToDefault() {
+  var DEFAULT_PASSWORD = 'Lavipco@2025';
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('TaiKhoan');
+  if (!sheet) { Logger.log('❌ Sheet TaiKhoan không tồn tại'); return; }
+  var lastRow = sheet.getLastRow();
+  if (lastRow < 2) { Logger.log('❌ TaiKhoan trống'); return; }
+
+  var rows = sheet.getRange(2, 1, lastRow - 1, 2).getValues();
+  var reset = 0, empty = 0;
+  var startTime = new Date().getTime();
+  var TIMEOUT_MS = 5 * 60 * 1000;
+
+  Logger.log('═══ Reset tất cả password về mặc định ═══');
+  Logger.log('Password mặc định: "' + DEFAULT_PASSWORD + '"');
+  Logger.log('Iterations mới: ' + PBKDF_ITERATIONS);
+  Logger.log('');
+
+  // Hash 1 lần dùng cho tất cả (mỗi user vẫn có salt riêng nên hash cuối vẫn unique)
+  for (var i = 0; i < rows.length; i++) {
+    var username = String(rows[i][0] || '').trim();
+    if (!username) { empty++; continue; }
+
+    var elapsed = new Date().getTime() - startTime;
+    if (elapsed > TIMEOUT_MS) {
+      Logger.log('⏱ Dừng do gần timeout. Còn ' + (rows.length - i) + ' user. Chạy lại để tiếp tục.');
+      break;
+    }
+
+    var hashed = _encodePasswordHash(DEFAULT_PASSWORD);
+    sheet.getRange(i + 2, 2).setValue(hashed);
+    Logger.log('✓ ' + username + ': reset');
+    reset++;
+  }
+
+  Logger.log('');
+  Logger.log('═══════════════════════════');
+  Logger.log('✅ Đã reset ' + reset + ' user về password: "' + DEFAULT_PASSWORD + '"');
+  Logger.log('👉 Gửi thông báo cho user login với password này rồi tự đổi qua UI.');
+}
+
+/**
+ * ⚡ Rehash password từ 50000 iterations → 10000 iterations DÙNG PASSWORD ĐÃ BIẾT.
+ *
+ * Trick: nếu bạn nhớ password của user, có thể verify hash cũ (chậm 50s) → rehash 10000 (nhanh 200ms).
+ * KHÔNG cần user tự login.
+ *
+ * Chỉ dùng khi admin quen thân với user và biết password của họ.
+ * Cách dùng: sửa mảng KNOWN_PASSWORDS bên dưới → chạy hàm này.
+ */
+function rehashKnownPasswords() {
+  // ⚠ EDIT array này với danh sách { username, password } bạn nhớ
+  var KNOWN_PASSWORDS = [
+    // { username: 'admin', password: 'Lavipco@2025' },
+    // { username: 'lamvt', password: 'password_cua_lam' },
+  ];
+
+  if (KNOWN_PASSWORDS.length === 0) {
+    Logger.log('❌ KNOWN_PASSWORDS trống. Edit array trong hàm này trước khi chạy.');
+    return;
+  }
+
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('TaiKhoan');
+  if (!sheet) { Logger.log('❌ Sheet TaiKhoan không tồn tại'); return; }
+  var lastRow = sheet.getLastRow();
+  var rows = sheet.getRange(2, 1, lastRow - 1, 2).getValues();
+
+  var ok = 0, wrongPassword = 0, notFound = 0;
+
+  KNOWN_PASSWORDS.forEach(function(entry) {
+    var idx = -1;
+    for (var i = 0; i < rows.length; i++) {
+      if (String(rows[i][0]).trim().toLowerCase() === entry.username.toLowerCase()) { idx = i; break; }
+    }
+    if (idx === -1) { Logger.log('❌ ' + entry.username + ': không tìm thấy'); notFound++; return; }
+
+    var storedHash = String(rows[idx][1] || '').trim();
+    var v = _verifyPassword(entry.password, storedHash);
+    if (!v.ok) { Logger.log('❌ ' + entry.username + ': password sai (không match hash hiện tại)'); wrongPassword++; return; }
+
+    var newHash = _encodePasswordHash(entry.password);
+    sheet.getRange(idx + 2, 2).setValue(newHash);
+    Logger.log('✓ ' + entry.username + ': rehashed');
+    ok++;
+  });
+
+  Logger.log('');
+  Logger.log('═══════════════════════════');
+  Logger.log('Kết quả: ' + ok + ' rehashed, ' + wrongPassword + ' sai password, ' + notFound + ' không tìm thấy');
+}
+
+/**
+ * Đếm số user chưa được hash (dùng để check trước/sau migrate).
+ */
+function countUnhashedPasswords() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('TaiKhoan');
+  if (!sheet || sheet.getLastRow() < 2) { Logger.log('TaiKhoan trống'); return; }
+  var rows = sheet.getRange(2, 1, sheet.getLastRow() - 1, 2).getValues();
+  var byIters = {}, plain = 0, empty = 0, plainList = [], slowList = [];
+  rows.forEach(function(r) {
+    var u = String(r[0] || '').trim();
+    var p = String(r[1] || '').trim();
+    if (!u) return;
+    if (!p) { empty++; return; }
+    if (p.indexOf(PASSWORD_ALGO) === 0) {
+      var parts = p.split('$');
+      var iters = parseInt(parts[1]) || 0;
+      byIters[iters] = (byIters[iters] || 0) + 1;
+      if (iters > PBKDF_ITERATIONS) slowList.push(u + ' (' + iters + ')');
+    } else { plain++; plainList.push(u); }
+  });
+  Logger.log('═══ Password status ═══');
+  Object.keys(byIters).sort().forEach(function(k) {
+    Logger.log('🔒 Hashed ' + k + ' iters: ' + byIters[k] + (parseInt(k) > PBKDF_ITERATIONS ? ' ⚠ SLOW' : ' ✓ FAST'));
+  });
+  Logger.log('⚠ Plaintext: ' + plain + (plainList.length ? ' (' + plainList.join(', ') + ')' : ''));
+  Logger.log('❌ Trống: ' + empty);
+  Logger.log('Target iterations: ' + PBKDF_ITERATIONS);
+  if (slowList.length > 0) {
+    Logger.log('');
+    Logger.log('👉 User cần rehash (login lần đầu sẽ chậm 5-10s, sau đó nhanh):');
+    slowList.forEach(function(u) { Logger.log('   - ' + u); });
+    Logger.log('   HOẶC: chạy resetAllPasswordsToDefault() để reset toàn bộ nhanh.');
+  }
+}
+
+/**
+ * Tạo pepper mới (chỉ chạy 1 lần khi setup ban đầu).
+ * ⚠ QUAN TRỌNG: Nếu đổi pepper sau khi đã có user → toàn bộ password bị invalid.
+ *   Phải chạy lại migrateAllPasswords() (nhưng plaintext cũ đã mất — không thể revert).
+ *
+ * Cách chạy: chọn hàm này → ▶ Run 1 LẦN DUY NHẤT khi setup mới.
+ */
+function generateAndSavePepper() {
+  var existing = PropertiesService.getScriptProperties().getProperty('PASSWORD_PEPPER');
+  if (existing) {
+    Logger.log('⚠ PASSWORD_PEPPER đã tồn tại — KHÔNG override để tránh vô hiệu password.');
+    Logger.log('  Nếu muốn reset, xóa Property "PASSWORD_PEPPER" trong Script Properties trước.');
+    return;
+  }
+  var pepper = _generateSalt() + _generateSalt();
+  PropertiesService.getScriptProperties().setProperty('PASSWORD_PEPPER', pepper);
+  Logger.log('✓ PASSWORD_PEPPER đã lưu vào Script Properties');
+  Logger.log('  Bước tiếp: chạy migrateAllPasswords() để hash password hiện có');
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// ── QUẢN LÝ TÀI KHOẢN (admin only) ─────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════
+
+// Helper: verify admin credentials trong request
+function _requireAdmin(data) {
+  var adminAuth = data.adminAuth || {};
+  var adminUser = String(adminAuth.username || '').trim();
+  var adminPass = String(adminAuth.password || '');
+  if (!adminUser || !adminPass) {
+    return { ok: false, error: 'Thiếu adminAuth' };
+  }
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('TaiKhoan');
+  if (!sheet || sheet.getLastRow() < 2) return { ok: false, error: 'TaiKhoan trống' };
+  var rows = sheet.getRange(2, 1, sheet.getLastRow() - 1, 5).getValues();
+  for (var i = 0; i < rows.length; i++) {
+    var dn = String(rows[i][0] || '').trim();
+    var storedHash = String(rows[i][1] || '').trim();
+    if (dn.toLowerCase() !== adminUser.toLowerCase()) continue;
+    var v = _verifyPassword(adminPass, storedHash);
+    if (!v.ok) return { ok: false, error: 'Password admin sai' };
+    var role = String(rows[i][3] || '').trim().toLowerCase();
+    if (role !== 'admin') return { ok: false, error: 'Cần quyền admin (hiện là ' + role + ')' };
+    return { ok: true, adminUser: dn };
+  }
+  return { ok: false, error: 'Không tìm thấy admin user' };
+}
+
+function handleListUsers(data) {
+  var auth = _requireAdmin(data);
+  if (!auth.ok) return jsonResponse({ status: 'error', message: auth.error });
+
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('TaiKhoan');
+  if (!sheet || sheet.getLastRow() < 2) return jsonResponse({ status: 'ok', users: [] });
+
+  var rows = sheet.getRange(2, 1, sheet.getLastRow() - 1, 5).getValues();
+  var users = rows.map(function(r) {
+    var hashStr = String(r[1] || '').trim();
+    return {
+      username:    String(r[0] || '').trim(),
+      hasPassword: !!hashStr,
+      isHashed:    hashStr.indexOf(PASSWORD_ALGO) === 0,   // true nếu đã hash
+      displayName: String(r[2] || '').trim(),
+      role:        String(r[3] || 'user').trim(),
+      vung:        String(r[4] || '').trim()
+    };
+  }).filter(function(u) { return u.username; });
+  return jsonResponse({ status: 'ok', count: users.length, users: users });
+}
+
+function handleCreateUser(data) {
+  var auth = _requireAdmin(data);
+  if (!auth.ok) return jsonResponse({ status: 'error', message: auth.error });
+
+  var newUser = data.newUser || {};
+  var username    = String(newUser.username    || '').trim();
+  var password    = String(newUser.password    || '');
+  var displayName = String(newUser.displayName || '').trim();
+  var role        = String(newUser.role        || 'user').trim().toLowerCase();
+  var vung        = String(newUser.vung        || '').trim();
+
+  if (!username) return jsonResponse({ status: 'error', message: 'Thiếu username' });
+  if (!password) return jsonResponse({ status: 'error', message: 'Thiếu password' });
+  if (password.length < 6) return jsonResponse({ status: 'error', message: 'Password ≥ 6 ký tự' });
+  if (!['admin','user','user1','demo'].includes(role)) {
+    return jsonResponse({ status: 'error', message: 'Role không hợp lệ (admin/user/user1/demo)' });
+  }
+
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('TaiKhoan');
+  if (!sheet) return jsonResponse({ status: 'error', message: 'Sheet TaiKhoan không tồn tại' });
+
+  // Check duplicate username
+  if (sheet.getLastRow() >= 2) {
+    var existing = sheet.getRange(2, 1, sheet.getLastRow() - 1, 1).getValues();
+    for (var i = 0; i < existing.length; i++) {
+      if (String(existing[i][0]).trim().toLowerCase() === username.toLowerCase()) {
+        return jsonResponse({ status: 'error', message: 'Username đã tồn tại: ' + username });
+      }
+    }
+  }
+
+  sheet.appendRow([
+    username,
+    _encodePasswordHash(password),
+    displayName || username,
+    role,
+    vung
+  ]);
+
+  // Log
+  try {
+    var logSheet = ss.getSheetByName('LichSu');
+    if (logSheet) {
+      logSheet.appendRow([
+        new Date().toISOString(), auth.adminUser, 'create_user',
+        username, displayName, 'role=' + role + ', vung=' + (vung || 'all')
+      ]);
+    }
+  } catch (_) {}
+
+  return jsonResponse({ status: 'ok', username: username });
+}
+
+function handleUpdateUser(data) {
+  var auth = _requireAdmin(data);
+  if (!auth.ok) return jsonResponse({ status: 'error', message: auth.error });
+
+  var target = String(data.targetUsername || '').trim();
+  if (!target) return jsonResponse({ status: 'error', message: 'Thiếu targetUsername' });
+
+  var updates = data.updates || {};
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('TaiKhoan');
+  if (!sheet) return jsonResponse({ status: 'error', message: 'Sheet TaiKhoan không tồn tại' });
+
+  var rows = sheet.getRange(2, 1, sheet.getLastRow() - 1, 5).getValues();
+  for (var i = 0; i < rows.length; i++) {
+    if (String(rows[i][0]).trim().toLowerCase() !== target.toLowerCase()) continue;
+    var rowNum = i + 2;
+    var changes = [];
+    if (updates.displayName !== undefined) {
+      sheet.getRange(rowNum, 3).setValue(String(updates.displayName).trim());
+      changes.push('displayName');
+    }
+    if (updates.role !== undefined) {
+      var role = String(updates.role).trim().toLowerCase();
+      if (!['admin','user','user1','demo'].includes(role)) {
+        return jsonResponse({ status: 'error', message: 'Role không hợp lệ' });
+      }
+      // Không cho phép admin tự demote chính mình (avoid lockout)
+      if (target.toLowerCase() === auth.adminUser.toLowerCase() && role !== 'admin') {
+        return jsonResponse({ status: 'error', message: 'Không thể tự demote chính mình' });
+      }
+      sheet.getRange(rowNum, 4).setValue(role);
+      changes.push('role→' + role);
+    }
+    if (updates.vung !== undefined) {
+      sheet.getRange(rowNum, 5).setValue(String(updates.vung).trim());
+      changes.push('vung');
+    }
+
+    // Log
+    try {
+      var logSheet = ss.getSheetByName('LichSu');
+      if (logSheet) {
+        logSheet.appendRow([
+          new Date().toISOString(), auth.adminUser, 'update_user',
+          target, String(rows[i][2] || ''), changes.join(', ')
+        ]);
+      }
+    } catch (_) {}
+
+    return jsonResponse({ status: 'ok', changes: changes });
+  }
+  return jsonResponse({ status: 'error', message: 'Không tìm thấy user: ' + target });
+}
+
+function handleResetPassword(data) {
+  var auth = _requireAdmin(data);
+  if (!auth.ok) return jsonResponse({ status: 'error', message: auth.error });
+
+  var target = String(data.targetUsername || '').trim();
+  var newPassword = String(data.newPassword || '');
+  if (!target) return jsonResponse({ status: 'error', message: 'Thiếu targetUsername' });
+  if (!newPassword) return jsonResponse({ status: 'error', message: 'Thiếu newPassword' });
+  if (newPassword.length < 6) return jsonResponse({ status: 'error', message: 'Password ≥ 6 ký tự' });
+
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('TaiKhoan');
+  if (!sheet) return jsonResponse({ status: 'error', message: 'Sheet TaiKhoan không tồn tại' });
+
+  var rows = sheet.getRange(2, 1, sheet.getLastRow() - 1, 1).getValues();
+  for (var i = 0; i < rows.length; i++) {
+    if (String(rows[i][0]).trim().toLowerCase() !== target.toLowerCase()) continue;
+    sheet.getRange(i + 2, 2).setValue(_encodePasswordHash(newPassword));
+    // Clear login attempts
+    _clearLoginAttempts(target);
+    // Log
+    try {
+      var logSheet = ss.getSheetByName('LichSu');
+      if (logSheet) {
+        logSheet.appendRow([
+          new Date().toISOString(), auth.adminUser, 'reset_password',
+          target, '', 'admin reset'
+        ]);
+      }
+    } catch (_) {}
+    return jsonResponse({ status: 'ok' });
+  }
+  return jsonResponse({ status: 'error', message: 'Không tìm thấy user: ' + target });
+}
+
+function handleDeleteUser(data) {
+  var auth = _requireAdmin(data);
+  if (!auth.ok) return jsonResponse({ status: 'error', message: auth.error });
+
+  var target = String(data.targetUsername || '').trim();
+  if (!target) return jsonResponse({ status: 'error', message: 'Thiếu targetUsername' });
+  if (target.toLowerCase() === auth.adminUser.toLowerCase()) {
+    return jsonResponse({ status: 'error', message: 'Không thể tự xóa chính mình' });
+  }
+
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('TaiKhoan');
+  if (!sheet) return jsonResponse({ status: 'error', message: 'Sheet TaiKhoan không tồn tại' });
+
+  var rows = sheet.getRange(2, 1, sheet.getLastRow() - 1, 3).getValues();
+  for (var i = 0; i < rows.length; i++) {
+    if (String(rows[i][0]).trim().toLowerCase() !== target.toLowerCase()) continue;
+    var displayName = String(rows[i][2] || '');
+    sheet.deleteRow(i + 2);
+    _clearLoginAttempts(target);
+    // Log
+    try {
+      var logSheet = ss.getSheetByName('LichSu');
+      if (logSheet) {
+        logSheet.appendRow([
+          new Date().toISOString(), auth.adminUser, 'delete_user',
+          target, displayName, 'admin xóa'
+        ]);
+      }
+    } catch (_) {}
+    return jsonResponse({ status: 'ok' });
+  }
+  return jsonResponse({ status: 'error', message: 'Không tìm thấy user: ' + target });
+}
+
 // ── ĐỔI THÔNG TIN TÀI KHOẢN ───────────────────────────────────────────────
 
 function handleChangeCredentials(data) {
@@ -239,22 +814,31 @@ function handleChangeCredentials(data) {
   const newUsername = String(data.newUsername || '').trim();
   const newPassword = String(data.newPassword || '');
 
+  if (newPassword && newPassword.length < 6) {
+    return jsonResponse({ status: 'error', message: 'Mật khẩu mới phải có ít nhất 6 ký tự' });
+  }
+
   const rows = sheet.getRange(2, 1, lastRow - 1, 2).getValues();
   for (var i = 0; i < rows.length; i++) {
     var dn = String(rows[i][0] || '').trim();
-    var mk = String(rows[i][1] || '').trim();
-    if (dn.toLowerCase() === username.toLowerCase() && mk === currentPassword) {
-      var rowNum = i + 2;
-      if (newUsername && newUsername !== dn) {
-        sheet.getRange(rowNum, 1).setValue(newUsername);
-      }
-      if (newPassword) {
-        sheet.getRange(rowNum, 2).setValue(newPassword);
-      }
-      return jsonResponse({ status: 'ok', newUsername: newUsername || dn });
+    var storedHash = String(rows[i][1] || '').trim();
+    if (dn.toLowerCase() !== username.toLowerCase()) continue;
+
+    var verifyResult = _verifyPassword(currentPassword, storedHash);
+    if (!verifyResult.ok) {
+      return jsonResponse({ status: 'error', message: 'Mật khẩu hiện tại không đúng' });
     }
+
+    var rowNum = i + 2;
+    if (newUsername && newUsername !== dn) {
+      sheet.getRange(rowNum, 1).setValue(newUsername);
+    }
+    if (newPassword) {
+      sheet.getRange(rowNum, 2).setValue(_encodePasswordHash(newPassword));
+    }
+    return jsonResponse({ status: 'ok', newUsername: newUsername || dn });
   }
-  return jsonResponse({ status: 'error', message: 'Mật khẩu hiện tại không đúng' });
+  return jsonResponse({ status: 'error', message: 'Không tìm thấy tài khoản' });
 }
 
 // ── ĐĂNG NHẬP ──────────────────────────────────────────────────────────────
@@ -267,25 +851,60 @@ function handleLogin(username, password) {
   const lastRow = sheet.getLastRow();
   if (lastRow < 2) return jsonResponse({ status: 'error', message: 'Sai tên đăng nhập hoặc mật khẩu' });
 
-  const rows = sheet.getRange(2, 1, lastRow - 1, 5).getValues();
-  // Cột: A=tenDangNhap, B=matKhau, C=hoTen, D=vaiTro, E=vung (phân tách bằng dấu phẩy)
-  for (const row of rows) {
-    const dn = String(row[0] || '').trim();
-    const mk = String(row[1] || '').trim();
-    if (dn.toLowerCase() === username.toLowerCase() && mk === password) {
-      const vungRaw = String(row[4] || '').trim();
-      const vung = vungRaw ? vungRaw.split(',').map(function(s){ return s.trim(); }).filter(Boolean) : [];
-      return jsonResponse({
-        status: 'ok',
-        user: {
-          username:    dn,
-          displayName: String(row[2] || dn).trim(),
-          role:        String(row[3] || 'user').trim(),
-          vung:        vung   // [] = được phép tất cả địa bàn
-        }
-      });
-    }
+  // Rate limiting — chống brute force
+  var rateCheck = _checkLoginRateLimit(username);
+  if (!rateCheck.allowed) {
+    return jsonResponse({
+      status: 'error',
+      message: 'Quá nhiều lần thử. Đợi ' + rateCheck.remainingSec + ' giây rồi thử lại.'
+    });
   }
+
+  const rows = sheet.getRange(2, 1, lastRow - 1, 5).getValues();
+  // Cột: A=tenDangNhap, B=matKhau (hoặc hash), C=hoTen, D=vaiTro, E=vung
+  for (var i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    const dn = String(row[0] || '').trim();
+    const storedHash = String(row[1] || '').trim();
+    if (dn.toLowerCase() !== username.toLowerCase()) continue;
+
+    var verifyResult = _verifyPassword(password, storedHash);
+    if (!verifyResult.ok) {
+      _recordLoginAttempt(username);
+      break; // username đúng nhưng password sai → don't leak "user exists"
+    }
+
+    // Login thành công — clear attempts
+    _clearLoginAttempts(username);
+
+    // Auto-migrate plaintext password → hash sau login đầu tiên
+    // HOẶC downgrade hash iterations cao (50000) → PBKDF_ITERATIONS mới (10000) để login nhanh hơn
+    if (verifyResult.needsMigration || verifyResult.needsRehash) {
+      try {
+        var newHash = _encodePasswordHash(password);
+        sheet.getRange(i + 2, 2).setValue(newHash);
+        Logger.log(
+          (verifyResult.needsMigration ? 'Auto-migrated' : 'Auto-rehashed')
+          + ' password cho user: ' + dn
+        );
+      } catch (e) {
+        Logger.log('Auto-rehash lỗi cho ' + dn + ': ' + e.message);
+      }
+    }
+
+    const vungRaw = String(row[4] || '').trim();
+    const vung = vungRaw ? vungRaw.split(',').map(function(s){ return s.trim(); }).filter(Boolean) : [];
+    return jsonResponse({
+      status: 'ok',
+      user: {
+        username:    dn,
+        displayName: String(row[2] || dn).trim(),
+        role:        String(row[3] || 'user').trim(),
+        vung:        vung
+      }
+    });
+  }
+  // Password sai hoặc user không tồn tại — trả về cùng message để không leak
   return jsonResponse({ status: 'error', message: 'Sai tên đăng nhập hoặc mật khẩu' });
 }
 
@@ -370,6 +989,24 @@ function doPost(e) {
 
     if (data.action === 'report_suco')  return handleReportSuCo(data);
     if (data.action === 'update_suco')  return handleUpdateSuCo(data);
+
+    // P22: Lịch bảo trì
+    if (data.action === 'create_bao_tri')   return handleCreateBaoTri(data);
+    if (data.action === 'complete_bao_tri') return handleCompleteBaoTri(data);
+
+    // P23: Nhiệm vụ
+    if (data.action === 'create_nhiem_vu')        return handleCreateNhiemVu(data);
+    if (data.action === 'update_nhiem_vu_status') return handleUpdateNhiemVuStatus(data);
+
+    // P27: Email báo cáo định kỳ (test manual)
+    if (data.action === 'send_monthly_report') return handleSendMonthlyReport(data);
+
+    // Quản lý tài khoản (admin only)
+    if (data.action === 'list_users')       return handleListUsers(data);
+    if (data.action === 'create_user')      return handleCreateUser(data);
+    if (data.action === 'update_user')      return handleUpdateUser(data);
+    if (data.action === 'reset_password')   return handleResetPassword(data);
+    if (data.action === 'delete_user')      return handleDeleteUser(data);
 
     return jsonResponse({ status: 'error', message: 'action không hợp lệ: ' + data.action });
   } catch (err) {
@@ -490,8 +1127,11 @@ function buildFieldValues(data) {
 // ── HEALTH CHECK ───────────────────────────────────────────────────────────
 
 function doGet(e) {
+  var params = (e && e.parameter) || {};
+  // P30: REST API endpoint — nếu request có api_key thì route qua handleApiCall
+  if (params.api_key) return handleApiCall(params);
   ensureHeader(getSheet());
-  return jsonResponse({ status: 'ok', message: 'KhaoSat GAS v2 — login ready, header ensured' });
+  return jsonResponse({ status: 'ok', message: 'KhaoSat GAS v3 — login + API ready' });
 }
 
 // ── CHUẨN HÓA TỌA ĐỘ ─────────────────────────────────────────────────────
@@ -1038,6 +1678,883 @@ function handleUpdateSuCo(data) {
     }
   }
   return jsonResponse({ status: 'error', message: 'Không tìm thấy sự cố ID: ' + data.id });
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// ── P22: LỊCH BẢO TRÌ (sheet BaoTri) ────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════
+
+function ensureHeaderBaoTri(sheet) {
+  var lastCol = sheet.getLastColumn();
+  if (lastCol === 0 || sheet.getLastRow() === 0) {
+    sheet.appendRow(HEADER_BAOTRI);
+    sheet.getRange(1, 1, 1, HEADER_BAOTRI.length)
+      .setFontWeight('bold').setBackground('#dbeafe').setHorizontalAlignment('center');
+    sheet.setFrozenRows(1);
+    return;
+  }
+  var existing = sheet.getRange(1, 1, 1, lastCol).getValues()[0].map(function(h){ return String(h); });
+  HEADER_BAOTRI.forEach(function(h) {
+    if (existing.indexOf(h) === -1) {
+      var col = sheet.getLastColumn() + 1;
+      sheet.getRange(1, col).setValue(h).setFontWeight('bold').setBackground('#dbeafe');
+    }
+  });
+}
+
+function getBaoTriSheet() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('BaoTri');
+  if (!sheet) sheet = ss.insertSheet('BaoTri');
+  ensureHeaderBaoTri(sheet);
+  return sheet;
+}
+
+/**
+ * Chạy 1 lần từ Apps Script Editor để khởi tạo sheet BaoTri với header.
+ * Sau khi chạy: File → Share → Publish to web → chọn sheet BaoTri → CSV → Publish
+ *               → copy URL → paste vào BAOTRI_CSV_URL trong index.html
+ * Cách chạy: chọn hàm này → nhấn Run (▶)
+ */
+function initBaoTriSheet() {
+  var sheet = getBaoTriSheet();
+  Logger.log('✓ Sheet BaoTri đã sẵn sàng với ' + HEADER_BAOTRI.length + ' cột');
+  Logger.log('  URL sheet: ' + SpreadsheetApp.getActiveSpreadsheet().getUrl() + '#gid=' + sheet.getSheetId());
+  Logger.log('  Bước tiếp: File → Share → Publish to web → chọn BaoTri → CSV → copy URL → paste vào BAOTRI_CSV_URL trong index.html');
+}
+
+// Cộng N tháng vào 1 ISO date (YYYY-MM-DD) → trả về YYYY-MM-DD
+function _addMonthsIso(isoDate, months) {
+  var d = new Date(isoDate);
+  d.setMonth(d.getMonth() + parseInt(months, 10));
+  var y = d.getFullYear(),
+      m = String(d.getMonth() + 1).padStart(2, '0'),
+      day = String(d.getDate()).padStart(2, '0');
+  return y + '-' + m + '-' + day;
+}
+
+function handleCreateBaoTri(data) {
+  try {
+    var sheet = getBaoTriSheet();
+    var year = new Date().getFullYear();
+    // Sinh ID: BT_YYYY_NNN (auto-increment theo số hàng)
+    var nextNum = String(sheet.getLastRow()).padStart(3, '0');
+    var id = 'BT_' + year + '_' + nextNum;
+
+    // Nếu lanToi client chưa gửi hoặc rỗng → tự tính từ lanCuoi + chuKy
+    var lanToi = data.lanToi;
+    if (!lanToi && data.lanCuoi && data.chuKy) {
+      lanToi = _addMonthsIso(data.lanCuoi, data.chuKy);
+    }
+
+    sheet.appendRow([
+      id,
+      data.tenTru      || '',
+      data.loai        || '',
+      data.chuKy       || 12,
+      data.lanCuoi     || '',
+      lanToi           || '',
+      data.phuTrach    || '',
+      data.trangThai   || 'cho',
+      data.ghiChu      || '',
+      ''  // Ảnh sau bảo trì — chưa có khi tạo
+    ]);
+    return jsonResponse({ status: 'ok', id: id, lanToi: lanToi });
+  } catch (err) {
+    return jsonResponse({ status: 'error', message: 'BaoTri create lỗi: ' + err.message });
+  }
+}
+
+function handleCompleteBaoTri(data) {
+  try {
+    var sheet = getBaoTriSheet();
+    var lastRow = sheet.getLastRow();
+    if (lastRow < 2) return jsonResponse({ status: 'error', message: 'Sheet BaoTri trống' });
+
+    var idCol = 0, chuKyCol = 3, lanCuoiCol = 4, lanToiCol = 5, statusCol = 7;
+    var allData = sheet.getRange(2, 1, lastRow - 1, HEADER_BAOTRI.length).getValues();
+
+    for (var i = 0; i < allData.length; i++) {
+      if (String(allData[i][idCol]) !== String(data.id)) continue;
+      var rowNum = i + 2;
+      var lanCuoi = data.lanCuoi || new Date().toISOString().slice(0, 10);
+      var chuKy = parseInt(allData[i][chuKyCol]) || 12;
+      var nextLanToi = _addMonthsIso(lanCuoi, chuKy);
+
+      sheet.getRange(rowNum, lanCuoiCol + 1).setValue(lanCuoi);
+      sheet.getRange(rowNum, lanToiCol + 1).setValue(nextLanToi);
+      // Trạng thái reset về "cho" cho chu kỳ tiếp theo (KHÔNG dùng 'hoan_thanh'
+      // để lịch tiếp tục xuất hiện trong list bảo trì định kỳ)
+      sheet.getRange(rowNum, statusCol + 1).setValue('cho');
+
+      // Log lịch sử (optional, nếu có nguoiHoanThanh)
+      if (data.nguoiHoanThanh) {
+        try {
+          var ss = SpreadsheetApp.getActiveSpreadsheet();
+          var logSheet = ss.getSheetByName('LichSu');
+          if (logSheet) {
+            logSheet.appendRow([
+              data.thoiGianHoanThanh || new Date().toISOString(),
+              data.nguoiHoanThanh,
+              'complete_bao_tri',
+              String(data.id),
+              String(allData[i][1] || ''),  // Tên trụ
+              'Bảo trì hoàn thành, chu kỳ tiếp: ' + nextLanToi
+            ]);
+          }
+        } catch (_) {}
+      }
+      return jsonResponse({ status: 'ok', nextLanToi: nextLanToi });
+    }
+    return jsonResponse({ status: 'error', message: 'Không tìm thấy BaoTri ID: ' + data.id });
+  } catch (err) {
+    return jsonResponse({ status: 'error', message: 'BaoTri complete lỗi: ' + err.message });
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// ── P23: NHIỆM VỤ (sheet NhiemVu) ───────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════
+
+function ensureHeaderNhiemVu(sheet) {
+  var lastCol = sheet.getLastColumn();
+  if (lastCol === 0 || sheet.getLastRow() === 0) {
+    sheet.appendRow(HEADER_NHIEMVU);
+    sheet.getRange(1, 1, 1, HEADER_NHIEMVU.length)
+      .setFontWeight('bold').setBackground('#ede9fe').setHorizontalAlignment('center');
+    sheet.setFrozenRows(1);
+    return;
+  }
+  var existing = sheet.getRange(1, 1, 1, lastCol).getValues()[0].map(function(h){ return String(h); });
+  HEADER_NHIEMVU.forEach(function(h) {
+    if (existing.indexOf(h) === -1) {
+      var col = sheet.getLastColumn() + 1;
+      sheet.getRange(1, col).setValue(h).setFontWeight('bold').setBackground('#ede9fe');
+    }
+  });
+}
+
+function getNhiemVuSheet() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('NhiemVu');
+  if (!sheet) sheet = ss.insertSheet('NhiemVu');
+  ensureHeaderNhiemVu(sheet);
+  return sheet;
+}
+
+/**
+ * Chạy 1 lần từ Apps Script Editor để khởi tạo sheet NhiemVu với header.
+ * Sau khi chạy: publish CSV → paste URL vào NHIEMVU_CSV_URL trong index.html
+ */
+function initNhiemVuSheet() {
+  var sheet = getNhiemVuSheet();
+  Logger.log('✓ Sheet NhiemVu đã sẵn sàng với ' + HEADER_NHIEMVU.length + ' cột');
+  Logger.log('  URL sheet: ' + SpreadsheetApp.getActiveSpreadsheet().getUrl() + '#gid=' + sheet.getSheetId());
+  Logger.log('  Bước tiếp: File → Share → Publish to web → chọn NhiemVu → CSV → copy URL → paste vào NHIEMVU_CSV_URL trong index.html');
+}
+
+/**
+ * Chạy 1 lần để khởi tạo CẢ 2 sheet BaoTri + NhiemVu + SuCo cùng lúc.
+ * Sau khi chạy → publish 3 CSV URL → paste vào 3 constant trong index.html.
+ */
+function initAllOperationSheets() {
+  Logger.log('═══ Khởi tạo sheet vận hành ═══');
+  try { getBaoTriSheet(); Logger.log('✓ BaoTri (P22)'); } catch (e) { Logger.log('❌ BaoTri: ' + e.message); }
+  try { getNhiemVuSheet(); Logger.log('✓ NhiemVu (P23)'); } catch (e) { Logger.log('❌ NhiemVu: ' + e.message); }
+  // SuCo đã tạo tự động qua handleReportSuCo, nhưng init trước cho gọn
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var sc = ss.getSheetByName('SuCo');
+    if (!sc) { sc = ss.insertSheet('SuCo'); }
+    ensureHeaderSuCo(sc);
+    Logger.log('✓ SuCo (P21)');
+  } catch (e) { Logger.log('❌ SuCo: ' + e.message); }
+  Logger.log('═══════════════════════════════');
+  Logger.log('Hoàn tất. Tiếp theo: publish 3 CSV → paste vào SUCO_CSV_URL / BAOTRI_CSV_URL / NHIEMVU_CSV_URL trong index.html');
+}
+
+// Validate status transition: from → to (chỉ cho phép các bước hợp lệ)
+function _validateNvTransition(fromStatus, toStatus) {
+  var allowed = {
+    'draft':       ['assigned'],
+    'assigned':    ['in_progress'],
+    'in_progress': ['submitted'],
+    'submitted':   ['approved', 'rejected'],
+    'approved':    ['closed'],
+    'rejected':    ['submitted', 'closed'],  // Cho phép nộp lại HOẶC đóng
+    'closed':      []
+  };
+  var validTargets = allowed[fromStatus] || [];
+  return validTargets.indexOf(toStatus) !== -1;
+}
+
+function handleCreateNhiemVu(data) {
+  try {
+    var sheet = getNhiemVuSheet();
+    var year = new Date().getFullYear();
+    var nextNum = String(sheet.getLastRow()).padStart(3, '0');
+    var id = 'NV_' + year + '_' + nextNum;
+
+    sheet.appendRow([
+      id,
+      data.nguoiGiao   || '',
+      data.nguoiNhan   || '',
+      data.moTa        || '',
+      data.khuVuc      || '',
+      data.deadline    || '',
+      data.status      || 'assigned',
+      '',   // Kết quả — chưa có khi tạo
+      ''    // Thời gian đóng
+    ]);
+
+    // Log
+    try {
+      var ss = SpreadsheetApp.getActiveSpreadsheet();
+      var logSheet = ss.getSheetByName('LichSu');
+      if (logSheet) {
+        logSheet.appendRow([
+          data.thoiGianTao || new Date().toISOString(),
+          data.nguoiGiao || '',
+          'create_nhiem_vu',
+          id,
+          data.nguoiNhan || '',
+          'Giao cho: ' + (data.nguoiNhan || '') + ' · Deadline: ' + (data.deadline || '')
+        ]);
+      }
+    } catch (_) {}
+
+    return jsonResponse({ status: 'ok', id: id });
+  } catch (err) {
+    return jsonResponse({ status: 'error', message: 'NhiemVu create lỗi: ' + err.message });
+  }
+}
+
+function handleUpdateNhiemVuStatus(data) {
+  try {
+    var sheet = getNhiemVuSheet();
+    var lastRow = sheet.getLastRow();
+    if (lastRow < 2) return jsonResponse({ status: 'error', message: 'Sheet NhiemVu trống' });
+
+    var idCol = 0, statusCol = 6, ketQuaCol = 7, closeTimeCol = 8;
+    var allData = sheet.getRange(2, 1, lastRow - 1, HEADER_NHIEMVU.length).getValues();
+
+    for (var i = 0; i < allData.length; i++) {
+      if (String(allData[i][idCol]) !== String(data.id)) continue;
+      var rowNum = i + 2;
+      var currentStatus = String(allData[i][statusCol] || '').trim();
+      var newStatus = String(data.newStatus || '').trim();
+
+      // Validate transition (bảo mật server-side — client không được bypass)
+      if (!_validateNvTransition(currentStatus, newStatus)) {
+        return jsonResponse({
+          status: 'error',
+          message: 'Không thể chuyển từ "' + currentStatus + '" sang "' + newStatus + '"'
+        });
+      }
+
+      // Update status
+      sheet.getRange(rowNum, statusCol + 1).setValue(newStatus);
+
+      // Update kết quả nếu client gửi (khi user submit hoặc admin duyệt/từ chối)
+      if (data.ketQua !== undefined && data.ketQua !== '') {
+        sheet.getRange(rowNum, ketQuaCol + 1).setValue(data.ketQua);
+      }
+      // Ghi chú duyệt (nếu có) — append vào kết quả với dấu ngăn cách
+      if (data.ghiChuDuyet !== undefined && data.ghiChuDuyet !== '') {
+        var currentKQ = String(allData[i][ketQuaCol] || '');
+        var newKQ = currentKQ +
+          (currentKQ ? '\n' : '') +
+          '[' + newStatus + ' by ' + (data.nguoiDuyet || '?') + '] ' + data.ghiChuDuyet;
+        sheet.getRange(rowNum, ketQuaCol + 1).setValue(newKQ);
+      }
+      // Thời gian đóng — chỉ set khi status = closed
+      if (newStatus === 'closed') {
+        sheet.getRange(rowNum, closeTimeCol + 1).setValue(data.thoiGian || new Date().toISOString());
+      }
+
+      // Log
+      try {
+        var ss = SpreadsheetApp.getActiveSpreadsheet();
+        var logSheet = ss.getSheetByName('LichSu');
+        if (logSheet) {
+          logSheet.appendRow([
+            data.thoiGian || new Date().toISOString(),
+            data.nguoiDuyet || allData[i][2] || '',
+            'update_nhiem_vu',
+            String(data.id),
+            String(allData[i][2] || ''),  // Người nhận
+            currentStatus + ' → ' + newStatus
+          ]);
+        }
+      } catch (_) {}
+
+      return jsonResponse({ status: 'ok', newStatus: newStatus });
+    }
+    return jsonResponse({ status: 'error', message: 'Không tìm thấy NhiemVu ID: ' + data.id });
+  } catch (err) {
+    return jsonResponse({ status: 'error', message: 'NhiemVu update lỗi: ' + err.message });
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// ── P27: EMAIL REPORT ĐỊNH KỲ (cron mỗi tháng) ─────────────────────────
+// ══════════════════════════════════════════════════════════════════════════
+
+const HEADER_SETTING = ['Key', 'Value', 'Ghi chú'];
+
+const DEFAULT_SETTINGS = {
+  'email_recipients':  { value: 'admin@example.com,truongphong@example.com', note: 'Email nhận báo cáo (cách nhau bằng dấu phẩy)' },
+  'email_enabled':     { value: 'true',                                       note: 'true = bật gửi tự động, false = tắt' },
+  'donvi_name':        { value: 'Huyện Cần Giuộc',                            note: 'Tên đơn vị hành chính' },
+  'phong_name':        { value: 'Phòng Kinh tế và Hạ tầng',                  note: 'Tên phòng ban' },
+  'nguoi_ky':          { value: 'Nguyễn Văn A',                              note: 'Tên người ký duyệt' },
+  'chuc_vu':           { value: 'Trưởng phòng',                              note: 'Chức vụ người ký' }
+};
+
+function initSettingSheet() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('Setting');
+  if (!sheet) {
+    sheet = ss.insertSheet('Setting');
+    sheet.appendRow(HEADER_SETTING);
+    sheet.getRange(1, 1, 1, HEADER_SETTING.length)
+      .setFontWeight('bold').setBackground('#fbbf24').setHorizontalAlignment('center');
+    sheet.setFrozenRows(1);
+  }
+  // Bổ sung default nếu key chưa có
+  var lastRow = sheet.getLastRow();
+  var existing = new Set();
+  if (lastRow >= 2) {
+    var data = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
+    data.forEach(function(r) { if (r[0]) existing.add(String(r[0]).trim()); });
+  }
+  Object.keys(DEFAULT_SETTINGS).forEach(function(key) {
+    if (!existing.has(key)) {
+      var cfg = DEFAULT_SETTINGS[key];
+      sheet.appendRow([key, cfg.value, cfg.note]);
+    }
+  });
+  sheet.autoResizeColumns(1, 3);
+  return sheet;
+}
+
+function getSetting(key) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('Setting');
+  if (!sheet || sheet.getLastRow() < 2) {
+    var def = DEFAULT_SETTINGS[key];
+    return def ? def.value : '';
+  }
+  var data = sheet.getRange(2, 1, sheet.getLastRow() - 1, 2).getValues();
+  for (var i = 0; i < data.length; i++) {
+    if (String(data[i][0]).trim() === key) return String(data[i][1] || '').trim();
+  }
+  var d = DEFAULT_SETTINGS[key];
+  return d ? d.value : '';
+}
+
+// Aggregate data từ tất cả sheet cho báo cáo tháng
+function _aggregateMonthlyReport(from, to) {
+  var fromDate = new Date(from);
+  var toDate = new Date(to);
+  toDate.setHours(23, 59, 59);
+
+  var districts = ['DanhSachTru', 'Quan1', 'Quan3', 'Quan5', 'Quan8', 'Quan10', 'Quan11',
+                    'PhuNhuan', 'BinhThanh', 'TanBinh', 'TanPhu',
+                    'BauBang', 'TruVanTho', 'BenCat', 'CanGiuoc'];
+
+  var totalMarkers = 0, totalWithImage = 0;
+  var byDistrict = [];
+  var byType = {};
+
+  districts.forEach(function(d) {
+    try {
+      var sheet = getSheet(d);
+      if (!sheet || sheet.getLastRow() < 2) return;
+      var lastCol = Math.min(sheet.getLastColumn(), 22);
+      var data = sheet.getRange(2, 1, sheet.getLastRow() - 1, lastCol).getValues();
+      var districtCount = 0, districtWithImage = 0;
+      data.forEach(function(r) {
+        if (!r[1]) return;
+        totalMarkers++; districtCount++;
+        if (r[12] && String(r[12]).trim()) { totalWithImage++; districtWithImage++; }
+        var type = parseInt(r[6]) || 0;
+        byType[type] = (byType[type] || 0) + 1;
+      });
+      if (districtCount > 0) byDistrict.push({
+        name: d, count: districtCount, withImage: districtWithImage
+      });
+    } catch (_) {}
+  });
+
+  // SuCo trong kỳ (Thời gian phát sinh trong from-to)
+  var suCoInMonth = [];
+  try {
+    var suCoSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('SuCo');
+    if (suCoSheet && suCoSheet.getLastRow() >= 2) {
+      var suCoData = suCoSheet.getRange(2, 1, suCoSheet.getLastRow() - 1, 17).getValues();
+      suCoData.forEach(function(r) {
+        var tg = new Date(r[1]);
+        if (isNaN(tg.getTime())) return;
+        if (tg < fromDate || tg > toDate) return;
+        suCoInMonth.push({
+          id: r[0], time: String(r[1]).slice(0, 16).replace('T', ' '),
+          tenTru: r[2], loai: r[9], mucDo: r[10], trangThai: r[14]
+        });
+      });
+    }
+  } catch (_) {}
+
+  // BaoTri hoàn thành trong kỳ (Lần cuối trong from-to)
+  var baoTriInMonth = [];
+  try {
+    var btSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('BaoTri');
+    if (btSheet && btSheet.getLastRow() >= 2) {
+      var btData = btSheet.getRange(2, 1, btSheet.getLastRow() - 1, 10).getValues();
+      btData.forEach(function(r) {
+        var lc = new Date(r[4]);
+        if (isNaN(lc.getTime())) return;
+        if (lc < fromDate || lc > toDate) return;
+        baoTriInMonth.push({
+          id: r[0], tenTru: r[1], loai: r[2],
+          chuKy: r[3], lanCuoi: r[4], phuTrach: r[6]
+        });
+      });
+    }
+  } catch (_) {}
+
+  // NhiemVu closed/approved trong kỳ
+  var nhiemVuInMonth = [];
+  try {
+    var nvSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('NhiemVu');
+    if (nvSheet && nvSheet.getLastRow() >= 2) {
+      var nvData = nvSheet.getRange(2, 1, nvSheet.getLastRow() - 1, 9).getValues();
+      nvData.forEach(function(r) {
+        var status = String(r[6] || '');
+        if (status !== 'closed' && status !== 'approved') return;
+        var closeTime = r[8] ? new Date(r[8]) : null;
+        if (!closeTime || isNaN(closeTime.getTime())) return;
+        if (closeTime < fromDate || closeTime > toDate) return;
+        nhiemVuInMonth.push({
+          id: r[0], nguoiNhan: r[2], moTa: r[3], status: status
+        });
+      });
+    }
+  } catch (_) {}
+
+  return {
+    totalMarkers: totalMarkers,
+    totalWithImage: totalWithImage,
+    byDistrict: byDistrict,
+    byType: byType,
+    suCo: suCoInMonth,
+    baoTri: baoTriInMonth,
+    nhiemVu: nhiemVuInMonth
+  };
+}
+
+// Build HTML email body
+function _buildReportHtmlEmail(report, from, to, monthLabel) {
+  var donVi = getSetting('donvi_name');
+  var phong = getSetting('phong_name');
+  var nguoi = getSetting('nguoi_ky');
+  var chucVu = getSetting('chuc_vu');
+  var coveragePct = report.totalMarkers > 0
+    ? ((report.totalWithImage / report.totalMarkers) * 100).toFixed(1) : '0';
+
+  var html = '<div style="font-family:Arial,sans-serif;max-width:800px;margin:0 auto;padding:20px;color:#1e293b;">';
+  html += '<div style="text-align:center;margin-bottom:8px;font-weight:bold;font-size:13px;">' + donVi.toUpperCase() + '</div>';
+  html += '<div style="text-align:center;margin-bottom:20px;font-weight:bold;font-size:13px;">' + phong.toUpperCase() + '</div>';
+  html += '<h2 style="text-align:center;color:#1e40af;margin:0;">BÁO CÁO CHIẾU SÁNG CÔNG CỘNG</h2>';
+  html += '<div style="text-align:center;font-style:italic;color:#64748b;margin:6px 0 24px;">Kỳ báo cáo: ' + from + ' → ' + to + '</div>';
+
+  // 4 tile số
+  html += '<table width="100%" cellpadding="0" cellspacing="8" style="border-collapse:separate;margin-bottom:20px;"><tr>';
+  html += _htmlTile('💡', report.totalMarkers, 'Tổng trụ / tủ', '#2563eb');
+  html += _htmlTile('📷', report.totalWithImage, 'Có ảnh (' + coveragePct + '%)', '#10b981');
+  html += _htmlTile('⚠️', report.suCo.length, 'Sự cố phát sinh', '#dc2626');
+  html += _htmlTile('🔧', report.baoTri.length, 'Bảo trì thực hiện', '#f59e0b');
+  html += '</tr></table>';
+
+  // Bảng theo địa bàn
+  html += '<h3 style="color:#1e40af;border-bottom:2px solid #1e40af;padding-bottom:4px;">1. Số lượng theo địa bàn</h3>';
+  html += '<table width="100%" style="border-collapse:collapse;font-size:13px;"><thead><tr style="background:#e0e7ff;">';
+  ['Địa bàn', 'Số trụ/tủ', 'Có ảnh', 'Tỷ lệ'].forEach(function(h) {
+    html += '<th style="border:1px solid #94a3b8;padding:6px;">' + h + '</th>';
+  });
+  html += '</tr></thead><tbody>';
+  report.byDistrict.forEach(function(d) {
+    var pct = d.count > 0 ? ((d.withImage / d.count) * 100).toFixed(1) : '0';
+    html += '<tr>';
+    html += '<td style="border:1px solid #cbd5e1;padding:5px;"><b>' + d.name + '</b></td>';
+    html += '<td style="border:1px solid #cbd5e1;padding:5px;text-align:center;">' + d.count + '</td>';
+    html += '<td style="border:1px solid #cbd5e1;padding:5px;text-align:center;">' + d.withImage + '</td>';
+    html += '<td style="border:1px solid #cbd5e1;padding:5px;text-align:center;">' + pct + '%</td>';
+    html += '</tr>';
+  });
+  html += '</tbody></table>';
+
+  // Sự cố
+  if (report.suCo.length > 0) {
+    html += '<h3 style="color:#dc2626;border-bottom:2px solid #dc2626;padding-bottom:4px;">2. Sự cố phát sinh trong kỳ (' + report.suCo.length + ')</h3>';
+    html += '<table width="100%" style="border-collapse:collapse;font-size:12px;"><thead><tr style="background:#fee2e2;">';
+    ['ID', 'Thời gian', 'Tên trụ', 'Loại', 'Mức độ', 'Trạng thái'].forEach(function(h) {
+      html += '<th style="border:1px solid #94a3b8;padding:4px;">' + h + '</th>';
+    });
+    html += '</tr></thead><tbody>';
+    report.suCo.slice(0, 50).forEach(function(sc) {
+      html += '<tr>';
+      html += '<td style="border:1px solid #cbd5e1;padding:3px;font-family:monospace;font-size:10px;">' + sc.id + '</td>';
+      html += '<td style="border:1px solid #cbd5e1;padding:3px;font-size:11px;">' + sc.time + '</td>';
+      html += '<td style="border:1px solid #cbd5e1;padding:3px;"><b>' + sc.tenTru + '</b></td>';
+      html += '<td style="border:1px solid #cbd5e1;padding:3px;">' + sc.loai + '</td>';
+      html += '<td style="border:1px solid #cbd5e1;padding:3px;">' + (sc.mucDo === 'Khẩn cấp' ? '<b style="color:#dc2626">⚡ Khẩn cấp</b>' : sc.mucDo) + '</td>';
+      html += '<td style="border:1px solid #cbd5e1;padding:3px;">' + sc.trangThai + '</td>';
+      html += '</tr>';
+    });
+    html += '</tbody></table>';
+    if (report.suCo.length > 50) html += '<div style="font-style:italic;font-size:11px;color:#64748b;margin-top:4px;">... và ' + (report.suCo.length - 50) + ' sự cố nữa (xem chi tiết trong app)</div>';
+  }
+
+  // Bảo trì
+  if (report.baoTri.length > 0) {
+    html += '<h3 style="color:#f59e0b;border-bottom:2px solid #f59e0b;padding-bottom:4px;">3. Bảo trì thực hiện trong kỳ (' + report.baoTri.length + ')</h3>';
+    html += '<table width="100%" style="border-collapse:collapse;font-size:12px;"><thead><tr style="background:#fef3c7;">';
+    ['ID', 'Tên trụ', 'Loại BT', 'Chu kỳ', 'Ngày TH', 'Nhân sự'].forEach(function(h) {
+      html += '<th style="border:1px solid #94a3b8;padding:4px;">' + h + '</th>';
+    });
+    html += '</tr></thead><tbody>';
+    report.baoTri.slice(0, 50).forEach(function(bt) {
+      html += '<tr>';
+      html += '<td style="border:1px solid #cbd5e1;padding:3px;font-family:monospace;font-size:10px;">' + bt.id + '</td>';
+      html += '<td style="border:1px solid #cbd5e1;padding:3px;"><b>' + bt.tenTru + '</b></td>';
+      html += '<td style="border:1px solid #cbd5e1;padding:3px;">' + bt.loai + '</td>';
+      html += '<td style="border:1px solid #cbd5e1;padding:3px;text-align:center;">' + bt.chuKy + 't</td>';
+      html += '<td style="border:1px solid #cbd5e1;padding:3px;font-family:monospace;font-size:11px;">' + bt.lanCuoi + '</td>';
+      html += '<td style="border:1px solid #cbd5e1;padding:3px;">' + bt.phuTrach + '</td>';
+      html += '</tr>';
+    });
+    html += '</tbody></table>';
+  }
+
+  // Nhiệm vụ
+  if (report.nhiemVu.length > 0) {
+    html += '<h3 style="color:#8b5cf6;border-bottom:2px solid #8b5cf6;padding-bottom:4px;">4. Nhiệm vụ hoàn thành trong kỳ (' + report.nhiemVu.length + ')</h3>';
+    html += '<table width="100%" style="border-collapse:collapse;font-size:12px;"><thead><tr style="background:#ede9fe;">';
+    ['ID', 'Người nhận', 'Mô tả', 'Trạng thái'].forEach(function(h) {
+      html += '<th style="border:1px solid #94a3b8;padding:4px;">' + h + '</th>';
+    });
+    html += '</tr></thead><tbody>';
+    report.nhiemVu.slice(0, 30).forEach(function(nv) {
+      html += '<tr>';
+      html += '<td style="border:1px solid #cbd5e1;padding:3px;font-family:monospace;font-size:10px;">' + nv.id + '</td>';
+      html += '<td style="border:1px solid #cbd5e1;padding:3px;"><b>' + nv.nguoiNhan + '</b></td>';
+      html += '<td style="border:1px solid #cbd5e1;padding:3px;">' + String(nv.moTa).slice(0, 100) + '</td>';
+      html += '<td style="border:1px solid #cbd5e1;padding:3px;">' + (nv.status === 'approved' ? '✅ Duyệt' : '🔒 Đóng') + '</td>';
+      html += '</tr>';
+    });
+    html += '</tbody></table>';
+  }
+
+  // Ký duyệt
+  html += '<div style="margin-top:40px;text-align:right;">';
+  html += '<div style="font-style:italic;">' + donVi + ', ngày ' + to.slice(8, 10) + ' tháng ' + to.slice(5, 7) + ' năm ' + to.slice(0, 4) + '</div>';
+  html += '<div style="font-weight:bold;margin-top:12px;">' + chucVu.toUpperCase() + '</div>';
+  html += '<div style="font-style:italic;font-size:11px;">(Ký, ghi rõ họ tên, đóng dấu)</div>';
+  html += '<div style="height:60px;"></div>';
+  html += '<div style="font-weight:bold;font-size:13px;">' + nguoi + '</div>';
+  html += '</div>';
+
+  html += '<div style="text-align:center;margin-top:30px;padding:10px;background:#f1f5f9;border-radius:6px;font-size:11px;color:#94a3b8;">📧 Báo cáo tự động tạo bởi <b>Lighting Survey</b> — Không cần trả lời email này</div>';
+  html += '</div>';
+  return html;
+}
+
+function _htmlTile(icon, value, label, color) {
+  return '<td style="padding:14px;border-left:4px solid ' + color + ';background:#f8fafc;border-radius:6px;text-align:center;width:25%;vertical-align:middle;">'
+    + '<div style="font-size:28px;">' + icon + '</div>'
+    + '<div style="font-size:26px;font-weight:900;color:' + color + ';font-family:monospace;line-height:1;margin-top:4px;">' + value + '</div>'
+    + '<div style="font-size:11px;color:#64748b;margin-top:4px;font-weight:600;">' + label + '</div>'
+    + '</td>';
+}
+
+/**
+ * Main entry — gọi từ cron trigger 6am ngày 1 hàng tháng.
+ * Có thể chạy tay để test.
+ */
+function sendMonthlyReport() {
+  try {
+    initSettingSheet();
+    var enabled = getSetting('email_enabled').toLowerCase();
+    if (enabled !== 'true' && enabled !== '1') {
+      Logger.log('❌ Email disabled trong Setting (email_enabled = ' + enabled + ')');
+      return { status: 'skipped', reason: 'disabled' };
+    }
+    var recipients = getSetting('email_recipients');
+    if (!recipients) {
+      Logger.log('❌ Không có email_recipients trong Setting');
+      return { status: 'error', reason: 'no_recipients' };
+    }
+
+    // Kỳ báo cáo = tháng trước
+    var now = new Date();
+    var lastMonthFirst = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    var lastMonthLast = new Date(now.getFullYear(), now.getMonth(), 0);
+    var from = Utilities.formatDate(lastMonthFirst, 'GMT+7', 'yyyy-MM-dd');
+    var to = Utilities.formatDate(lastMonthLast, 'GMT+7', 'yyyy-MM-dd');
+    var monthLabel = Utilities.formatDate(lastMonthFirst, 'GMT+7', 'MM/yyyy');
+
+    Logger.log('Aggregating data từ ' + from + ' đến ' + to);
+    var report = _aggregateMonthlyReport(from, to);
+
+    var html = _buildReportHtmlEmail(report, from, to, monthLabel);
+    var subject = 'Báo cáo chiếu sáng tháng ' + monthLabel + ' — ' + getSetting('donvi_name');
+
+    GmailApp.sendEmail(
+      recipients,
+      subject,
+      'Vui lòng bật HTML email để xem báo cáo đầy đủ.\n\nTóm tắt:\n' +
+        '- Tổng trụ/tủ: ' + report.totalMarkers + '\n' +
+        '- Sự cố phát sinh: ' + report.suCo.length + '\n' +
+        '- Bảo trì thực hiện: ' + report.baoTri.length + '\n' +
+        '- Nhiệm vụ hoàn thành: ' + report.nhiemVu.length,
+      {
+        htmlBody: html,
+        name: getSetting('phong_name')
+      }
+    );
+
+    Logger.log('✓ Đã gửi báo cáo tháng ' + monthLabel + ' đến: ' + recipients);
+    return { status: 'ok', recipients: recipients, monthLabel: monthLabel };
+  } catch (err) {
+    Logger.log('❌ Lỗi gửi báo cáo: ' + err.message);
+    return { status: 'error', message: err.message };
+  }
+}
+
+/**
+ * Test ngay — không đợi ngày 1. Chạy tay từ Editor.
+ */
+function sendMonthlyReportNow() {
+  var result = sendMonthlyReport();
+  Logger.log('Kết quả: ' + JSON.stringify(result));
+  return result;
+}
+
+/**
+ * Setup cron trigger 6am ngày 1 hàng tháng.
+ * Chạy 1 lần từ Editor — sau đó GAS tự chạy hàng tháng.
+ */
+function setupMonthlyReportTrigger() {
+  // Xóa trigger cũ (nếu có) để tránh duplicate
+  var triggers = ScriptApp.getProjectTriggers();
+  var removed = 0;
+  triggers.forEach(function(t) {
+    if (t.getHandlerFunction() === 'sendMonthlyReport') {
+      ScriptApp.deleteTrigger(t);
+      removed++;
+    }
+  });
+  // Tạo trigger mới
+  ScriptApp.newTrigger('sendMonthlyReport')
+    .timeBased()
+    .onMonthDay(1)
+    .atHour(6)
+    .create();
+  Logger.log('✓ Trigger đã setup — sendMonthlyReport chạy 6:00 sáng ngày 1 hàng tháng');
+  if (removed > 0) Logger.log('  (đã xóa ' + removed + ' trigger cũ)');
+  Logger.log('  Danh sách trigger hiện tại:');
+  ScriptApp.getProjectTriggers().forEach(function(t, i) {
+    Logger.log('  ' + (i + 1) + '. ' + t.getHandlerFunction() + ' — ' + t.getEventType());
+  });
+}
+
+/**
+ * Xóa trigger email report (nếu muốn tắt hoàn toàn).
+ */
+function removeMonthlyReportTrigger() {
+  var triggers = ScriptApp.getProjectTriggers();
+  var removed = 0;
+  triggers.forEach(function(t) {
+    if (t.getHandlerFunction() === 'sendMonthlyReport') {
+      ScriptApp.deleteTrigger(t);
+      removed++;
+    }
+  });
+  Logger.log('✓ Đã xóa ' + removed + ' trigger sendMonthlyReport');
+}
+
+// Handler cho client call test email
+function handleSendMonthlyReport(data) {
+  var result = sendMonthlyReport();
+  return jsonResponse(result);
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// ── P30: REST API cho hệ thống bên ngoài ────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════
+
+const HEADER_APIKEYS = ['API Key', 'Tên client', 'Permissions', 'Trạng thái', 'Rate limit (req/phút)', 'Tạo lúc'];
+
+function initApiKeysSheet() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('ApiKeys');
+  if (!sheet) {
+    sheet = ss.insertSheet('ApiKeys');
+    sheet.appendRow(HEADER_APIKEYS);
+    sheet.getRange(1, 1, 1, HEADER_APIKEYS.length)
+      .setFontWeight('bold').setBackground('#f97316').setFontColor('#fff').setHorizontalAlignment('center');
+    sheet.setFrozenRows(1);
+    // Insert sample row (deactivated by default)
+    var sampleKey = 'ls_' + Utilities.getUuid().replace(/-/g, '').slice(0, 24);
+    sheet.appendRow([sampleKey, 'sample_client', 'read', 'inactive', 60, new Date().toISOString()]);
+  }
+  return sheet;
+}
+
+// Rotate 1 API key mới cho client
+function generateApiKey(clientName, permissions, rateLimit) {
+  var sheet = initApiKeysSheet();
+  var key = 'ls_' + Utilities.getUuid().replace(/-/g, '').slice(0, 24);
+  sheet.appendRow([
+    key, clientName || 'anonymous',
+    permissions || 'read',
+    'active', rateLimit || 60,
+    new Date().toISOString()
+  ]);
+  Logger.log('✓ Đã tạo API key: ' + key + ' cho client: ' + clientName);
+  return key;
+}
+
+// Validate API key + return { permissions, client, rateLimit } hoặc null
+function _checkApiKey(key) {
+  if (!key) return null;
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('ApiKeys');
+  if (!sheet || sheet.getLastRow() < 2) return null;
+  var data = sheet.getRange(2, 1, sheet.getLastRow() - 1, HEADER_APIKEYS.length).getValues();
+  for (var i = 0; i < data.length; i++) {
+    if (String(data[i][0]).trim() === key.trim() && String(data[i][3]).trim() === 'active') {
+      return {
+        key: data[i][0], client: data[i][1],
+        permissions: String(data[i][2] || '').split(',').map(function(p){ return p.trim(); }),
+        rateLimit: parseInt(data[i][4]) || 60
+      };
+    }
+  }
+  return null;
+}
+
+// Simple rate limiting với cache 60s
+var _rateCache = {};
+function _checkRateLimit(apiKey, limit) {
+  var now = Date.now();
+  var window = 60000; // 1 phút
+  if (!_rateCache[apiKey]) _rateCache[apiKey] = [];
+  // Xóa timestamps cũ
+  _rateCache[apiKey] = _rateCache[apiKey].filter(function(ts) { return (now - ts) < window; });
+  if (_rateCache[apiKey].length >= limit) return false;
+  _rateCache[apiKey].push(now);
+  return true;
+}
+
+// Main API handler — gọi từ doGet(?api_key=...&action=...)
+function handleApiCall(params) {
+  var apiKey = params.api_key;
+  var apiAction = String(params.api_action || '').trim();
+  if (!apiKey) return jsonResponse({ error: 'Missing api_key' }, 401);
+  var auth = _checkApiKey(apiKey);
+  if (!auth) return jsonResponse({ error: 'Invalid or inactive API key' }, 401);
+  if (!_checkRateLimit(apiKey, auth.rateLimit)) {
+    return jsonResponse({ error: 'Rate limit exceeded (' + auth.rateLimit + ' req/min)' }, 429);
+  }
+
+  try {
+    switch (apiAction) {
+      case 'list_markers': {
+        if (!auth.permissions.includes('read') && !auth.permissions.includes('*')) {
+          return jsonResponse({ error: 'Permission denied: needs read' }, 403);
+        }
+        var district = String(params.district || 'DanhSachTru').trim();
+        var limit = Math.min(parseInt(params.limit) || 100, 500);
+        var sheet = getSheet(district);
+        if (!sheet || sheet.getLastRow() < 2) return jsonResponse({ status: 'ok', count: 0, markers: [] });
+        var data = sheet.getRange(2, 1, Math.min(sheet.getLastRow() - 1, limit), 22).getValues();
+        var markers = data.map(function(r) {
+          return {
+            id: r[0], tenTru: r[1], lat: r[2], lon: r[3],
+            loai: r[6], tuDieuKhien: r[7],
+            loaiDen: r[10], congSuat: r[11],
+            duong: r[17], phuongXa: r[18]
+          };
+        }).filter(function(m) { return m.tenTru; });
+        return jsonResponse({ status: 'ok', district: district, count: markers.length, markers: markers });
+      }
+
+      case 'get_marker': {
+        if (!auth.permissions.includes('read') && !auth.permissions.includes('*')) {
+          return jsonResponse({ error: 'Permission denied' }, 403);
+        }
+        var district2 = String(params.district || 'DanhSachTru').trim();
+        var mid = String(params.id || params.tenTru || '').trim();
+        if (!mid) return jsonResponse({ error: 'Missing id or tenTru' }, 400);
+        var sheet2 = getSheet(district2);
+        if (!sheet2 || sheet2.getLastRow() < 2) return jsonResponse({ status: 'ok', marker: null });
+        var data2 = sheet2.getRange(2, 1, sheet2.getLastRow() - 1, 22).getValues();
+        for (var i = 0; i < data2.length; i++) {
+          if (String(data2[i][0]) === mid || String(data2[i][1]) === mid) {
+            var r = data2[i];
+            return jsonResponse({ status: 'ok', marker: {
+              id: r[0], tenTru: r[1], lat: r[2], lon: r[3], loai: r[6],
+              tuDieuKhien: r[7], loaiTru: r[8], loaiCan: r[9], loaiDen: r[10],
+              congSuat: r[11], hinhAnh: r[12], capNhat: r[13],
+              maPE: r[16], duong: r[17], phuongXa: r[18]
+            } });
+          }
+        }
+        return jsonResponse({ status: 'ok', marker: null });
+      }
+
+      case 'list_su_co': {
+        if (!auth.permissions.includes('read') && !auth.permissions.includes('*')) {
+          return jsonResponse({ error: 'Permission denied' }, 403);
+        }
+        var statusFilter = String(params.status || '').trim();
+        var scSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('SuCo');
+        if (!scSheet || scSheet.getLastRow() < 2) return jsonResponse({ status: 'ok', count: 0, incidents: [] });
+        var scData = scSheet.getRange(2, 1, scSheet.getLastRow() - 1, 17).getValues();
+        var incidents = scData.map(function(r) {
+          return { id: r[0], thoiGian: r[1], tenTru: r[2], loai: r[9], mucDo: r[10], trangThai: r[14] };
+        }).filter(function(sc) { return !statusFilter || sc.trangThai === statusFilter; });
+        return jsonResponse({ status: 'ok', count: incidents.length, incidents: incidents });
+      }
+
+      case 'stats': {
+        if (!auth.permissions.includes('read') && !auth.permissions.includes('*')) {
+          return jsonResponse({ error: 'Permission denied' }, 403);
+        }
+        var districts = ['DanhSachTru', 'Quan1', 'Quan3', 'Quan5', 'Quan8', 'Quan10', 'Quan11',
+                          'PhuNhuan', 'BinhThanh', 'TanBinh', 'TanPhu',
+                          'BauBang', 'TruVanTho', 'BenCat', 'CanGiuoc'];
+        var totalStats = { totalMarkers: 0, byDistrict: {} };
+        districts.forEach(function(d) {
+          try {
+            var s = getSheet(d);
+            if (s && s.getLastRow() > 1) {
+              var cnt = s.getLastRow() - 1;
+              totalStats.totalMarkers += cnt;
+              totalStats.byDistrict[d] = cnt;
+            }
+          } catch (_) {}
+        });
+        return jsonResponse({ status: 'ok', stats: totalStats });
+      }
+
+      default:
+        return jsonResponse({ error: 'Unknown api_action: ' + apiAction + '. Available: list_markers, get_marker, list_su_co, stats' }, 400);
+    }
+  } catch (err) {
+    return jsonResponse({ error: 'API error: ' + err.message }, 500);
+  }
 }
 
 // ── IMPORT MÃ PE TỪ FILE PHÂN CẤP BC-BB-TVT ────────────────────────────────

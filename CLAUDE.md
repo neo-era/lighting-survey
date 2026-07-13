@@ -152,13 +152,13 @@ Tự động cập nhật tại 2 điểm: `saveMarkerPopup()` (thêm/sửa mark
 
 | Cache name      | Chiến lược   | Nội dung                                          |
 |-----------------|--------------|---------------------------------------------------|
-| `lighting-survey-v6` | Network-first | `index.html`, `.html` (luôn lấy code mới)   |
-| `lighting-survey-v6` | Cache-first  | Icon/ảnh tĩnh (pre-cache khi install)             |
+| `lighting-survey-v8` | Network-first | `index.html`, `.html` (luôn lấy code mới)   |
+| `lighting-survey-v8` | Cache-first  | Icon/ảnh tĩnh (pre-cache khi install)             |
 | `map-tiles-v1`  | Cache-first  | Tile bản đồ OSM/Google/CartoDB (tối đa 300 tile)  |
 | `cdn-libs-v1`   | Cache-first  | Toàn bộ CDN JS/CSS/fonts (jQuery, Leaflet, v.v.)  |
 
 - Google Sheets CSV + GAS URL: **luôn fetch mới**, không cache
-- **Bump cache name** (`v6` → `v7`, v.v.) mỗi khi cần xóa cache cũ hoàn toàn
+- **Bump cache name** (`v6` → `v7` → `v8`, v.v.) mỗi khi cần xóa cache cũ hoàn toàn
 - Đăng ký trong `index.html` (cuối body):
 ```javascript
 if ('serviceWorker' in navigator) {
@@ -212,8 +212,10 @@ GAS trả về `vung: ['Quan1','Quan3']` trong login response. Client lưu vào 
 ```javascript
 canEdit()        // true nếu role = admin | user | user1
 canDelete()      // true nếu role = admin | user
-_allowedPages()  // lọc DISTRICT_PAGES theo currentUser.vung ([] = tất cả)
+_allowedPages()  // admin luôn thấy tất cả; role khác lọc theo currentUser.vung ([] = tất cả)
 ```
+
+**⚠ Admin bypass vung filter:** `_allowedPages()` check `role === 'admin'` trước `vung` — admin luôn thấy đủ 15 địa bàn dù cột `vung` trong sheet TaiKhoan có gõ gì. Điều này tránh việc admin bị mất access do gõ nhầm sheet trong `vung`.
 
 **Enforcement:**
 - `_applyRoleUI()` → `_buildDistrictOptions()` — chỉ render district options trong `_allowedPages()`
@@ -448,10 +450,13 @@ Leaflet: ground_per_px = earthCirc × cos(lat) / (256 × 2^Z)
 
 **Bug cũ:** dùng `96 / 25.4` (DPI screen) — sai 2-3× zoom level vì image bị stretch lên paper, không in 1:1 từ pixel screen.
 
-**Widget chọn tỷ lệ** (`_applyMapScale(scale)`) — dropdown trong control box bên phải (`MapTools`):
+**Widget chọn tỷ lệ** (`_applyMapScale(scale)`) — dropdown **trong ☰ panel** (đã chuyển từ MapTools widget bên phải):
 - Options 1:200, 500, 1000, 2000, 5000, 10000, 25000 với reference A3
+- Section "Tỷ lệ bản đồ (A3)" với badge `Z <zoom>` (xanh) + dropdown + display badge "Đang áp dụng 1:N" (gradient xanh, chỉ hiện khi chọn)
 - onChange → bật zoomSnap=0, gọi `_zoomToScale`, restore zoomSnap sau 200ms
 - `_applyMapScale._inProgress` flag để zoomend listener không reset dropdown
+- Zoomend listener sync `#panelZoomDisplay` + reset dropdown/display khi user zoom thủ công
+- Modal open (controlsBtn click) sync `#panelZoomDisplay` với `map.getZoom()` hiện tại
 
 ---
 
@@ -466,12 +471,18 @@ Leaflet: ground_per_px = earthCirc × cos(lat) / (256 × 2^Z)
     rotationDelayMs: 150,
     svgCableDelayMs: 100,
     overlayDelayMs:  300,
-    captureScale: 2,
-    jpegQuality:  0.93,
+    captureScale: 3,     // 2 làm chữ bể vì stretch 2×; 3 → stretch 1.38× cho A3 300 DPI
+    jpegQuality:  0.95,  // không còn dùng cho PDF (đã đổi PNG), giữ cho code khác nếu có
     tileLoadTimeoutMs: 5000
 }
 ```
 Mọi magic number trong luồng in tham chiếu qua object này — dễ tune.
+
+**Text sharpness fix (2026-07-11)**:
+- `captureScale: 2 → 3` — tăng resolution capture (1200×800 × 3 = 3600×2400 px), stretch lên A3 300 DPI (4960×3508) chỉ còn 1.38× thay vì 2.07× → chữ sắc.
+- Đổi `toDataURL('image/jpeg') → toDataURL('image/png')` + `doc.addImage(..., 'PNG', ...)` — JPEG chroma subsampling tạo halo mờ quanh text, PNG lossless giữ edge sắc.
+- Overlay thêm CSS `text-rendering:geometricPrecision; -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale` — hint browser render glyph mượt.
+- Trade-off: PDF nặng hơn ~2-3× (~3MB → ~8-10MB), export chậm hơn (~5s → ~10-15s), memory peak ~40MB → ~90MB (có thể fail trên mobile cũ — nếu cần detect `isMobile` để dùng scale 2).
 
 ---
 
@@ -982,6 +993,71 @@ Thêm 2 hàng vào bảng ký hiệu (thay vì 1 hàng "Cáp nguồn"):
 
 ## Các pattern quan trọng
 
+### UI layout — mọi control tập trung vào ☰ panel (2026-06-18)
+
+Refactor lớn: **topbar chỉ còn nút hamburger**, gỡ hoàn toàn `#bottomActionBar` và widget MapTools bên phải bản đồ. Tất cả control tập trung vào modal `#controlsModal`.
+
+**Thứ tự section trong ☰ panel** (từ trên xuống):
+1. **User chip** — tên + nút đăng xuất + nút 🔑 đổi pass
+2. **Tìm kiếm** — input `#searchInput` + nút 🔍 (chuyển từ topbar)
+3. **Hành động nhanh** — [+ Thêm marker] [⏧ Lọc] (2 cột, đã gỡ nút "Lưu" duplicate)
+4. **Điều hướng** — dropdown `#pages` chọn địa bàn
+5. **Tỷ lệ bản đồ (A3)** — badge `Z <zoom>` + dropdown scale + display badge "Đang áp dụng 1:N"
+6. **Thiết bị GPS** — 2 radio segmented horizontal (📱 Phone / 🛰 RTK)
+7. **Vị trí & Đồng bộ** — [Chỉnh vị trí] [Cập nhật]
+8. **Xuất dữ liệu** — 2×2 grid (Báo cáo / CAD / In bản vẽ / Sơ đồ cáp)
+9. **GitHub Sync** — input path + [Lưu Excel] [Đẩy lên]
+
+**Bootstrap modal focus trap**: nút mở overlay khác (Lọc, Thêm marker, Tìm kiếm) đều `closeControlsModal()` trước → tránh Bootstrap backdrop chặn input trong filter overlay.
+
+**Compact CSS**: `.ctrl-section margin-bottom:8px`, `.ctrl-title margin-bottom:4px`, `.ctrl-divider margin:6px -16px`, `.ctrl-radio padding:5px 8px`.
+
+**Đã gỡ**:
+- `#bottomActionBar` (nút Vị trí + Thêm marker + Lọc + Lưu ở đáy màn hình)
+- Nút "Vị trí" — user dùng widget zoom bên phải hoặc "Thêm marker" (auto get GPS)
+- `--bottombar-h: 0px` để map dùng full chiều cao
+
+### Chức năng xoay bản đồ — ĐÃ BẬT LẠI (2026-07-11)
+
+Xoay 2D bằng CSS transform trên `.leaflet-map-pane`. Slider `[0°, 359°]` trong ☰ panel (section "Xoay bản đồ" ngay dưới "Tỷ lệ bản đồ").
+
+**UI trong ☰ panel**:
+- Slider 0-359° + nút `↺ 0°` reset
+- 4 nút quick snap: `B (0°)` `Đ (90°)` `N (180°)` `T (270°)`
+- Badge `panelRotDisplay` hiển thị góc hiện tại (xanh dương, monospace)
+
+**Handlers**:
+- `_onRotSliderChange(v)` — wire slider oninput
+- `_setRotation(angle)` — 4 nút hướng
+- `_resetRotSlider()` — nút ↺
+
+**Core (index.html)**:
+- `_applyMapRotation(angle)` — set CSS `transform: rotate(θ)` trên `.leaflet-map-pane`
+- `_applyRotationCore(angle)` — helper thực thi (gọi cả trong hook)
+- `_clearMapRotation()` — reset về 0
+- `_installRotationHook()` — hook 1 lần `map.on('move viewreset zoomanim')` re-apply rotation, vì Leaflet ghi đè `pane.style.transform` khi pan/zoom
+- `_setRotationTileBuffer(active)` — monkey-patch `L.GridLayer.prototype._pxBoundsToTileRange` để mở rộng bounds 60% mỗi bên khi rotate → tránh tam giác trắng ở 4 góc chéo
+
+**2 bug quan trọng đã fix**:
+
+1. **Origin lệch tâm**: dùng `L.DomUtil.getPosition(pane)` thay vì `pane.getBoundingClientRect()`. `getBoundingClientRect()` của pane đã rotate trả về AABB của hình xoay (rộng và lệch) → tính origin sai. `L.DomUtil.getPosition` trả translate Leaflet đã lưu, không bị CSS rotate ảnh hưởng.
+   ```js
+   const panePos = L.DomUtil.getPosition(pane);
+   const size = map.getSize();
+   const ox = size.x/2 - panePos.x;
+   const oy = size.y/2 - panePos.y;
+   pane.style.transformOrigin = `${ox}px ${oy}px`;
+   ```
+
+2. **Mất tile 4 góc**: Leaflet chỉ load tile trong viewport gốc; sau rotate, diagonal = √2 cạnh → 4 tam giác chưa có tile. Fix: monkey-patch `_pxBoundsToTileRange` mở rộng 60% mỗi bên khi rotate. Reset về gốc (`_origPxBoundsToTileRange`) khi rotation = 0.
+
+**Limitation đã biết** (Leaflet không "biết" mình bị rotate):
+- Click bản đồ để thêm marker → `containerPointToLatLng` không tính rotation → lat/lon lệch
+- Kéo marker → drop tại vị trí sai so với con trỏ
+- Label tên tủ (zoom cao) → chữ xoay theo, khó đọc
+
+**Print flow tương thích**: `pdRotation` vẫn hidden = 0. Print luôn north-up. User rotate map chỉ để xem, khi export PDF tự unrotate.
+
 ### Chỉnh sửa marker — `_editingRow`
 
 `saveMarkerPopup()` dùng biến `_editingRow` để phân biệt chế độ:
@@ -1035,8 +1111,45 @@ Client không giữ token. Luồng:
 3. Client POST `{ action: 'upload_to_github', path, content }` lên GAS
 4. GAS đọc `GITHUB_TOKEN` từ Script Properties → gọi GitHub API
 
-### Tìm kiếm
-`searchMarkers()` tìm theo tên (bỏ dấu), ID, và tọa độ `lat,lon`.
+### Ảnh — Google Drive URL migration (2026-07-11)
+
+**Vấn đề**: Google Drive **đã deprecate URL format `drive.google.com/uc?export=view&id=<ID>`** từ 2024 — thẻ `<img>` không load được, hiện placeholder.
+
+**Fix**: Helper global `_migrateDriveUrl(url)` transparent chuyển đổi khi RENDER:
+```js
+function _migrateDriveUrl(url) {
+    if (!url || typeof url !== 'string') return url;
+    const m = url.match(/drive\.google\.com\/uc\?export=view&id=([\w-]+)/);
+    if (m) return 'https://lh3.googleusercontent.com/d/' + m[1];
+    return url;
+}
+```
+- `drive.google.com/uc?export=view&id=X` → `lh3.googleusercontent.com/d/X`
+- Data trong sheet **KHÔNG bị sửa** — chỉ migrate lúc display
+
+**Áp dụng ở 2 chỗ**:
+| Vị trí | Chức năng |
+|---|---|
+| `createMarkerPopupContent` | Popup marker — avatar chính + strip ảnh phụ |
+| `openEditMarker` | Restore 3 slot khi Sửa marker |
+
+**Upload mới**: GAS `handleImageUpload` đã dùng URL mới format (`lh3.googleusercontent.com/d/<fileId>`) upload lên folder Drive `1i32dWpWSSoW61MIUD1qDJZne2FBiofOr` qua `DriveApp.getFolderById()`.
+
+### Tìm kiếm — text normalization
+`searchMarkers()` (topbar → giờ trong ☰ panel) và `_filterTuOptions()` (filter tủ) dùng chung 2 helper:
+
+- **`normalizeText(text)`** — chuẩn hóa cơ bản:
+  1. `replace(/đ/g,'d').replace(/Đ/g,'D')` — **thủ công trước NFD** (đ là base char, NFD không tách được)
+  2. `.normalize('NFD').replace(/\p{Diacritic}/gu,'')` — bỏ dấu
+  3. `.toLowerCase()`
+- **`normalizeTextSearchable(text)`** — thêm `.replace(/[^a-z0-9]/g,'')` để bỏ mọi space + ký tự đặc biệt (`_`, `-`, `#`...).
+
+Cả 2 hàm áp dụng cho:
+- Topbar search (`searchMarkers`): tên trụ / ID / ghi chú — dùng `normalizeTextSearchable`
+- Filter panel search tủ (`_filterTuOptions`): tên tủ — dùng `normalizeTextSearchable`
+- Coord parse vẫn dùng `rawInput.trim()` (không normalize) để không phá tọa độ `lat,lon`.
+
+Test: gõ `duongtranhungdao` → match `Đường Trần Hưng Đạo #5` (bỏ dấu, đ→d, bỏ space + #).
 
 ### Xuất CAD
 DXF tọa độ VN-2000. Hàm `convertLatLonToVn2000(lat, lon)` → `{ x, y, zone }` (Gauss-Krüger, múi 6°, ellipsoid GRS80).
@@ -1708,13 +1821,24 @@ Nhưng L.canvas chỉ hỗ trợ `L.circleMarker` / `L.circle`, không hỗ tr�
 ### Checklist implement (theo thứ tự ưu tiên)
 
 ```
-9.1 → index.html: IndexedDB cache CSV + stale-while-revalidate         ⬜
-9.2 → index.html: Lazy popup content (bind '' + generate on popupopen) ⬜
-9.3 → index.html: chunked addMarkersToMap + progress bar               ⬜
-9.4 → index.html: xác nhận VN2000 không gọi khi render                ⬜
-9.5 → index.html: viewport culling (chỉ nếu > 2,000 marker)           ⬜
-9.6 → index.html: Canvas renderer (refactor lớn, defer)                ⬜
+9.1 → index.html: IndexedDB cache CSV + stale-while-revalidate         ✅
+9.2 → index.html: Lazy popup content (bind '' + generate on popupopen) ✅
+9.3 → index.html: chunked addMarkersToMap + progress bar               ✅
+9.4 → index.html: xác nhận VN2000 không gọi khi render                ✅
+9.5 → index.html: zoom-tier progressive (cabinet only zoom < 12)      ✅
 ```
+
+### 9.5 — Zoom-tier progressive loading (đã implement 2026-06-17)
+
+- Const `ZOOM_TIER_THRESHOLD = 12`, state `_zoomTier: 'cabinet' | 'all'` (default `'all'`)
+- Function `_applyZoomTier()` — check zoom < threshold → tier `'cabinet'` (chỉ render type 5,6); ngược lại `'all'`
+- Chỉ re-render khi tier thực sự đổi (tránh render khi pan trong cùng tier)
+- Base rows = filtered nếu có `_activeFilters` active, ngược lại `loadedData.slice(1)`
+- Hook vào `map.on('zoomend')` sau logic labelLayerGroup add/remove
+
+**⚠ Bug đã fix**: `addMarkersToMap(data, opts)` giờ nhận `opts.fitView` (default true). `_applyZoomTier` truyền `fitView: false` để KHÔNG `fitBounds()` khi đổi tier — giữ nguyên viewport user. Không có fix này, zoom từ 11→12 sẽ reset về ~10 do `fitBounds` recompute cho all markers.
+
+Reset `_zoomTier = 'all'` trước mỗi `addMarkersToMap` từ data fresh (loadFromCSV, loadFromCSVWithCache) — để lần render đầu không bị stale tier.
 
 ### Ước tính cải thiện
 
@@ -2273,3 +2397,370 @@ timeout ngắn (8s) + không hiện UI.
 - [x] (P13c) `startTrackingCurrentLocation` dùng GPS_MODES config ✅
 - [x] (P13c) huongdan.html section "Cấu hình GPS" (Phone + RTK Tersus) ✅ (đã thêm từ trước trong session)
 - [x] (P13c) Update bảng schema cột sheet trong tài liệu — 25 cột ✅
+
+---
+
+## Roadmap 2026 — Kế hoạch hoàn thiện product
+
+Phần mềm hiện tại đạt **~75% completeness** cho product khảo sát chiếu sáng chuyên nghiệp. Roadmap dưới đây bổ sung 5 nhóm tính năng còn thiếu, chia theo priority + effort. Mỗi tính năng có prompt implement riêng (P21-P42) trong `prompts.md`.
+
+### Overview nhóm tính năng
+
+| Nhóm | Tính năng | Trạng thái | Q ưu tiên |
+|---|---|:---:|:---:|
+| **Vận hành** (13) | Ticketing, Bảo trì, Task, Notification | ⏳ | Q1 |
+| **Analytics** (14) | Dashboard, Mẫu NN, Email report, Chữ ký số | ⏳ | Q1-Q2 |
+| **Tích hợp** (15) | Zalo OA, REST API, SCADA, SMS | ⏳ | Q2 |
+| **Field nâng cao** (16) | Voice, QR, Polygon, Đo | ⏳ | Q2-Q3 |
+| **DevOps** (17) | Tests, Sentry, CI, Modularize | ⏳ | Q1 |
+| **SaaS** (18) | CLI, Multi-tenant, Billing, Verticals | ⏳ | Q3-Q4 |
+
+Xem `prompts.md` § "Session Tính năng 13-18" cho bộ prompt implement từng phần.
+
+---
+
+## Tính năng 13 — Quản lý vận hành
+
+### 13.1 Ticketing sự cố (`SuCo`)
+
+**Mục tiêu**: Ghi nhận báo cáo hư hỏng/sự cố từ khảo sát viên hoặc dân, gán cho nhân sự xử lý, tracking đến khi đóng.
+
+**Sheet mới**: `SuCo` — 12 cột
+
+| Idx | Cột | Mô tả |
+|---|---|---|
+| 0 | ID | `SC_2026_001` tự sinh |
+| 1 | Marker ID | Liên kết với trụ (ID hoặc tên) |
+| 2 | Loại sự cố | `chay`/`toi`/`nghieng`/`gay`/`mat_cap`/`khac` |
+| 3 | Mức độ | `khẩn`/`cao`/`trung`/`thấp` |
+| 4 | Mô tả | Text |
+| 5 | Ảnh | URLs cách nhau `;` |
+| 6 | Người báo | Username |
+| 7 | Người xử lý | Username (nullable, admin gán) |
+| 8 | Trạng thái | `moi`/`dang_xu_ly`/`da_xu_ly`/`da_dong` |
+| 9 | Thời gian tạo | ISO timestamp |
+| 10 | Thời gian đóng | ISO timestamp |
+| 11 | Ghi chú xử lý | Text |
+
+**UI**: 
+- Nút 🚨 trên popup marker → mở form báo sự cố
+- Trang `/admin/su-co` list + filter + assign
+- Badge đỏ trên topbar khi có sự cố mới chưa xử lý
+- Marker hiển thị glow đỏ khi có sự cố `moi` hoặc `dang_xu_ly` chưa đóng
+
+**Prompt**: P21 trong `prompts.md`
+
+### 13.2 Lịch bảo trì (`BaoTri`)
+
+**Mục tiêu**: Lên lịch bảo trì định kỳ (thay bóng đèn, kiểm tra tủ điện, đo cáp), nhắc nhở khi đến hạn.
+
+**Sheet mới**: `BaoTri` — 10 cột
+
+| Idx | Cột |
+|---|---|
+| 0 | ID |
+| 1 | Marker ID |
+| 2 | Loại bảo trì (`thay_den`/`kiem_tra_tu`/`do_cap`/`ve_sinh`) |
+| 3 | Chu kỳ (tháng, VD 6, 12, 24) |
+| 4 | Lần cuối thực hiện |
+| 5 | Lần tới (auto tính) |
+| 6 | Nhân sự phụ trách |
+| 7 | Trạng thái (`chờ`/`đang`/`xong`/`trễ`) |
+| 8 | Ghi chú |
+| 9 | Ảnh sau bảo trì |
+
+**Logic**:
+- Cron mỗi ngày (GAS trigger): check `Lần tới < today + 7 ngày` → status `trễ` (nếu đã qua) hoặc `sắp đến` → notification
+- Dashboard hiển thị số bảo trì trễ/tuần này
+
+**Prompt**: P22
+
+### 13.3 Assign task + Workflow duyệt
+
+**Mục tiêu**: Admin gán task (khảo sát khu vực X) cho user, user submit → admin approve.
+
+**Sheet mới**: `NhiemVu` — 9 cột (ID, người giao, người nhận, mô tả, khu vực, deadline, status, kết quả, thời gian đóng)
+
+**Workflow**:
+```
+draft → assigned → in_progress → submitted → approved / rejected → closed
+```
+
+**UI**: Trang `/admin/nhiem-vu` (admin) + section "Nhiệm vụ của tôi" trong ☰ panel (user).
+
+**Prompt**: P23
+
+### 13.4 Notification Push
+
+**Mục tiêu**: Notify user khi có sự cố mới / task gán / bảo trì đến hạn.
+
+**Cơ chế**:
+- **Browser Push API** (chỉ Chrome/Edge, cần HTTPS)
+- **Fallback**: Poll GAS mỗi 60s, hiện toast trên UI
+- **Zalo OA** (integrated ở tính năng 15.1)
+
+Client subscribe → GAS lưu endpoint → khi có event trigger send.
+
+**Prompt**: P24
+
+---
+
+## Tính năng 14 — Analytics & Báo cáo chính thức
+
+### 14.1 Dashboard KPI
+
+**Mục tiêu**: Trang `/admin/dashboard` với biểu đồ và số liệu tổng quan.
+
+**5 KPI chính**:
+1. Tổng số trụ / tủ theo địa bàn (bar chart)
+2. Tỷ lệ trụ đã khảo sát vs chưa (donut)
+3. Số sự cố mới / đang xử lý / đã xong (bar 30 ngày)
+4. Số bảo trì đến hạn tuần này (số + badge)
+5. Hiệu suất khảo sát viên (bar: số marker tạo/tuần)
+
+**Thư viện**: Chart.js 4 (lazy load, ~150KB gzipped)
+
+**Prompt**: P25
+
+### 14.2 Báo cáo theo mẫu Nhà nước (TT06/2016, TCVN 7722)
+
+**Mục tiêu**: Xuất báo cáo Excel/PDF theo mẫu chuẩn cho phòng KTHT.
+
+**3 mẫu bắt buộc**:
+1. **Báo cáo tháng** — số trụ, số sự cố, số bảo trì thực hiện
+2. **Báo cáo tình hình chiếu sáng** (theo TT06/2016, Bộ Xây dựng)
+3. **Danh mục thiết bị** (theo TCVN 7722, TT39/2009)
+
+Mỗi mẫu có template Excel riêng với logo, header, footer chuẩn. Admin config được logo + tên phòng.
+
+**Prompt**: P26
+
+### 14.3 Email report định kỳ
+
+**Mục tiêu**: Tự động gửi báo cáo tháng qua email cho lãnh đạo.
+
+**Cơ chế**:
+- GAS trigger cron ngày mùng 1 mỗi tháng
+- Tạo báo cáo tháng trước → attach PDF vào email
+- Gửi qua Gmail API (dùng account chạy GAS)
+- Config danh sách người nhận trong sheet `Setting`
+
+**Prompt**: P27
+
+### 14.4 Chữ ký số (Digital Signature)
+
+**Mục tiêu**: Ký PDF bản vẽ bằng chứng thư số (USB token / cloud CA VN).
+
+**Cơ chế**:
+- Client tạo PDF → server-side sign qua library `pdf-lib` + private key
+- Support **VNPT-CA**, **BKAV-CA**, **FPT-CA** (3 CA lớn nhất VN)
+- Chứng thư gắn vào cuối PDF, verify được bằng Adobe Reader
+
+**Prompt**: P28
+
+---
+
+## Tính năng 15 — Tích hợp bên ngoài
+
+### 15.1 Zalo Official Account integration
+
+**Mục tiêu**: Dân báo sự cố qua Zalo OA → auto-tạo ticket trong app.
+
+**Cơ chế**:
+- Đăng ký **Zalo Official Account** (miễn phí cấp thấp)
+- User chat với OA → chọn "Báo sự cố" → gửi ảnh + vị trí
+- Webhook từ Zalo → GAS endpoint → tạo row trong `SuCo`
+- Admin nhận notification, xử lý → gửi phản hồi qua Zalo
+
+**Prompt**: P29
+
+### 15.2 REST API
+
+**Mục tiêu**: Cho hệ thống khác (SCADA, ERP) đọc/ghi dữ liệu.
+
+**Endpoints**:
+```
+GET  /api/markers?district=Quan1     → list
+POST /api/markers                     → create
+GET  /api/su-co?status=moi           → filter
+POST /api/reports/monthly            → trigger report
+```
+
+**Auth**: API key (Bearer token) sinh cho từng client, có rate limit.
+
+**Prompt**: P30
+
+### 15.3 SCADA/IoT read (optional, cho city)
+
+Chỉ implement nếu có khách hàng cụ thể yêu cầu — chi phí lớn, ROI thấp cho MVP.
+
+### 15.4 SMS gateway
+
+Notify qua SMS khi có sự cố khẩn cấp. Dùng **Twilio** (~$0.05/SMS) hoặc **Viettel SMS Brandname** (~250 VND/SMS).
+
+---
+
+## Tính năng 16 — Field Survey nâng cao
+
+### 16.1 Voice note trên marker
+
+**Mục tiêu**: Ghi âm ghi chú nhanh khi tay đang cầm thiết bị/RTK.
+
+**Cơ chế**:
+- MediaRecorder API → Blob → upload GDrive
+- Marker có cột mới `Ghi âm` (URL)
+- Popup có nút play
+
+**Prompt**: P31
+
+### 16.2 QR/Barcode scan tag trụ
+
+**Mục tiêu**: Nhiều trụ có dán tag QR/số hiệu → scan để nhập nhanh ID.
+
+**Thư viện**: `html5-qrcode` (~30KB, dùng camera phone)
+
+**Prompt**: P32
+
+### 16.3 Vẽ vùng polygon (khu vực chiếu sáng)
+
+**Mục tiêu**: Vẽ vùng polygon để đánh dấu "khu vực đã khảo sát" hoặc "cụm dân cư".
+
+**Cơ chế**: Leaflet Draw plugin → lưu GeoJSON vào sheet `Vung`
+
+**Prompt**: P33
+
+### 16.4 Đo khoảng cách trên bản đồ
+
+**Mục tiêu**: Click 2 điểm trên map → hiện khoảng cách + đường đi.
+
+**Prompt**: P34
+
+---
+
+## Tính năng 17 — DevOps & Quality
+
+### 17.1 Smoke tests với Playwright
+
+**Mục tiêu**: 5 test critical flow chạy tự động trên PR.
+
+**Tests**:
+1. Login admin + user
+2. Add marker mới với ảnh
+3. Sửa marker + sync
+4. Xuất PDF bản vẽ
+5. Switch district + load CAD
+
+**CI**: GitHub Actions chạy trên mỗi PR, block merge nếu fail.
+
+**Prompt**: P35
+
+### 17.2 Sentry monitoring
+
+**Mục tiêu**: Track lỗi production, giảm MTTR.
+
+**Setup**: 
+- Free tier 5k errors/tháng
+- Instrument client-side: `window.onerror` + `sw.js` fetch errors
+- Filter noise (adblock, extensions)
+
+**Prompt**: P36
+
+### 17.3 Progressive module extraction
+
+**Mục tiêu**: Split `index.html` 7000 dòng thành modules.
+
+**Thứ tự**:
+1. `lib/vn2000.js` — conversions
+2. `lib/utils.js` — haversine, format, sanitize
+3. `lib/dxf.js` — CAD helpers
+4. `modules/print.js` — PDF export
+5. `modules/excel.js` — Excel export
+6. `modules/cable.js` — sơ đồ cáp
+
+Dùng ES modules native (`<script type="module">`), không cần build tool ban đầu.
+
+**Prompt**: P37
+
+### 17.4 Unit tests với Vitest
+
+**Mục tiêu**: Coverage 80% pure functions.
+
+Tests cho:
+- `convertLatLonToVn2000` + reverse
+- `haversineM`
+- `_cleanMText` MTEXT parser
+- `normalizeTextSearchable`
+- `averageFixes` MAD filter
+
+**Prompt**: P38
+
+---
+
+## Tính năng 18 — SaaS Foundation
+
+### 18.1 CLI onboarding tool
+
+**Mục tiêu**: Setup khách hàng mới trong 5 phút thay 4-8 giờ.
+
+**Interface**:
+```bash
+npx lighting-survey-setup
+? Tên khách hàng: Cần Giuộc
+? Google account: admin@cangiuoc.gov.vn
+? Danh sách địa bàn: Chọn từ preset
+✓ Tạo Google Sheet + share với admin
+✓ Deploy GAS + set Script Properties
+✓ Tạo GitHub repo + Pages
+✓ Send email hướng dẫn user
+
+Thời gian: 3 phút
+```
+
+**Auth**: OAuth Google API (Sheets + Drive + Apps Script scope).
+
+**Prompt**: P39
+
+### 18.2 Multi-tenant Supabase
+
+**Mục tiêu**: Chuyển từ instance-per-customer sang single instance multi-tenant.
+
+**Schema**:
+```sql
+tenants (id, name, plan, created_at)
+users (id, tenant_id, email, role)
+markers (id, tenant_id, ...25 columns...)
+su_co (id, tenant_id, ...)
+```
+
+Row Level Security (RLS) enforce `tenant_id = auth.tenant_id`.
+
+**Prompt**: P40
+
+### 18.3 Billing với Payos
+
+**Mục tiêu**: Subscription tự động cho SaaS.
+
+**3 tier**:
+- **Free**: 2 user, 1 địa bàn, 200 marker
+- **Pro**: 500k VND/tháng, 10 user, unlimited marker
+- **Enterprise**: 1.5M/tháng, unlimited user, custom template
+
+**Payment**: Payos VN (1.5% + 500đ/giao dịch, hỗ trợ VNPay/Momo/thẻ).
+
+**Prompt**: P41
+
+### 18.4 Vertical expansion
+
+**Mục tiêu**: Mở rộng từ chiếu sáng sang các asset type khác.
+
+**Wave 1** (Q4 2026):
+- 🚦 Đèn tín hiệu giao thông
+- 📹 Camera an ninh
+
+**Wave 2** (Q1 2027):
+- 🚰 Trụ nước sinh hoạt
+- 📡 Trụ viễn thông
+
+Với architecture modular (17.3), thêm mỗi vertical chỉ cần config `TYPE_CONFIG` + template báo cáo.
+
+**Prompt**: P42

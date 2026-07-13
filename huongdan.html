@@ -155,6 +155,14 @@
           <li><a href="#s15" style="font-weight:400;color:#4b5563;">Ngưỡng độ chính xác (thanh trượt)</a></li>
         </ul>
       </li>
+      <li><a href="#s16">Tải bản vẽ CAD (DXF) lên bản đồ</a>
+        <ul style="margin-top:4px;padding-left:16px;">
+          <li><a href="#s16" style="font-weight:400;color:#4b5563;">Yêu cầu file — ASCII DXF, không Binary</a></li>
+          <li><a href="#s16" style="font-weight:400;color:#4b5563;">Chọn kinh tuyến trung tâm + k₀</a></li>
+          <li><a href="#s16" style="font-weight:400;color:#4b5563;">Chỉnh tọa độ — meridian + offset mét</a></li>
+          <li><a href="#s16" style="font-weight:400;color:#4b5563;">Bộ thông số mẫu cho từng địa bàn</a></li>
+        </ul>
+      </li>
     </ol>
   </div>
 
@@ -255,8 +263,8 @@
     <h4 style="margin-top:14px;color:#1e40af;">👥 Phân quyền 4 vai trò</h4>
     <ul>
       <li><strong>admin</strong>: đầy đủ + xem lịch sử thao tác</li>
-      <li><strong>user</strong>: thêm/sửa/xóa + GitHub sync</li>
-      <li><strong>user1</strong>: thêm/sửa, không được xóa</li>
+      <li><strong>user</strong>: thêm/sửa/xóa/kéo marker (không GitHub sync)</li>
+      <li><strong>user1</strong>: thêm/sửa (không xóa, không kéo marker, không GitHub sync)</li>
       <li><strong>demo</strong>: chỉ xem bản đồ</li>
       <li>Đổi tên đăng nhập / mật khẩu trực tiếp trong app (nút 🔑)</li>
     </ul>
@@ -334,8 +342,8 @@
         <th>Vai trò</th><th>Xem bản đồ</th><th>Thêm / Sửa</th><th>Xóa</th><th>Kéo marker</th><th>GitHub sync</th><th>Camera / Đèn tắt</th>
       </tr>
       <tr><td><span class="badge badge-red">admin</span></td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td></tr>
-      <tr><td><span class="badge badge-blue">user</span></td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="no">✗</td></tr>
-      <tr><td><span class="badge badge-green">user1</span></td><td class="yes">✓</td><td class="yes">✓</td><td class="no">✗</td><td class="yes">✓</td><td class="yes">✓</td><td class="no">✗</td></tr>
+      <tr><td><span class="badge badge-blue">user</span></td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="no">✗</td><td class="no">✗</td></tr>
+      <tr><td><span class="badge badge-green">user1</span></td><td class="yes">✓</td><td class="yes">✓</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td></tr>
       <tr><td><span class="badge badge-gray">demo</span></td><td class="yes">✓</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td></tr>
     </table>
 
@@ -508,7 +516,7 @@
     </div>
     <div class="note note-warn">
       <span class="note-icon">🔒</span>
-      <div>Chỉ tài khoản admin / user / user1 mới kéo được marker. Tài khoản <code>demo</code> không thể kéo.</div>
+      <div>Chỉ tài khoản <code>admin</code> và <code>user</code> mới kéo được marker. Tài khoản <code>user1</code> và <code>demo</code> không thể kéo.</div>
     </div>
   </section>
 
@@ -1047,6 +1055,112 @@
       <li>Mỗi marker lưu thêm 2 cột: <strong>Độ chính xác (m)</strong> (giá trị raw, vd <code>0.018</code>) và <strong>Chế độ GPS</strong> (<code>rtk</code> hoặc <code>phone</code>).</li>
       <li>Sau này có thể filter Excel để biết marker nào đo bằng RTK (vd <code>Độ chính xác &lt; 0.1</code>).</li>
       <li>Marker cũ chưa có 2 cột này → hiển thị rỗng, không ảnh hưởng chức năng.</li>
+    </ul>
+  </section>
+
+  <section id="s16">
+    <h2><span class="num">16</span> Tải bản vẽ CAD (DXF) lên bản đồ</h2>
+    <p>App hỗ trợ overlay bản vẽ AutoCAD lên nền bản đồ Leaflet — tương tự Nuwa. Mỗi địa bàn có thể tải 1 bản vẽ riêng, cache offline vào IndexedDB (không cần re-upload sau khi refresh).</p>
+
+    <h3>Yêu cầu file DXF</h3>
+    <ul>
+      <li><strong>Định dạng</strong>: ASCII DXF (không phải Binary DXF). Trong AutoCAD: <code>File → Save As → chọn "AutoCAD 2013 ASCII DXF (*.dxf)"</code>.</li>
+      <li><strong>Entity hỗ trợ</strong>: LINE, LWPOLYLINE, POLYLINE, CIRCLE, TEXT, MTEXT. Bỏ qua ARC/HATCH/BLOCK/DIMENSION.</li>
+      <li><strong>Kích thước</strong>: khuyến nghị &lt; 10MB. File 10-20MB có warning. File &gt; 20MB có thể freeze UI 30-90s, mobile có thể OOM.</li>
+      <li><strong>Encoding</strong>: UTF-8 hoặc Windows-1258 (auto-detect).</li>
+    </ul>
+
+    <h3>Cách tải lên</h3>
+    <div class="steps">
+      <div class="step"><div class="sn">1</div><div class="sc">Mở <kbd>☰</kbd> panel → cuộn tới section <strong>Bản vẽ CAD</strong> → click <strong>📐 Tải DXF</strong>.</div></div>
+      <div class="step"><div class="sn">2</div><div class="sc">Chọn file <code>.dxf</code> từ máy.</div></div>
+      <div class="step"><div class="sn">3</div><div class="sc">Chọn <strong>Kinh tuyến trung tâm</strong> (105° / 105.5° / 105.75° / 106°) và <strong>Scale factor k₀</strong> (0.9996 múi 6° hoặc 0.9999 múi 3°) — tùy hệ tọa độ của bản vẽ.</div></div>
+      <div class="step"><div class="sn">4</div><div class="sc">Click <strong>Tải lên</strong>. Parse xong app tự fit view lên bounds bản vẽ.</div></div>
+    </div>
+
+    <h3>Nếu bản vẽ hiển thị lệch vị trí</h3>
+    <p>Bản vẽ có thể lệch vài km do sai kinh tuyến hoặc file dùng hệ tọa độ local. Không cần re-upload — dùng nút <strong>🎯 Chỉnh</strong> trong info box:</p>
+    <div class="steps">
+      <div class="step"><div class="sn">1</div><div class="sc">Info box CAD → click <strong>🎯 Chỉnh</strong>. Modal mở ra với preview realtime.</div></div>
+      <div class="step"><div class="sn">2</div><div class="sc"><strong>Thử kinh tuyến khác</strong>: bước 0.001° = ~111m. Nút <code>1km←</code> / <code>1km→</code> nhảy ±0.01° = ~1.1km.</div></div>
+      <div class="step"><div class="sn">3</div><div class="sc"><strong>Đổi k₀</strong>: 0.9996 (UTM múi 6°) vs 0.9999 (VN-2000 múi 3°). Chọn khác nhau tạo shift ~150m.</div></div>
+      <div class="step"><div class="sn">4</div><div class="sc"><strong>Dịch chuyển thêm (mét)</strong>: chỉnh vi mô Đông/Tây (X) và Bắc/Nam (Y) đơn vị mét, bước 10m. Áp dụng sau khi convert VN-2000 → lat/lon.</div></div>
+      <div class="step"><div class="sn">5</div><div class="sc">Xem <strong>delta so với trung tâm Cần Giuộc</strong> trong preview: 🟢 &lt; 1km = OK, 🟠 1-5km, 🔴 &gt; 5km. Click <strong>Áp dụng</strong> khi vừa ý.</div></div>
+    </div>
+
+    <h3>Bộ thông số mẫu theo địa bàn</h3>
+    <p>Các bộ thông số đã tinh chỉnh thủ công cho từng file DXF cụ thể. Áp vào modal 🎯 Chỉnh sau khi upload:</p>
+
+    <h4 style="margin-top:14px;color:#1e40af;">🏘 Cần Giuộc — Long An</h4>
+    <p>File <code>Ban do xa CG.dxf</code> (46.66 MB, quy hoạch xã Cần Giuộc):</p>
+    <table>
+      <tr><th>Tham số</th><th>Giá trị</th><th>Ghi chú</th></tr>
+      <tr><td>Kinh tuyến trung tâm</td><td><code>105.972°</code></td><td>Khác chuẩn Long An (105.75°) — file dùng local zone</td></tr>
+      <tr><td>Scale factor k₀</td><td><code>0.9996</code></td><td>UTM múi 6°, không phải VN-2000 múi 3°</td></tr>
+      <tr><td>Offset Đông (X)</td><td><code>-38 m</code></td><td>Dịch trái 38m</td></tr>
+      <tr><td>Offset Bắc (Y)</td><td><code>-114 m</code></td><td>Dịch xuống 114m</td></tr>
+      <tr><td>Điểm đầu tiên</td><td><code>10.596877, 106.702518</code></td><td>Preview</td></tr>
+      <tr><td>Trung tâm Cần Giuộc</td><td><code>10.601, 106.664</code></td><td>Reference</td></tr>
+      <tr><td>Delta</td><td>± 4.2 km (đông)</td><td>Chấp nhận được cho MVP — file phủ nhiều xã</td></tr>
+    </table>
+
+    <h4 style="margin-top:14px;color:#1e40af;">🏙 TP.HCM</h4>
+    <p>Bản vẽ khu vực TP.HCM (chuẩn VN-2000 múi 3°):</p>
+    <table>
+      <tr><th>Tham số</th><th>Giá trị</th><th>Ghi chú</th></tr>
+      <tr><td>Kinh tuyến trung tâm</td><td><code>105.7515°</code></td><td>Rất gần chuẩn HCM 105°45' (105.75°) — chỉ lệch 0.0015°</td></tr>
+      <tr><td>Scale factor k₀</td><td><code>0.9999</code></td><td>VN-2000 múi 3° chuẩn</td></tr>
+      <tr><td>Offset Đông (X)</td><td><code>+30 m</code></td><td>Dịch phải 30m</td></tr>
+      <tr><td>Offset Bắc (Y)</td><td><code>-110 m</code></td><td>Dịch xuống 110m</td></tr>
+      <tr><td>Điểm đầu tiên (ví dụ)</td><td><code>10.794883, 106.687348</code></td><td>Preview — khu Bình Chánh / Tân Bình</td></tr>
+      <tr><td>Reference</td><td>TP.HCM (10.7769, 106.7009)</td><td>Đơn vị hành chính</td></tr>
+      <tr><td>Delta so với Cần Giuộc</td><td>21.7 km bắc</td><td>Bình thường — file là TP.HCM, không phải Cần Giuộc</td></tr>
+    </table>
+
+    <div class="note">
+      <div class="ni">💡</div>
+      <div>Bộ thông số này là kết quả tinh chỉnh thủ công cho từng file DXF cụ thể. File CAD do khảo sát trước phát sinh, không dùng chuẩn VN-2000 mà thường là local zone tùy chỉnh (kinh tuyến lệch 0.001°-0.5° so chuẩn). Nếu cần chính xác 100% (cho stake-out RTK), chờ Phase 3 (P19) — calibration 2 điểm bù cả rotation.</div>
+    </div>
+
+    <div class="note" style="background:#fef3c7;border-color:#f59e0b;">
+      <div class="ni">⚠</div>
+      <div><strong>Delta trong preview modal</strong> tính so với <em>trung tâm Cần Giuộc</em> (10.601, 106.664) — chỉ có ý nghĩa cho địa bàn Cần Giuộc. Với các địa bàn khác (TP.HCM, Bình Dương), delta lớn không đồng nghĩa sai — kiểm tra bằng cách zoom in xem bản vẽ có khớp với địa danh thực tế trên Google Maps hay không.</div>
+    </div>
+
+    <h3>Mặc định kinh tuyến theo địa bàn</h3>
+    <p>Khi mở modal upload, kinh tuyến được suggest dựa trên district:</p>
+    <table>
+      <tr><th>Địa bàn</th><th>Kinh tuyến mặc định</th></tr>
+      <tr><td>TP.HCM (Quận 1, 3, 5, 8, 10, 11, Phú Nhuận, Bình Thạnh, Tân Bình, Tân Phú)</td><td><code>105.75°</code></td></tr>
+      <tr><td>Long An (Cần Giuộc)</td><td><code>105.75°</code></td></tr>
+      <tr><td>Bình Dương (Bàu Bàng, Trừ Văn Thố, Bến Cát)</td><td><code>105.75°</code></td></tr>
+      <tr><td>Tổng quan (DanhSachTru)</td><td><code>105°</code> (múi 6° UTM zone 48)</td></tr>
+    </table>
+
+    <h3>Text hiển thị theo zoom</h3>
+    <ul>
+      <li><strong>Zoom &lt; 16</strong>: chỉ hiện đường/polygon/circle → map dễ đọc.</li>
+      <li><strong>Zoom ≥ 16</strong>: text label hiện dần, đã strip MTEXT format codes (<code>{fTimes New Roman|…}</code>, <code>\C256;</code>, <code>%%NNN</code>, <code>%%c</code>=Ø, <code>%%d</code>=°).</li>
+    </ul>
+
+    <h3>Xử lý sự cố</h3>
+    <table>
+      <tr><th>Triệu chứng</th><th>Nguyên nhân</th><th>Cách khắc phục</th></tr>
+      <tr><td>Không tải được dxf-parser</td><td>CDN chặn / offline</td><td>App tự thử 3 CDN (esm.sh / skypack / jsdelivr). Kiểm tra mạng.</td></tr>
+      <tr><td>File này là Binary DXF...</td><td>File binary format</td><td>AutoCAD → Save As → chọn <strong>ASCII DXF</strong> (không Binary)</td></tr>
+      <tr><td>Thiếu marker EOF</td><td>File truncated / hỏng</td><td>Mở lại trong AutoCAD → Save As DXF (ghi đè)</td></tr>
+      <tr><td>Text hiện <code>{fTimes...}</code></td><td>MTEXT format code chưa strip</td><td>Hard reload — app tự re-clean cache cũ</td></tr>
+      <tr><td>Bản vẽ lệch &gt; 10km</td><td>Sai kinh tuyến / k₀</td><td>🎯 Chỉnh → thử 105 / 105.5 / 105.75 / 106</td></tr>
+      <tr><td>Bản vẽ lệch vài km và rotated</td><td>File local zone / custom projection</td><td>Chờ Phase 3 (P19) — calibration 2 điểm</td></tr>
+      <tr><td>File 46MB parse mất 60s</td><td>File lớn, main thread block</td><td>Chấp nhận, hoặc pre-process bằng QGIS → GeoJSON offline</td></tr>
+    </table>
+
+    <h3>Persistent qua session</h3>
+    <ul>
+      <li>Sau khi tải xong, bản vẽ + meta (kinh tuyến, k₀, offset) lưu vào <strong>IndexedDB</strong> với key = tên sheet.</li>
+      <li>Refresh app / đổi thiết bị đăng nhập cùng account → tự load lại.</li>
+      <li>Đổi địa bàn → CAD của địa bàn cũ ẩn, load CAD của địa bàn mới nếu có.</li>
+      <li>Nút <strong>🗑 Gỡ</strong> → xóa bản vẽ khỏi cache của địa bàn hiện tại.</li>
     </ul>
   </section>
 
