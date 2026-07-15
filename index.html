@@ -1378,6 +1378,19 @@
                             </div>
                             <div style="font-size:11px;color:#64748b;margin-top:4px;line-height:1.4">GPS không đạt ngưỡng → phải chọn vị trí trên bản đồ</div>
                         </div>
+                        <div style="margin-top:10px;padding-top:10px;border-top:1px solid #e2e8f0">
+                            <label style="font-size:13px;font-weight:600;color:#374151;margin-bottom:4px;display:flex;justify-content:space-between;align-items:center">
+                                <span>Thời gian chờ GPS</span>
+                                <span id="gpsMaxWaitLabel" style="color:#2563eb;font-weight:700">30s</span>
+                            </label>
+                            <input type="range" id="gpsMaxWaitSlider" min="5" max="120" step="5" value="30" style="width:100%;accent-color:#2563eb"
+                                oninput="_onGpsMaxWaitInput(this.value)"
+                                onchange="_saveGpsMaxWait(this.value)">
+                            <div style="display:flex;justify-content:space-between;font-size:11px;color:#94a3b8;margin-top:2px">
+                                <span>5s</span><span>120s</span>
+                            </div>
+                            <div style="font-size:11px;color:#64748b;margin-top:4px;line-height:1.4">Hết giờ → tự dùng tín hiệu tốt nhất có được</div>
+                        </div>
                     </div>
 
                     <div class="ctrl-divider"></div>
@@ -2653,11 +2666,42 @@
 
         function _buildCableLines(rows) {
             const cycle = _detectCableCycle(rows);
+            // Build set tên node thuộc vòng lặp (bỏ phần tử cuối trùng đầu)
+            const cycleSet = new Set();
             if (cycle) {
+                cycle.slice(0, -1).forEach(n => cycleSet.add(n));
                 const chain = cycle.join(' → ');
+                const _cycleFirstNode = cycle[0];
                 console.error('[cable] Vòng lặp Marker gốc:', chain);
-                displayError('⚠ Vòng lặp Marker gốc: ' + chain + ' — sửa cột Marker gốc của 1 trong các trụ này.');
-                return;
+                displayError('⚠ Vòng lặp Marker gốc: ' + chain + ' — đoạn đỏ trên bản đồ, click để xóa.');
+                // Cho phép click toast để nhảy đến vị trí vòng lặp
+                (function() {
+                    const el = document.getElementById('error');
+                    if (!el) return;
+                    el.style.pointerEvents = 'auto';
+                    el.style.cursor = 'pointer';
+                    // Kéo dài timeout 12s (thay vì 4s) để user kịp click
+                    if (_toastTimer) clearTimeout(_toastTimer);
+                    _toastTimer = setTimeout(function() {
+                        el.style.display = 'none';
+                        el.style.pointerEvents = '';
+                        el.style.cursor = '';
+                        el.onclick = null;
+                    }, 12000);
+                    el.onclick = function() {
+                        const r = (loadedData || []).slice(1).find(function(row) {
+                            return String(row[1] || '').trim() === _cycleFirstNode;
+                        });
+                        if (r) {
+                            const lat = parseCoord(r[2]), lon = parseCoord(r[3]);
+                            if (Number.isFinite(lat) && Number.isFinite(lon)) map.flyTo([lat, lon], 18);
+                        }
+                        el.style.pointerEvents = '';
+                        el.style.cursor = '';
+                        el.onclick = null;
+                    };
+                })();
+                // KHÔNG return — vẫn vẽ toàn bộ, cycle segments tô đỏ
             }
             _removeCableLines();
             _cableLayerGroup = L.layerGroup().addTo(map);
@@ -2676,12 +2720,20 @@
                 const child = String(r[1] || '').trim();
                 if (!child || !posIdx[child] || child === parent) return;
                 const from = posIdx[parent], to = posIdx[child];
-                const cableType = String(r[22] || 'noi');
-                const style = CABLE_STYLE[cableType] || CABLE_STYLE.noi;
+                // Segment thuộc cycle khi cả child lẫn parent đều trong cycleSet
+                const isCycle = cycleSet.size > 0 && cycleSet.has(child) && cycleSet.has(parent);
+                let lineColor, lineDash, lineWeight;
+                if (isCycle) {
+                    lineColor = '#ef4444'; lineDash = '6 4'; lineWeight = 3.5;
+                } else {
+                    const style = CABLE_STYLE[String(r[22] || 'noi')] || CABLE_STYLE.noi;
+                    lineColor = style.color; lineDash = style.dashArray; lineWeight = 2.5;
+                }
                 const line = L.polyline([from, to], {
-                    color: style.color, weight: 2.5, dashArray: style.dashArray, opacity: 0.8
+                    color: lineColor, weight: lineWeight, dashArray: lineDash, opacity: isCycle ? 1 : 0.8
                 });
                 line._cableRow = r;
+                line._isCycle  = isCycle;
                 line.addTo(_cableLayerGroup);
                 if (_cableEditMode) _attachCableEditHandler(line);
                 cableCount++;
@@ -2727,6 +2779,11 @@
                 if (name && Number.isFinite(lat) && Number.isFinite(lon)) posIdx[name] = [lat, lon];
             });
 
+            // Detect cycle để tô đỏ đoạn lỗi trong SVG
+            const _svgCycle = _detectCableCycle(rows);
+            const _svgCycleSet = new Set();
+            if (_svgCycle) _svgCycle.slice(0, -1).forEach(n => _svgCycleSet.add(n));
+
             let markup = '';
             rows.forEach(r => {
                 const parentName = String(r[14] || '').trim();
@@ -2740,14 +2797,16 @@
                     String(haversineM(posIdx[childName][0], posIdx[childName][1], posIdx[parentName][0], posIdx[parentName][1]));
                 const mx = ((from.x + to.x) / 2).toFixed(1);
                 const my = ((from.y + to.y) / 2).toFixed(1);
-                const cableType = String(r[22] || 'noi');
-                const style = CABLE_STYLE[cableType] || CABLE_STYLE.noi;
+                const isCycle = _svgCycleSet.size > 0 && _svgCycleSet.has(childName) && _svgCycleSet.has(parentName);
+                const strokeColor = isCycle ? '#ef4444' : (CABLE_STYLE[String(r[22] || 'noi')] || CABLE_STYLE.noi).color;
+                const strokeDash  = isCycle ? '6 4'     : (CABLE_STYLE[String(r[22] || 'noi')] || CABLE_STYLE.noi).dashArray;
+                const strokeW     = isCycle ? 3.5        : 2.5;
 
                 markup +=
                     `<line x1="${from.x.toFixed(1)}" y1="${from.y.toFixed(1)}" x2="${to.x.toFixed(1)}" y2="${to.y.toFixed(1)}"` +
-                    ` stroke="${style.color}" stroke-width="2.5" stroke-dasharray="${style.dashArray}" opacity="0.85"/>` +
+                    ` stroke="${strokeColor}" stroke-width="${strokeW}" stroke-dasharray="${strokeDash}" opacity="0.85"/>` +
                     `<text x="${mx}" y="${my}" text-anchor="middle" dominant-baseline="middle"` +
-                    ` font-family="Arial,sans-serif" font-size="10" font-weight="700" fill="${style.color}"` +
+                    ` font-family="Arial,sans-serif" font-size="10" font-weight="700" fill="${strokeColor}"` +
                     ` paint-order="stroke" stroke="white" stroke-width="3" stroke-linejoin="round">${distVal}m</text>`;
             });
 
@@ -6882,6 +6941,7 @@
         };
         let currentGpsMode = localStorage.getItem('gpsMode') || 'phone';
         let _gpsAccThreshold = parseFloat(localStorage.getItem('gpsAccThreshold') || '3');
+        let _gpsMaxWaitMs = parseInt(localStorage.getItem('gpsMaxWaitMs') || '30') * 1000;
 
         // ── Helpers hiển thị accuracy / coord / VN2000 theo mode ─────────
         function formatAccuracy(meters) {
@@ -7110,6 +7170,15 @@
             localStorage.setItem('gpsAccThreshold', _gpsAccThreshold);
             _onGpsThresholdInput(val);
         }
+        function _onGpsMaxWaitInput(val) {
+            const label = document.getElementById('gpsMaxWaitLabel');
+            if (label) label.textContent = val + 's';
+        }
+        function _saveGpsMaxWait(val) {
+            _gpsMaxWaitMs = parseInt(val) * 1000;
+            localStorage.setItem('gpsMaxWaitMs', parseInt(val));
+            _onGpsMaxWaitInput(val);
+        }
 
         // ── GPS TRACKING BAR (P13b) ───────────────────────────────────────
         // State machine: SEARCHING (orange) → REACHED (green, 3s countdown) → accept
@@ -7157,7 +7226,7 @@
             if (!s) return;
             document.getElementById('gpsAccuracyText').textContent = formatAccuracy(accuracy);
             const elapsedS = (elapsed / 1000).toFixed(1);
-            const maxS = (s.cfg.maxWaitMs / 1000).toFixed(0);
+            const maxS = (_gpsMaxWaitMs / 1000).toFixed(0);
             let progText = `${elapsedS}s / ${maxS}s`;
             if (s.cfg.useAveraging) progText += ` · ${samples}/${s.cfg.averageSamples} mẫu`;
             document.getElementById('gpsProgressText').textContent = progText;
@@ -7253,7 +7322,7 @@
                 // Fallback nếu không có UI
                 return new Promise((resolve, reject) => {
                     navigator.geolocation.getCurrentPosition(resolve, reject,
-                        { enableHighAccuracy: true, maximumAge: 0, timeout: cfg.maxWaitMs });
+                        { enableHighAccuracy: true, maximumAge: 0, timeout: _gpsMaxWaitMs });
                 });
             }
 
@@ -7318,13 +7387,13 @@
                         }
                     },
                     err => fail(err),
-                    { enableHighAccuracy: true, maximumAge: 0, timeout: cfg.maxWaitMs }
+                    { enableHighAccuracy: true, maximumAge: 0, timeout: _gpsMaxWaitMs }
                 );
 
                 hardTimeoutId = setTimeout(() => {
                     if (bestFix) finish(cfg.useAveraging && samples.length > 0 ? averageFixes(samples) : bestFix);
                     else fail(new Error('Không lấy được GPS — quá thời gian chờ'));
-                }, cfg.maxWaitMs);
+                }, _gpsMaxWaitMs);
 
                 bar.onAccept(() => {
                     if (bestFix) finish(cfg.useAveraging && samples.length > 0 ? averageFixes(samples) : bestFix);
@@ -8937,7 +9006,7 @@
             currentLocationWatchId = navigator.geolocation.watchPosition(
                 pos => updateCurrentLocationMarker(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy),
                 err => displayError('Không thể lấy vị trí: ' + err.message),
-                { enableHighAccuracy: true, maximumAge: 0, timeout: cfg.maxWaitMs }
+                { enableHighAccuracy: true, maximumAge: 0, timeout: _gpsMaxWaitMs }
             );
             displayInfo('Đang theo dõi vị trí...');
         }
@@ -11480,6 +11549,9 @@
                     // Sync accuracy threshold slider
                     const sl = document.getElementById('gpsAccThresholdSlider');
                     if (sl) { sl.value = _gpsAccThreshold; _onGpsThresholdInput(_gpsAccThreshold); }
+                    // Sync max wait slider
+                    const wsl = document.getElementById('gpsMaxWaitSlider');
+                    if (wsl) { wsl.value = _gpsMaxWaitMs / 1000; _onGpsMaxWaitInput(_gpsMaxWaitMs / 1000); }
                     // Sync rotation slider theo state hiện tại
                     const rotSl = document.getElementById('panelRotSlider');
                     const rotDisp = document.getElementById('panelRotDisplay');
