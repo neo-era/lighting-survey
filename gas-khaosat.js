@@ -1000,6 +1000,8 @@ function doPost(e) {
 
     // P27: Email báo cáo định kỳ (test manual)
     if (data.action === 'send_monthly_report') return handleSendMonthlyReport(data);
+    if (data.action === 'send_daily_report')   return handleSendDailyReport(data);
+    if (data.action === 'get_daily_report')    return handleGetDailyReport(data);
 
     // Quản lý tài khoản (admin only)
     if (data.action === 'list_users')       return handleListUsers(data);
@@ -1084,8 +1086,11 @@ function findRowNum(sheet, headers, hIdx, data) {
   for (let i = 0; i < allData.length; i++) {
     const rowId  = idCol   !== undefined ? norm(allData[i][idCol])   : '';
     const rowNm  = nameCol !== undefined ? norm(allData[i][nameCol]) : '';
-    if ((searchId && rowId && rowId === searchId) ||
-        (searchNm && rowNm && rowNm === searchNm)) {
+    // Nếu có ID: chỉ match theo ID (tránh ghi đè marker trùng tên nhưng khác ID)
+    // Nếu không có ID (dữ liệu cũ): fallback match theo tên
+    const idMatch   = searchId && rowId && rowId === searchId;
+    const nameMatch = !searchId && searchNm && rowNm && rowNm === searchNm;
+    if (idMatch || nameMatch) {
       return i + 2;
     }
   }
@@ -2005,6 +2010,8 @@ const HEADER_SETTING = ['Key', 'Value', 'Ghi chú'];
 const DEFAULT_SETTINGS = {
   'email_recipients':  { value: 'admin@example.com,truongphong@example.com', note: 'Email nhận báo cáo (cách nhau bằng dấu phẩy)' },
   'email_enabled':     { value: 'true',                                       note: 'true = bật gửi tự động, false = tắt' },
+  'daily_report_enabled': { value: 'true',  note: 'true = bật báo cáo ngày tự động, false = tắt' },
+  'daily_report_hour':    { value: '18',    note: 'Giờ gửi báo cáo ngày (0-23, múi giờ Asia/Ho_Chi_Minh)' },
   'donvi_name':        { value: 'Huyện Cần Giuộc',                            note: 'Tên đơn vị hành chính' },
   'phong_name':        { value: 'Phòng Kinh tế và Hạ tầng',                  note: 'Tên phòng ban' },
   'nguoi_ky':          { value: 'Nguyễn Văn A',                              note: 'Tên người ký duyệt' },
@@ -2615,4 +2622,450 @@ function importMaPE() {
   var msg = 'Hoàn thành! ' + totalUpdated + ' hàng cập nhật Mã PE.\n\n' + summary.join('\n');
   Logger.log(msg);
   SpreadsheetApp.getUi().alert(msg);
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// ── BÁO CÁO KHẢO SÁT HÀNG NGÀY ──────────────────────────────────────────
+// Tổng hợp tất cả marker được thêm/sửa trong ngày, gửi email lúc 18:00.
+// ══════════════════════════════════════════════════════════════════════════
+
+var ALL_DISTRICT_SHEETS = [
+  'DanhSachTru', 'Quan1', 'Quan3', 'Quan5', 'Quan8', 'Quan10', 'Quan11',
+  'PhuNhuan', 'BinhThanh', 'TanBinh', 'TanPhu',
+  'BauBang', 'TruVanTho', 'BenCat', 'CanGiuoc'
+];
+
+/**
+ * Tổng hợp dữ liệu khảo sát trong ngày dateStr (YYYY-MM-DD, Asia/Ho_Chi_Minh).
+ * Trả về object: { bySheet, bySurveyor, byType, rows, suCoToday, lichSuToday, total }
+ */
+function _aggregateDailyReport(dateStr) {
+  var bySheet    = {};   // sheetName → count
+  var bySurveyor = {};   // nguoiKS → { count, sheets: Set }
+  var byType     = {};   // loai (int) → count
+  var rows       = [];   // top-100 row records for detail table
+
+  ALL_DISTRICT_SHEETS.forEach(function(sheetName) {
+    try {
+      var sheet = getSheet(sheetName);
+      if (!sheet || sheet.getLastRow() < 2) return;
+
+      var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+      var hIdx    = buildHeaderIndex(headers);
+      var numCols = Math.min(headers.length, 22);
+      var allData = sheet.getRange(2, 1, sheet.getLastRow() - 1, numCols).getValues();
+
+      var capNhatCol  = hIdx[norm('Thời gian cập nhật')];
+      var nguoiKSCol  = hIdx[norm('Người KS')];
+      var tenTruCol   = hIdx[norm('Tên trụ')];
+      var loaiCol     = hIdx[norm('Loại')];
+      var tuCol       = hIdx[norm('Tủ điều khiển')];
+      var duongCol    = hIdx[norm('Đường')];
+      var pxCol       = hIdx[norm('Phường/ Xã')];
+      var hinhAnhCol  = hIdx[norm('Ảnh')];
+
+      var sheetCount = 0;
+
+      allData.forEach(function(r) {
+        if (!r[tenTruCol !== undefined ? tenTruCol : 1]) return;
+        var capNhat = String(r[capNhatCol !== undefined ? capNhatCol : 13] || '');
+        // Đối chiếu dateStr với phần ngày của timestamp (dd/MM/yyyy hoặc ISO)
+        var matchDate = false;
+        if (capNhat.indexOf(dateStr) !== -1) {
+          matchDate = true;
+        } else if (capNhat.indexOf('/') !== -1) {
+          // Định dạng dd/MM/yyyy HH:mm:ss → chuyển sang YYYY-MM-DD
+          var parts = capNhat.split(/[\s\/]/);
+          // parts[0]=dd, parts[1]=MM, parts[2]=yyyy
+          if (parts.length >= 3) {
+            var isoDay = parts[2] + '-' + parts[1].padStart(2,'0') + '-' + parts[0].padStart(2,'0');
+            matchDate = (isoDay === dateStr);
+          }
+        }
+        if (!matchDate) return;
+
+        sheetCount++;
+        var tenTru   = String(r[tenTruCol  !== undefined ? tenTruCol  : 1]  || '');
+        var nguoiKS  = String(r[nguoiKSCol !== undefined ? nguoiKSCol : 5]  || '') || '—';
+        var loai     = parseInt(r[loaiCol  !== undefined ? loaiCol    : 6])  || 0;
+        var tu       = String(r[tuCol      !== undefined ? tuCol      : 7]  || '');
+        var duong    = String(r[duongCol   !== undefined ? duongCol   : 17] || '');
+        var px       = String(r[pxCol      !== undefined ? pxCol      : 18] || '');
+        var hasAnh   = !!(r[hinhAnhCol !== undefined ? hinhAnhCol : 12] && String(r[hinhAnhCol !== undefined ? hinhAnhCol : 12]).trim());
+
+        byType[loai] = (byType[loai] || 0) + 1;
+
+        if (!bySurveyor[nguoiKS]) bySurveyor[nguoiKS] = { count: 0, sheets: {} };
+        bySurveyor[nguoiKS].count++;
+        bySurveyor[nguoiKS].sheets[sheetName] = (bySurveyor[nguoiKS].sheets[sheetName] || 0) + 1;
+
+        if (rows.length < 200) {
+          rows.push({
+            sheet: sheetName, tenTru: tenTru, nguoiKS: nguoiKS,
+            loai: loai, tu: tu, duong: duong, px: px,
+            capNhat: capNhat, hasAnh: hasAnh
+          });
+        }
+      });
+
+      if (sheetCount > 0) bySheet[sheetName] = sheetCount;
+    } catch (e) {
+      Logger.log('Daily report lỗi sheet ' + sheetName + ': ' + e.message);
+    }
+  });
+
+  // LichSu hôm nay (delete / edit / move)
+  var lichSuToday = [];
+  try {
+    var lsSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('LichSu');
+    if (lsSheet && lsSheet.getLastRow() >= 2) {
+      var lsData = lsSheet.getRange(2, 1, lsSheet.getLastRow() - 1, 6).getValues();
+      lsData.forEach(function(r) {
+        var tg = String(r[0] || '');
+        if (tg.indexOf(dateStr) !== -1) {
+          lichSuToday.push({ thoiGian: tg, nguoi: r[1], thaoTac: r[2], id: r[3], tenTru: r[4], chiTiet: r[5] });
+        }
+      });
+    }
+  } catch (_) {}
+
+  // SuCo hôm nay
+  var suCoToday = [];
+  try {
+    var scSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('SuCo');
+    if (scSheet && scSheet.getLastRow() >= 2) {
+      var scData = scSheet.getRange(2, 1, scSheet.getLastRow() - 1, 15).getValues();
+      scData.forEach(function(r) {
+        var tg = String(r[1] || '');
+        if (tg.indexOf(dateStr) !== -1) {
+          suCoToday.push({ id: r[0], thoiGian: tg.slice(0,16).replace('T',' '), tenTru: r[2], loai: r[9], mucDo: r[10], trangThai: r[14] });
+        }
+      });
+    }
+  } catch (_) {}
+
+  var total = rows.length;
+  return { bySheet: bySheet, bySurveyor: bySurveyor, byType: byType,
+           rows: rows, suCoToday: suCoToday, lichSuToday: lichSuToday, total: total };
+}
+
+var TYPE_LABEL = { 1: 'Trụ STK', 2: 'Trụ trang trí', 3: 'Trụ HTLT', 4: 'Trụ TTLT', 5: 'Tủ CS nổi', 6: 'Tủ CS ngầm' };
+var THAO_TAC_LABEL = { 'edit': '✏️ Sửa', 'delete': '🗑 Xóa', 'move': '📍 Di chuyển', 'create_nhiem_vu': '📋 Giao việc', 'complete_bao_tri': '🔧 BT hoàn thành' };
+
+/**
+ * Build HTML email cho báo cáo ngày.
+ */
+function _buildDailyReportHtml(report, dateStr) {
+  var donVi   = getSetting('donvi_name');
+  var phong   = getSetting('phong_name');
+
+  // Format date display: YYYY-MM-DD → DD/MM/YYYY
+  var dp = dateStr.split('-');
+  var dateDisplay = dp[2] + '/' + dp[1] + '/' + dp[0];
+
+  var withAnh = report.rows.filter(function(r){ return r.hasAnh; }).length;
+  var anhPct  = report.total > 0 ? ((withAnh / report.total) * 100).toFixed(0) : 0;
+
+  var html = '<div style="font-family:Arial,sans-serif;max-width:820px;margin:0 auto;padding:20px;color:#1e293b;">';
+
+  // Header
+  html += '<div style="text-align:center;font-weight:bold;font-size:12px;margin-bottom:4px;">' + donVi.toUpperCase() + ' — ' + phong.toUpperCase() + '</div>';
+  html += '<div style="background:linear-gradient(135deg,#1e40af,#2563eb);border-radius:10px;padding:18px 24px;margin-bottom:20px;color:#fff;text-align:center;">';
+  html += '<div style="font-size:18px;font-weight:900;letter-spacing:1px;">BÁO CÁO KHẢO SÁT NGÀY</div>';
+  html += '<div style="font-size:13px;margin-top:6px;opacity:.85;">📅 ' + dateDisplay + '</div>';
+  html += '</div>';
+
+  // 4 tiles
+  html += '<table width="100%" cellpadding="6" cellspacing="8" style="border-collapse:separate;margin-bottom:20px;"><tr>';
+  html += _htmlTile('📍', report.total,              'Marker khảo sát',      '#2563eb');
+  html += _htmlTile('👷', Object.keys(report.bySurveyor).length, 'Người khảo sát', '#10b981');
+  html += _htmlTile('📷', withAnh + ' (' + anhPct + '%)', 'Có ảnh',          '#8b5cf6');
+  html += _htmlTile('⚠️', report.suCoToday.length,   'Sự cố phát sinh',      '#dc2626');
+  html += '</tr></table>';
+
+  if (report.total === 0 && report.suCoToday.length === 0 && report.lichSuToday.length === 0) {
+    html += '<div style="text-align:center;padding:40px;background:#f8fafc;border-radius:8px;color:#94a3b8;font-size:14px;">🌙 Hôm nay không có hoạt động khảo sát nào được ghi nhận.</div>';
+    html += '</div>';
+    return html;
+  }
+
+  // 1. Theo người khảo sát
+  if (Object.keys(report.bySurveyor).length > 0) {
+    html += '<h3 style="color:#1e40af;border-bottom:2px solid #1e40af;padding-bottom:4px;margin-top:0;">1. Theo người khảo sát</h3>';
+    html += '<table width="100%" style="border-collapse:collapse;font-size:13px;">';
+    html += '<thead><tr style="background:#dbeafe;">';
+    ['Người KS', 'Tổng marker', 'Địa bàn'].forEach(function(h) {
+      html += '<th style="border:1px solid #93c5fd;padding:6px;text-align:left;">' + h + '</th>';
+    });
+    html += '</tr></thead><tbody>';
+    var surveyors = Object.keys(report.bySurveyor).sort(function(a,b){
+      return report.bySurveyor[b].count - report.bySurveyor[a].count;
+    });
+    surveyors.forEach(function(name, idx) {
+      var sv = report.bySurveyor[name];
+      var sheetList = Object.keys(sv.sheets).map(function(s){ return s + ' (' + sv.sheets[s] + ')'; }).join(', ');
+      var bg = idx % 2 === 0 ? '#fff' : '#f0f7ff';
+      html += '<tr style="background:' + bg + ';">';
+      html += '<td style="border:1px solid #bfdbfe;padding:5px;font-weight:bold;">' + name + '</td>';
+      html += '<td style="border:1px solid #bfdbfe;padding:5px;text-align:center;font-size:16px;font-weight:900;color:#2563eb;">' + sv.count + '</td>';
+      html += '<td style="border:1px solid #bfdbfe;padding:5px;font-size:12px;color:#475569;">' + sheetList + '</td>';
+      html += '</tr>';
+    });
+    html += '</tbody></table>';
+  }
+
+  // 2. Theo địa bàn
+  if (Object.keys(report.bySheet).length > 0) {
+    html += '<h3 style="color:#1e40af;border-bottom:2px solid #1e40af;padding-bottom:4px;">2. Theo địa bàn</h3>';
+    html += '<table width="100%" style="border-collapse:collapse;font-size:13px;">';
+    html += '<thead><tr style="background:#dbeafe;"><th style="border:1px solid #93c5fd;padding:6px;text-align:left;">Địa bàn</th><th style="border:1px solid #93c5fd;padding:6px;text-align:center;">Số marker</th></tr></thead><tbody>';
+    Object.keys(report.bySheet).sort().forEach(function(s, idx) {
+      var bg = idx % 2 === 0 ? '#fff' : '#f0f7ff';
+      html += '<tr style="background:' + bg + '">';
+      html += '<td style="border:1px solid #bfdbfe;padding:5px;">' + s + '</td>';
+      html += '<td style="border:1px solid #bfdbfe;padding:5px;text-align:center;font-weight:bold;">' + report.bySheet[s] + '</td>';
+      html += '</tr>';
+    });
+    html += '</tbody></table>';
+  }
+
+  // 3. Theo loại marker
+  if (Object.keys(report.byType).length > 0) {
+    html += '<h3 style="color:#1e40af;border-bottom:2px solid #1e40af;padding-bottom:4px;">3. Theo loại đối tượng</h3>';
+    html += '<table width="100%" style="border-collapse:collapse;font-size:13px;">';
+    html += '<thead><tr style="background:#dbeafe;"><th style="border:1px solid #93c5fd;padding:6px;text-align:left;">Loại</th><th style="border:1px solid #93c5fd;padding:6px;text-align:center;">Số lượng</th></tr></thead><tbody>';
+    Object.keys(report.byType).sort(function(a,b){ return parseInt(a)-parseInt(b); }).forEach(function(t, idx) {
+      var bg = idx % 2 === 0 ? '#fff' : '#f0f7ff';
+      html += '<tr style="background:' + bg + '">';
+      html += '<td style="border:1px solid #bfdbfe;padding:5px;">' + (TYPE_LABEL[parseInt(t)] || 'Loại ' + t) + '</td>';
+      html += '<td style="border:1px solid #bfdbfe;padding:5px;text-align:center;font-weight:bold;">' + report.byType[t] + '</td>';
+      html += '</tr>';
+    });
+    html += '</tbody></table>';
+  }
+
+  // 4. Danh sách chi tiết marker (top 100)
+  if (report.rows.length > 0) {
+    html += '<h3 style="color:#1e40af;border-bottom:2px solid #1e40af;padding-bottom:4px;">4. Chi tiết marker đã khảo sát' + (report.rows.length >= 200 ? ' (hiển thị 200 đầu)' : '') + '</h3>';
+    html += '<table width="100%" style="border-collapse:collapse;font-size:12px;">';
+    html += '<thead><tr style="background:#dbeafe;">';
+    ['Tên trụ/tủ', 'Địa bàn', 'Người KS', 'Tủ ĐK', 'Đường', 'Phường/Xã', 'Ảnh', 'Giờ cập nhật'].forEach(function(h) {
+      html += '<th style="border:1px solid #93c5fd;padding:4px;font-size:11px;">' + h + '</th>';
+    });
+    html += '</tr></thead><tbody>';
+    report.rows.slice(0, 100).forEach(function(row, idx) {
+      var bg = idx % 2 === 0 ? '#fff' : '#f8fafc';
+      var gioCN = String(row.capNhat || '');
+      // Lấy phần giờ: ISO có T, dd/MM/yyyy có space
+      if (gioCN.indexOf('T') !== -1) gioCN = gioCN.slice(11, 16);
+      else if (gioCN.indexOf(' ') !== -1) gioCN = gioCN.split(' ')[1] || '';
+      html += '<tr style="background:' + bg + '">';
+      html += '<td style="border:1px solid #e2e8f0;padding:3px 5px;font-weight:600;">' + row.tenTru + '</td>';
+      html += '<td style="border:1px solid #e2e8f0;padding:3px 5px;font-size:11px;color:#64748b;">' + row.sheet + '</td>';
+      html += '<td style="border:1px solid #e2e8f0;padding:3px 5px;">' + row.nguoiKS + '</td>';
+      html += '<td style="border:1px solid #e2e8f0;padding:3px 5px;font-size:11px;">' + row.tu + '</td>';
+      html += '<td style="border:1px solid #e2e8f0;padding:3px 5px;font-size:11px;">' + row.duong + '</td>';
+      html += '<td style="border:1px solid #e2e8f0;padding:3px 5px;font-size:11px;">' + row.px + '</td>';
+      html += '<td style="border:1px solid #e2e8f0;padding:3px 5px;text-align:center;">' + (row.hasAnh ? '✅' : '—') + '</td>';
+      html += '<td style="border:1px solid #e2e8f0;padding:3px 5px;font-family:monospace;font-size:11px;">' + gioCN + '</td>';
+      html += '</tr>';
+    });
+    html += '</tbody></table>';
+    if (report.rows.length > 100) {
+      html += '<div style="font-size:11px;color:#94a3b8;margin-top:4px;font-style:italic;">... và ' + (report.rows.length - 100) + ' marker nữa (xem đầy đủ trong app)</div>';
+    }
+  }
+
+  // 5. Sự cố hôm nay
+  if (report.suCoToday.length > 0) {
+    html += '<h3 style="color:#dc2626;border-bottom:2px solid #dc2626;padding-bottom:4px;">5. Sự cố phát sinh hôm nay (' + report.suCoToday.length + ')</h3>';
+    html += '<table width="100%" style="border-collapse:collapse;font-size:12px;">';
+    html += '<thead><tr style="background:#fee2e2;">';
+    ['ID', 'Giờ', 'Tên trụ', 'Loại SC', 'Mức độ', 'Trạng thái'].forEach(function(h) {
+      html += '<th style="border:1px solid #fca5a5;padding:4px;">' + h + '</th>';
+    });
+    html += '</tr></thead><tbody>';
+    report.suCoToday.forEach(function(sc, idx) {
+      var bg = idx % 2 === 0 ? '#fff' : '#fff5f5';
+      var gio = String(sc.thoiGian || '').slice(-5);
+      html += '<tr style="background:' + bg + '">';
+      html += '<td style="border:1px solid #fecaca;padding:3px;font-family:monospace;font-size:10px;">' + sc.id + '</td>';
+      html += '<td style="border:1px solid #fecaca;padding:3px;font-family:monospace;">' + gio + '</td>';
+      html += '<td style="border:1px solid #fecaca;padding:3px;font-weight:bold;">' + sc.tenTru + '</td>';
+      html += '<td style="border:1px solid #fecaca;padding:3px;">' + sc.loai + '</td>';
+      html += '<td style="border:1px solid #fecaca;padding:3px;">' + (sc.mucDo === 'Khẩn cấp' ? '<b style="color:#dc2626">⚡ Khẩn cấp</b>' : sc.mucDo) + '</td>';
+      html += '<td style="border:1px solid #fecaca;padding:3px;">' + sc.trangThai + '</td>';
+      html += '</tr>';
+    });
+    html += '</tbody></table>';
+  }
+
+  // 6. Lịch sử thao tác (xóa/sửa/di chuyển)
+  var editLogs = report.lichSuToday.filter(function(r){ return r.thaoTac === 'edit' || r.thaoTac === 'delete' || r.thaoTac === 'move'; });
+  if (editLogs.length > 0) {
+    html += '<h3 style="color:#f59e0b;border-bottom:2px solid #f59e0b;padding-bottom:4px;">6. Thao tác chỉnh sửa / xóa hôm nay (' + editLogs.length + ')</h3>';
+    html += '<table width="100%" style="border-collapse:collapse;font-size:12px;">';
+    html += '<thead><tr style="background:#fef3c7;">';
+    ['Giờ', 'Người thực hiện', 'Thao tác', 'Tên trụ', 'Chi tiết'].forEach(function(h) {
+      html += '<th style="border:1px solid #fcd34d;padding:4px;">' + h + '</th>';
+    });
+    html += '</tr></thead><tbody>';
+    editLogs.slice(0, 50).forEach(function(log, idx) {
+      var bg = idx % 2 === 0 ? '#fff' : '#fffbeb';
+      var gio = String(log.thoiGian || '').slice(11, 16);
+      var label = THAO_TAC_LABEL[log.thaoTac] || log.thaoTac;
+      html += '<tr style="background:' + bg + '">';
+      html += '<td style="border:1px solid #fde68a;padding:3px;font-family:monospace;font-size:11px;">' + gio + '</td>';
+      html += '<td style="border:1px solid #fde68a;padding:3px;">' + log.nguoi + '</td>';
+      html += '<td style="border:1px solid #fde68a;padding:3px;">' + label + '</td>';
+      html += '<td style="border:1px solid #fde68a;padding:3px;font-weight:bold;">' + log.tenTru + '</td>';
+      html += '<td style="border:1px solid #fde68a;padding:3px;font-size:11px;color:#64748b;">' + String(log.chiTiet || '').slice(0, 120) + '</td>';
+      html += '</tr>';
+    });
+    html += '</tbody></table>';
+  }
+
+  html += '<div style="text-align:center;margin-top:28px;padding:10px;background:#f1f5f9;border-radius:6px;font-size:11px;color:#94a3b8;">📧 Báo cáo ngày tự động tạo bởi <b>Lighting Survey</b> lúc 18:00 — Không cần trả lời</div>';
+  html += '</div>';
+  return html;
+}
+
+/**
+ * Hàm chính gửi báo cáo ngày.
+ * @param {string} [dateStr] — YYYY-MM-DD, mặc định hôm nay (Asia/Ho_Chi_Minh)
+ */
+function sendDailyReport(dateStr) {
+  try {
+    initSettingSheet();
+    var enabled = getSetting('daily_report_enabled').toLowerCase();
+    if (enabled !== 'true' && enabled !== '1') {
+      Logger.log('❌ Báo cáo ngày bị tắt (daily_report_enabled = ' + enabled + ')');
+      return { status: 'skipped', reason: 'disabled' };
+    }
+    var recipients = getSetting('email_recipients');
+    if (!recipients) {
+      Logger.log('❌ Không có email_recipients trong Setting');
+      return { status: 'error', reason: 'no_recipients' };
+    }
+
+    if (!dateStr) {
+      dateStr = Utilities.formatDate(new Date(), 'Asia/Ho_Chi_Minh', 'yyyy-MM-dd');
+    }
+
+    Logger.log('═══ Báo cáo ngày ' + dateStr + ' ═══');
+    var report = _aggregateDailyReport(dateStr);
+    Logger.log('Tổng marker: ' + report.total + ' | Sự cố: ' + report.suCoToday.length + ' | Thao tác: ' + report.lichSuToday.length);
+
+    var dp = dateStr.split('-');
+    var dateDisplay = dp[2] + '/' + dp[1] + '/' + dp[0];
+    var subject = '[Lighting Survey] Báo cáo khảo sát ngày ' + dateDisplay + ' — ' + report.total + ' marker';
+
+    var html = _buildDailyReportHtml(report, dateStr);
+    var plain = 'Báo cáo khảo sát ngày ' + dateDisplay + ':\n'
+      + '- Tổng marker: ' + report.total + '\n'
+      + '- Người khảo sát: ' + Object.keys(report.bySurveyor).length + '\n'
+      + '- Sự cố: ' + report.suCoToday.length + '\n'
+      + 'Vui lòng bật HTML để xem chi tiết.';
+
+    GmailApp.sendEmail(recipients, subject, plain, {
+      htmlBody: html,
+      name: getSetting('phong_name') || 'Lighting Survey'
+    });
+
+    Logger.log('✓ Đã gửi báo cáo ngày ' + dateDisplay + ' đến: ' + recipients);
+    return { status: 'ok', date: dateStr, total: report.total, recipients: recipients };
+  } catch (err) {
+    Logger.log('❌ Lỗi gửi báo cáo ngày: ' + err.message);
+    return { status: 'error', message: err.message };
+  }
+}
+
+/**
+ * Test ngay — chạy tay từ Editor để gửi báo cáo hôm nay.
+ */
+function sendDailyReportNow() {
+  var result = sendDailyReport();
+  Logger.log('Kết quả: ' + JSON.stringify(result));
+  return result;
+}
+
+/**
+ * Gửi báo cáo cho ngày cụ thể (dùng khi cần gửi lại báo cáo ngày đã qua).
+ * Sửa dateStr trước rồi chạy.
+ */
+function sendDailyReportForDate() {
+  var dateStr = '2026-07-13'; // ← sửa ngày cần gửi (YYYY-MM-DD)
+  var result = sendDailyReport(dateStr);
+  Logger.log('Kết quả: ' + JSON.stringify(result));
+}
+
+/**
+ * Setup trigger gửi báo cáo ngày lúc 18:00 (Asia/Ho_Chi_Minh).
+ * Chạy 1 lần từ Editor — GAS tự chạy hàng ngày sau đó.
+ */
+function setupDailyReportTrigger() {
+  // Xóa trigger cũ tránh duplicate
+  var triggers = ScriptApp.getProjectTriggers();
+  var removed = 0;
+  triggers.forEach(function(t) {
+    if (t.getHandlerFunction() === 'sendDailyReport') {
+      ScriptApp.deleteTrigger(t);
+      removed++;
+    }
+  });
+
+  var hour = parseInt(getSetting('daily_report_hour') || '18');
+
+  ScriptApp.newTrigger('sendDailyReport')
+    .timeBased()
+    .everyDays(1)
+    .atHour(hour)
+    .create();
+
+  Logger.log('✓ Trigger đã setup — sendDailyReport chạy ' + hour + ':00 mỗi ngày');
+  if (removed > 0) Logger.log('  (đã xóa ' + removed + ' trigger cũ)');
+  Logger.log('  Trigger hiện tại:');
+  ScriptApp.getProjectTriggers().forEach(function(t, i) {
+    Logger.log('  ' + (i + 1) + '. ' + t.getHandlerFunction() + ' — ' + t.getEventType());
+  });
+}
+
+/**
+ * Xóa trigger báo cáo ngày.
+ */
+function removeDailyReportTrigger() {
+  var triggers = ScriptApp.getProjectTriggers();
+  var removed = 0;
+  triggers.forEach(function(t) {
+    if (t.getHandlerFunction() === 'sendDailyReport') {
+      ScriptApp.deleteTrigger(t);
+      removed++;
+    }
+  });
+  Logger.log('✓ Đã xóa ' + removed + ' trigger sendDailyReport');
+}
+
+// Handler cho client call (doPost action: send_daily_report)
+function handleSendDailyReport(data) {
+  var dateStr = String(data.date || '').trim() || undefined;
+  var result = sendDailyReport(dateStr);
+  return jsonResponse(result);
+}
+
+/**
+ * Trả về dữ liệu báo cáo ngày dạng JSON cho client hiển thị trong app.
+ * doPost action: get_daily_report
+ * Request: { action, date: 'YYYY-MM-DD' }  (date mặc định hôm nay nếu bỏ trống)
+ */
+function handleGetDailyReport(data) {
+  try {
+    var dateStr = String(data.date || '').trim();
+    if (!dateStr) {
+      dateStr = Utilities.formatDate(new Date(), 'Asia/Ho_Chi_Minh', 'yyyy-MM-dd');
+    }
+    var report = _aggregateDailyReport(dateStr);
+    return jsonResponse({ status: 'ok', date: dateStr, report: report });
+  } catch (err) {
+    return jsonResponse({ status: 'error', message: 'get_daily_report lỗi: ' + err.message });
+  }
 }
