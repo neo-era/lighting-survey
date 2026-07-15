@@ -1481,6 +1481,10 @@
                                     🗑 Gỡ
                                 </button>
                             </div>
+                            <button id="btnToggleBasemap" onclick="_toggleBasemap()" class="ctrl-btn outline"
+                                    style="width:100%;margin-top:6px;font-size:11px;padding:5px;color:#64748b;border-color:#cbd5e1;">
+                                🗺 Ẩn bản đồ nền
+                            </button>
                             <!-- P19: Snap toggle -->
                             <div style="margin-top:8px;padding-top:6px;border-top:1px solid var(--border);">
                                 <label class="ctrl-radio" style="padding:4px 6px;font-size:11px;">
@@ -5255,6 +5259,7 @@
         // P18: Layer control state
         let _cadLayerVisibility = {};    // { 'LAYER_NAME': false } — mặc định true nếu không có
         let _cadLayerColorOverride = {}; // { 'LAYER_NAME': '#hex' }
+        let _hiddenTileLayers = [];      // tile layers tạm ẩn khi xem CAD
 
         // P18: Preset regex cho layer patterns tiếng Việt + English
         const _CAD_LAYER_PRESETS = {
@@ -5421,6 +5426,106 @@
 
         function _parseDxfEntities(dxf) {
             const entities = [];
+
+            // Build block definitions map (skip AutoCAD internal blocks *Model_Space etc.)
+            const blockDefs = {};
+            if (dxf.blocks) {
+                Object.keys(dxf.blocks).forEach(name => {
+                    if (!name.startsWith('*')) blockDefs[name] = dxf.blocks[name];
+                });
+            }
+
+            // Transform point from block-local to world coordinates
+            function xformPt(p, bx, by, sx, sy, cosR, sinR, ix, iy) {
+                const dx = ((p.x || 0) - bx) * sx;
+                const dy = ((p.y || 0) - by) * sy;
+                return { x: ix + dx * cosR - dy * sinR, y: iy + dx * sinR + dy * cosR };
+            }
+
+            // Push entities from a block, applying INSERT transform (recursive, max depth 4)
+            function expandInsert(ins, depth) {
+                if (depth > 4) return;
+                const block = blockDefs[ins.name];
+                if (!block || !Array.isArray(block.entities)) return;
+
+                const bx = (block.position && block.position.x) || 0;
+                const by = (block.position && block.position.y) || 0;
+                const ix = (ins.position && ins.position.x) || 0;
+                const iy = (ins.position && ins.position.y) || 0;
+                const sx = ins.xScale || 1;
+                const sy = ins.yScale || 1;
+                const rotRad = ((ins.rotation || 0) * Math.PI) / 180;
+                const cosR = Math.cos(rotRad), sinR = Math.sin(rotRad);
+                const insLayer = ins.layer || '0';
+                const insColor = ins.color;
+
+                // Array insert support (columnCount × rowCount grid)
+                const cols = ins.columnCount || 1;
+                const rows = ins.rowCount || 1;
+                const colSpacing = ins.columnSpacing || 0;
+                const rowSpacing = ins.rowSpacing || 0;
+
+                for (let col = 0; col < cols; col++) {
+                    for (let row = 0; row < rows; row++) {
+                        const offX = col * colSpacing;
+                        const offY = row * rowSpacing;
+                        const ox = ix + offX, oy = iy + offY;
+                        const xf = p => xformPt(p, bx, by, sx, sy, cosR, sinR, ox, oy);
+
+                        block.entities.forEach(e => {
+                            try {
+                                const layer = e.layer || insLayer;
+                                const color = e.color !== undefined ? e.color : insColor;
+
+                                if (e.type === 'INSERT') {
+                                    // Compose nested INSERT: compute new insertion point in world space
+                                    const nestedPos = xf(e.position || { x: 0, y: 0 });
+                                    expandInsert({
+                                        name: e.name,
+                                        position: nestedPos,
+                                        xScale: (e.xScale || 1) * sx,
+                                        yScale: (e.yScale || 1) * sy,
+                                        rotation: (e.rotation || 0) + (ins.rotation || 0),
+                                        columnCount: e.columnCount, rowCount: e.rowCount,
+                                        columnSpacing: e.columnSpacing, rowSpacing: e.rowSpacing,
+                                        layer, color
+                                    }, depth + 1);
+                                } else if (e.type === 'LINE' && e.vertices && e.vertices.length >= 2) {
+                                    entities.push({
+                                        type: 'line', layer, color,
+                                        points: [xf(e.vertices[0]), xf(e.vertices[1])]
+                                    });
+                                } else if ((e.type === 'LWPOLYLINE' || e.type === 'POLYLINE') && Array.isArray(e.vertices)) {
+                                    entities.push({
+                                        type: 'polyline', layer, color,
+                                        points: e.vertices.map(v => xf(v)),
+                                        closed: !!(e.shape || e.closed)
+                                    });
+                                } else if (e.type === 'CIRCLE' && e.center) {
+                                    const c = xf(e.center);
+                                    entities.push({
+                                        type: 'circle', layer, color,
+                                        center: c,
+                                        radius: e.radius * Math.abs(sx)
+                                    });
+                                } else if ((e.type === 'TEXT' || e.type === 'MTEXT') && (e.position || e.startPoint)) {
+                                    const rawText = (e.text || e.string || '').toString();
+                                    const cleanText = _cleanMText(rawText);
+                                    if (cleanText) {
+                                        entities.push({
+                                            type: 'text', layer, color,
+                                            position: xf(e.position || e.startPoint),
+                                            text: cleanText,
+                                            height: e.textHeight || 2.5
+                                        });
+                                    }
+                                }
+                            } catch { /* ignore malformed block entity */ }
+                        });
+                    }
+                }
+            }
+
             (dxf.entities || []).forEach(e => {
                 try {
                     if (e.type === 'LINE') {
@@ -5447,15 +5552,17 @@
                         const pos = e.position || e.startPoint;
                         const rawText = (e.text || e.string || '').toString();
                         const cleanText = _cleanMText(rawText);
-                        if (!cleanText) return; // skip empty text
+                        if (!cleanText) return;
                         entities.push({
                             type: 'text', layer: e.layer, color: e.color,
                             position: { x: pos.x, y: pos.y },
                             text: cleanText,
                             height: e.textHeight || 2.5
                         });
+                    } else if (e.type === 'INSERT') {
+                        expandInsert(e, 0);
                     }
-                    // ARC, HATCH, BLOCK, DIMENSION — skip cho MVP P17
+                    // ARC, HATCH, DIMENSION — skip
                 } catch { /* ignore malformed entity */ }
             });
             return entities;
@@ -5803,11 +5910,43 @@
             if (btn) btn.textContent = _cadVisible ? '👁 Ẩn' : '👁 Hiện';
         }
 
+        function _toggleBasemap() {
+            const btn = document.getElementById('btnToggleBasemap');
+            if (_hiddenTileLayers.length === 0) {
+                // Ẩn: lưu và xóa tất cả tile layers khỏi map
+                map.eachLayer(l => {
+                    if (l instanceof L.TileLayer) {
+                        _hiddenTileLayers.push(l);
+                        map.removeLayer(l);
+                    }
+                });
+                if (btn) {
+                    btn.textContent = '🗺 Hiện bản đồ nền';
+                    btn.style.cssText += ';color:#92400e;border-color:#fde68a;background:#fef3c7;';
+                }
+            } else {
+                // Restore
+                _hiddenTileLayers.forEach(l => l.addTo(map));
+                _hiddenTileLayers = [];
+                if (btn) {
+                    btn.textContent = '🗺 Ẩn bản đồ nền';
+                    btn.style.color = '#64748b';
+                    btn.style.borderColor = '#cbd5e1';
+                    btn.style.background = '';
+                }
+            }
+        }
+
         async function _removeCad() {
             if (!_cadMeta) return;
             if (!confirm(`Gỡ bản vẽ "${_cadMeta.filename}" khỏi ${currentSheet}?`)) return;
             if (_cadLayer) { map.removeLayer(_cadLayer); _cadLayer = null; }
             if (_cadTextLayer) { map.removeLayer(_cadTextLayer); _cadTextLayer = null; }
+            // Restore tile layers nếu đang ẩn
+            if (_hiddenTileLayers.length > 0) {
+                _hiddenTileLayers.forEach(l => l.addTo(map));
+                _hiddenTileLayers = [];
+            }
             _stopCalibrate();
             _cadVertexIndex = [];
             _cadEntities = []; _cadMeta = null;
