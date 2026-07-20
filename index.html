@@ -859,6 +859,10 @@
         .login-btn { width:100%;padding:13px;border-radius:12px;border:none;background:linear-gradient(135deg,var(--orange),#dc2626);color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;transition:opacity .2s;box-shadow:0 4px 16px rgba(249,115,22,.4); }
         .login-btn:hover { opacity:.9; }
         .login-btn:disabled { opacity:.6;cursor:not-allowed; }
+        #loginProgressWrap { height:3px;background:#e2e8f0;border-radius:2px;margin:10px 0 14px;display:none;overflow:hidden; }
+        #loginProgressBar { height:100%;width:0%;background:linear-gradient(90deg,#f97316,#dc2626);border-radius:2px; }
+        #loginError { min-height:20px;font-size:13px;color:var(--red);margin-bottom:10px;text-align:center;transition:color .3s; }
+        #loginError.info { color:#64748b; }
         /* user chip in topbar */
         #topbarUser { display:none; align-items:center; gap:12px; background:linear-gradient(135deg,#2563eb,#1d4ed8); border-radius:12px; padding:10px 14px; cursor:pointer; font-size:14px; font-weight:600; color:#fff; box-shadow:0 2px 8px rgba(37,99,235,.25); transition:transform .12s, box-shadow .15s; }
         #topbarUser:hover { transform:translateY(-1px); box-shadow:0 4px 14px rgba(37,99,235,.35); }
@@ -907,6 +911,7 @@
                         onkeydown="if(event.key==='Enter')doLogin()">
                 </div>
                 <div id="loginError"></div>
+                <div id="loginProgressWrap"><div id="loginProgressBar"></div></div>
                 <button class="login-btn" id="loginBtn" onclick="doLogin()">Đăng nhập</button>
                 <button id="loginCancelBtn" onclick="cancelLogin()"
                     style="display:none;margin-top:8px;width:100%;padding:10px;border:1.5px solid #cbd5e1;border-radius:10px;background:#f8fafc;color:#64748b;font-size:15px;cursor:pointer;">
@@ -3974,6 +3979,7 @@
                 currentUser = null;
                 document.getElementById('loginOverlay').classList.add('visible');
                 setTimeout(() => { const el = document.getElementById('lUsername'); if (el) el.focus(); }, 150);
+                _warmupGas(); // hâm nóng GAS ngay khi hiện form login
             }
         }
 
@@ -4010,6 +4016,71 @@
             if (_loginCtrl) _loginCtrl.abort();
         }
 
+        // ─── Pre-warm GAS + login progress helpers ───
+        let _gasWarmed = false;
+        async function _warmupGas() {
+            if (_gasWarmed || !KHAOSAT_GAS_URL) return;
+            try {
+                await fetch(KHAOSAT_GAS_URL, {
+                    method: 'POST',
+                    body: JSON.stringify({ action: 'ping' }),
+                    signal: AbortSignal.timeout(50000)
+                });
+                _gasWarmed = true;
+                console.log('[warmup] GAS ready');
+            } catch { /* ignore — cold start absorbed */ }
+        }
+
+        let _loginElapsedTid = null;
+        function _startLoginProgress() {
+            const wrap = document.getElementById('loginProgressWrap');
+            const bar  = document.getElementById('loginProgressBar');
+            if (!wrap || !bar) return;
+            wrap.style.display = 'block';
+            bar.style.transition = 'none';
+            bar.style.background = 'linear-gradient(90deg,#f97316,#dc2626)';
+            bar.style.width = '0%';
+            // start filling: logarithmic easing toward 90% over 50s
+            requestAnimationFrame(() => {
+                bar.style.transition = 'width 50s cubic-bezier(0.15, 0.8, 0.3, 1)';
+                bar.style.width = '90%';
+            });
+        }
+        function _stopLoginProgress(success) {
+            const wrap = document.getElementById('loginProgressWrap');
+            const bar  = document.getElementById('loginProgressBar');
+            if (!wrap || !bar) return;
+            if (success) {
+                bar.style.transition = 'width 0.25s ease, background 0.25s ease';
+                bar.style.background = '#10b981';
+                bar.style.width = '100%';
+                setTimeout(() => { wrap.style.display = 'none'; bar.style.width = '0%'; }, 500);
+            } else {
+                bar.style.transition = 'none';
+                bar.style.width = '0%';
+                wrap.style.display = 'none';
+            }
+        }
+        function _startElapsedTicker(errEl) {
+            const t0 = Date.now();
+            _loginElapsedTid = setInterval(() => {
+                if (!errEl || !errEl.classList.contains('info')) return;
+                const s = Math.floor((Date.now() - t0) / 1000);
+                if (s < 3) {
+                    errEl.textContent = '';
+                } else if (s < 8) {
+                    errEl.textContent = 'Máy chủ đang khởi động... ' + s + 's';
+                } else if (s < 25) {
+                    errEl.textContent = 'Vui lòng chờ... ' + s + 's';
+                } else {
+                    errEl.textContent = 'Hệ thống phản hồi chậm, gần xong... ' + s + 's';
+                }
+            }, 1000);
+        }
+        function _stopElapsedTicker() {
+            if (_loginElapsedTid) { clearInterval(_loginElapsedTid); _loginElapsedTid = null; }
+        }
+
         async function doLogin() {
             const username = (document.getElementById('lUsername').value || '').trim();
             const password = document.getElementById('lPassword').value || '';
@@ -4021,22 +4092,14 @@
             if (!password) { errEl.textContent = 'Vui lòng nhập mật khẩu'; return; }
             btn.disabled = true; btn.textContent = '⏳ Đang đăng nhập...';
             if (cancelBtn) cancelBtn.style.display = 'none';
+            errEl.classList.add('info'); errEl.textContent = '';
+            _startLoginProgress();
+            _startElapsedTicker(errEl);
+            // Hiện nút Hủy sau 8s
+            const cancelTid = setTimeout(() => { if (cancelBtn) cancelBtn.style.display = 'inline-block'; }, 8000);
             _loginCtrl = new AbortController();
             const ctrl = _loginCtrl;
-            // Tăng timeout lên 60s — GAS cold start + PBKDF2 verify + auto-migrate
-            // plaintext password có thể mất 30-40s trong lần login đầu tiên
             const tid = setTimeout(() => ctrl.abort(), 60000);
-            // Hiện nút Hủy sau 4 giây
-            const cancelTid = setTimeout(() => {
-                if (cancelBtn) {
-                    cancelBtn.style.display = 'inline-block';
-                    errEl.textContent = 'Máy chủ đang khởi động (có thể mất 30-40 giây lần đầu)...';
-                }
-            }, 4000);
-            // Hiển thị progress rõ hơn sau 15s
-            const progressTid = setTimeout(() => {
-                errEl.textContent = 'Vẫn đang xử lý — vui lòng chờ thêm ...';
-            }, 15000);
             const startTime = Date.now();
             try {
                 const res = await fetch(KHAOSAT_GAS_URL, {
@@ -4044,32 +4107,37 @@
                     body: JSON.stringify({ action: 'login', username, password }),
                     signal: ctrl.signal
                 });
-                clearTimeout(tid); clearTimeout(cancelTid); clearTimeout(progressTid);
+                clearTimeout(tid); clearTimeout(cancelTid);
                 if (!res.ok) throw new Error('HTTP ' + res.status);
                 const data = await res.json();
                 if (data.status === 'ok') {
                     const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
                     console.log('[login] OK sau ' + elapsed + 's');
+                    _stopElapsedTicker();
+                    _stopLoginProgress(true);
                     currentUser = data.user;
                     localStorage.setItem('ks_user', JSON.stringify(currentUser));
-                    // Cache password trong memory (KHÔNG localStorage) để dùng cho admin actions
-                    // Refresh → mất, phải relogin (an toàn hơn lưu persistent)
                     if (currentUser.role === 'admin') {
                         window._adminAuth = { username: username, password: password };
                     }
+                    _gasWarmed = true;
                     _showApp();
                 } else {
+                    errEl.classList.remove('info');
                     errEl.textContent = data.message || 'Sai tên đăng nhập hoặc mật khẩu';
                 }
             } catch(e) {
-                clearTimeout(tid); clearTimeout(cancelTid); clearTimeout(progressTid);
+                clearTimeout(tid); clearTimeout(cancelTid);
                 const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
                 console.log('[login] Lỗi sau ' + elapsed + 's:', e.message);
+                errEl.classList.remove('info');
                 errEl.textContent = e.name === 'AbortError'
-                    ? `Máy chủ quá chậm (${elapsed}s). Bấm Đăng nhập lại — lần sau sẽ nhanh hơn (GAS đã warm-up).`
+                    ? `Máy chủ quá chậm (${elapsed}s). Bấm Đăng nhập lại — lần sau sẽ nhanh hơn.`
                     : 'Lỗi kết nối: ' + e.message;
             } finally {
                 _loginCtrl = null;
+                _stopElapsedTicker();
+                _stopLoginProgress(false);
                 btn.disabled = false; btn.textContent = 'Đăng nhập';
                 if (cancelBtn) cancelBtn.style.display = 'none';
             }
@@ -4086,6 +4154,8 @@
             const chip = document.getElementById('topbarUser');
             if (chip) chip.style.display = 'none';
             document.getElementById('loginOverlay').classList.add('visible');
+            _gasWarmed = false; // reset để warmup lại cho lần login tiếp
+            _warmupGas();
             setTimeout(() => {
                 const el = document.getElementById('lUsername');
                 if (el) { el.value = ''; el.focus(); }
@@ -7825,10 +7895,14 @@
         function initializeMap() {
             const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom:33, attribution:'© OpenStreetMap' });
             const googleMap = L.tileLayer('https://{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', { maxZoom:33, subdomains:['mt0','mt1','mt2','mt3'], attribution:'© Google' });
-            const googleSat = L.tileLayer('https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', { maxZoom:20, attribution:'© Google' });
-            const satellite = L.tileLayer('https://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', { maxZoom:33, subdomains:['mt0','mt1','mt2','mt3'], attribution:'© Google' });
+            const googleSat = L.tileLayer('https://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', { maxZoom:33, subdomains:['mt0','mt1','mt2','mt3'], attribution:'© Google' });
             const googleHybrid = L.tileLayer('https://{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', { maxZoom:33, subdomains:['mt0','mt1','mt2','mt3'], attribution:'© Google' });
             const streetLabels = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager_only_labels/{z}/{x}/{y}{r}.png', { maxZoom:33, attribution:'© CartoDB', pane:'shadowPane' });
+            const hcmcMap = L.tileLayer('https://bando.tphcm.gov.vn/service/gisp/tile/raster/{z}/{x}/{y}', { maxZoom:20, maxNativeZoom:14, attribution:'© Bản đồ số TP.HCM', errorTileUrl:'' });
+            const esriImagery = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom:20, attribution:'© Esri, Maxar, Earthstar Geographics' });
+            const esriStreet = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', { maxZoom:20, attribution:'© Esri' });
+            const cartoLight = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', { maxZoom:33, attribution:'© CartoDB Positron', subdomains:'abcd' });
+            const cartoDark = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom:33, attribution:'© CartoDB Dark Matter', subdomains:'abcd' });
 
             map = L.map('map', { center:[10.762622,106.660172], zoom:13, maxZoom:33, layers:[googleMap] });
             if (isMobile) {
@@ -7874,9 +7948,13 @@
                 {
                     '🗺 Google Maps': googleMap,
                     'OpenStreetMap': osm,
-                    'Vệ tinh (Google)': googleSat,
+                    '🏙 Bản đồ TPHCM (GIS)': hcmcMap,
+                    '🛰 Vệ tinh (Google)': googleSat,
                     '🛰 Vệ tinh + tên đường': googleHybrid,
-                    'Satellite (old)': satellite
+                    '🛰 Vệ tinh Esri (PDF OK)': esriImagery,
+                    '🗺 Esri Street Map': esriStreet,
+                    '⬜ CartoDB Sáng': cartoLight,
+                    '⬛ CartoDB Tối': cartoDark,
                 },
                 { '🏷 Nhãn tên đường': streetLabels },
                 { position: 'topright' }

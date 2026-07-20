@@ -912,6 +912,11 @@ function doPost(e) {
   try {
     const data = JSON.parse(e.postData.contents);
 
+    // Ping để warm-up GAS (client gọi ngay khi hiện form login)
+    if (data.action === 'ping') {
+      return jsonOk({ status: 'ok', pong: true });
+    }
+
     if (data.action === 'login') {
       return handleLogin((data.username || '').trim(), data.password || '');
     }
