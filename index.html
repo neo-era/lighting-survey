@@ -876,6 +876,13 @@
         .leaflet-top.leaflet-right { top: 50%; transform: translateY(-50%); }
         /* (Đã gỡ CSS hover cho nút xoay — chức năng xoay đã loại bỏ) */
 
+        /* ═══ ZOOM-TIER FILTER OPTIMIZATION ═══ */
+        /* Disable expensive SVG drop-shadow at zoom < 18 — saves GPU repaint for 500+ icons */
+        #map:not(.z-hi) .leaflet-marker-pane [filter],
+        #map:not(.z-hi) .leaflet-marker-pane [style*="filter:drop-shadow"] {
+            filter: none !important;
+        }
+
         /* ═══ MOBILE OPTIMIZATION ═══ */
         @media (max-width: 768px) {
             /* Tắt transition nặng */
@@ -4713,7 +4720,7 @@
         const labelZoomThreshold = isMobile ? 18 : 17;
         let map;
         let markersCluster = L.markerClusterGroup({
-            disableClusteringAtZoom: isMobile ? 16 : 15,
+            disableClusteringAtZoom: 17,
             maxClusterRadius: isMobile ? 80 : 60,
             spiderfyOnMaxZoom: true,
             chunkedLoading: true,
@@ -4721,6 +4728,7 @@
             chunkDelay: 50
         });
         let labelLayerGroup = L.layerGroup();
+        const _lblMarkers = new Map(); // _rid → L.Marker (label) — dùng cho viewport culling
         let markers = [];
         let loadedData = [];
         const _labelOffsets = {};     // rowId → {dlat, dlon}
@@ -7083,9 +7091,29 @@
                         }, 1500);
                     });
                 }
-                labelLayerGroup.addLayer(_lbl);
+                _lblMarkers.set(_rid, _lbl); // không addLayer trực tiếp — viewport culling quyết định
             }
             return marker;
+        }
+
+        function _refreshLabelViewport() {
+            if (map.getZoom() < labelZoomThreshold) {
+                map.removeLayer(labelLayerGroup);
+                return;
+            }
+            if (!map.hasLayer(labelLayerGroup)) map.addLayer(labelLayerGroup);
+            const bounds = map.getBounds().pad(0.3);
+            _lblMarkers.forEach(function(lbl, rid) {
+                const inView = bounds.contains(lbl.getLatLng());
+                const inGroup = labelLayerGroup.hasLayer(lbl);
+                if (inView && !inGroup) {
+                    if (labelEditMode) { if (lbl.dragging) lbl.dragging.enable(); }
+                    else { if (lbl.dragging) lbl.dragging.disable(); }
+                    labelLayerGroup.addLayer(lbl);
+                } else if (!inView && inGroup) {
+                    labelLayerGroup.removeLayer(lbl);
+                }
+            });
         }
 
         function updateAddMarkerButton() {
@@ -7985,12 +8013,21 @@
                 showMarkerPopupAt(e.latlng.lat, e.latlng.lng);
             });
 
-            map.on('zoomend', function() {
-                if (map.getZoom() < labelZoomThreshold) map.removeLayer(labelLayerGroup);
-                else map.addLayer(labelLayerGroup);
-                _applyZoomTier(); // 9.5 — re-render khi đổi tier (cabinet ↔ all)
-            });
+            function _syncZoomFilterClass() {
+                const el = document.getElementById('map');
+                if (!el) return;
+                if (map.getZoom() >= 18) el.classList.add('z-hi');
+                else el.classList.remove('z-hi');
+            }
 
+            map.on('zoomend', function() {
+                _refreshLabelViewport();
+                _applyZoomTier(); // 9.5 — re-render khi đổi tier (cabinet ↔ all)
+                _syncZoomFilterClass(); // #3 — enable drop-shadow chỉ ở zoom ≥ 18
+            });
+            map.on('moveend', _refreshLabelViewport);
+
+            _syncZoomFilterClass(); // initial state
 
             return map;
         }
@@ -8001,6 +8038,7 @@
             const fitView = !opts || opts.fitView !== false;
             markersCluster.clearLayers();
             labelLayerGroup.clearLayers();
+            _lblMarkers.clear();
             markers = [];
             const rows = Array.isArray(data) ? data : [];
             const total = rows.length;
@@ -8015,8 +8053,7 @@
             if (fitView && markers.length > 0) {
                 try { map.fitBounds(markersCluster.getBounds().pad(0.1)); } catch {}
             }
-            if (map.getZoom() < labelZoomThreshold) map.removeLayer(labelLayerGroup);
-            else map.addLayer(labelLayerGroup);
+            _refreshLabelViewport();
         }
 
         function processFile(file) {
