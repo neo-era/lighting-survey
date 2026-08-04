@@ -437,6 +437,37 @@
             0%, 100% { transform: scale(1); opacity: 1; }
             50% { transform: scale(1.15); opacity: .85; }
         }
+        /* P21 — Icon cảnh báo sự cố chớp chớp trên marker */
+        @keyframes incidentBlink {
+            0%, 100% { background:#ef4444; box-shadow:0 0 0 0 rgba(239,68,68,.9), 0 1px 3px rgba(0,0,0,.4); }
+            50%      { background:#fbbf24; box-shadow:0 0 0 6px rgba(239,68,68,0), 0 1px 3px rgba(0,0,0,.4); }
+        }
+        @keyframes incidentRipple {
+            0%   { transform:scale(.6); opacity:.9; }
+            100% { transform:scale(2.6); opacity:0; }
+        }
+        .incident-alert {
+            position:absolute; top:-6px; right:-6px;
+            width:14px; height:14px;
+            border:2px solid #fff;
+            border-radius:50%;
+            display:flex; align-items:center; justify-content:center;
+            font-family:Arial,sans-serif; font-size:9px; font-weight:900;
+            color:#fff;
+            pointer-events:none; z-index:1000;
+            animation: incidentBlink 1s ease-in-out infinite;
+        }
+        .incident-alert::before {
+            content:'';
+            position:absolute;
+            top:50%; left:50%;
+            width:14px; height:14px;
+            margin:-7px 0 0 -7px;
+            border-radius:50%;
+            background:rgba(239,68,68,.5);
+            animation: incidentRipple 1.4s ease-out infinite;
+            pointer-events:none;
+        }
 
         /* P18 — CAD Layer control row */
         .cad-layer-row {
@@ -4150,16 +4181,19 @@
                 if (page.sheet === currentSheet) opt.selected = true;
                 sel.insertBefore(opt, firstOpt);
             });
+            // Sự cố — mọi role edit thấy được (admin, user, user1) để tra cứu
+            if (canEdit()) {
+                const scOpt = document.createElement('option');
+                scOpt.value = 'suco';
+                scOpt.textContent = '⚠️ Sự cố';
+                sel.appendChild(scOpt);
+            }
             if (currentUser && currentUser.role === 'admin') {
                 // P25: Dashboard — đầu list admin options
                 const dbOpt = document.createElement('option');
                 dbOpt.value = 'dashboard';
                 dbOpt.textContent = '📊 Dashboard KPI';
                 sel.appendChild(dbOpt);
-                const scOpt = document.createElement('option');
-                scOpt.value = 'suco';
-                scOpt.textContent = '⚠️ Sự cố';
-                sel.appendChild(scOpt);
                 // P22: Bảo trì admin option
                 const btOpt = document.createElement('option');
                 btOpt.value = 'baotri';
@@ -4745,8 +4779,8 @@
                 });
             });
 
-            // 2. Sự cố mới (admin) — Chờ xử lý
-            if (isAdmin && _activeIncidents.size > 0) {
+            // 2. Sự cố mới — Chờ xử lý (admin/user/user1 đều nhận notification để xử lý nhanh)
+            if (canEdit() && _activeIncidents.size > 0) {
                 let urgentCount = 0, normalCount = 0;
                 _activeIncidents.forEach(inc => {
                     inc.items.forEach(it => {
@@ -7422,7 +7456,7 @@
                 ? `<div style="position:absolute;top:19px;left:50%;transform:translateX(-50%);white-space:nowrap;font-family:Arial,sans-serif;font-size:8px;font-weight:700;color:#fff;background:${color};border-radius:3px;padding:1px 4px;line-height:1.5;box-shadow:0 1px 2px rgba(0,0,0,.4);pointer-events:none;">${compact}</div>`
                 : '';
             const incidentDot = hasIncident
-                ? `<div style="position:absolute;top:-3px;right:-3px;width:9px;height:9px;background:#ef4444;border:1.5px solid #fff;border-radius:50%;box-shadow:0 1px 3px rgba(0,0,0,.4);pointer-events:none;"></div>`
+                ? `<div class="incident-alert">!</div>`
                 : '';
             return L.divIcon({
                 className: '',
@@ -7470,7 +7504,7 @@
                    <circle cx="12" cy="18" r="2.8" fill="white" opacity="0.8"/>
                    <line x1="8" y1="18" x2="10" y2="18" stroke="${color}" stroke-width="1.2"/>`;
             const incidentDot = hasIncident
-                ? `<div style="position:absolute;top:-3px;right:-3px;width:9px;height:9px;background:#ef4444;border:1.5px solid #fff;border-radius:50%;box-shadow:0 1px 3px rgba(0,0,0,.4);pointer-events:none;"></div>`
+                ? `<div class="incident-alert">!</div>`
                 : '';
             return L.divIcon({
                 className: '',
@@ -7852,6 +7886,11 @@
                     const bn = normalizeMarkerBaseName(nameInput.value.trim());
                     const cabinetName = cabinetInput ? cabinetInput.value.trim() : '';
                     baseSelect.innerHTML = '';
+                    // Option trống ở đầu để user xóa marker gốc (đặt row[14] = '')
+                    const emptyOpt = document.createElement('option');
+                    emptyOpt.value = '';
+                    emptyOpt.textContent = '— (không có marker gốc) —';
+                    baseSelect.appendChild(emptyOpt);
                     const addedIdx = new Set();
                     // Build map: marker name → cabinet name (từ loadedData[*][7])
                     const cabinetByName = {};
@@ -11133,6 +11172,10 @@
                         <option value="Bình thường" ${fSev==='Bình thường'?'selected':''}>🟠 Bình thường</option>
                         <option value="Thấp" ${fSev==='Thấp'?'selected':''}>🟢 Thấp</option>
                     </select>
+                    <button class="btn btn-sm btn-success" onclick="exportSuCoReport()" title="Xuất báo cáo Excel"
+                            style="font-size:12px;padding:6px 12px;font-weight:700;">
+                        📊 Xuất báo cáo
+                    </button>
                 </div>
             `;
 
@@ -11141,13 +11184,16 @@
                 return;
             }
 
-            let html = summary + `<table class="table table-sm table-bordered" style="font-size:12px;min-width:800px;">
+            let html = summary + `<table class="table table-sm table-bordered" style="font-size:12px;min-width:1000px;">
                 <thead style="background:#f8fafc;font-weight:700;position:sticky;top:0;">
-                    <tr><th>ID</th><th>Thời gian</th><th>Tên trụ</th><th>Loại SC</th><th>Mức độ</th><th>Mô tả</th><th>Người báo</th><th>Trạng thái</th><th>Hành động</th></tr>
+                    <tr><th>ID</th><th>Thời gian</th><th>Tên trụ</th><th>Đường</th><th>Phường/Xã</th><th>Loại SC</th><th>Mức độ</th><th>Mô tả</th><th>Người báo</th><th>Trạng thái</th><th>Hành động</th></tr>
                 </thead><tbody>`;
             for (const r of rows) {
                 const scId = r[0], tg = String(r[1] || '').replace('T', ' ').substring(0, 16),
-                      ten = r[2], loai = r[9], muc = r[10], moTa = r[11],
+                      ten = r[2],
+                      duong = String(r[7] || ''),
+                      phuongXa = String(r[8] || ''),
+                      loai = r[9], muc = r[10], moTa = r[11],
                       nguoi = r[13], tt = String(r[14] || 'Chờ xử lý'),
                       lat = parseFloat(r[3]), lon = parseFloat(r[4]);
                 const ttColor = STATUS_COLOR[tt] || '#f8fafc';
@@ -11159,13 +11205,15 @@
                     <td style="font-family:monospace;font-size:10px;">${scId}</td>
                     <td style="font-size:11px;">${tg}</td>
                     <td><b>${ten}</b></td>
+                    <td style="font-size:11px;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${duong.replace(/"/g,'&quot;')}">${duong || '<i style="color:#cbd5e1;">—</i>'}</td>
+                    <td style="font-size:11px;max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${phuongXa.replace(/"/g,'&quot;')}">${phuongXa || '<i style="color:#cbd5e1;">—</i>'}</td>
                     <td style="font-size:11px;">${loai}</td>
                     <td>${sevIcon}${muc}</td>
-                    <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${(moTa||'').replace(/"/g,'&quot;')}">${moTa||''}</td>
+                    <td style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${(moTa||'').replace(/"/g,'&quot;')}">${moTa||''}</td>
                     <td style="font-size:11px;">${nguoi}</td>
                     <td style="background:${ttColor};font-weight:700;">${tt}</td>
                     <td style="white-space:nowrap;">${jumpBtn}
-                        <button class="btn btn-xs btn-outline-warning" onclick="_openUpdateSuCo('${scId}','${tt.replace(/'/g,"\\'")}')" style="font-size:10px;padding:2px 6px;">✏️</button>
+                        ${canDelete() ? `<button class="btn btn-xs btn-outline-warning" onclick="_openUpdateSuCo('${scId}','${tt.replace(/'/g,"\\'")}')" style="font-size:10px;padding:2px 6px;" title="Cập nhật trạng thái">✏️</button>` : ''}
                     </td>
                 </tr>`;
             }
@@ -11277,6 +11325,317 @@
             } catch (e) {
                 displayError('Lỗi: ' + e.message);
                 if (btn) { btn.disabled = false; btn.textContent = 'Lưu'; }
+            }
+        }
+
+        // ── XUẤT BÁO CÁO SỰ CỐ RA EXCEL ──────────────────────────
+        // Helper: lọc + sort rows theo filter đang chọn (dùng chung 3 fallback)
+        function _sucoGetFilteredRows() {
+            const q = normalizeTextSearchable((document.getElementById('sucoAdminSearch') || {}).value || '');
+            const fStatus = (document.getElementById('sucoAdminFilterStatus') || {}).value || '';
+            const fSev = (document.getElementById('sucoAdminFilterSev') || {}).value || '';
+            let rows = _suCoAdminRows.slice();
+            if (fStatus) rows = rows.filter(r => String(r[14] || 'Chờ xử lý') === fStatus);
+            if (fSev)   rows = rows.filter(r => String(r[10] || '') === fSev);
+            if (q) rows = rows.filter(r => {
+                const hay = normalizeTextSearchable((r[2]||'') + ' ' + (r[7]||'') + ' ' + (r[8]||'') + ' ' + (r[9]||'') + ' ' + (r[11]||'') + ' ' + (r[13]||''));
+                return hay.includes(q);
+            });
+            rows.sort((a, b) => {
+                const sa = _sucoStatusRank(a[14]), sb = _sucoStatusRank(b[14]);
+                if (sa !== sb) return sa - sb;
+                const va = _sucoSeverityRank(a[10]), vb = _sucoSeverityRank(b[10]);
+                if (va !== vb) return va - vb;
+                return String(b[1] || '').localeCompare(String(a[1] || ''));
+            });
+            return { rows, filterLabel: (fStatus ? 'TT:'+fStatus+' ' : '') + (fSev ? 'MD:'+fSev+' ' : '') + (q ? 'Q:"'+q+'"' : '') };
+        }
+
+        // Xuất qua XLSX.js (đã load sẵn) — luôn work, không cần internet
+        function _exportSuCoXlsxFallback(rows, filterLabel) {
+            if (typeof XLSX === 'undefined') return false;
+
+            // Sheet 1: Chi tiết
+            const now = new Date();
+            const headerRow = ['STT', 'ID', 'Thời gian', 'Tên trụ', 'Đường', 'Phường/Xã',
+                               'Loại sự cố', 'Mức độ', 'Mô tả', 'Người báo cáo', 'Trạng thái', 'Người xử lý'];
+            const dataRows = rows.map((r, i) => [
+                i + 1,
+                String(r[0] || ''),
+                String(r[1] || '').replace('T', ' ').substring(0, 16),
+                String(r[2] || ''),
+                String(r[7] || ''),
+                String(r[8] || ''),
+                String(r[9] || ''),
+                String(r[10] || ''),
+                String(r[11] || ''),
+                String(r[13] || ''),
+                String(r[14] || 'Chờ xử lý'),
+                String(r[15] || '')
+            ]);
+            const infoRow = ['Ngày xuất: ' + now.toLocaleString('vi-VN') + (filterLabel ? '  |  Lọc: ' + filterLabel : '') + '  |  Tổng: ' + rows.length + ' sự cố'];
+            const titleRow = ['BÁO CÁO SỰ CỐ CHIẾU SÁNG CÔNG CỘNG'];
+
+            const aoa1 = [titleRow, infoRow, [], headerRow, ...dataRows];
+            const ws1 = XLSX.utils.aoa_to_sheet(aoa1);
+            // Column widths
+            ws1['!cols'] = [{wch:5},{wch:10},{wch:18},{wch:22},{wch:22},{wch:18},{wch:16},{wch:14},{wch:32},{wch:16},{wch:14},{wch:16}];
+            // Merge title + info rows
+            ws1['!merges'] = [
+                { s: {r:0,c:0}, e: {r:0,c:11} },
+                { s: {r:1,c:0}, e: {r:1,c:11} }
+            ];
+
+            // Sheet 2: Tổng hợp
+            const stats = { 'Chờ xử lý': 0, 'Đang xử lý': 0, 'Đã xử lý': 0 };
+            const byMucDo = {}, byLoai = {}, byPhuongXa = {};
+            rows.forEach(r => {
+                const tt = String(r[14] || 'Chờ xử lý');
+                if (stats[tt] != null) stats[tt]++;
+                const m = String(r[10] || 'Chưa xác định'); byMucDo[m] = (byMucDo[m] || 0) + 1;
+                const l = String(r[9] || 'Khác'); byLoai[l] = (byLoai[l] || 0) + 1;
+                const px = String(r[8] || 'Chưa xác định'); byPhuongXa[px] = (byPhuongXa[px] || 0) + 1;
+            });
+
+            const aoa2 = [['THỐNG KÊ SỰ CỐ'], []];
+            const addStats = (title, obj) => {
+                aoa2.push([title, 'Số lượng']);
+                Object.entries(obj).forEach(([k, v]) => aoa2.push([k, v]));
+                aoa2.push([]);
+            };
+            addStats('Theo trạng thái', stats);
+            addStats('Theo mức độ', byMucDo);
+            addStats('Theo loại sự cố', byLoai);
+            addStats('Theo phường/xã', byPhuongXa);
+            const ws2 = XLSX.utils.aoa_to_sheet(aoa2);
+            ws2['!cols'] = [{wch:30},{wch:12}];
+
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws1, 'Chi tiết sự cố');
+            XLSX.utils.book_append_sheet(wb, ws2, 'Tổng hợp');
+
+            const stamp = now.toISOString().replace(/[:.]/g, '-').substring(0, 16);
+            XLSX.writeFile(wb, `bao-cao-su-co-${stamp}.xlsx`);
+            return true;
+        }
+
+        // Xuất CSV — không cần thư viện, luôn work offline
+        function _exportSuCoCsvFallback(rows, filterLabel) {
+            const headers = ['STT', 'ID', 'Thời gian', 'Tên trụ', 'Đường', 'Phường/Xã',
+                             'Loại sự cố', 'Mức độ', 'Mô tả', 'Người báo cáo', 'Trạng thái', 'Người xử lý'];
+            const esc = v => {
+                const s = String(v == null ? '' : v);
+                return /[,\n"]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+            };
+            const lines = [];
+            const now = new Date();
+            lines.push('BÁO CÁO SỰ CỐ CHIẾU SÁNG CÔNG CỘNG');
+            lines.push('Ngày xuất: ' + now.toLocaleString('vi-VN') + (filterLabel ? ' | Lọc: ' + filterLabel : '') + ' | Tổng: ' + rows.length);
+            lines.push('');
+            lines.push(headers.map(esc).join(','));
+            rows.forEach((r, i) => {
+                lines.push([
+                    i + 1, r[0]||'', String(r[1]||'').replace('T',' ').substring(0,16),
+                    r[2]||'', r[7]||'', r[8]||'', r[9]||'', r[10]||'', r[11]||'', r[13]||'',
+                    r[14]||'Chờ xử lý', r[15]||''
+                ].map(esc).join(','));
+            });
+            // BOM UTF-8 để Excel hiểu tiếng Việt
+            const csv = '﻿' + lines.join('\r\n');
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            const stamp = now.toISOString().replace(/[:.]/g, '-').substring(0, 16);
+            a.href = url;
+            a.download = `bao-cao-su-co-${stamp}.csv`;
+            document.body.appendChild(a);
+            a.click();
+            setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
+            return true;
+        }
+
+        async function exportSuCoReport() {
+            if (!Array.isArray(_suCoAdminRows) || _suCoAdminRows.length === 0) {
+                displayError('Chưa có dữ liệu sự cố để xuất.');
+                return;
+            }
+
+            const { rows, filterLabel } = _sucoGetFilteredRows();
+            if (rows.length === 0) {
+                displayError('Không có sự cố khớp với filter hiện tại.');
+                return;
+            }
+
+            // Thử ExcelJS trước (đẹp nhất), fallback → XLSX.js → CSV
+            try {
+                displayInfo('Đang tạo báo cáo Excel...');
+                await _loadExcelJS();
+                // Có ExcelJS → dùng bản đẹp
+                const now = new Date();
+                const wb = new ExcelJS.Workbook();
+                wb.creator = 'Lighting Survey';
+                wb.created = new Date();
+
+                // ─── Sheet 1: Chi tiết ────────────────────────────
+                const ws = wb.addWorksheet('Chi tiết sự cố', {
+                    views: [{ state: 'frozen', ySplit: 4 }]
+                });
+
+                // Header block công ty + tiêu đề
+                ws.mergeCells('A1:L1');
+                ws.getCell('A1').value = 'BÁO CÁO SỰ CỐ CHIẾU SÁNG CÔNG CỘNG';
+                ws.getCell('A1').font = { bold: true, size: 16, color: { argb: 'FF1E40AF' } };
+                ws.getCell('A1').alignment = { horizontal: 'center', vertical: 'middle' };
+                ws.getRow(1).height = 28;
+
+                ws.mergeCells('A2:L2');
+                ws.getCell('A2').value = 'Ngày xuất: ' + now.toLocaleString('vi-VN')
+                    + (filterLabel ? '   |   Lọc: ' + filterLabel : '')
+                    + '   |   Tổng: ' + rows.length + ' sự cố';
+                ws.getCell('A2').font = { italic: true, size: 10, color: { argb: 'FF64748B' } };
+                ws.getCell('A2').alignment = { horizontal: 'center' };
+
+                // Ô trống row 3
+                ws.getRow(3).height = 6;
+
+                // Header cột
+                const headers = ['STT', 'ID', 'Thời gian', 'Tên trụ', 'Đường', 'Phường/Xã',
+                                 'Loại sự cố', 'Mức độ', 'Mô tả', 'Người báo cáo',
+                                 'Trạng thái', 'Người xử lý'];
+                const headerRow = ws.getRow(4);
+                headers.forEach((h, i) => {
+                    const cell = headerRow.getCell(i + 1);
+                    cell.value = h;
+                    cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
+                    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E40AF' } };
+                    cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+                    cell.border = { top: {style:'thin'}, bottom: {style:'thin'}, left: {style:'thin'}, right: {style:'thin'} };
+                });
+                headerRow.height = 32;
+
+                // Column widths
+                const widths = [5, 10, 18, 20, 22, 18, 16, 14, 32, 16, 14, 16];
+                widths.forEach((w, i) => ws.getColumn(i + 1).width = w);
+
+                // Data rows
+                rows.forEach((r, idx) => {
+                    const rowNum = idx + 5;
+                    const row = ws.getRow(rowNum);
+                    const tt = String(r[14] || 'Chờ xử lý');
+                    const muc = String(r[10] || '');
+                    const sevRank = _sucoSeverityRank(muc);
+                    const values = [
+                        idx + 1,
+                        String(r[0] || ''),
+                        String(r[1] || '').replace('T', ' ').substring(0, 16),
+                        String(r[2] || ''),
+                        String(r[7] || ''),
+                        String(r[8] || ''),
+                        String(r[9] || ''),
+                        muc,
+                        String(r[11] || ''),
+                        String(r[13] || ''),
+                        tt,
+                        String(r[15] || '')
+                    ];
+                    values.forEach((v, i) => {
+                        const cell = row.getCell(i + 1);
+                        cell.value = v;
+                        cell.alignment = { vertical: 'top', wrapText: (i === 8) };
+                        cell.font = { size: 11 };
+                        cell.border = { top: {style:'thin', color:{argb:'FFE2E8F0'}}, bottom: {style:'thin', color:{argb:'FFE2E8F0'}}, left: {style:'thin', color:{argb:'FFE2E8F0'}}, right: {style:'thin', color:{argb:'FFE2E8F0'}} };
+                    });
+                    // Color status column (cột 11)
+                    const ttCell = row.getCell(11);
+                    if (tt === 'Chờ xử lý') { ttCell.fill = { type:'pattern', pattern:'solid', fgColor:{argb:'FFFEF3C7'} }; ttCell.font = { size:11, bold:true, color:{argb:'FF92400E'} }; }
+                    else if (tt === 'Đang xử lý') { ttCell.fill = { type:'pattern', pattern:'solid', fgColor:{argb:'FFDBEAFE'} }; ttCell.font = { size:11, bold:true, color:{argb:'FF1E40AF'} }; }
+                    else if (tt === 'Đã xử lý') { ttCell.fill = { type:'pattern', pattern:'solid', fgColor:{argb:'FFDCFCE7'} }; ttCell.font = { size:11, bold:true, color:{argb:'FF166534'} }; }
+                    // Color mức độ column (cột 8)
+                    const mCell = row.getCell(8);
+                    if (sevRank === 0) { mCell.fill = { type:'pattern', pattern:'solid', fgColor:{argb:'FFFECACA'} }; mCell.font = { size:11, bold:true, color:{argb:'FFDC2626'} }; }
+                    else if (sevRank === 1) { mCell.font = { size:11, color:{argb:'FFF97316'} }; }
+                });
+
+                // ─── Sheet 2: Tổng hợp ─────────────────────────────
+                const wsSum = wb.addWorksheet('Tổng hợp');
+                wsSum.getColumn(1).width = 30;
+                wsSum.getColumn(2).width = 12;
+
+                wsSum.mergeCells('A1:B1');
+                wsSum.getCell('A1').value = 'THỐNG KÊ SỰ CỐ';
+                wsSum.getCell('A1').font = { bold: true, size: 14, color: { argb: 'FF1E40AF' } };
+                wsSum.getCell('A1').alignment = { horizontal: 'center' };
+
+                // Theo trạng thái
+                const stats = { 'Chờ xử lý': 0, 'Đang xử lý': 0, 'Đã xử lý': 0 };
+                const byMucDo = {};
+                const byLoai = {};
+                const byPhuongXa = {};
+                rows.forEach(r => {
+                    const tt = String(r[14] || 'Chờ xử lý');
+                    if (stats[tt] != null) stats[tt]++;
+                    const m = String(r[10] || 'Chưa xác định');
+                    byMucDo[m] = (byMucDo[m] || 0) + 1;
+                    const l = String(r[9] || 'Khác');
+                    byLoai[l] = (byLoai[l] || 0) + 1;
+                    const px = String(r[8] || 'Chưa xác định');
+                    byPhuongXa[px] = (byPhuongXa[px] || 0) + 1;
+                });
+
+                let rowIdx = 3;
+                function addSection(title, obj) {
+                    wsSum.getCell('A' + rowIdx).value = title;
+                    wsSum.getCell('A' + rowIdx).font = { bold: true, size: 12, color: { argb: 'FFFFFFFF' } };
+                    wsSum.getCell('A' + rowIdx).fill = { type:'pattern', pattern:'solid', fgColor:{argb:'FF1E40AF'} };
+                    wsSum.getCell('B' + rowIdx).fill = { type:'pattern', pattern:'solid', fgColor:{argb:'FF1E40AF'} };
+                    rowIdx++;
+                    Object.entries(obj).forEach(([k, v]) => {
+                        wsSum.getCell('A' + rowIdx).value = k;
+                        wsSum.getCell('B' + rowIdx).value = v;
+                        wsSum.getCell('B' + rowIdx).font = { bold: true };
+                        wsSum.getCell('B' + rowIdx).alignment = { horizontal: 'center' };
+                        rowIdx++;
+                    });
+                    rowIdx++;
+                }
+                addSection('Theo trạng thái', stats);
+                addSection('Theo mức độ', byMucDo);
+                addSection('Theo loại sự cố', byLoai);
+                addSection('Theo phường/xã', byPhuongXa);
+
+                // ─── Xuất file ────────────────────────────────────
+                const buf = await wb.xlsx.writeBuffer();
+                const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                const stamp = now.toISOString().replace(/[:.]/g, '-').substring(0, 16);
+                a.href = url;
+                a.download = `bao-cao-su-co-${stamp}.xlsx`;
+                document.body.appendChild(a);
+                a.click();
+                setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
+
+                displayInfo(`✅ Đã xuất ${rows.length} sự cố ra file Excel`);
+                return;
+            } catch (err) {
+                console.warn('[exportSuCoReport] ExcelJS fail, thử fallback XLSX.js:', err.message);
+                // Fallback 1: dùng XLSX.js đã load sẵn
+                try {
+                    if (_exportSuCoXlsxFallback(rows, filterLabel)) {
+                        displayInfo(`✅ Đã xuất ${rows.length} sự cố ra Excel (bản đơn giản)`);
+                        return;
+                    }
+                } catch (e2) {
+                    console.warn('[exportSuCoReport] XLSX.js fail, thử CSV:', e2.message);
+                }
+                // Fallback 2: CSV — luôn work
+                try {
+                    _exportSuCoCsvFallback(rows, filterLabel);
+                    displayInfo(`✅ Đã xuất ${rows.length} sự cố ra CSV (mở bằng Excel/Sheets)`);
+                    return;
+                } catch (e3) {
+                    displayError('Lỗi xuất báo cáo: ' + (e3.message || e3));
+                }
             }
         }
 
