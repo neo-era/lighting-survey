@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Thư viện bản đồ — Lighting Survey</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: #0f172a; color: #e2e8f0; min-height: 100vh;
+  }
+  .topbar {
+    position: sticky; top: 0; z-index: 100;
+    background: linear-gradient(135deg, #1e40af, #7c3aed);
+    padding: 14px 20px; box-shadow: 0 4px 12px rgba(0,0,0,.3);
+  }
+  .topbar h1 {
+    margin: 0; font-size: 20px; font-weight: 800; color: #fff;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .topbar h1 small { font-weight: 400; opacity: .85; font-size: 13px; }
+  .toolbar {
+    display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+    padding: 10px 20px; background: #1e293b; border-bottom: 1px solid #334155;
+  }
+  .toolbar input, .toolbar button, .toolbar select {
+    background: #0f172a; color: #e2e8f0;
+    border: 1px solid #475569; border-radius: 6px;
+    padding: 7px 12px; font-size: 13px; font-family: inherit;
+  }
+  .toolbar input { min-width: 200px; }
+  .toolbar input:focus { outline: none; border-color: #3b82f6; }
+  .toolbar button {
+    background: #2563eb; border-color: #2563eb; cursor: pointer;
+    font-weight: 600; transition: background .15s;
+  }
+  .toolbar button:hover { background: #1d4ed8; }
+  .toolbar button.secondary { background: transparent; }
+  .toolbar button.secondary:hover { background: #334155; }
+  .toolbar label { font-size: 12px; color: #94a3b8; }
+  .grid {
+    display: grid; gap: 14px; padding: 14px 20px;
+    grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  }
+  .card {
+    background: #1e293b; border: 1px solid #334155;
+    border-radius: 10px; overflow: hidden;
+    transition: transform .15s, box-shadow .15s;
+  }
+  .card:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,.4); }
+  .card-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 14px; background: #0f172a; border-bottom: 1px solid #334155;
+  }
+  .card-title {
+    font-weight: 700; font-size: 14px; color: #f8fafc;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .card-badges {
+    display: flex; gap: 4px; align-items: center;
+  }
+  .badge {
+    font-size: 10px; padding: 2px 6px; border-radius: 4px;
+    font-weight: 700; text-transform: uppercase;
+  }
+  .badge-vn { background: #dc2626; color: #fff; }
+  .badge-sat { background: #059669; color: #fff; }
+  .badge-topo { background: #7c3aed; color: #fff; }
+  .badge-cors { background: #16a34a; color: #fff; }
+  .badge-dark { background: #64748b; color: #fff; }
+  .badge-free { background: #0891b2; color: #fff; }
+  .card-actions {
+    display: flex; gap: 4px;
+  }
+  .card-actions button {
+    background: transparent; color: #94a3b8;
+    border: 1px solid #334155; border-radius: 4px;
+    padding: 3px 8px; font-size: 11px; cursor: pointer;
+    transition: all .15s;
+  }
+  .card-actions button:hover { color: #fff; border-color: #3b82f6; background: #1e40af; }
+  .mini-map {
+    height: 260px; width: 100%; background: #0f172a;
+  }
+  .card-footer {
+    padding: 8px 14px; background: #0f172a; border-top: 1px solid #334155;
+    font-size: 11px; color: #64748b; font-family: 'Consolas', monospace;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .fullscreen-modal {
+    position: fixed; inset: 0; z-index: 9999;
+    background: rgba(0,0,0,.9); display: none;
+    flex-direction: column; padding: 20px;
+  }
+  .fullscreen-modal.show { display: flex; }
+  .fullscreen-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding-bottom: 12px;
+  }
+  .fullscreen-header h2 { margin: 0; color: #fff; font-size: 18px; }
+  .fullscreen-close {
+    background: #dc2626; color: #fff; border: none;
+    border-radius: 6px; padding: 8px 16px; cursor: pointer;
+    font-size: 14px; font-weight: 700;
+  }
+  #fullscreenMap { flex: 1; border-radius: 10px; overflow: hidden; }
+  .plan-links {
+    padding: 10px 20px 20px; background: #0f172a;
+    border-top: 1px solid #334155;
+  }
+  .plan-links h3 {
+    margin: 0 0 10px; font-size: 14px; color: #a1a1aa; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 1px;
+  }
+  .plan-grid {
+    display: grid; gap: 10px;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  }
+  .plan-card {
+    background: #1e293b; border-left: 4px solid #16a34a;
+    border-radius: 6px; padding: 12px; text-decoration: none;
+    color: #e2e8f0; transition: all .15s;
+    display: flex; align-items: center; gap: 12px;
+  }
+  .plan-card:hover { background: #334155; border-left-color: #22c55e; transform: translateX(4px); }
+  .plan-card .icon { font-size: 24px; }
+  .plan-card .txt strong { display: block; color: #fff; font-size: 13px; }
+  .plan-card .txt small { color: #94a3b8; font-size: 11px; }
+  .footer {
+    text-align: center; padding: 20px; color: #64748b; font-size: 12px;
+    border-top: 1px solid #334155; margin-top: 20px;
+  }
+  .footer a { color: #3b82f6; }
+  @media (max-width: 640px) {
+    .toolbar input { min-width: 100%; }
+    .grid { grid-template-columns: 1fr; padding: 10px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <h1>🗺️ Thư viện bản đồ <small>— So sánh, xem trước và chọn layer cho khảo sát</small></h1>
+</div>
+
+<div class="toolbar">
+  <label>🎯 Tọa độ trung tâm:</label>
+  <input type="text" id="coordInput" value="10.762622, 106.660172" placeholder="lat, lon">
+  <label>Zoom:</label>
+  <select id="zoomInput">
+    <option value="10">10 (thành phố)</option>
+    <option value="13" selected>13 (quận)</option>
+    <option value="15">15 (phường)</option>
+    <option value="17">17 (đường)</option>
+    <option value="19">19 (nhà)</option>
+  </select>
+  <button onclick="applyCenter()">🎯 Áp dụng cho tất cả</button>
+  <button class="secondary" onclick="syncEnabled = !syncEnabled; syncBtn.textContent = syncEnabled ? '🔗 Đồng bộ: BẬT' : '🔗 Đồng bộ: TẮT'" id="syncBtn">🔗 Đồng bộ: BẬT</button>
+  <button class="secondary" onclick="window.location.href='index.html'">← Về app khảo sát</button>
+</div>
+
+<div class="grid" id="mapsGrid"></div>
+
+<div class="plan-links">
+  <h3>🏛 Nguồn tra cứu quy hoạch TP.HCM</h3>
+  <div class="plan-grid">
+    <a class="plan-card" href="https://guland.vn/soi-quy-hoach/tphcm" target="_blank" rel="noopener">
+      <span class="icon">🗺️</span>
+      <div class="txt">
+        <strong>Guland.vn — Soi quy hoạch</strong>
+        <small>Quy hoạch 1/2000 chi tiết, dễ xem, deep-link tọa độ</small>
+      </div>
+    </a>
+    <a class="plan-card" href="https://thongtinquyhoach.hochiminhcity.gov.vn/" target="_blank" rel="noopener">
+      <span class="icon">🏛️</span>
+      <div class="txt">
+        <strong>Sở QHKT TP.HCM (chính thức)</strong>
+        <small>Cổng thông tin quy hoạch chính thức của TP.HCM</small>
+      </div>
+    </a>
+    <a class="plan-card" href="https://datdai.tphcm.gov.vn/" target="_blank" rel="noopener">
+      <span class="icon">📋</span>
+      <div class="txt">
+        <strong>Cổng đất đai TP.HCM</strong>
+        <small>Tra cứu thông tin thửa đất, giấy CN QSDĐ</small>
+      </div>
+    </a>
+    <a class="plan-card" href="https://giaothong.hochiminhcity.gov.vn/" target="_blank" rel="noopener">
+      <span class="icon">🚦</span>
+      <div class="txt">
+        <strong>Giao thông TP.HCM</strong>
+        <small>Bản đồ giao thông, camera, biển báo</small>
+      </div>
+    </a>
+    <a class="plan-card" href="https://vmap.vn/" target="_blank" rel="noopener">
+      <span class="icon">🇻🇳</span>
+      <div class="txt">
+        <strong>Vmap.vn — Bản đồ số Việt Nam</strong>
+        <small>Bộ TT&amp;TT — địa danh chi tiết đến xã/phường</small>
+      </div>
+    </a>
+    <a class="plan-card" href="https://maps.google.com/" target="_blank" rel="noopener">
+      <span class="icon">📍</span>
+      <div class="txt">
+        <strong>Google Maps</strong>
+        <small>Street View, POI, đánh giá địa điểm</small>
+      </div>
+    </a>
+  </div>
+</div>
+
+<div class="footer">
+  Trang này là 1 phần của <a href="index.html">Lighting Survey System</a> — © 2026 Mai Vũ Lâm &amp; Lavipco
+</div>
+
+<div class="fullscreen-modal" id="fullscreenModal">
+  <div class="fullscreen-header">
+    <h2 id="fullscreenTitle">—</h2>
+    <button class="fullscreen-close" onclick="closeFullscreen()">✕ Đóng (Esc)</button>
+  </div>
+  <div id="fullscreenMap"></div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+'use strict';
+
+const MAPS_CATALOG = [
+  {
+    id: 'google-map', title: 'Google Maps', icon: '🗺',
+    url: 'https://{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}',
+    options: { maxZoom: 20, subdomains: ['mt0','mt1','mt2','mt3'], attribution: '© Google' },
+    badges: ['free']
+  },
+  {
+    id: 'google-sat', title: 'Google Satellite', icon: '🛰',
+    url: 'https://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
+    options: { maxZoom: 20, subdomains: ['mt0','mt1','mt2','mt3'], attribution: '© Google' },
+    badges: ['sat', 'free']
+  },
+  {
+    id: 'google-hybrid', title: 'Google Hybrid (vệ tinh + tên đường)', icon: '🛰',
+    url: 'https://{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}',
+    options: { maxZoom: 20, subdomains: ['mt0','mt1','mt2','mt3'], attribution: '© Google' },
+    badges: ['sat', 'free']
+  },
+  {
+    id: 'osm', title: 'OpenStreetMap', icon: '🌐',
+    url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+    options: { maxZoom: 19, attribution: '© OpenStreetMap' },
+    badges: ['free']
+  },
+  {
+    id: 'wikimedia', title: 'Wikimedia (nhãn tiếng Việt)', icon: '🇻🇳',
+    url: 'https://maps.wikimedia.org/osm-intl/{z}/{x}/{y}.png',
+    options: { maxZoom: 19, attribution: '© Wikimedia | © OSM' },
+    badges: ['vn', 'free']
+  },
+  {
+    id: 'hcmc-gis', title: 'Bản đồ TP.HCM (GIS chính thức)', icon: '🏙',
+    url: 'https://bando.tphcm.gov.vn/service/gisp/tile/raster/{z}/{x}/{y}',
+    options: { maxZoom: 20, maxNativeZoom: 14, attribution: '© bando.tphcm.gov.vn' },
+    badges: ['vn']
+  },
+  {
+    id: 'carto-voyager', title: 'CartoDB Voyager (CORS OK - PDF friendly)', icon: '⬜',
+    url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
+    options: { maxZoom: 19, attribution: '© CartoDB', crossOrigin: 'anonymous' },
+    badges: ['cors', 'free']
+  },
+  {
+    id: 'carto-light', title: 'CartoDB Positron (sáng)', icon: '⬜',
+    url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+    options: { maxZoom: 19, attribution: '© CartoDB Positron', subdomains: 'abcd' },
+    badges: ['free']
+  },
+  {
+    id: 'carto-dark', title: 'CartoDB Dark Matter (tối)', icon: '⬛',
+    url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+    options: { maxZoom: 19, attribution: '© CartoDB Dark Matter', subdomains: 'abcd' },
+    badges: ['dark', 'free']
+  },
+  {
+    id: 'esri-sat', title: 'Esri World Imagery (vệ tinh)', icon: '🛰',
+    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+    options: { maxZoom: 19, attribution: '© Esri, Maxar, Earthstar' },
+    badges: ['sat', 'free']
+  },
+  {
+    id: 'esri-street', title: 'Esri Street Map', icon: '🗺',
+    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',
+    options: { maxZoom: 19, attribution: '© Esri' },
+    badges: ['free']
+  },
+  {
+    id: 'opentopo', title: 'OpenTopoMap (địa hình)', icon: '⛰',
+    url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
+    options: { maxZoom: 17, subdomains: 'abc', attribution: '© OpenTopoMap (CC-BY-SA)' },
+    badges: ['topo', 'free']
+  }
+];
+
+const BADGE_LABELS = {
+  vn: 'VN', sat: 'Vệ tinh', topo: 'Địa hình',
+  cors: 'CORS OK', dark: 'Dark', free: 'Free'
+};
+
+let syncEnabled = true;
+const mapInstances = new Map();
+const grid = document.getElementById('mapsGrid');
+const coordInput = document.getElementById('coordInput');
+const zoomInput = document.getElementById('zoomInput');
+const syncBtn = document.getElementById('syncBtn');
+
+function parseCoord(txt) {
+  const parts = String(txt).split(/[,\s]+/).map(s => parseFloat(s));
+  if (parts.length >= 2 && isFinite(parts[0]) && isFinite(parts[1])) {
+    return [parts[0], parts[1]];
+  }
+  return [10.762622, 106.660172];
+}
+
+function createCard(cfg) {
+  const [lat, lon] = parseCoord(coordInput.value);
+  const zoom = parseInt(zoomInput.value) || 13;
+
+  const card = document.createElement('div');
+  card.className = 'card';
+  const badgesHtml = (cfg.badges || []).map(b =>
+    `<span class="badge badge-${b}">${BADGE_LABELS[b] || b}</span>`
+  ).join('');
+
+  card.innerHTML = `
+    <div class="card-header">
+      <div class="card-title">${cfg.icon || '🗺'} ${cfg.title}</div>
+      <div class="card-badges">${badgesHtml}</div>
+    </div>
+    <div class="mini-map" id="map-${cfg.id}"></div>
+    <div class="card-footer" title="${cfg.url}">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;">
+        <span style="overflow:hidden;text-overflow:ellipsis;">${cfg.url}</span>
+        <div class="card-actions">
+          <button onclick="copyUrl('${cfg.id}')" title="Copy URL">📋</button>
+          <button onclick="openFullscreen('${cfg.id}')" title="Xem full">⛶</button>
+        </div>
+      </div>
+    </div>
+  `;
+  grid.appendChild(card);
+
+  const m = L.map('map-' + cfg.id, {
+    center: [lat, lon], zoom, zoomControl: true,
+    attributionControl: false, preferCanvas: true
+  });
+  const layer = L.tileLayer(cfg.url, cfg.options).addTo(m);
+  layer.on('tileerror', () => {
+    const footer = card.querySelector('.card-footer');
+    if (footer && !footer.querySelector('.err-tag')) {
+      footer.insertAdjacentHTML('afterbegin', '<div class="err-tag" style="color:#dc2626;font-weight:700;padding-bottom:4px;">⚠ Một số tile không tải được</div>');
+    }
+  });
+
+  // Sync pan/zoom
+  m.on('moveend zoomend', function() {
+    if (!syncEnabled) return;
+    const c = m.getCenter();
+    const z = m.getZoom();
+    mapInstances.forEach((other, id) => {
+      if (id === cfg.id) return;
+      other.off('moveend zoomend', null, other); // temporarily to avoid loop
+      const oc = other.getCenter();
+      if (Math.abs(oc.lat - c.lat) > 1e-6 || Math.abs(oc.lng - c.lng) > 1e-6 || other.getZoom() !== z) {
+        other.setView([c.lat, c.lng], z, { animate: false });
+      }
+    });
+  });
+
+  mapInstances.set(cfg.id, m);
+  return m;
+}
+
+function applyCenter() {
+  const [lat, lon] = parseCoord(coordInput.value);
+  const zoom = parseInt(zoomInput.value) || 13;
+  mapInstances.forEach(m => m.setView([lat, lon], zoom, { animate: false }));
+}
+
+function copyUrl(id) {
+  const cfg = MAPS_CATALOG.find(c => c.id === id);
+  if (!cfg) return;
+  const opts = JSON.stringify(cfg.options, null, 2);
+  const snippet = `L.tileLayer('${cfg.url}', ${opts}).addTo(map);`;
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(snippet).then(() => {
+      alert('✓ Đã copy snippet Leaflet vào clipboard');
+    });
+  }
+}
+
+let fullscreenMap = null;
+function openFullscreen(id) {
+  const cfg = MAPS_CATALOG.find(c => c.id === id);
+  if (!cfg) return;
+  const modal = document.getElementById('fullscreenModal');
+  const title = document.getElementById('fullscreenTitle');
+  title.textContent = (cfg.icon || '🗺') + ' ' + cfg.title;
+  modal.classList.add('show');
+
+  const [lat, lon] = parseCoord(coordInput.value);
+  const zoom = parseInt(zoomInput.value) || 13;
+
+  // Cleanup nếu có sẵn
+  if (fullscreenMap) { fullscreenMap.remove(); fullscreenMap = null; }
+  fullscreenMap = L.map('fullscreenMap', { center: [lat, lon], zoom });
+  L.tileLayer(cfg.url, cfg.options).addTo(fullscreenMap);
+  setTimeout(() => fullscreenMap.invalidateSize(), 100);
+}
+
+function closeFullscreen() {
+  const modal = document.getElementById('fullscreenModal');
+  modal.classList.remove('show');
+  if (fullscreenMap) { fullscreenMap.remove(); fullscreenMap = null; }
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeFullscreen();
+});
+
+coordInput.addEventListener('keydown', e => { if (e.key === 'Enter') applyCenter(); });
+zoomInput.addEventListener('change', applyCenter);
+
+// Init tất cả cards
+MAPS_CATALOG.forEach(cfg => createCard(cfg));
+</script>
+</body>
+</html>
