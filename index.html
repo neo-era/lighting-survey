@@ -849,9 +849,8 @@
         .pc-actions.one   { grid-template-columns: 1fr; }
         .pc-actions.two   { grid-template-columns: 1fr 1fr; }
         .pc-actions.three { grid-template-columns: 1fr 1fr 1fr; }
-        .pc-actions.four  { grid-template-columns: 1fr 1fr; }
-        .pc-actions.five  { grid-template-columns: 1fr 1fr 1fr; }
-        .pc-actions.six   { grid-template-columns: 1fr 1fr 1fr; }
+        .pc-actions.four  { grid-template-columns: 1fr 1fr 1fr 1fr; }
+        .pc-actions.five  { grid-template-columns: 1fr 1fr 1fr 1fr 1fr; }
         .pc-btn { padding: 11px 6px; border-radius: 11px; border: none; font-size: 12px; font-weight: 700; cursor: pointer; font-family: 'Inter', system-ui, sans-serif; transition: opacity .15s, transform .1s; display: flex; align-items: center; justify-content: center; gap: 5px; touch-action: manipulation; min-height: 44px; white-space: nowrap; }
         .pc-btn:active { opacity: .82; transform: scale(.97); }
         .pc-btn.route  { background: #0ea5e9; color: #fff; }
@@ -861,25 +860,6 @@
         .pc-btn.street { background: #f0fdf4; color: #16a34a; }
         .pc-btn.report { background: #fff7ed; color: #f97316; }
         .pc-btn.baotri { background: #eff6ff; color: #2563eb; }
-        .pc-btn.quyhoach { background: #f0fdf4; color: #16a34a; }
-        /* Menu tra cứu quy hoạch */
-        .quyhoach-menu {
-            position: fixed; z-index: 10000;
-            background: #fff; border-radius: 8px;
-            box-shadow: 0 6px 24px rgba(0,0,0,.18), 0 0 0 1px rgba(0,0,0,.06);
-            padding: 6px; min-width: 240px;
-            font-size: 13px;
-        }
-        .quyhoach-menu .qh-item {
-            display: flex; align-items: center; gap: 10px;
-            padding: 10px 12px; border-radius: 6px;
-            cursor: pointer; transition: background .15s;
-            text-decoration: none; color: #1e293b;
-        }
-        .quyhoach-menu .qh-item:hover { background: #f0fdf4; color: #16a34a; }
-        .quyhoach-menu .qh-icon { font-size: 18px; }
-        .quyhoach-menu .qh-title { font-weight: 700; }
-        .quyhoach-menu .qh-desc { font-size: 11px; color: #64748b; }
         .sc-chip { padding: 7px 12px; border-radius: 20px; border: 1.5px solid #e2e8f0; background: #f8fafc; color: #334155; font-size: 13px; font-weight: 600; cursor: pointer; transition: all .15s; }
         .sc-chip.active { border-color: #f97316; background: #fff7ed; color: #f97316; }
         .sc-chip:active { transform: scale(.97); }
@@ -1344,6 +1324,7 @@
                             <option value="https://neo-era.github.io/dentat/dentat.html" id="pageOptDenTat" style="display:none">Quản lý đèn tắt/sự cố</option>
                             <option value="https://neo-era.github.io/lighting-survey/huongdan.html">Hướng dẫn sử dụng</option>
                             <option value="bando.html">🗺️ Thư viện bản đồ</option>
+                            <option value="quyhoach.html">🏛 Quy hoạch chi tiết TP.HCM</option>
                             <option value="tutorial.html">🎬 Video Tutorial</option>
                             <option value="lichsu.html" id="pageOptLichSu" style="display:none">Lịch sử thao tác</option>
                         </select>
@@ -6877,24 +6858,21 @@
                 </div>`;
             }
 
-            // Nút Quy hoạch — mọi role đều thấy (tra cứu là public info)
-            const quyHoachBtn = `<button class="pc-btn quyhoach" onclick="openQuyHoachMenu(${lat},${lon},event)">🏛 Quy hoạch</button>`;
-
             let actionBtns, actionClass;
             if (canDelete()) {
                 actionBtns = `<button class="pc-btn route" onclick="routeToMarkerLatLon(${lat},${lon})">🧭 Đi đến</button>
                 <button class="pc-btn edit" onclick="openEditMarker()">✏️ Sửa</button>
                 <button class="pc-btn delete" onclick="confirmDeleteMarker(this)">🗑 Xóa</button>
-                ${reportBtn}${baoTriBtn}${quyHoachBtn}`;
-                actionClass = baoTriBtn ? 'six' : 'five';
+                ${reportBtn}${baoTriBtn}`;
+                actionClass = baoTriBtn ? 'five' : 'four';
             } else if (canEdit()) {
                 actionBtns = `<button class="pc-btn route" onclick="routeToMarkerLatLon(${lat},${lon})">🧭 Đi đến</button>
                 <button class="pc-btn edit" onclick="openEditMarker()">✏️ Sửa</button>
-                ${reportBtn}${baoTriBtn}${quyHoachBtn}`;
-                actionClass = baoTriBtn ? 'five' : 'four';
+                ${reportBtn}${baoTriBtn}`;
+                actionClass = baoTriBtn ? 'four' : 'three';
             } else {
-                actionBtns = `<button class="pc-btn route" onclick="routeToMarkerLatLon(${lat},${lon})">🧭 Đi đến</button>${quyHoachBtn}`;
-                actionClass = 'two';
+                actionBtns = `<button class="pc-btn route" onclick="routeToMarkerLatLon(${lat},${lon})">🧭 Đi đến</button>`;
+                actionClass = 'one';
             }
 
             return `<div class="pc">
@@ -9439,82 +9417,6 @@
                 updateCurrentLocationMarker(pos.coords.latitude, pos.coords.longitude);
                 doRoute();
             }).catch(err => displayError('Không thể lấy vị trí: ' + err.message));
-        }
-
-        // ── TRA CỨU QUY HOẠCH TP.HCM ─────────────────────────────
-        // Mở menu chọn nguồn: Guland (dễ xem) / Sở QHKT (chính thức) / Google Maps
-        function openQuyHoachMenu(lat, lon, evt) {
-            // Close existing menu nếu có
-            const old = document.getElementById('quyHoachMenu');
-            if (old) old.remove();
-
-            // Copy tọa độ vào clipboard (nếu user cần paste vào ô Tìm kiếm)
-            const coordStr = `${lat.toFixed(6)}, ${lon.toFixed(6)}`;
-            if (navigator.clipboard) navigator.clipboard.writeText(coordStr).catch(() => {});
-
-            const menu = document.createElement('div');
-            menu.id = 'quyHoachMenu';
-            menu.className = 'quyhoach-menu';
-            menu.innerHTML = `
-                <a class="qh-item" href="https://guland.vn/soi-quy-hoach?lat=${lat}&lng=${lon}&z=19" target="_blank" rel="noopener">
-                    <span class="qh-icon">🗺️</span>
-                    <div>
-                        <div class="qh-title">Guland.vn</div>
-                        <div class="qh-desc">Quy hoạch 1/2000, dễ xem, deep-link tọa độ</div>
-                    </div>
-                </a>
-                <a class="qh-item" href="https://thongtinquyhoach.hochiminhcity.gov.vn/" target="_blank" rel="noopener">
-                    <span class="qh-icon">🏛️</span>
-                    <div>
-                        <div class="qh-title">Sở QHKT TP.HCM (chính thức)</div>
-                        <div class="qh-desc">Đã copy tọa độ — paste vào ô Tìm kiếm</div>
-                    </div>
-                </a>
-                <a class="qh-item" href="https://www.google.com/maps/@${lat},${lon},20z" target="_blank" rel="noopener">
-                    <span class="qh-icon">📍</span>
-                    <div>
-                        <div class="qh-title">Google Maps</div>
-                        <div class="qh-desc">Zoom sâu, xem street view + POI</div>
-                    </div>
-                </a>
-                <div class="qh-item" style="cursor:default;color:#94a3b8;border-top:1px solid #f1f5f9;margin-top:4px;padding-top:8px;">
-                    <span class="qh-icon">📋</span>
-                    <div>
-                        <div class="qh-title" style="font-size:11px;">Tọa độ đã copy:</div>
-                        <div class="qh-desc" style="font-family:monospace;color:#16a34a;">${coordStr}</div>
-                    </div>
-                </div>
-            `;
-
-            // Position gần chỗ click
-            document.body.appendChild(menu);
-            const btnRect = evt.target.getBoundingClientRect();
-            const menuRect = menu.getBoundingClientRect();
-            let left = btnRect.left;
-            let top = btnRect.bottom + 4;
-            // Nếu tràn phải màn hình → dời sang trái
-            if (left + menuRect.width > window.innerWidth - 8) {
-                left = window.innerWidth - menuRect.width - 8;
-            }
-            // Nếu tràn dưới màn hình → hiện phía trên nút
-            if (top + menuRect.height > window.innerHeight - 8) {
-                top = btnRect.top - menuRect.height - 4;
-            }
-            menu.style.left = Math.max(8, left) + 'px';
-            menu.style.top = Math.max(8, top) + 'px';
-
-            // Close khi click ra ngoài
-            setTimeout(() => {
-                const closeMenu = (e) => {
-                    if (!menu.contains(e.target)) {
-                        menu.remove();
-                        document.removeEventListener('click', closeMenu);
-                    }
-                };
-                document.addEventListener('click', closeMenu);
-            }, 100);
-
-            if (evt && typeof evt.stopPropagation === 'function') evt.stopPropagation();
         }
 
         function routeToMarkerLatLon(lat, lon) {

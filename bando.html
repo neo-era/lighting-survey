@@ -158,6 +158,7 @@
   </select>
   <button onclick="applyCenter()">🎯 Áp dụng cho tất cả</button>
   <button class="secondary" onclick="syncEnabled = !syncEnabled; syncBtn.textContent = syncEnabled ? '🔗 Đồng bộ: BẬT' : '🔗 Đồng bộ: TẮT'" id="syncBtn">🔗 Đồng bộ: BẬT</button>
+  <button style="background:#16a34a;border-color:#16a34a;" onclick="openQuyHoachPage()">🏛 Xem quy hoạch chi tiết</button>
   <button class="secondary" onclick="window.location.href='index.html'">← Về app khảo sát</button>
 </div>
 
@@ -430,6 +431,12 @@ document.addEventListener('keydown', e => {
 
 coordInput.addEventListener('keydown', e => { if (e.key === 'Enter') applyCenter(); });
 zoomInput.addEventListener('change', applyCenter);
+
+// Mở trang quy hoạch chi tiết với coord hiện tại
+function openQuyHoachPage() {
+  const [lat, lon] = parseCoord(coordInput.value);
+  window.location.href = `quyhoach.html?lat=${lat}&lon=${lon}`;
+}
 
 // Init tất cả cards
 MAPS_CATALOG.forEach(cfg => createCard(cfg));
