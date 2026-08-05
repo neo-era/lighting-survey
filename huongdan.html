@@ -163,6 +163,14 @@
           <li><a href="#s16" style="font-weight:400;color:#4b5563;">Bộ thông số mẫu cho từng địa bàn</a></li>
         </ul>
       </li>
+      <li><a href="#s17">Nhập CSV tọa độ (VN-2000 / Lat-Lon)</a>
+        <ul style="margin-top:4px;padding-left:16px;">
+          <li><a href="#s17" style="font-weight:400;color:#4b5563;">3 chế độ import: Tự động / Chỉ cập nhật / Thêm mới</a></li>
+          <li><a href="#s17" style="font-weight:400;color:#4b5563;">Auto-detect format hoặc ép Lat/Lon / VN-2000</a></li>
+          <li><a href="#s17" style="font-weight:400;color:#4b5563;">Bù offset local grid (dự án Tham Lương)</a></li>
+          <li><a href="#s17" style="font-weight:400;color:#4b5563;">Preview + Δ vs marker cũ trước khi ghi</a></li>
+        </ul>
+      </li>
     </ol>
   </div>
 
@@ -1162,6 +1170,164 @@
       <li>Đổi địa bàn → CAD của địa bàn cũ ẩn, load CAD của địa bàn mới nếu có.</li>
       <li>Nút <strong>🗑 Gỡ</strong> → xóa bản vẽ khỏi cache của địa bàn hiện tại.</li>
     </ul>
+  </section>
+
+  <!-- 17. NHẬP CSV TỌA ĐỘ -->
+  <section id="s17">
+    <h2><span class="num">17</span> Nhập CSV tọa độ (VN-2000 / Lat-Lon)</h2>
+    <p>Nạp hàng loạt tọa độ từ file khảo sát bên ngoài (đo bằng RTK, Total Station, xuất từ AutoCAD, thiết bị Nuwa) vào Google Sheet — hỗ trợ cả <strong>Lat/Lon WGS-84</strong> lẫn <strong>VN-2000 Northing/Easting</strong>. App tự nhận dạng format hoặc cho phép ép thủ công.</p>
+
+    <p>Nhấn <kbd>☰</kbd> → mục <strong>📤 Xuất dữ liệu</strong> → nút <strong>📂 Nhập CSV tọa độ (VN-2000 · Lat/Lon · Nuwa RTK)</strong>.</p>
+
+    <h3>Format file CSV hỗ trợ</h3>
+    <table>
+      <tr><th>Định dạng</th><th>Ví dụ dòng</th><th>Ghi chú</th></tr>
+      <tr>
+        <td><strong>🌐 Lat/Lon (WGS-84)</strong></td>
+        <td><code>CS.C1,10.757235,106.588008,-1.29</code></td>
+        <td>Lat 10..11, Lon 106..107 — chuẩn Google/GPS</td>
+      </tr>
+      <tr>
+        <td><strong>📍 VN-2000 (Northing, Easting)</strong></td>
+        <td><code>CS.C1,1189730.866,591455.847,1</code></td>
+        <td>N &gt; 100000 (~7 chữ số), E ~ 500000..700000</td>
+      </tr>
+      <tr>
+        <td>Có header</td>
+        <td><code>Name,Latitude,Longitude,Elevation</code></td>
+        <td>App đọc tên cột (Name/Point/Lat/Lon/Northing/Easting/Accuracy/GPSMode)</td>
+      </tr>
+      <tr>
+        <td>Không có header</td>
+        <td>Chỉ dữ liệu — cột 1: Tên, cột 2/3: tọa độ</td>
+        <td>App đoán từ giá trị dòng đầu</td>
+      </tr>
+    </table>
+
+    <div class="note note-info">
+      <span class="note-icon">ℹ️</span>
+      <div>
+        <strong>Delimiter tự động</strong>: dấu phẩy, chấm phẩy, tab đều được nhận dạng.
+        <strong>Decimal</strong>: chấp nhận cả dấu chấm (<code>10.757</code>) lẫn dấu phẩy VN (<code>10,757</code>).
+        <strong>Integer scaled</strong>: Nuwa RTK xuất <code>107572360</code> → app tự chia 10<sup>7</sup> về <code>10.7572360</code>.
+      </div>
+    </div>
+
+    <h3>3 chế độ import</h3>
+    <div class="steps">
+      <div class="step">
+        <div class="sn">1</div>
+        <div class="sc"><strong>🤖 Tự động</strong> (khuyến nghị) — Nếu tên trụ đã có trong sheet → <strong>cập nhật tọa độ</strong> (giữ ID cũ). Nếu chưa có → <strong>thêm mới</strong> với ID tự sinh.</div>
+      </div>
+      <div class="step">
+        <div class="sn">2</div>
+        <div class="sc"><strong>🔄 Chỉ cập nhật</strong> — Chỉ update marker đã tồn tại (theo tên). Marker chưa có trong sheet sẽ bị <strong>bỏ qua</strong> (không tạo mới). Dùng khi muốn hiệu chỉnh tọa độ cho danh sách đã có.</div>
+      </div>
+      <div class="step">
+        <div class="sn">3</div>
+        <div class="sc"><strong>➕ Thêm mới</strong> — Mọi record đều tạo <strong>1 dòng mới + ID mới</strong>, kể cả trùng tên. Dùng để nạp dữ liệu lần đầu.</div>
+      </div>
+    </div>
+
+    <h3>Định dạng tọa độ — Auto vs Ép</h3>
+    <p>Section <strong>📐 Định dạng tọa độ</strong> có 3 radio:</p>
+    <ul>
+      <li><strong>🤖 Tự động</strong> — App đoán từ giá trị (Lat ≤90 → WGS-84; N &gt;100000 → VN-2000). Đúng với hầu hết file chuẩn.</li>
+      <li><strong>🌐 Lat/Lon</strong> — Ép format WGS-84, ánh xạ cột 0=Tên, 1=Lat, 2=Lon (hoặc theo header nếu có).</li>
+      <li><strong>📍 VN-2000</strong> — Ép format Northing/Easting, cột 0=Tên, 1=Northing, 2=Easting.</li>
+    </ul>
+    <div class="note note-warn">
+      <span class="note-icon">⚠</span>
+      <div>Ép format thủ công chỉ dùng khi Auto đoán sai (VD file Lat &gt;90° do format lạ, hoặc VN-2000 có giá trị bất thường). Badge vàng <strong>"Ép format"</strong> hiện trong modal khi override.</div>
+    </div>
+
+    <h3>Múi chiếu VN-2000</h3>
+    <p>Khi format = VN-2000, chọn múi:</p>
+    <ul>
+      <li><strong>3° — CM 105.75° (HCM/BD/LA)</strong> — Múi hẹp k₀=0.9999, dùng cho TP.HCM, Bình Dương, Long An.</li>
+      <li><strong>6° — CM 105° (cả nước)</strong> — Múi rộng k₀=0.9996 (UTM zone 48), dùng cho dữ liệu tổng quan cả nước.</li>
+    </ul>
+
+    <h3>🔀 Bù offset local grid</h3>
+    <p>Một số dự án (VD Tham Lương) dùng <strong>grid cục bộ</strong> — origin đã shift so với VN-2000 chuẩn quốc gia. Khi convert về Lat/Lon, marker bị lệch cả trăm mét.</p>
+    <p>Section <strong>🔀 Bù offset local grid</strong> (chỉ hiện khi format = VN-2000) cho phép nhập:</p>
+    <ul>
+      <li><strong>ΔE (Easting)</strong> — Bù về hướng Đông, đơn vị mét</li>
+      <li><strong>ΔN (Northing)</strong> — Bù về hướng Bắc, đơn vị mét</li>
+    </ul>
+    <p>Công thức: <code>VN2000_chuẩn = giá_trị_CSV - (ΔE, ΔN)</code></p>
+
+    <div class="note note-success">
+      <span class="note-icon">📍</span>
+      <div><strong>Nút "📍 Tham Lương"</strong> điền sẵn <code>ΔE = -391.75m, ΔN = +223.86m</code> — đúng offset của dự án chiếu sáng Tham Lương (đã verify với 10 điểm cặp chính xác 0.000m).</div>
+    </div>
+
+    <div class="note note-info">
+      <span class="note-icon">💾</span>
+      <div>Giá trị offset <strong>tự nhớ vào trình duyệt</strong> (localStorage) — lần sau mở modal sẽ tự restore. Để trống (0, 0) nếu file đã ở VN-2000 chuẩn quốc gia.</div>
+    </div>
+
+    <h3>Cột dữ liệu bổ sung (nếu có)</h3>
+    <p>App đọc thêm các cột tùy chọn khi header khớp:</p>
+    <table>
+      <tr><th>Cột</th><th>Header khớp regex</th><th>Ghi vào</th></tr>
+      <tr><td>Accuracy</td><td><code>accuracy</code>, <code>hAccuracy</code>, <code>độ chính xác</code>, <code>std dev</code></td><td>Cột 24 — Độ chính xác (m)</td></tr>
+      <tr><td>GPS mode</td><td><code>solution</code>, <code>fixType</code>, <code>quality</code>, <code>status</code></td><td>Cột 25 — Auto detect <strong>rtk</strong> nếu chứa <code>fix/float/dgps</code></td></tr>
+      <tr><td>Elevation</td><td><code>elevation</code>, <code>height</code>, <code>độ cao</code></td><td>Bỏ qua (không lưu)</td></tr>
+    </table>
+
+    <h3>Preview trước khi ghi</h3>
+    <p>Modal hiện bảng 100 dòng đầu với 5 cột:</p>
+    <ul>
+      <li><strong>Tên trụ</strong> — Từ cột name của CSV</li>
+      <li><strong>Lat / Lon</strong> — Sau convert (đã áp offset nếu VN-2000)</li>
+      <li><strong>Δ (m)</strong> — Khoảng cách Haversine so với vị trí cũ trong sheet (Δ &gt; 5m sẽ hiện màu cam cảnh báo)</li>
+      <li><strong>Trạng thái</strong> — 🔄 Cập nhật / ➕ Thêm mới / Bỏ qua</li>
+    </ul>
+    <p>Stats trên đầu: <strong>Cập nhật: N</strong> · <strong>Thêm mới: N</strong> · Lỗi: N · Tổng: N.</p>
+
+    <h3>Options cho "thêm mới"</h3>
+    <p>Khi có record thêm mới (mode Tự động hoặc Thêm mới), điền:</p>
+    <ul>
+      <li><strong>Tủ điều khiển mặc định</strong> — Áp cho tất cả marker mới; để trống → app tự nhận diện từ tên (VD <code>C1.15</code> → tủ <code>CS.C1</code>)</li>
+      <li><strong>Loại mặc định</strong> — 1 (STK) / 2 (trang trí) / 3 (HTLT) / 4 (TTLT). Tên bắt đầu <code>CS.</code> tự set loại 5 (tủ nổi)</li>
+    </ul>
+
+    <h3>Xử lý sau khi bấm "Áp dụng"</h3>
+    <div class="steps">
+      <div class="step">
+        <div class="sn">1</div>
+        <div class="sc"><strong>Update</strong>: chia batch 50 marker/request, gọi <code>batch_match_update</code> GAS song song 3 chunk, retry 3 lần khi lỗi.</div>
+      </div>
+      <div class="step">
+        <div class="sn">2</div>
+        <div class="sc"><strong>New rows</strong>: mỗi row 1 request <code>full_update</code>, sync tuần tự.</div>
+      </div>
+      <div class="step">
+        <div class="sn">3</div>
+        <div class="sc"><strong>Progress bar</strong> trên đầu màn hình + toast "Batch i/N".</div>
+      </div>
+      <div class="step">
+        <div class="sn">4</div>
+        <div class="sc"><strong>Auto reload</strong> CSV từ Google Sheet sau 2s để xác nhận trạng thái thực tế.</div>
+      </div>
+    </div>
+
+    <h3>Xử lý sự cố</h3>
+    <table>
+      <tr><th>Triệu chứng</th><th>Nguyên nhân</th><th>Cách khắc phục</th></tr>
+      <tr><td>"Không nhận diện được cột tọa độ"</td><td>File thiếu cột hoặc header không match</td><td>Đảm bảo có cột Name + Lat/Lon (hoặc Northing/Easting). Hoặc dùng ép format thủ công.</td></tr>
+      <tr><td>Δ hiển thị hàng chục km</td><td>Sai múi chiếu / thiếu offset / sai datum</td><td>Kiểm tra: (1) đúng múi 3° hay 6°; (2) có cần bù offset local grid không; (3) đúng zone HCM (105.75°) hay các tỉnh khác</td></tr>
+      <tr><td>Marker ghim sai vị trí ~450m so thực tế</td><td>File VN-2000 dùng local grid</td><td>Nhấn <strong>📍 Tham Lương</strong> hoặc nhập ΔE/ΔN thủ công. Xem preview Δ để confirm.</td></tr>
+      <tr><td>"Lat/Lon không hợp lệ"</td><td>Cột lat/lon chứa text hoặc rỗng</td><td>Mở CSV kiểm tra, xóa dòng lỗi rồi import lại</td></tr>
+      <tr><td>Nuwa xuất Lat=107572360 (integer)</td><td>Format scaled × 10<sup>7</sup></td><td>App tự nhận và chia — không cần chỉnh</td></tr>
+      <tr><td>Sync xong nhưng 1 số marker fail</td><td>GAS timeout / mạng chậm</td><td>App tự retry 3 lần + reload sau 2s. Nếu còn fail → chia file nhỏ hơn (&lt; 100 dòng)</td></tr>
+    </table>
+
+    <div class="note note-warn">
+      <span class="note-icon">⚠</span>
+      <div><strong>Cập nhật ghi đè</strong> — Với mode "Tự động" và "Chỉ cập nhật", tọa độ marker cũ sẽ bị ghi đè bằng tọa độ mới trong CSV. Backup trước khi import file lớn (nút <strong>GitHub</strong> để tạo snapshot Excel).</div>
+    </div>
   </section>
 
 </div>

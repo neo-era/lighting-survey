@@ -914,7 +914,7 @@ function doPost(e) {
 
     // Ping để warm-up GAS (client gọi ngay khi hiện form login)
     if (data.action === 'ping') {
-      return jsonOk({ status: 'ok', pong: true });
+      return jsonResponse({ status: 'ok', pong: true });
     }
 
     if (data.action === 'login') {
@@ -1146,25 +1146,71 @@ function doGet(e) {
 
 // ── CHUẨN HÓA TỌA ĐỘ ─────────────────────────────────────────────────────
 
-// Tính VN2000 (Gauss-Krüger, múi 6°, GRS80) — khớp hàm convertLatLonToVn2000 trong index.html
-function _convertLatLonToVn2000(lat, lon) {
-  var toRad = function(x) { return x * Math.PI / 180; };
-  var a = 6378137.0, f = 1/298.257222101;
-  var e2 = 2*f - f*f, k0 = 0.9996;
-  var zone = Math.floor((lon + 180)/6) + 1;
-  var lon0 = toRad(zone*6 - 183);
-  var phi = toRad(lat), lambda = toRad(lon);
-  var sinPhi = Math.sin(phi), cosPhi = Math.cos(phi), tanPhi = Math.tan(phi);
-  var N = a / Math.sqrt(1 - e2*sinPhi*sinPhi);
-  var T = tanPhi*tanPhi, C = e2/(1-e2)*cosPhi*cosPhi;
-  var A = (lambda - lon0)*cosPhi;
-  var M = a * ((1-e2/4-3*Math.pow(e2,2)/64-5*Math.pow(e2,3)/256)*phi
-    - (3*e2/8+3*Math.pow(e2,2)/32+45*Math.pow(e2,3)/1024)*Math.sin(2*phi)
-    + (15*Math.pow(e2,2)/256+45*Math.pow(e2,3)/1024)*Math.sin(4*phi)
-    - (35*Math.pow(e2,3)/3072)*Math.sin(6*phi));
-  var x = k0*N*(A+(1-T+C)*Math.pow(A,3)/6+(5-18*T+T*T+72*C-58*e2/(1-e2))*Math.pow(A,5)/120);
-  var y = k0*(M+N*tanPhi*(Math.pow(A,2)/2+(5-T+9*C+4*C*C)*Math.pow(A,4)/24+(61-58*T+T*T+600*C-330*e2/(1-e2))*Math.pow(A,6)/720));
-  return { x: x + 500000, y: y, zone: zone };
+// Chuyển đổi WGS-84 → VN-2000 theo chuẩn QĐ 05/2007/QĐ-BTNMT
+// Helmert 7-parameter + Transverse Mercator, mặc định TPHCM (múi 3°, CM=105.75°, k0=0.9999)
+// KHỚP HOÀN TOÀN với convertLatLonToVn2000 bên client (index.html) để round-trip nhất quán
+var _VN2K_A = 6378137.0;
+var _VN2K_F = 1 / 298.257223563;
+var _VN2K_E2 = 2 * _VN2K_F - _VN2K_F * _VN2K_F;
+var _VN2K_HELMERT = {
+  dx: -191.90441429, dy: -39.30318279, dz: -111.45032835,
+  rx: (-0.00928836) * Math.PI / (180 * 3600),
+  ry: (0.01975479) * Math.PI / (180 * 3600),
+  rz: (-0.00427372) * Math.PI / (180 * 3600),
+  ds: 0.252906 / 1e6
+};
+var _VN2K_LON0 = 105.75;
+var _VN2K_K0 = 0.9999;
+
+function _convertLatLonToVn2000(lat, lon, lon0Deg, k0) {
+  lon0Deg = lon0Deg != null ? lon0Deg : _VN2K_LON0;
+  k0 = k0 != null ? k0 : _VN2K_K0;
+  // Bước 1: WGS-84 BLH → XYZ địa tâm
+  var phi = lat * Math.PI / 180, lam = lon * Math.PI / 180;
+  var sP = Math.sin(phi), cP = Math.cos(phi);
+  var N1 = _VN2K_A / Math.sqrt(1 - _VN2K_E2 * sP * sP);
+  var X1 = N1 * cP * Math.cos(lam);
+  var Y1 = N1 * cP * Math.sin(lam);
+  var Z1 = (N1 * (1 - _VN2K_E2)) * sP;
+  // Bước 2: Helmert WGS-84 → VN-2000
+  var p = _VN2K_HELMERT, kk = 1 + p.ds;
+  var X2 = p.dx + kk * ( X1 + p.rz*Y1 - p.ry*Z1);
+  var Y2 = p.dy + kk * (-p.rz*X1 + Y1 + p.rx*Z1);
+  var Z2 = p.dz + kk * ( p.ry*X1 - p.rx*Y1 + Z1);
+  // Bước 3: XYZ → BLH (Bowring)
+  var b = _VN2K_A * Math.sqrt(1 - _VN2K_E2);
+  var ep2b = (_VN2K_A*_VN2K_A - b*b) / (b*b);
+  var pp = Math.sqrt(X2*X2 + Y2*Y2);
+  var theta = Math.atan2(Z2 * _VN2K_A, pp * b);
+  var sT = Math.sin(theta), cT = Math.cos(theta);
+  var lat2 = Math.atan2(Z2 + ep2b * b * sT*sT*sT, pp - _VN2K_E2 * _VN2K_A * cT*cT*cT);
+  var lon2 = Math.atan2(Y2, X2);
+  // Bước 4: TM forward
+  var e2 = _VN2K_E2, ep2 = e2/(1-e2);
+  var lon0 = lon0Deg * Math.PI / 180;
+  var sP2 = Math.sin(lat2), cP2 = Math.cos(lat2), tP2 = Math.tan(lat2);
+  var N2 = _VN2K_A / Math.sqrt(1 - e2 * sP2 * sP2);
+  var T = tP2 * tP2, C = ep2 * cP2 * cP2;
+  var A = (lon2 - lon0) * cP2;
+  var M = _VN2K_A * (
+    (1 - e2/4 - 3*e2*e2/64 - 5*Math.pow(e2,3)/256) * lat2
+    - (3*e2/8 + 3*e2*e2/32 + 45*Math.pow(e2,3)/1024) * Math.sin(2*lat2)
+    + (15*e2*e2/256 + 45*Math.pow(e2,3)/1024) * Math.sin(4*lat2)
+    - (35*Math.pow(e2,3)/3072) * Math.sin(6*lat2)
+  );
+  var E = 500000 + k0 * N2 * (
+    A
+    + (1 - T + C) * Math.pow(A,3) / 6
+    + (5 - 18*T + T*T + 72*C - 58*ep2) * Math.pow(A,5) / 120
+  );
+  var NN = k0 * (
+    M + N2 * tP2 * (
+      A*A/2
+      + (5 - T + 9*C + 4*C*C) * Math.pow(A,4) / 24
+      + (61 - 58*T + T*T + 600*C - 330*ep2) * Math.pow(A,6) / 720
+    )
+  );
+  return { x: E, y: NN, zone: Math.floor((lon + 180)/6) + 1 };
 }
 
 function handleNormalizeCoords(sheetName) {
@@ -1549,37 +1595,56 @@ function handleBatchMatchUpdate(sheetName, records) {
 
   var headers  = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
   var hIdx     = buildHeaderIndex(headers);
-  // Tìm cột Tên trụ: thử theo tên trước, fallback index cứng 1 (cột B)
   var nameCol = hIdx[norm('Tên trụ')];
   if (nameCol === undefined) {
-    // Fallback: scan headers tìm bất kỳ header nào có 'tr' (tên trụ, ten tru, ...)
     for (var hi = 0; hi < headers.length; hi++) {
       var hn = norm(headers[hi]);
       if (hn.indexOf('tr') !== -1 && hn.indexOf('t') === 0) { nameCol = hi; break; }
     }
   }
-  if (nameCol === undefined) nameCol = 1; // hardcode cột B nếu không tìm thấy
+  if (nameCol === undefined) nameCol = 1;
   if (headers.length < 2) return jsonResponse({ status: 'error', message: 'Sheet không có đủ cột' });
 
+  // BULK READ: đọc toàn bộ data 1 lần
   var allData   = sheet.getRange(2, 1, lastRow - 1, headers.length).getValues();
-  var nameToRow = {};
+  var nameToIdx = {};
   for (var i = 0; i < allData.length; i++) {
     var nm = norm(String(allData[i][nameCol] || ''));
-    if (nm && !nameToRow[nm]) nameToRow[nm] = i + 2;
+    if (nm && nameToIdx[nm] === undefined) nameToIdx[nm] = i;
   }
 
+  // BULK UPDATE in-memory: thay setValue từng cell bằng cập nhật array
   var updated = 0, notFound = 0;
+  var dirtyRowIdxs = {}; // { rowIdx: true }
   for (var k = 0; k < records.length; k++) {
-    var rec    = records[k];
-    var rnm    = norm(String(rec.tenTru || ''));
-    var rowNum = nameToRow[rnm];
-    if (rowNum) {
-      updateRowFields(sheet, hIdx, rowNum, buildFieldValues(rec));
-      updated++;
-    } else {
-      notFound++;
+    var rec = records[k];
+    var rnm = norm(String(rec.tenTru || ''));
+    var rowIdx = nameToIdx[rnm];
+    if (rowIdx === undefined) { notFound++; continue; }
+
+    // Apply fields vào allData[rowIdx]
+    var fieldValues = buildFieldValues(rec);
+    for (var header in fieldValues) {
+      var colIdx = hIdx[norm(header)];
+      if (colIdx !== undefined) {
+        var v = fieldValues[header];
+        allData[rowIdx][colIdx] = (v === null || v === undefined) ? '' : v;
+      }
     }
+    dirtyRowIdxs[rowIdx] = true;
+    updated++;
   }
+
+  // BULK WRITE: setValues 1 lần cho toàn bộ range (thay vì nhiều setValue)
+  // Chỉ write range từ min-max dirty row để tránh scan cả sheet nếu không cần
+  if (updated > 0) {
+    var dirtyList = Object.keys(dirtyRowIdxs).map(function(x){ return parseInt(x); }).sort(function(a,b){return a-b;});
+    var minIdx = dirtyList[0];
+    var maxIdx = dirtyList[dirtyList.length - 1];
+    var rangeData = allData.slice(minIdx, maxIdx + 1);
+    sheet.getRange(minIdx + 2, 1, rangeData.length, headers.length).setValues(rangeData);
+  }
+
   return jsonResponse({ status: 'ok', updated: updated, notFound: notFound, sheet: sheetName });
 }
 

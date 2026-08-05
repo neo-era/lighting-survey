@@ -1180,6 +1180,51 @@ Các nhóm field trong form:
 `#dataVersionTag` — luôn visible, style pill xanh `#eff6ff / #2563eb`. Text mặc định `"Dữ liệu v—"`.
 `_setDataVersion({major, minor, patch})` cập nhật text.
 
+### CSV Import — VN-2000 / Lat-Lon / Local grid offset (2026-08)
+
+Nút **📂 Nhập CSV tọa độ** trong ☰ panel section Xuất dữ liệu — nạp hàng loạt tọa độ từ file khảo sát ngoài (RTK, Total Station, AutoCAD, Nuwa) vào Google Sheet.
+
+**Modal `#csvImportModal`** — 4 config sections + preview:
+
+| Section | Nội dung |
+|---|---|
+| 📐 Định dạng tọa độ | Radio Auto / 🌐 Lat/Lon / 📍 VN-2000 — auto-detect hoặc ép format |
+| 🔧 Chế độ import | Radio Tự động (match tên → update, không match → new) / Chỉ cập nhật / Thêm mới (luôn tạo ID mới) |
+| Múi chiếu VN-2000 | Radio 3° CM=105.75° k0=0.9999 (HCM/BD/LA) / 6° CM=105° k0=0.9996 (cả nước) — chỉ hiện khi format VN-2000 |
+| 🔀 Bù offset local grid | 2 input dE/dN (m) + nút preset **📍 Tham Lương** (-391.75, +223.86) — chỉ hiện khi format VN-2000. Auto save vào localStorage |
+| Options thêm mới | Tủ điều khiển mặc định + Loại đèn — hiện khi mode ≠ update |
+| Preview | 100 dòng đầu với Δ Haversine vs sheet cũ (cam khi >5m) |
+
+**Helpers**:
+- `_parseCsvSmart(text)` — auto-detect delimiter (`,`/`;`/`\t`), robust CSV parser
+- `_parseFlexibleNumber(val)` — chấp nhận `10,757` (VN comma) + `10.757` (dot)
+- `_normalizeLatLon(v, isLat)` — detect + fix Nuwa scaled integer (`107572360` ÷ 10⁷ → `10.7572360`)
+- `_detectCsvFormat(rows)` — đọc header (regex Name/Lat/Lon/Northing/Easting/Accuracy/GPSMode) hoặc đoán từ dòng đầu (Lat ≤90 → WGS-84; N >100000 → VN-2000)
+- `_onCsvFormatOverride()` — remap colMap khi user ép format, badge vàng "Ép format"
+- `_getCsvOffset()` / `_onCsvOffsetChange()` / `_restoreCsvOffset()` / `_applyThamLuongOffset()` — offset local grid + persistence
+- `_extractLatLon(row, zoneOpts, offsetOpts)` — convert từ CSV row. VN-2000: `E_std = E_csv - dE, N_std = N_csv - dN` rồi `convertVn2000ToLatLon(E_std, N_std, cm, k0)`
+- `_confirmCsvImport()` — chia batch 50 markers/`batch_match_update`, retry 3× per chunk, progress bar, auto reload sau 2s
+
+**Convention lưu VN-2000 vào sheet**:
+- Cột 19 (X = Easting) và cột 20 (Y = Northing) luôn lưu **VN-2000 CHUẨN QUỐC GIA** (đã trừ offset)
+- Marker draw dùng Lat/Lon chuẩn WGS-84 → ghim đúng vị trí trên bản đồ
+- Local grid values không lưu — tránh mixing hệ tọa độ trong sheet
+
+**Bù offset local grid — công thức**:
+```
+file_local = VN2000_chuẩn + (dE, dN)
+→ chuẩn = file_local - (dE, dN)
+```
+
+Preset "📍 Tham Lương" (dE=-391.75m, dN=+223.86m) đã verify với 10 điểm cặp C1.01-C1.10 (file 1 VN-2000 vs file 2 Lat/Lon) — sai lệch **0.000m** cả 2 chiều convert. Fit qua LSF translation-only trên 10 điểm. Nếu dự án khác có local grid → user nhập dE/dN thủ công.
+
+**Lưu ý bug tiềm ẩn đã fix (2026-07 cập nhật)**:
+- `parseFloat("10,759269") = 10` (mất decimal) → **dùng `parseCoord()`** cho lat/lon từ sheet
+- Sheet Google locale VN lưu `10,759269` (comma decimal) — mọi so sánh Δ Haversine phải qua `parseCoord`
+
+**Persistence localStorage**:
+- `csv_offset_e`, `csv_offset_n` — auto save khi user đổi input, restore khi mở modal
+
 ---
 
 ## Tính năng 8: Tối ưu mobile

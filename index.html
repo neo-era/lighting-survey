@@ -1486,10 +1486,10 @@
                                 <i class="fa fa-share-alt"></i> Sơ đồ cáp
                             </button>
                         </div>
-                        <!-- Nhập CSV tọa độ VN-2000 -->
+                        <!-- Nhập CSV tọa độ (VN-2000 hoặc WGS-84 Lat/Lon) -->
                         <input type="file" id="csvImportInput" accept=".csv" style="display:none" onchange="_onCsvImportChange(this)">
                         <button onclick="document.getElementById('csvImportInput').click()" class="ctrl-btn outline" style="margin-bottom:0;font-size:12px;padding:8px;margin-top:6px;width:100%;">
-                            📂 Nhập CSV tọa độ
+                            📂 Nhập CSV tọa độ (VN-2000 · Lat/Lon · Nuwa RTK)
                         </button>
 
                         <div id="cableToolbar" style="display:none;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px;">
@@ -1889,17 +1889,64 @@
 
     <!-- ═══ NHẬP CSV TỌA ĐỘ VN-2000 MODAL ═══ -->
     <div class="modal fade" id="csvImportModal" tabindex="-1" role="dialog" aria-hidden="true">
-        <div class="modal-dialog" role="document">
+        <div class="modal-dialog modal-lg" role="document">
             <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title">📂 Nhập CSV tọa độ VN-2000</h5>
-                    <button type="button" class="close" data-dismiss="modal"><span>&times;</span></button>
+                <div class="modal-header" style="background:linear-gradient(135deg,#059669,#16a34a);color:#fff;">
+                    <h5 class="modal-title" style="color:#fff;">📂 Nhập CSV cập nhật tọa độ</h5>
+                    <button type="button" class="close" data-dismiss="modal" style="color:#fff;text-shadow:none;opacity:.9;"><span>&times;</span></button>
                 </div>
                 <div class="modal-body">
                     <p id="csvImportFileInfo" style="font-size:13px;color:#64748b;margin-bottom:12px;"></p>
 
-                    <!-- Múi chiếu -->
+                    <!-- Auto-detect format info -->
+                    <div id="csvImportFormatInfo" style="background:#f0fdf4;border-left:4px solid #16a34a;padding:8px 12px;border-radius:6px;margin-bottom:12px;font-size:12px;color:#166534;"></div>
+
+                    <!-- Định dạng tọa độ (override auto-detect) -->
                     <div class="form-group">
+                        <label style="font-size:13px;font-weight:700;color:#1e293b;">📐 Định dạng tọa độ</label>
+                        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:4px;">
+                            <label class="csv-fmt-label" style="font-size:12px;cursor:pointer;padding:8px;border:2px solid #e2e8f0;border-radius:6px;">
+                                <input type="radio" name="csvFormat" value="auto" checked style="margin-right:4px;" onchange="_onCsvFormatOverride()">
+                                <b>🤖 Tự động</b><br>
+                                <span style="color:#64748b;font-size:11px;">Đoán từ dữ liệu (khuyến nghị)</span>
+                            </label>
+                            <label class="csv-fmt-label" style="font-size:12px;cursor:pointer;padding:8px;border:2px solid #e2e8f0;border-radius:6px;">
+                                <input type="radio" name="csvFormat" value="wgs84" style="margin-right:4px;" onchange="_onCsvFormatOverride()">
+                                <b>🌐 Lat/Lon</b><br>
+                                <span style="color:#64748b;font-size:11px;">WGS-84 (10.7572, 106.5880)</span>
+                            </label>
+                            <label class="csv-fmt-label" style="font-size:12px;cursor:pointer;padding:8px;border:2px solid #e2e8f0;border-radius:6px;">
+                                <input type="radio" name="csvFormat" value="vn2000" style="margin-right:4px;" onchange="_onCsvFormatOverride()">
+                                <b>📍 VN-2000</b><br>
+                                <span style="color:#64748b;font-size:11px;">Northing / Easting (1189730, 591455)</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Chế độ import -->
+                    <div class="form-group">
+                        <label style="font-size:13px;font-weight:700;color:#1e293b;">🔧 Chế độ import</label>
+                        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:4px;">
+                            <label class="csv-mode-label" style="font-size:12px;cursor:pointer;padding:8px;border:2px solid #e2e8f0;border-radius:6px;">
+                                <input type="radio" name="csvMode" value="auto" checked style="margin-right:4px;" onchange="_updateCsvPreview()">
+                                <b>🤖 Tự động</b><br>
+                                <span style="color:#64748b;font-size:11px;">Match tên → cập nhật; không match → thêm mới</span>
+                            </label>
+                            <label class="csv-mode-label" style="font-size:12px;cursor:pointer;padding:8px;border:2px solid #e2e8f0;border-radius:6px;">
+                                <input type="radio" name="csvMode" value="update" style="margin-right:4px;" onchange="_updateCsvPreview()">
+                                <b>🔄 Chỉ cập nhật</b><br>
+                                <span style="color:#64748b;font-size:11px;">Match theo tên trụ (bỏ qua nếu không tìm thấy)</span>
+                            </label>
+                            <label class="csv-mode-label" style="font-size:12px;cursor:pointer;padding:8px;border:2px solid #e2e8f0;border-radius:6px;">
+                                <input type="radio" name="csvMode" value="add" style="margin-right:4px;" onchange="_updateCsvPreview()">
+                                <b>➕ Thêm mới</b><br>
+                                <span style="color:#64748b;font-size:11px;">Mỗi record → 1 dòng mới + ID mới (kể cả trùng tên)</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Múi chiếu (chỉ hiện khi format VN-2000) -->
+                    <div class="form-group" id="csvZoneGroup" style="display:none;">
                         <label style="font-size:13px;font-weight:600;">Múi chiếu VN-2000</label>
                         <div style="display:flex;gap:12px;margin-top:4px;">
                             <label style="font-size:13px;cursor:pointer;">
@@ -1913,33 +1960,64 @@
                         </div>
                     </div>
 
-                    <!-- Tủ điều khiển mặc định -->
-                    <div class="form-group">
-                        <label style="font-size:13px;font-weight:600;">Tủ điều khiển mặc định</label>
-                        <input type="text" id="csvImportTu" class="form-control form-control-sm" placeholder="Để trống = tự nhận diện từ tên CS.Cx" style="font-size:13px;">
+                    <!-- Bù offset local grid (chỉ hiện khi format VN-2000) -->
+                    <div class="form-group" id="csvOffsetGroup" style="display:none;background:#fef3c7;padding:10px 12px;border-radius:6px;border-left:4px solid #f59e0b;margin-bottom:12px;">
+                        <label style="font-size:13px;font-weight:700;color:#78350f;">🔀 Bù offset local grid (nếu file dùng hệ tọa độ công trình)</label>
+                        <div style="font-size:11px;color:#78350f;margin-bottom:6px;opacity:.85;">
+                            Nhiều dự án dùng grid cục bộ (VD Tham Lương lệch −391.75m E · +223.86m N so với VN-2000 chuẩn).<br>
+                            App sẽ TRỪ offset này khỏi giá trị CSV để chuyển về VN-2000 chuẩn trước khi convert sang Lat/Lon.
+                        </div>
+                        <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:8px;align-items:end;">
+                            <div>
+                                <label style="font-size:11px;font-weight:600;color:#78350f;margin-bottom:2px;">ΔE (Easting, m)</label>
+                                <input type="number" step="0.01" id="csvOffsetE" value="0" class="form-control form-control-sm" style="font-size:13px;font-family:monospace;" oninput="_onCsvOffsetChange()">
+                            </div>
+                            <div>
+                                <label style="font-size:11px;font-weight:600;color:#78350f;margin-bottom:2px;">ΔN (Northing, m)</label>
+                                <input type="number" step="0.01" id="csvOffsetN" value="0" class="form-control form-control-sm" style="font-size:13px;font-family:monospace;" oninput="_onCsvOffsetChange()">
+                            </div>
+                            <div>
+                                <button type="button" class="btn btn-warning btn-sm" onclick="_applyThamLuongOffset()" style="font-size:11px;padding:6px 10px;white-space:nowrap;">
+                                    📍 Tham Lương
+                                </button>
+                            </div>
+                        </div>
+                        <div style="font-size:11px;color:#78350f;margin-top:4px;opacity:.75;">
+                            Để trống (0, 0) nếu file đã ở VN-2000 chuẩn quốc gia. Giá trị sẽ tự nhớ cho lần sau.
+                        </div>
                     </div>
 
-                    <!-- Loại mặc định cho trụ đèn -->
-                    <div class="form-group">
-                        <label style="font-size:13px;font-weight:600;">Loại mặc định trụ đèn</label>
-                        <select id="csvImportLoai" class="form-control form-control-sm" style="font-size:13px;">
-                            <option value="1">Trụ STK (loại 1)</option>
-                            <option value="2">Trụ trang trí (loại 2)</option>
-                            <option value="3">Trụ HTLT (loại 3)</option>
-                            <option value="4">Trụ TTLT (loại 4)</option>
-                        </select>
+                    <!-- Options cho thêm mới -->
+                    <div id="csvAddOptions" style="display:none;background:#eff6ff;padding:10px 12px;border-radius:6px;margin-bottom:12px;">
+                        <div class="form-group" style="margin-bottom:6px;">
+                            <label style="font-size:12px;font-weight:600;">Tủ điều khiển mặc định (chỉ áp dụng marker mới)</label>
+                            <input type="text" id="csvImportTu" class="form-control form-control-sm" placeholder="Để trống = tự nhận diện từ tên CS.Cx" style="font-size:13px;">
+                        </div>
+                        <div class="form-group" style="margin-bottom:0;">
+                            <label style="font-size:12px;font-weight:600;">Loại mặc định trụ đèn</label>
+                            <select id="csvImportLoai" class="form-control form-control-sm" style="font-size:13px;">
+                                <option value="1">Trụ STK (loại 1)</option>
+                                <option value="2">Trụ trang trí (loại 2)</option>
+                                <option value="3">Trụ HTLT (loại 3)</option>
+                                <option value="4">Trụ TTLT (loại 4)</option>
+                            </select>
+                        </div>
                     </div>
+
+                    <!-- Preview stats -->
+                    <div id="csvImportStats" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;font-size:12px;"></div>
 
                     <!-- Preview table -->
-                    <div style="font-size:12px;font-weight:600;color:#475569;margin-bottom:4px;">Xem trước (5 hàng đầu):</div>
-                    <div style="overflow-x:auto;">
+                    <div style="font-size:12px;font-weight:600;color:#475569;margin-bottom:4px;">Xem trước:</div>
+                    <div style="max-height:280px;overflow:auto;border:1px solid #e2e8f0;border-radius:6px;">
                         <table id="csvImportPreview" style="width:100%;border-collapse:collapse;font-size:12px;">
-                            <thead>
-                                <tr style="background:#f1f5f9;">
-                                    <th style="padding:4px 8px;text-align:left;border-bottom:1px solid #cbd5e1;">Tên trụ</th>
-                                    <th style="padding:4px 8px;text-align:right;border-bottom:1px solid #cbd5e1;">Lat</th>
-                                    <th style="padding:4px 8px;text-align:right;border-bottom:1px solid #cbd5e1;">Lon</th>
-                                    <th style="padding:4px 8px;text-align:center;border-bottom:1px solid #cbd5e1;">Loại</th>
+                            <thead style="background:#f1f5f9;position:sticky;top:0;z-index:1;">
+                                <tr>
+                                    <th style="padding:6px 8px;text-align:left;border-bottom:1px solid #cbd5e1;">Tên trụ</th>
+                                    <th style="padding:6px 8px;text-align:right;border-bottom:1px solid #cbd5e1;">Lat</th>
+                                    <th style="padding:6px 8px;text-align:right;border-bottom:1px solid #cbd5e1;">Lon</th>
+                                    <th style="padding:6px 8px;text-align:right;border-bottom:1px solid #cbd5e1;">Δ (m)</th>
+                                    <th style="padding:6px 8px;text-align:center;border-bottom:1px solid #cbd5e1;">Trạng thái</th>
                                 </tr>
                             </thead>
                             <tbody id="csvImportPreviewBody"></tbody>
@@ -1948,8 +2026,8 @@
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary btn-sm" data-dismiss="modal">Hủy</button>
-                    <button type="button" class="btn btn-primary btn-sm" id="csvImportConfirmBtn" onclick="_confirmCsvImport()">
-                        Nhập marker
+                    <button type="button" class="btn btn-success btn-sm" id="csvImportConfirmBtn" onclick="_confirmCsvImport()">
+                        Áp dụng
                     </button>
                 </div>
             </div>
@@ -5260,13 +5338,26 @@
             return normalizeText(base);
         }
 
+        // Counter để đảm bảo ID unique khi gọi generateId() nhiều lần trong cùng millisecond
+        // (VD: import CSV batch — loop sync gọi 100 lần trong ~1ms sẽ tạo 100 ID trùng nhau
+        //  nếu không có counter → GAS overwrite cùng 1 dòng)
+        let _idSeqCounter = 0;
+        let _idLastMs = 0;
         function generateId() {
             const prefix = SHEET_ID_PREFIX[currentSheet] || 'XX';
             const now = new Date();
+            const nowMs = now.getTime();
+            if (nowMs !== _idLastMs) {
+                _idLastMs = nowMs;
+                _idSeqCounter = 0;
+            } else {
+                _idSeqCounter++;
+            }
             const pad = n => String(n).padStart(2, '0');
             const ms = String(now.getMilliseconds()).padStart(3, '0');
             const ts = `${now.getFullYear()}${pad(now.getMonth()+1)}${pad(now.getDate())}T${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}${ms}`;
-            return `${prefix}_${ts}`;
+            const seq = String(_idSeqCounter).padStart(3, '0');
+            return `${prefix}_${ts}${seq}`;
         }
 
         function debounce(fn, ms) {
@@ -5354,6 +5445,14 @@
             return parseFloat(typeof val === 'string' ? val.replace(',', '.') : val);
         }
 
+        // Format số dạng VN (dấu phẩy decimal) — dùng khi lưu vào Google Sheet locale VN
+        // VD: formatCoordVN(10.7606005, 7) → "10,7606005"
+        function formatCoordVN(num, decimals) {
+            if (!isFinite(num)) return '';
+            const d = decimals != null ? decimals : 7;
+            return Number(num).toFixed(d).replace('.', ',');
+        }
+
         function getDistanceMeters(lat1, lon1, lat2, lon2) {
             const toRad = x => x * Math.PI / 180;
             const R = 6371e3;
@@ -5383,61 +5482,185 @@
             if (el && !el.value) el.value = dist;
         }
 
-        function convertLatLonToVn2000(lat, lon) {
-            const toRad = x => x * Math.PI / 180;
-            const a = 6378137.0, f = 1/298.257222101;
-            const e2 = 2*f - f*f, k0 = 0.9996;
-            const zone = Math.floor((lon + 180)/6) + 1;
-            const lon0 = toRad(zone*6 - 183);
-            const phi = toRad(lat), lambda = toRad(lon);
-            const sinPhi = Math.sin(phi), cosPhi = Math.cos(phi), tanPhi = Math.tan(phi);
-            const N = a / Math.sqrt(1 - e2*sinPhi*sinPhi);
-            const T = tanPhi*tanPhi, C = e2/(1-e2)*cosPhi*cosPhi;
-            const A = (lambda - lon0)*cosPhi;
-            const M = a * ((1-e2/4-3*Math.pow(e2,2)/64-5*Math.pow(e2,3)/256)*phi
-                - (3*e2/8+3*Math.pow(e2,2)/32+45*Math.pow(e2,3)/1024)*Math.sin(2*phi)
-                + (15*Math.pow(e2,2)/256+45*Math.pow(e2,3)/1024)*Math.sin(4*phi)
-                - (35*Math.pow(e2,3)/3072)*Math.sin(6*phi));
-            const x = k0*N*(A+(1-T+C)*Math.pow(A,3)/6+(5-18*T+T*T+72*C-58*e2/(1-e2))*Math.pow(A,5)/120);
-            const y = k0*(M+N*tanPhi*(Math.pow(A,2)/2+(5-T+9*C+4*C*C)*Math.pow(A,4)/24+(61-58*T+T*T+600*C-330*e2/(1-e2))*Math.pow(A,6)/720));
-            return { x: x+500000, y, zone };
+        // ═══════════════════════════════════════════════════════════════════
+        // CHUYỂN ĐỔI WGS-84 ↔ VN-2000 (chuẩn QĐ 05/2007/QĐ-BTNMT)
+        // ═══════════════════════════════════════════════════════════════════
+        // 2 bước: (1) Helmert 7 params (shift datum) + (2) Transverse Mercator
+        // Ellipsoid: WGS-84 (a=6378137, f=1/298.257223563) cho cả 2 datum
+        // Default: TPHCM/Bình Dương/Long An — kinh tuyến trục 105°45', múi 3°, k₀=0.9999
+        //          Vũng Tàu (sau sáp nhập 2025): CM=107°45' → truyền lon0Deg=107.75
+        //          UTM 6°: CM tự theo lon, k0=0.9996
+        // Convention: return {x: Easting, y: Northing} theo app hiện tại
+        //             (khác với quy ước VN chính thức: X=Bắc, Y=Đông)
+        // Test point: Nhà thờ Đức Bà (10.779783, 106.699018) → x≈603981.9, y≈1192036.5
+        // ═══════════════════════════════════════════════════════════════════
+        const VN2000_A = 6378137.0;
+        const VN2000_F = 1 / 298.257223563;
+        const VN2000_E2 = 2 * VN2000_F - VN2000_F * VN2000_F;
+
+        // Helmert 7-parameter WGS-84 → VN-2000 (Bursa-Wolf, QĐ 05/2007/QĐ-BTNMT)
+        const VN2000_HELMERT = {
+            dx: -191.90441429,           // meters
+            dy:  -39.30318279,
+            dz: -111.45032835,
+            rx: (-0.00928836) * Math.PI / (180 * 3600),   // arc-sec → rad
+            ry:  (0.01975479) * Math.PI / (180 * 3600),
+            rz: (-0.00427372) * Math.PI / (180 * 3600),
+            ds:  0.252906 / 1e6          // scale ppm (+0.252906 ppm)
+        };
+        const VN2000_LON0_DEFAULT = 105.75;   // TPHCM/BD/LA
+        const VN2000_K0_DEFAULT   = 0.9999;
+
+        // BLH → XYZ địa tâm
+        function _vnBlhToXyz(latDeg, lonDeg, h) {
+            const phi = latDeg * Math.PI / 180;
+            const lam = lonDeg * Math.PI / 180;
+            const sP = Math.sin(phi), cP = Math.cos(phi);
+            const N = VN2000_A / Math.sqrt(1 - VN2000_E2 * sP * sP);
+            return {
+                X: (N + h) * cP * Math.cos(lam),
+                Y: (N + h) * cP * Math.sin(lam),
+                Z: (N * (1 - VN2000_E2) + h) * sP
+            };
         }
 
-        // ─── Reverse Gauss-Krüger cho CAD overlay (P17) ───
-        // Input: x = easting (m, có false easting 500000); y = northing (m)
-        //        centralMeridianDeg = kinh tuyến trung tâm (105 múi 6°, 105.75 múi 3° HCM/BD/LA)
-        //        k0 = scale factor (0.9996 múi 6° UTM, 0.9999 múi 3° VN-2000)
-        // Output: {lat, lon} độ
-        function convertVn2000ToLatLon(x, y, centralMeridianDeg, k0) {
-            const a = 6378137.0, f = 1/298.257222101;
-            const e2 = 2*f - f*f;
+        // XYZ → BLH (Bowring closed-form)
+        function _vnXyzToBlh(X, Y, Z) {
+            const a = VN2000_A;
+            const b = a * Math.sqrt(1 - VN2000_E2);
+            const ep2 = (a*a - b*b) / (b*b);
+            const p = Math.sqrt(X*X + Y*Y);
+            const theta = Math.atan2(Z * a, p * b);
+            const sT = Math.sin(theta), cT = Math.cos(theta);
+            const lat = Math.atan2(Z + ep2 * b * sT*sT*sT, p - VN2000_E2 * a * cT*cT*cT);
+            const lon = Math.atan2(Y, X);
+            const sinLat = Math.sin(lat);
+            const N = a / Math.sqrt(1 - VN2000_E2 * sinLat * sinLat);
+            const h = p / Math.cos(lat) - N;
+            return { lat: lat * 180 / Math.PI, lon: lon * 180 / Math.PI, h: h };
+        }
+
+        // Helmert forward: WGS-84 XYZ → VN-2000 XYZ
+        // [X']   [dx]         [ 1    rz  -ry] [X]
+        // [Y'] = [dy] + (1+ds)[-rz   1    rx] [Y]
+        // [Z']   [dz]         [ ry  -rx   1 ] [Z]
+        function _vnHelmertForward(X, Y, Z) {
+            const p = VN2000_HELMERT;
+            const k = 1 + p.ds;
+            return {
+                X: p.dx + k * ( X + p.rz*Y - p.ry*Z),
+                Y: p.dy + k * (-p.rz*X + Y + p.rx*Z),
+                Z: p.dz + k * ( p.ry*X - p.rx*Y + Z)
+            };
+        }
+
+        // Helmert reverse: VN-2000 XYZ → WGS-84 XYZ (R^T + đảo dấu translation)
+        function _vnHelmertReverse(X, Y, Z) {
+            const p = VN2000_HELMERT;
+            const k = 1 / (1 + p.ds);
+            const dx = X - p.dx, dy = Y - p.dy, dz = Z - p.dz;
+            return {
+                X: k * ( dx - p.rz*dy + p.ry*dz),
+                Y: k * ( p.rz*dx + dy - p.rx*dz),
+                Z: k * (-p.ry*dx + p.rx*dy + dz)
+            };
+        }
+
+        // Transverse Mercator forward: BLH → (Easting, Northing)
+        function _vnTmForward(latDeg, lonDeg, lon0Deg, k0) {
+            const a = VN2000_A, e2 = VN2000_E2;
             const ep2 = e2 / (1 - e2);
-            k0 = k0 || 0.9996;
-            const lon0 = centralMeridianDeg * Math.PI / 180;
-            const xFalse = x - 500000; // remove false easting
-            const M = y / k0;
-            const mu = M / (a * (1 - e2/4 - 3*e2*e2/64 - 5*e2*e2*e2/256));
+            const lon0 = lon0Deg * Math.PI / 180;
+            const phi = latDeg * Math.PI / 180;
+            const lam = lonDeg * Math.PI / 180;
+            const sP = Math.sin(phi), cP = Math.cos(phi), tP = Math.tan(phi);
+            const N = a / Math.sqrt(1 - e2 * sP * sP);
+            const T = tP * tP;
+            const C = ep2 * cP * cP;
+            const A = (lam - lon0) * cP;
+            const M = a * (
+                (1 - e2/4 - 3*e2*e2/64 - 5*Math.pow(e2,3)/256) * phi
+                - (3*e2/8 + 3*e2*e2/32 + 45*Math.pow(e2,3)/1024) * Math.sin(2*phi)
+                + (15*e2*e2/256 + 45*Math.pow(e2,3)/1024) * Math.sin(4*phi)
+                - (35*Math.pow(e2,3)/3072) * Math.sin(6*phi)
+            );
+            const E = 500000 + k0 * N * (
+                A
+                + (1 - T + C) * Math.pow(A,3) / 6
+                + (5 - 18*T + T*T + 72*C - 58*ep2) * Math.pow(A,5) / 120
+            );
+            const NN = k0 * (
+                M + N * tP * (
+                    A*A/2
+                    + (5 - T + 9*C + 4*C*C) * Math.pow(A,4) / 24
+                    + (61 - 58*T + T*T + 600*C - 330*ep2) * Math.pow(A,6) / 720
+                )
+            );
+            return { E: E, N: NN };
+        }
+
+        // Transverse Mercator reverse: (Easting, Northing) → BLH
+        function _vnTmReverse(E, N, lon0Deg, k0) {
+            const a = VN2000_A, e2 = VN2000_E2;
+            const ep2 = e2 / (1 - e2);
+            const lon0 = lon0Deg * Math.PI / 180;
+            const xF = E - 500000;
+            const M = N / k0;
+            const mu = M / (a * (1 - e2/4 - 3*e2*e2/64 - 5*Math.pow(e2,3)/256));
             const e1 = (1 - Math.sqrt(1-e2)) / (1 + Math.sqrt(1-e2));
             const phi1 = mu
-                + (3*e1/2 - 27*e1*e1*e1/32) * Math.sin(2*mu)
-                + (21*e1*e1/16 - 55*e1*e1*e1*e1/32) * Math.sin(4*mu)
-                + (151*e1*e1*e1/96) * Math.sin(6*mu)
-                + (1097*e1*e1*e1*e1/512) * Math.sin(8*mu);
-            const sinP = Math.sin(phi1), cosP = Math.cos(phi1), tanP = Math.tan(phi1);
-            const N1 = a / Math.sqrt(1 - e2*sinP*sinP);
-            const R1 = a*(1-e2) / Math.pow(1 - e2*sinP*sinP, 1.5);
-            const T1 = tanP * tanP;
-            const C1 = ep2 * cosP * cosP;
-            const D = xFalse / (N1 * k0);
-            const lat = phi1 - (N1*tanP/R1) * (
-                D*D/2 - (5 + 3*T1 + 10*C1 - 4*C1*C1 - 9*ep2) * Math.pow(D,4)/24
-                + (61 + 90*T1 + 298*C1 + 45*T1*T1 - 252*ep2 - 3*C1*C1) * Math.pow(D,6)/720
+                + (3*e1/2 - 27*Math.pow(e1,3)/32) * Math.sin(2*mu)
+                + (21*e1*e1/16 - 55*Math.pow(e1,4)/32) * Math.sin(4*mu)
+                + (151*Math.pow(e1,3)/96) * Math.sin(6*mu)
+                + (1097*Math.pow(e1,4)/512) * Math.sin(8*mu);
+            const sP1 = Math.sin(phi1), cP1 = Math.cos(phi1), tP1 = Math.tan(phi1);
+            const N1 = a / Math.sqrt(1 - e2 * sP1 * sP1);
+            const R1 = a * (1 - e2) / Math.pow(1 - e2 * sP1 * sP1, 1.5);
+            const T1 = tP1 * tP1;
+            const C1 = ep2 * cP1 * cP1;
+            const D = xF / (N1 * k0);
+            const lat = phi1 - (N1 * tP1 / R1) * (
+                D*D/2
+                - (5 + 3*T1 + 10*C1 - 4*C1*C1 - 9*ep2) * Math.pow(D,4) / 24
+                + (61 + 90*T1 + 298*C1 + 45*T1*T1 - 252*ep2 - 3*C1*C1) * Math.pow(D,6) / 720
             );
             const lon = lon0 + (
-                D - (1 + 2*T1 + C1) * Math.pow(D,3)/6
-                + (5 - 2*C1 + 28*T1 - 3*C1*C1 + 8*ep2 + 24*T1*T1) * Math.pow(D,5)/120
-            ) / cosP;
-            return { lat: lat * 180/Math.PI, lon: lon * 180/Math.PI };
+                D
+                - (1 + 2*T1 + C1) * Math.pow(D,3) / 6
+                + (5 - 2*C1 + 28*T1 - 3*C1*C1 + 8*ep2 + 24*T1*T1) * Math.pow(D,5) / 120
+            ) / cP1;
+            return { lat: lat * 180 / Math.PI, lon: lon * 180 / Math.PI };
+        }
+
+        // ── MAIN API (backward compatible signatures) ─────────────────────
+
+        // WGS-84 (lat, lon độ) → VN-2000 (Easting, Northing mét)
+        // @param lon0Deg — kinh tuyến trục, default 105.75 (TPHCM); Vũng Tàu: 107.75
+        // @param k0      — scale factor, default 0.9999 (múi 3° VN-2000)
+        // @return {x: Easting, y: Northing, zone} — app convention (KHÔNG đổi)
+        function convertLatLonToVn2000(lat, lon, lon0Deg, k0) {
+            lon0Deg = lon0Deg != null ? lon0Deg : VN2000_LON0_DEFAULT;
+            k0      = k0      != null ? k0      : VN2000_K0_DEFAULT;
+            const p1 = _vnBlhToXyz(lat, lon, 0);
+            const p2 = _vnHelmertForward(p1.X, p1.Y, p1.Z);
+            const blh = _vnXyzToBlh(p2.X, p2.Y, p2.Z);
+            const tm = _vnTmForward(blh.lat, blh.lon, lon0Deg, k0);
+            return { x: tm.E, y: tm.N, zone: Math.floor((lon + 180)/6) + 1 };
+        }
+
+        // VN-2000 (Easting x, Northing y mét) → WGS-84 (lat, lon độ)
+        // @param x       — Easting (đã có 500000 offset)
+        // @param y       — Northing
+        // @param lon0Deg — kinh tuyến trục, default 105.75
+        // @param k0      — scale factor, default 0.9999
+        function convertVn2000ToLatLon(x, y, lon0Deg, k0) {
+            lon0Deg = lon0Deg != null ? lon0Deg : VN2000_LON0_DEFAULT;
+            k0      = k0      != null ? k0      : VN2000_K0_DEFAULT;
+            const blh1 = _vnTmReverse(x, y, lon0Deg, k0);
+            const p1 = _vnBlhToXyz(blh1.lat, blh1.lon, 0);
+            const p2 = _vnHelmertReverse(p1.X, p1.Y, p1.Z);
+            const blh2 = _vnXyzToBlh(p2.X, p2.Y, p2.Z);
+            return { lat: blh2.lat, lon: blh2.lon };
         }
 
         // ─── CAD (DXF) overlay — Tính năng 12 P17 + P18 ───
@@ -11615,7 +11838,7 @@
                       phuongXa = String(r[8] || ''),
                       loai = r[9], muc = r[10], moTa = r[11],
                       nguoi = r[13], tt = String(r[14] || 'Chờ xử lý'),
-                      lat = parseFloat(r[3]), lon = parseFloat(r[4]);
+                      lat = parseCoord(r[3]), lon = parseCoord(r[4]);
                 const ttColor = STATUS_COLOR[tt] || '#f8fafc';
                 const sevIcon = _sucoSeverityRank(muc) === 0 ? '⚡ ' : _sucoSeverityRank(muc) === 1 ? '🔴 ' : '';
                 const jumpBtn = Number.isFinite(lat) && Number.isFinite(lon)
@@ -12897,35 +13120,189 @@
         content.innerHTML = html;
     }
 
-    // ═══ NHẬP CSV TỌA ĐỘ VN-2000 ═══
+    // ═══ NHẬP CSV TỌA ĐỘ — hỗ trợ VN-2000 + WGS84 (Nuwa RTK) ═══
     let _csvImportRows = [];
+    let _csvImportFormat = null;    // 'vn2000' | 'wgs84'
+    let _csvImportColMap = {};       // { name: 0, lat: 1, lon: 2, accuracy: 4, gpsMode: null }
+    let _csvImportHeaders = null;    // header row (nếu có)
+
+    // Robust CSV parser: auto-detect delimiter (comma / semicolon / tab)
+    function _parseCsvSmart(text) {
+        // Detect delimiter từ dòng đầu tiên
+        const firstLine = text.split(/\r?\n/)[0] || '';
+        const counts = {
+            ',':  (firstLine.match(/,/g) || []).length,
+            ';':  (firstLine.match(/;/g) || []).length,
+            '\t': (firstLine.match(/\t/g) || []).length
+        };
+        let delim = ',';
+        if (counts[';'] > counts[',']) delim = ';';
+        if (counts['\t'] > counts[delim]) delim = '\t';
+
+        const rows = [];
+        for (const line of text.split(/\r?\n/)) {
+            if (!line.trim()) continue;
+            const row = [];
+            let inQuote = false, cell = '';
+            for (let i = 0; i < line.length; i++) {
+                const ch = line[i];
+                if (ch === '"') { inQuote = !inQuote; }
+                else if (ch === delim && !inQuote) { row.push(cell); cell = ''; }
+                else { cell += ch; }
+            }
+            row.push(cell);
+            rows.push(row.map(c => c.trim()));
+        }
+        return rows;
+    }
+
+    // Parse số linh hoạt: hỗ trợ "10,762523" (comma decimal EU/VN) và "10.762523" (dot)
+    // Đồng thời detect integer scaled × 10^7 (Nuwa RTK format: 107625230 → 10.762523)
+    function _parseFlexibleNumber(val) {
+        if (val == null || val === '') return NaN;
+        let s = String(val).trim();
+        // Loại bỏ ký tự không cần
+        if (!s) return NaN;
+        // Nếu có cả dấu chấm và dấu phẩy → dấu phẩy là thousand separator
+        if (s.indexOf('.') !== -1 && s.indexOf(',') !== -1) {
+            s = s.replace(/,/g, '');
+        } else if (s.indexOf(',') !== -1) {
+            // Chỉ có dấu phẩy → là decimal separator
+            s = s.replace(',', '.');
+        }
+        return parseFloat(s);
+    }
+
+    // Nếu giá trị lat/lon là integer scaled (VD 107625230 = 10.7625230)
+    // → scale lại về dạng thập phân bình thường
+    function _normalizeLatLon(v, isLat) {
+        if (!isFinite(v)) return v;
+        const abs = Math.abs(v);
+        if (isLat && abs > 90 && abs < 900000000) {
+            // Latitude scaled × 10^k → thử 10^7 trước
+            if (abs > 1e7 && abs < 1e9) return v / 1e7;
+            if (abs > 1e6 && abs < 1e8) return v / 1e6;
+        }
+        if (!isLat && abs > 180 && abs < 9000000000) {
+            if (abs > 1e8 && abs < 1e10) return v / 1e7;
+            if (abs > 1e7 && abs < 1e9) return v / 1e6;
+        }
+        return v;
+    }
+
+    // Auto-detect format + columns từ header
+    function _detectCsvFormat(rows) {
+        if (rows.length === 0) return { format: null, colMap: null, hasHeader: false };
+
+        const header = rows[0].map(c => String(c).toLowerCase().trim());
+        const looksLikeHeader = header.some(h => /^(name|point|id|tên|latitude|longitude|northing|easting|lat|lon|elevation)$/i.test(h));
+
+        const colMap = { name: -1, lat: -1, lon: -1, north: -1, east: -1, accuracy: -1, gpsMode: -1, elevation: -1 };
+
+        if (looksLikeHeader) {
+            header.forEach((h, i) => {
+                if (/^(name|point.?(name|id)?|tên(\s*trụ)?|id)$/i.test(h)) colMap.name = i;
+                else if (/^(lat|latitude|vĩ.?độ)/i.test(h)) colMap.lat = i;
+                else if (/^(lon|lng|longitude|kinh.?độ)/i.test(h)) colMap.lon = i;
+                else if (/^(north(ing)?|toa.?do.?x|vn2000.?y)/i.test(h)) colMap.north = i;
+                else if (/^(east(ing)?|toa.?do.?y|vn2000.?x)/i.test(h)) colMap.east = i;
+                else if (/^(h.?accuracy|accuracy|độ.?chính.?xác|std.?dev)/i.test(h)) colMap.accuracy = i;
+                else if (/^(solution|fix.?type|gps.?mode|quality|status)/i.test(h)) colMap.gpsMode = i;
+                else if (/^(elev(ation)?|height|độ.?cao)/i.test(h)) colMap.elevation = i;
+            });
+        } else {
+            // Không có header — đoán theo giá trị cột 1
+            const sampleRow = rows[0];
+            const val1 = parseFloat(sampleRow[1]);
+            if (isFinite(val1) && val1 >= -90 && val1 <= 90) {
+                // Format: Name, Lat, Lon
+                colMap.name = 0; colMap.lat = 1; colMap.lon = 2;
+            } else if (isFinite(val1) && val1 > 100000) {
+                // Format: Name, Northing, Easting (VN-2000)
+                colMap.name = 0; colMap.north = 1; colMap.east = 2;
+            } else {
+                // Không detect được, dùng default
+                colMap.name = 0; colMap.north = 1; colMap.east = 2;
+            }
+        }
+
+        const format = (colMap.lat >= 0 && colMap.lon >= 0) ? 'wgs84'
+                     : (colMap.north >= 0 && colMap.east >= 0) ? 'vn2000'
+                     : null;
+
+        return { format, colMap, hasHeader: looksLikeHeader };
+    }
 
     function _onCsvImportChange(input) {
         const file = input.files[0];
         if (!file) return;
         const reader = new FileReader();
         reader.onload = function(e) {
-            const rows = parseCSVText(e.target.result)
-                .filter(function(r) { return r.length >= 3 && String(r[0] || '').trim(); });
-            _csvImportRows = rows;
-            _openCsvImportModal(file.name, rows);
+            const allRows = _parseCsvSmart(e.target.result)
+                .filter(r => r.length >= 2 && String(r[0] || '').trim());
+            if (allRows.length === 0) {
+                displayError('File CSV rỗng hoặc không đúng định dạng.');
+                return;
+            }
+
+            const detect = _detectCsvFormat(allRows);
+            if (!detect.format) {
+                displayError('Không nhận diện được cột tọa độ. Cần cột: Name, Lat, Lon (WGS84) HOẶC Name, Northing, Easting (VN-2000).');
+                return;
+            }
+
+            _csvImportFormat  = detect.format;
+            _csvImportColMap  = detect.colMap;
+            _csvImportHeaders = detect.hasHeader ? allRows[0] : null;
+            _csvImportRows    = detect.hasHeader ? allRows.slice(1) : allRows;
+
+            _openCsvImportModal(file.name);
         };
         reader.readAsText(file, 'UTF-8');
         input.value = '';
     }
 
-    function _openCsvImportModal(filename, rows) {
+    function _openCsvImportModal(filename) {
+        const rows = _csvImportRows;
+        const fmt = _csvImportFormat === 'wgs84' ? 'WGS-84 (Lat/Lon)' : 'VN-2000 (Northing/Easting)';
+        const c = _csvImportColMap;
+
+        // Reset radio "Định dạng tọa độ" về Auto mỗi lần mở modal mới
+        const autoRadio = document.querySelector('input[name="csvFormat"][value="auto"]');
+        if (autoRadio) autoRadio.checked = true;
+
         document.getElementById('csvImportFileInfo').textContent =
             'File: ' + filename + ' — ' + rows.length + ' hàng dữ liệu';
-        document.getElementById('csvImportConfirmBtn').textContent =
-            'Nhập ' + rows.length + ' marker';
 
-        // Wire zone radio buttons to update preview
-        ['csvZone3', 'csvZone6'].forEach(function(id) {
+        const detectedCols = [];
+        if (c.name >= 0)      detectedCols.push('Tên [' + (c.name + 1) + ']');
+        if (c.lat >= 0)       detectedCols.push('Lat [' + (c.lat + 1) + ']');
+        if (c.lon >= 0)       detectedCols.push('Lon [' + (c.lon + 1) + ']');
+        if (c.north >= 0)     detectedCols.push('Northing [' + (c.north + 1) + ']');
+        if (c.east >= 0)      detectedCols.push('Easting [' + (c.east + 1) + ']');
+        if (c.accuracy >= 0)  detectedCols.push('Accuracy [' + (c.accuracy + 1) + ']');
+        if (c.gpsMode >= 0)   detectedCols.push('GPS mode [' + (c.gpsMode + 1) + ']');
+        if (c.elevation >= 0) detectedCols.push('Elevation [' + (c.elevation + 1) + ']');
+
+        document.getElementById('csvImportFormatInfo').innerHTML =
+            '<b>🔍 Đã nhận diện:</b> ' + fmt + ' — ' + detectedCols.join(' · ') +
+            (_csvImportHeaders ? '<br><span style="opacity:.7;">(Có hàng header)</span>' : '');
+
+        // Hide/show VN-2000 zone group + offset group
+        const isVn2000 = _csvImportFormat === 'vn2000';
+        document.getElementById('csvZoneGroup').style.display = isVn2000 ? 'block' : 'none';
+        document.getElementById('csvOffsetGroup').style.display = isVn2000 ? 'block' : 'none';
+
+        // Restore offset từ localStorage
+        _restoreCsvOffset();
+
+        // Wire event handlers
+        ['csvZone3', 'csvZone6'].forEach(id => {
             const el = document.getElementById(id);
             if (el) el.onchange = _updateCsvPreview;
         });
-        document.getElementById('csvImportLoai').onchange = _updateCsvPreview;
+        const loaiEl = document.getElementById('csvImportLoai');
+        if (loaiEl) loaiEl.onchange = _updateCsvPreview;
 
         _updateCsvPreview();
         $('#csvImportModal').modal('show');
@@ -12934,106 +13311,495 @@
     function _getCsvZoneParams() {
         const zone = document.querySelector('input[name="csvZone"]:checked');
         if (zone && zone.value === '6') return { cm: 105, k0: 0.9996 };
-        return { cm: 105.75, k0: 0.9999 }; // mặc định 3° zone HCM/BD/LA
+        return { cm: 105.75, k0: 0.9999 };
+    }
+
+    // Offset local grid (chỉ apply cho format VN-2000):
+    // file_local = VN2000_chuẩn + (dE, dN)   → chuẩn = file_local - (dE, dN)
+    function _getCsvOffset() {
+        const dE = parseFloat(document.getElementById('csvOffsetE').value) || 0;
+        const dN = parseFloat(document.getElementById('csvOffsetN').value) || 0;
+        return { dE, dN };
+    }
+
+    function _onCsvOffsetChange() {
+        // Save to localStorage
+        const o = _getCsvOffset();
+        try {
+            localStorage.setItem('csv_offset_e', String(o.dE));
+            localStorage.setItem('csv_offset_n', String(o.dN));
+        } catch(_) {}
+        _updateCsvPreview();
+    }
+
+    function _restoreCsvOffset() {
+        try {
+            const dE = parseFloat(localStorage.getItem('csv_offset_e'));
+            const dN = parseFloat(localStorage.getItem('csv_offset_n'));
+            const inE = document.getElementById('csvOffsetE');
+            const inN = document.getElementById('csvOffsetN');
+            if (inE && isFinite(dE)) inE.value = dE;
+            if (inN && isFinite(dN)) inN.value = dN;
+        } catch(_) {}
+    }
+
+    function _applyThamLuongOffset() {
+        // Preset offset đã fit từ 10 điểm C1.01-C1.10:
+        // file_local = VN2000_chuẩn + (-391.75, +223.86)
+        document.getElementById('csvOffsetE').value = -391.75;
+        document.getElementById('csvOffsetN').value = 223.86;
+        _onCsvOffsetChange();
+    }
+
+    // User override auto-detect format — remap columns theo format ép buộc
+    function _onCsvFormatOverride() {
+        const el = document.querySelector('input[name="csvFormat"]:checked');
+        const forced = el ? el.value : 'auto';
+        const rows = _csvImportRows || [];
+        if (rows.length === 0) return;
+
+        if (forced === 'auto') {
+            // Re-detect từ đầu (tôn trọng header nếu có)
+            const allRows = _csvImportHeaders ? [_csvImportHeaders, ...rows] : rows;
+            const d = _detectCsvFormat(allRows);
+            _csvImportFormat = d.format;
+            _csvImportColMap = d.colMap;
+        } else {
+            // Ép format — nếu có header dùng header, nếu không → default cột 0/1/2
+            const c = { name: -1, lat: -1, lon: -1, north: -1, east: -1, accuracy: -1, gpsMode: -1, elevation: -1 };
+            if (_csvImportHeaders) {
+                const header = _csvImportHeaders.map(h => String(h).toLowerCase().trim());
+                header.forEach((h, i) => {
+                    if (/^(name|point.?(name|id)?|tên(\s*trụ)?|id)$/i.test(h)) c.name = i;
+                    else if (/^(lat|latitude|vĩ.?độ)/i.test(h)) c.lat = i;
+                    else if (/^(lon|lng|longitude|kinh.?độ)/i.test(h)) c.lon = i;
+                    else if (/^(north(ing)?|toa.?do.?x|vn2000.?y)/i.test(h)) c.north = i;
+                    else if (/^(east(ing)?|toa.?do.?y|vn2000.?x)/i.test(h)) c.east = i;
+                    else if (/^(h.?accuracy|accuracy|độ.?chính.?xác|std.?dev)/i.test(h)) c.accuracy = i;
+                    else if (/^(solution|fix.?type|gps.?mode|quality|status)/i.test(h)) c.gpsMode = i;
+                    else if (/^(elev(ation)?|height|độ.?cao)/i.test(h)) c.elevation = i;
+                });
+            }
+            // Default cột nếu chưa detect được (không có header hoặc header không khớp)
+            if (c.name < 0) c.name = 0;
+            if (forced === 'wgs84') {
+                if (c.lat < 0) c.lat = 1;
+                if (c.lon < 0) c.lon = 2;
+                c.north = -1; c.east = -1;
+            } else {
+                if (c.north < 0) c.north = 1;
+                if (c.east < 0) c.east = 2;
+                c.lat = -1; c.lon = -1;
+            }
+            _csvImportFormat = forced;
+            _csvImportColMap = c;
+        }
+
+        // Refresh UI
+        const fmt = _csvImportFormat === 'wgs84' ? 'WGS-84 (Lat/Lon)'
+                  : _csvImportFormat === 'vn2000' ? 'VN-2000 (Northing/Easting)'
+                  : 'Không xác định';
+        const c = _csvImportColMap;
+        const detectedCols = [];
+        if (c.name >= 0)      detectedCols.push('Tên [' + (c.name + 1) + ']');
+        if (c.lat >= 0)       detectedCols.push('Lat [' + (c.lat + 1) + ']');
+        if (c.lon >= 0)       detectedCols.push('Lon [' + (c.lon + 1) + ']');
+        if (c.north >= 0)     detectedCols.push('Northing [' + (c.north + 1) + ']');
+        if (c.east >= 0)      detectedCols.push('Easting [' + (c.east + 1) + ']');
+        if (c.accuracy >= 0)  detectedCols.push('Accuracy [' + (c.accuracy + 1) + ']');
+        if (c.gpsMode >= 0)   detectedCols.push('GPS mode [' + (c.gpsMode + 1) + ']');
+        const forcedLabel = forced === 'auto' ? '' : ' <span style="background:#fbbf24;color:#78350f;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:700;">Ép format</span>';
+        document.getElementById('csvImportFormatInfo').innerHTML =
+            '<b>🔍 Định dạng:</b> ' + fmt + forcedLabel + ' — ' + detectedCols.join(' · ') +
+            (_csvImportHeaders ? '<br><span style="opacity:.7;">(Có hàng header)</span>' : '');
+
+        const isVn = _csvImportFormat === 'vn2000';
+        document.getElementById('csvZoneGroup').style.display = isVn ? 'block' : 'none';
+        document.getElementById('csvOffsetGroup').style.display = isVn ? 'block' : 'none';
+
+        _updateCsvPreview();
+    }
+
+    function _getCsvMode() {
+        const el = document.querySelector('input[name="csvMode"]:checked');
+        return el ? el.value : 'auto';
+    }
+
+    // Tính lat/lon từ 1 CSV row theo format đã detect
+    // Với format VN-2000: TRỪ offset local grid trước khi convert
+    function _extractLatLon(csvRow, zoneOpts, offsetOpts) {
+        const c = _csvImportColMap;
+        if (_csvImportFormat === 'wgs84') {
+            let lat = _parseFlexibleNumber(csvRow[c.lat]);
+            let lon = _parseFlexibleNumber(csvRow[c.lon]);
+            // Detect + fix scaled integer (VD Nuwa: 107625230 → 10.7625230)
+            lat = _normalizeLatLon(lat, true);
+            lon = _normalizeLatLon(lon, false);
+            return { lat, lon };
+        } else {
+            const north = _parseFlexibleNumber(csvRow[c.north]);
+            const east  = _parseFlexibleNumber(csvRow[c.east]);
+            // Bù offset local grid: file_local = VN2000_chuẩn + (dE, dN) → chuẩn = local - (dE, dN)
+            const o = offsetOpts || { dE: 0, dN: 0 };
+            const eStd = east  - o.dE;
+            const nStd = north - o.dN;
+            const r = convertVn2000ToLatLon(eStd, nStd, zoneOpts.cm, zoneOpts.k0);
+            return { lat: r.lat, lon: r.lon };
+        }
+    }
+
+    // Haversine distance meters
+    function _haversineDist(lat1, lon1, lat2, lon2) {
+        const R = 6371000, toRad = x => x * Math.PI / 180;
+        const dLat = toRad(lat2 - lat1), dLon = toRad(lon2 - lon1);
+        const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*Math.sin(dLon/2)**2;
+        return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
     }
 
     function _updateCsvPreview() {
-        const opts = _getCsvZoneParams();
-        opts.defaultLoai = document.getElementById('csvImportLoai').value;
+        const zoneOpts = _getCsvZoneParams();
+        const offsetOpts = _getCsvOffset();
+        const mode = _getCsvMode();
+        const c = _csvImportColMap;
         const tbody = document.getElementById('csvImportPreviewBody');
-        const TYPE_LABEL = { 1:'Trụ STK', 2:'Trụ TT', 3:'Trụ HTLT', 4:'Trụ TTLT', 5:'Tủ nổi', 6:'Tủ ngầm' };
-        const preview = _csvImportRows.slice(0, 5);
-        tbody.innerHTML = preview.map(function(r) {
-            try {
-                const name = String(r[0] || '').trim();
-                const northing = parseFloat(r[1]);
-                const easting  = parseFloat(r[2]);
-                const result   = convertVn2000ToLatLon(easting, northing, opts.cm, opts.k0);
-                const isCab = /^CS\./i.test(name);
-                const loai  = isCab ? 5 : parseInt(opts.defaultLoai || 1);
-                return '<tr style="border-bottom:1px solid #f1f5f9;">' +
-                    '<td style="padding:4px 8px;">' + name + '</td>' +
-                    '<td style="padding:4px 8px;text-align:right;font-family:monospace;">' + result.lat.toFixed(6) + '</td>' +
-                    '<td style="padding:4px 8px;text-align:right;font-family:monospace;">' + result.lon.toFixed(6) + '</td>' +
-                    '<td style="padding:4px 8px;text-align:center;">' + (TYPE_LABEL[loai] || loai) + '</td>' +
-                    '</tr>';
-            } catch(ex) {
-                return '<tr><td colspan="4" style="padding:4px 8px;color:#ef4444;">Lỗi: ' + ex.message + '</td></tr>';
+        const statsEl = document.getElementById('csvImportStats');
+        const addOptsEl = document.getElementById('csvAddOptions');
+
+        // Show "Options thêm mới" chỉ khi mode = auto hoặc add
+        if (addOptsEl) addOptsEl.style.display = (mode === 'update') ? 'none' : 'block';
+
+        // Build name → row index map từ loadedData
+        const existingByName = {};
+        if (Array.isArray(loadedData) && loadedData.length > 1) {
+            for (let i = 1; i < loadedData.length; i++) {
+                const nm = String(loadedData[i][1] || '').trim().toLowerCase();
+                if (nm) existingByName[nm] = i;
             }
-        }).join('');
-    }
-
-    function _buildImportedRow(csvRow, opts) {
-        const name     = String(csvRow[0] || '').trim();
-        const northing = parseFloat(csvRow[1]);
-        const easting  = parseFloat(csvRow[2]);
-        const result   = convertVn2000ToLatLon(easting, northing, opts.cm, opts.k0);
-        const lat = result.lat, lon = result.lon;
-
-        const isCabinet = /^CS\./i.test(name);
-        const loai = isCabinet ? 5 : parseInt(opts.defaultLoai || 1);
-
-        // Auto-detect tủ: C1.01 → CS.C1
-        let tu = opts.tuDieuKhien || '';
-        if (!tu && !isCabinet) {
-            tu = 'CS.' + name.split('.')[0];
         }
 
-        const vn = convertLatLonToVn2000(lat, lon);
-        const row = new Array(25).fill('');
-        row[0]  = generateId();
-        row[1]  = name;
-        row[2]  = lat.toFixed(7);
-        row[3]  = lon.toFixed(7);
-        row[6]  = loai;
-        row[7]  = tu;
-        row[13] = new Date().toISOString();
-        row[19] = Math.round(vn.x);
-        row[20] = Math.round(vn.y);
-        return row;
+        let matchCount = 0, newCount = 0, errCount = 0;
+        const rowsHtml = [];
+
+        for (let i = 0; i < _csvImportRows.length; i++) {
+            const r = _csvImportRows[i];
+            const name = String(r[c.name] || '').trim();
+            if (!name) continue;
+
+            let latLon;
+            try {
+                latLon = _extractLatLon(r, zoneOpts, offsetOpts);
+                if (!isFinite(latLon.lat) || !isFinite(latLon.lon)) throw new Error('Lat/Lon không hợp lệ');
+            } catch(ex) {
+                errCount++;
+                if (i < 10) rowsHtml.push(`<tr><td colspan="5" style="padding:4px 8px;color:#dc2626;">${name}: ${ex.message}</td></tr>`);
+                continue;
+            }
+
+            const existingIdx = existingByName[name.toLowerCase()];
+            const isMatch = !!existingIdx;
+            let delta = '';
+            let status, statusColor, willProcess = true;
+
+            if (mode === 'add') {
+                // Mode "Thêm mới" — LUÔN tạo dòng mới với ID mới, không cần check trùng
+                status = '➕ Thêm mới (ID mới)';
+                statusColor = '#16a34a';
+                newCount++;
+            } else if (isMatch) {
+                // Dùng parseCoord để hỗ trợ dấu phẩy VN (10,759269) —
+                // parseFloat("10,759269") = 10 → delta sai ~85km
+                const oldLat = parseCoord(loadedData[existingIdx][2]);
+                const oldLon = parseCoord(loadedData[existingIdx][3]);
+                if (isFinite(oldLat) && isFinite(oldLon)) {
+                    delta = _haversineDist(oldLat, oldLon, latLon.lat, latLon.lon).toFixed(2);
+                }
+                status = '🔄 Cập nhật (giữ ID)'; statusColor = '#0891b2'; matchCount++;
+            } else {
+                if (mode === 'update') { status = 'Bỏ qua (không tìm thấy)'; statusColor = '#94a3b8'; willProcess = false; }
+                else                    { status = '➕ Thêm mới'; statusColor = '#16a34a'; newCount++; }
+            }
+
+            if (i < 100) {
+                rowsHtml.push(`<tr style="border-bottom:1px solid #f1f5f9;${!willProcess ? 'opacity:.5;' : ''}">
+                    <td style="padding:4px 8px;font-weight:600;">${name}</td>
+                    <td style="padding:4px 8px;text-align:right;font-family:monospace;font-size:11px;">${latLon.lat.toFixed(6)}</td>
+                    <td style="padding:4px 8px;text-align:right;font-family:monospace;font-size:11px;">${latLon.lon.toFixed(6)}</td>
+                    <td style="padding:4px 8px;text-align:right;font-family:monospace;color:${delta && parseFloat(delta) > 5 ? '#f59e0b' : '#64748b'};">${delta ? delta + ' m' : '—'}</td>
+                    <td style="padding:4px 8px;text-align:center;color:${statusColor};font-weight:600;">${status}</td>
+                </tr>`);
+            }
+        }
+
+        // Stats
+        statsEl.innerHTML = `
+            <span style="background:#e0f2fe;color:#0891b2;padding:4px 10px;border-radius:6px;font-weight:700;">🔄 Cập nhật: ${matchCount}</span>
+            <span style="background:#dcfce7;color:#16a34a;padding:4px 10px;border-radius:6px;font-weight:700;">➕ Thêm mới: ${newCount}</span>
+            ${errCount > 0 ? `<span style="background:#fee2e2;color:#dc2626;padding:4px 10px;border-radius:6px;font-weight:700;">⚠ Lỗi: ${errCount}</span>` : ''}
+            <span style="color:#64748b;padding:4px 10px;">Tổng: ${_csvImportRows.length}</span>
+            ${_csvImportRows.length > 100 ? `<span style="color:#94a3b8;padding:4px 10px;font-style:italic;">Chỉ hiện 100 dòng đầu trong preview</span>` : ''}
+        `;
+
+        tbody.innerHTML = rowsHtml.join('');
+
+        // Update confirm button label
+        const btn = document.getElementById('csvImportConfirmBtn');
+        const total = matchCount + newCount;
+        btn.textContent = total > 0 ? `Áp dụng ${total} thao tác` : 'Không có thao tác';
+        btn.disabled = total === 0;
     }
 
     async function _confirmCsvImport() {
-        const opts = _getCsvZoneParams();
-        opts.defaultLoai  = document.getElementById('csvImportLoai').value;
-        opts.tuDieuKhien  = (document.getElementById('csvImportTu').value || '').trim();
+        const zoneOpts = _getCsvZoneParams();
+        const offsetOpts = _getCsvOffset();
+        const mode = _getCsvMode();
+        const c = _csvImportColMap;
+        const defaultLoai = document.getElementById('csvImportLoai').value;
+        const defaultTu   = (document.getElementById('csvImportTu').value || '').trim();
 
-        let newRows;
-        try {
-            newRows = _csvImportRows.map(function(r) { return _buildImportedRow(r, opts); });
-        } catch(ex) {
-            displayError('Lỗi chuyển đổi tọa độ: ' + ex.message);
+        // Build name → loadedData index map
+        const existingByName = {};
+        if (Array.isArray(loadedData) && loadedData.length > 1) {
+            for (let i = 1; i < loadedData.length; i++) {
+                const nm = String(loadedData[i][1] || '').trim().toLowerCase();
+                if (nm) existingByName[nm] = i;
+            }
+        }
+
+        const updates = []; // { rowIndex, name, lat, lon, accuracy, gpsMode }
+        const newRows = []; // full 25-col rows
+
+        for (const r of _csvImportRows) {
+            const name = String(r[c.name] || '').trim();
+            if (!name) continue;
+            let latLon;
+            try {
+                latLon = _extractLatLon(r, zoneOpts, offsetOpts);
+                if (!isFinite(latLon.lat) || !isFinite(latLon.lon)) continue;
+            } catch(_) { continue; }
+
+            const accuracy = c.accuracy >= 0 ? parseFloat(r[c.accuracy]) : null;
+            const gpsMode = c.gpsMode >= 0 ? String(r[c.gpsMode] || '').toLowerCase() : null;
+            const isRTK = gpsMode && /fix|rtk|float|dgps/i.test(gpsMode);
+
+            const existingIdx = existingByName[name.toLowerCase()];
+
+            // Helper: build row mới với ID tự sinh
+            const buildNewRow = () => {
+                const isCabinet = /^CS\./i.test(name);
+                const loai = isCabinet ? 5 : parseInt(defaultLoai || 1);
+                let tu = defaultTu;
+                if (!tu && !isCabinet) tu = 'CS.' + name.split('.')[0];
+
+                const row = new Array(25).fill('');
+                row[0]  = generateId();   // ← ID MỚI tự động
+                row[1]  = name;
+                // Format với dấu phẩy VN cho Google Sheet locale VN
+                row[2]  = formatCoordVN(latLon.lat, 7);
+                row[3]  = formatCoordVN(latLon.lon, 7);
+                row[6]  = loai;
+                row[7]  = tu;
+                row[13] = new Date().toISOString();
+
+                // VN2000: nếu CSV input là VN2000 → dùng giá trị CSV đã TRỪ offset (về hệ chuẩn)
+                //        nếu CSV input là WGS-84 → tính từ Lat/Lon
+                if (_csvImportFormat === 'vn2000') {
+                    const eStd = _parseFlexibleNumber(r[c.east])  - offsetOpts.dE;
+                    const nStd = _parseFlexibleNumber(r[c.north]) - offsetOpts.dN;
+                    row[19] = Math.round(eStd);  // Easting chuẩn → X
+                    row[20] = Math.round(nStd);  // Northing chuẩn → Y
+                } else {
+                    const vn = convertLatLonToVn2000(latLon.lat, latLon.lon);
+                    row[19] = Math.round(vn.x);
+                    row[20] = Math.round(vn.y);
+                }
+
+                if (isFinite(accuracy)) row[23] = accuracy;
+                if (isRTK) row[24] = 'rtk';
+                return row;
+            };
+
+            if (mode === 'add') {
+                // LUÔN thêm mới với ID mới — không quan tâm trùng tên
+                newRows.push(buildNewRow());
+            } else if (existingIdx) {
+                // Có match + mode auto/update → cập nhật in-place, GIỮ ID cũ
+                // VN2000 chuẩn = giá trị CSV - offset local grid (nếu format VN2000)
+                const csvVn2000x = _csvImportFormat === 'vn2000'
+                    ? Math.round(_parseFlexibleNumber(r[c.east])  - offsetOpts.dE)
+                    : null;
+                const csvVn2000y = _csvImportFormat === 'vn2000'
+                    ? Math.round(_parseFlexibleNumber(r[c.north]) - offsetOpts.dN)
+                    : null;
+                updates.push({
+                    rowIndex: existingIdx,
+                    name,
+                    lat: latLon.lat,
+                    lon: latLon.lon,
+                    accuracy: isFinite(accuracy) ? accuracy : null,
+                    gpsMode: isRTK ? 'rtk' : (accuracy && accuracy < 0.5 ? 'rtk' : null),
+                    csvVn2000x,
+                    csvVn2000y
+                });
+            } else {
+                // Không match + mode update → skip
+                if (mode === 'update') continue;
+                // mode auto + không match → thêm mới
+                newRows.push(buildNewRow());
+            }
+        }
+
+        if (updates.length === 0 && newRows.length === 0) {
+            displayError('Không có thao tác nào để thực hiện.');
             return;
         }
 
-        // 1. Thêm vào bản đồ + loadedData ngay
-        if (!Array.isArray(loadedData)) loadedData = [[]];
-        newRows.forEach(function(row) {
+        $('#csvImportModal').modal('hide');
+        displayInfo(`Đang xử lý ${updates.length} cập nhật + ${newRows.length} thêm mới...`);
+
+        const bar = document.getElementById('loadProgressBar');
+        const totalOps = updates.length + newRows.length;
+        let done = 0;
+        const updateBar = () => {
+            done++;
+            if (bar) { bar.style.display = 'block'; bar.style.width = Math.round(done / totalOps * 100) + '%'; }
+        };
+
+        // Helper: gọi batch_match_update 1 chunk với retry
+        const BATCH_SIZE = 50;
+        const MAX_RETRIES = 3;
+        async function _batchUpdateChunk(records, attempt = 1) {
+            try {
+                const res = await fetch(KHAOSAT_GAS_URL, {
+                    method: 'POST',
+                    body: JSON.stringify({ action: 'batch_match_update', sheet: currentSheet, records })
+                });
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                const data = await res.json();
+                if (data.status === 'ok') return data.updated || 0;
+                throw new Error(data.message || 'GAS error');
+            } catch (err) {
+                console.warn(`[batch_match_update] chunk lỗi lần ${attempt}:`, err.message);
+                if (attempt < MAX_RETRIES) {
+                    await new Promise(r => setTimeout(r, 1500 * attempt));
+                    return _batchUpdateChunk(records, attempt + 1);
+                }
+                console.error('[batch_match_update] Fail sau', MAX_RETRIES, 'lần retry');
+                return 0;
+            }
+        }
+
+        // 1. UPDATES — chia chunk 50 markers/request để tránh GAS timeout
+        let updateOk = 0;
+        if (updates.length > 0) {
+            // Update client-side trước (loadedData + marker) — feedback ngay lập tức
+            // Format lat/lon với dấu phẩy VN (10,7606005) để khớp với Google Sheet locale VN
+            updates.forEach(u => {
+                const row = loadedData[u.rowIndex];
+                if (!row) return;
+                row[2] = formatCoordVN(u.lat, 7);
+                row[3] = formatCoordVN(u.lon, 7);
+                row[13] = new Date().toISOString();
+                // VN2000: ưu tiên giá trị gốc từ CSV (tránh round-trip zone mismatch)
+                if (u.csvVn2000x != null && u.csvVn2000y != null) {
+                    row[19] = u.csvVn2000x;
+                    row[20] = u.csvVn2000y;
+                } else {
+                    const vn = convertLatLonToVn2000(u.lat, u.lon);
+                    row[19] = Math.round(vn.x);
+                    row[20] = Math.round(vn.y);
+                }
+                if (u.accuracy != null) row[23] = u.accuracy;
+                if (u.gpsMode) row[24] = u.gpsMode;
+                // Move marker on map
+                const entry = markers.find(m => normalizeText(String(m.name || '')) === normalizeText(u.name));
+                if (entry && entry.marker) {
+                    entry.marker.setLatLng([u.lat, u.lon]);
+                    entry.lat = u.lat; entry.lon = u.lon;
+                }
+            });
+
+            // Chia thành chunks + gọi song song (tối đa 3 chunk cùng lúc để không nghẽn GAS)
+            const chunks = [];
+            for (let i = 0; i < updates.length; i += BATCH_SIZE) {
+                chunks.push(updates.slice(i, i + BATCH_SIZE));
+            }
+            console.log(`[CSV import] Chia ${updates.length} updates thành ${chunks.length} chunks (${BATCH_SIZE}/chunk)`);
+            displayInfo(`Đang gửi ${chunks.length} batch × ${BATCH_SIZE} marker lên Google Sheet...`);
+
+            for (let ci = 0; ci < chunks.length; ci++) {
+                const chunk = chunks[ci];
+                const records = chunk.map(u => {
+                    // Nếu CSV có VN2000 gốc → dùng thẳng; ngược lại tính từ Lat/Lon
+                    let vx, vy;
+                    if (u.csvVn2000x != null && u.csvVn2000y != null) {
+                        vx = u.csvVn2000x;
+                        vy = u.csvVn2000y;
+                    } else {
+                        const vn = convertLatLonToVn2000(u.lat, u.lon);
+                        vx = Math.round(vn.x);
+                        vy = Math.round(vn.y);
+                    }
+                    return {
+                        tenTru: u.name,
+                        // Format với dấu phẩy VN (10,7606005) để Google Sheet locale VN hiển thị đúng
+                        lat: formatCoordVN(u.lat, 7),
+                        lon: formatCoordVN(u.lon, 7),
+                        capNhat: new Date().toISOString(),
+                        vn2000x: vx,
+                        vn2000y: vy,
+                        ...(u.accuracy != null ? { accuracy: u.accuracy } : {}),
+                        ...(u.gpsMode ? { gpsMode: u.gpsMode } : {})
+                    };
+                });
+                const chunkOk = await _batchUpdateChunk(records);
+                updateOk += chunkOk;
+                // Progress bar
+                for (let i = 0; i < chunk.length; i++) updateBar();
+                displayInfo(`Batch ${ci+1}/${chunks.length}: ${chunkOk}/${chunk.length} ✓ (tổng: ${updateOk}/${updates.length})`);
+            }
+        }
+
+        // 2. NEW ROWS — sync từng row (giữ nguyên logic cũ)
+        let newOk = 0;
+        for (const row of newRows) {
+            if (!Array.isArray(loadedData)) loadedData = [[]];
             loadedData.push(row);
             addMarkerRowToMap(row);
-        });
-
-        // 2. Đóng modal
-        $('#csvImportModal').modal('hide');
-        displayInfo('Đã thêm ' + newRows.length + ' marker. Đang đồng bộ lên Google Sheet...');
-
-        // 3. Batch sync lên GAS với progress
-        let ok = 0;
-        for (let i = 0; i < newRows.length; i++) {
-            const success = await syncRowToGAS(newRows[i], { silent: true });
-            if (success) ok++;
-            // Cập nhật progress bar
-            const pct = Math.round((i + 1) / newRows.length * 100);
-            const bar = document.getElementById('loadProgressBar');
-            if (bar) { bar.style.display = 'block'; bar.style.width = pct + '%'; }
+            const success = await syncRowToGAS(row, { silent: true });
+            if (success) newOk++;
+            updateBar();
         }
-        const bar = document.getElementById('loadProgressBar');
+
         if (bar) { bar.style.display = 'none'; bar.style.width = '0'; }
 
-        if (ok === newRows.length) {
-            displayInfo('Đã đồng bộ ' + ok + '/' + newRows.length + ' marker lên Google Sheet.');
+        const msg = [];
+        if (updates.length > 0) msg.push(`Cập nhật: ${updateOk}/${updates.length}`);
+        if (newRows.length > 0) msg.push(`Thêm mới: ${newOk}/${newRows.length}`);
+
+        // Cảnh báo nếu có row không sync được
+        const totalOk = updateOk + newOk;
+        if (totalOk < totalOps) {
+            const failed = totalOps - totalOk;
+            displayError(`⚠ ${msg.join(' · ')} — Còn ${failed} thao tác thất bại. Đang tự động thử lại...`);
+            // Auto reload CSV từ Google Sheet để user thấy trạng thái thực
+            setTimeout(async () => {
+                try {
+                    const page = DISTRICT_PAGES.find(p => p.sheet === currentSheet);
+                    if (page && page.csvUrl) {
+                        await loadFromCSV(page.csvUrl);
+                        displayInfo(`🔄 Đã reload dữ liệu từ Google Sheet để kiểm tra`);
+                    }
+                } catch (_) {}
+            }, 2000);
         } else {
-            displayError('Đồng bộ ' + ok + '/' + newRows.length + '. Kiểm tra kết nối GAS.');
+            displayInfo(`✅ ${msg.join(' · ')} — Đồng bộ thành công 100%`);
+            // Reload sau 2s để user thấy vị trí mới trên map
+            setTimeout(async () => {
+                try {
+                    const page = DISTRICT_PAGES.find(p => p.sheet === currentSheet);
+                    if (page && page.csvUrl) await loadFromCSV(page.csvUrl);
+                } catch (_) {}
+            }, 2000);
         }
     }
     </script>
