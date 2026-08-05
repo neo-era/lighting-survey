@@ -1486,6 +1486,12 @@
                                 <i class="fa fa-share-alt"></i> Sơ đồ cáp
                             </button>
                         </div>
+                        <!-- Nhập CSV tọa độ VN-2000 -->
+                        <input type="file" id="csvImportInput" accept=".csv" style="display:none" onchange="_onCsvImportChange(this)">
+                        <button onclick="document.getElementById('csvImportInput').click()" class="ctrl-btn outline" style="margin-bottom:0;font-size:12px;padding:8px;margin-top:6px;width:100%;">
+                            📂 Nhập CSV tọa độ
+                        </button>
+
                         <div id="cableToolbar" style="display:none;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px;">
                             <button id="btnCableEdit" onclick="toggleCableEditMode()" class="ctrl-btn outline" style="margin-bottom:0;font-size:12px;padding:8px;">
                                 <i class="fa fa-pencil"></i> Sửa cáp
@@ -1876,6 +1882,75 @@
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" onclick="closeExportCadModal()">Hủy</button>
                     <button type="button" class="btn btn-primary" id="exportCadBtn">Export</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══ NHẬP CSV TỌA ĐỘ VN-2000 MODAL ═══ -->
+    <div class="modal fade" id="csvImportModal" tabindex="-1" role="dialog" aria-hidden="true">
+        <div class="modal-dialog" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">📂 Nhập CSV tọa độ VN-2000</h5>
+                    <button type="button" class="close" data-dismiss="modal"><span>&times;</span></button>
+                </div>
+                <div class="modal-body">
+                    <p id="csvImportFileInfo" style="font-size:13px;color:#64748b;margin-bottom:12px;"></p>
+
+                    <!-- Múi chiếu -->
+                    <div class="form-group">
+                        <label style="font-size:13px;font-weight:600;">Múi chiếu VN-2000</label>
+                        <div style="display:flex;gap:12px;margin-top:4px;">
+                            <label style="font-size:13px;cursor:pointer;">
+                                <input type="radio" name="csvZone" id="csvZone3" value="3" checked style="margin-right:4px;">
+                                3° — CM 105.75° (HCM/BD/LA)
+                            </label>
+                            <label style="font-size:13px;cursor:pointer;">
+                                <input type="radio" name="csvZone" id="csvZone6" value="6" style="margin-right:4px;">
+                                6° — CM 105° (cả nước)
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Tủ điều khiển mặc định -->
+                    <div class="form-group">
+                        <label style="font-size:13px;font-weight:600;">Tủ điều khiển mặc định</label>
+                        <input type="text" id="csvImportTu" class="form-control form-control-sm" placeholder="Để trống = tự nhận diện từ tên CS.Cx" style="font-size:13px;">
+                    </div>
+
+                    <!-- Loại mặc định cho trụ đèn -->
+                    <div class="form-group">
+                        <label style="font-size:13px;font-weight:600;">Loại mặc định trụ đèn</label>
+                        <select id="csvImportLoai" class="form-control form-control-sm" style="font-size:13px;">
+                            <option value="1">Trụ STK (loại 1)</option>
+                            <option value="2">Trụ trang trí (loại 2)</option>
+                            <option value="3">Trụ HTLT (loại 3)</option>
+                            <option value="4">Trụ TTLT (loại 4)</option>
+                        </select>
+                    </div>
+
+                    <!-- Preview table -->
+                    <div style="font-size:12px;font-weight:600;color:#475569;margin-bottom:4px;">Xem trước (5 hàng đầu):</div>
+                    <div style="overflow-x:auto;">
+                        <table id="csvImportPreview" style="width:100%;border-collapse:collapse;font-size:12px;">
+                            <thead>
+                                <tr style="background:#f1f5f9;">
+                                    <th style="padding:4px 8px;text-align:left;border-bottom:1px solid #cbd5e1;">Tên trụ</th>
+                                    <th style="padding:4px 8px;text-align:right;border-bottom:1px solid #cbd5e1;">Lat</th>
+                                    <th style="padding:4px 8px;text-align:right;border-bottom:1px solid #cbd5e1;">Lon</th>
+                                    <th style="padding:4px 8px;text-align:center;border-bottom:1px solid #cbd5e1;">Loại</th>
+                                </tr>
+                            </thead>
+                            <tbody id="csvImportPreviewBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary btn-sm" data-dismiss="modal">Hủy</button>
+                    <button type="button" class="btn btn-primary btn-sm" id="csvImportConfirmBtn" onclick="_confirmCsvImport()">
+                        Nhập marker
+                    </button>
                 </div>
             </div>
         </div>
@@ -12820,6 +12895,146 @@
         }
 
         content.innerHTML = html;
+    }
+
+    // ═══ NHẬP CSV TỌA ĐỘ VN-2000 ═══
+    let _csvImportRows = [];
+
+    function _onCsvImportChange(input) {
+        const file = input.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const rows = parseCSVText(e.target.result)
+                .filter(function(r) { return r.length >= 3 && String(r[0] || '').trim(); });
+            _csvImportRows = rows;
+            _openCsvImportModal(file.name, rows);
+        };
+        reader.readAsText(file, 'UTF-8');
+        input.value = '';
+    }
+
+    function _openCsvImportModal(filename, rows) {
+        document.getElementById('csvImportFileInfo').textContent =
+            'File: ' + filename + ' — ' + rows.length + ' hàng dữ liệu';
+        document.getElementById('csvImportConfirmBtn').textContent =
+            'Nhập ' + rows.length + ' marker';
+
+        // Wire zone radio buttons to update preview
+        ['csvZone3', 'csvZone6'].forEach(function(id) {
+            const el = document.getElementById(id);
+            if (el) el.onchange = _updateCsvPreview;
+        });
+        document.getElementById('csvImportLoai').onchange = _updateCsvPreview;
+
+        _updateCsvPreview();
+        $('#csvImportModal').modal('show');
+    }
+
+    function _getCsvZoneParams() {
+        const zone = document.querySelector('input[name="csvZone"]:checked');
+        if (zone && zone.value === '6') return { cm: 105, k0: 0.9996 };
+        return { cm: 105.75, k0: 0.9999 }; // mặc định 3° zone HCM/BD/LA
+    }
+
+    function _updateCsvPreview() {
+        const opts = _getCsvZoneParams();
+        opts.defaultLoai = document.getElementById('csvImportLoai').value;
+        const tbody = document.getElementById('csvImportPreviewBody');
+        const TYPE_LABEL = { 1:'Trụ STK', 2:'Trụ TT', 3:'Trụ HTLT', 4:'Trụ TTLT', 5:'Tủ nổi', 6:'Tủ ngầm' };
+        const preview = _csvImportRows.slice(0, 5);
+        tbody.innerHTML = preview.map(function(r) {
+            try {
+                const name = String(r[0] || '').trim();
+                const northing = parseFloat(r[1]);
+                const easting  = parseFloat(r[2]);
+                const result   = convertVn2000ToLatLon(easting, northing, opts.cm, opts.k0);
+                const isCab = /^CS\./i.test(name);
+                const loai  = isCab ? 5 : parseInt(opts.defaultLoai || 1);
+                return '<tr style="border-bottom:1px solid #f1f5f9;">' +
+                    '<td style="padding:4px 8px;">' + name + '</td>' +
+                    '<td style="padding:4px 8px;text-align:right;font-family:monospace;">' + result.lat.toFixed(6) + '</td>' +
+                    '<td style="padding:4px 8px;text-align:right;font-family:monospace;">' + result.lon.toFixed(6) + '</td>' +
+                    '<td style="padding:4px 8px;text-align:center;">' + (TYPE_LABEL[loai] || loai) + '</td>' +
+                    '</tr>';
+            } catch(ex) {
+                return '<tr><td colspan="4" style="padding:4px 8px;color:#ef4444;">Lỗi: ' + ex.message + '</td></tr>';
+            }
+        }).join('');
+    }
+
+    function _buildImportedRow(csvRow, opts) {
+        const name     = String(csvRow[0] || '').trim();
+        const northing = parseFloat(csvRow[1]);
+        const easting  = parseFloat(csvRow[2]);
+        const result   = convertVn2000ToLatLon(easting, northing, opts.cm, opts.k0);
+        const lat = result.lat, lon = result.lon;
+
+        const isCabinet = /^CS\./i.test(name);
+        const loai = isCabinet ? 5 : parseInt(opts.defaultLoai || 1);
+
+        // Auto-detect tủ: C1.01 → CS.C1
+        let tu = opts.tuDieuKhien || '';
+        if (!tu && !isCabinet) {
+            tu = 'CS.' + name.split('.')[0];
+        }
+
+        const vn = convertLatLonToVn2000(lat, lon);
+        const row = new Array(25).fill('');
+        row[0]  = generateId();
+        row[1]  = name;
+        row[2]  = lat.toFixed(7);
+        row[3]  = lon.toFixed(7);
+        row[6]  = loai;
+        row[7]  = tu;
+        row[13] = new Date().toISOString();
+        row[19] = Math.round(vn.x);
+        row[20] = Math.round(vn.y);
+        return row;
+    }
+
+    async function _confirmCsvImport() {
+        const opts = _getCsvZoneParams();
+        opts.defaultLoai  = document.getElementById('csvImportLoai').value;
+        opts.tuDieuKhien  = (document.getElementById('csvImportTu').value || '').trim();
+
+        let newRows;
+        try {
+            newRows = _csvImportRows.map(function(r) { return _buildImportedRow(r, opts); });
+        } catch(ex) {
+            displayError('Lỗi chuyển đổi tọa độ: ' + ex.message);
+            return;
+        }
+
+        // 1. Thêm vào bản đồ + loadedData ngay
+        if (!Array.isArray(loadedData)) loadedData = [[]];
+        newRows.forEach(function(row) {
+            loadedData.push(row);
+            addMarkerRowToMap(row);
+        });
+
+        // 2. Đóng modal
+        $('#csvImportModal').modal('hide');
+        displayInfo('Đã thêm ' + newRows.length + ' marker. Đang đồng bộ lên Google Sheet...');
+
+        // 3. Batch sync lên GAS với progress
+        let ok = 0;
+        for (let i = 0; i < newRows.length; i++) {
+            const success = await syncRowToGAS(newRows[i], { silent: true });
+            if (success) ok++;
+            // Cập nhật progress bar
+            const pct = Math.round((i + 1) / newRows.length * 100);
+            const bar = document.getElementById('loadProgressBar');
+            if (bar) { bar.style.display = 'block'; bar.style.width = pct + '%'; }
+        }
+        const bar = document.getElementById('loadProgressBar');
+        if (bar) { bar.style.display = 'none'; bar.style.width = '0'; }
+
+        if (ok === newRows.length) {
+            displayInfo('Đã đồng bộ ' + ok + '/' + newRows.length + ' marker lên Google Sheet.');
+        } else {
+            displayError('Đồng bộ ' + ok + '/' + newRows.length + '. Kiểm tra kết nối GAS.');
+        }
     }
     </script>
 
