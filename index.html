@@ -1014,6 +1014,36 @@
                 <option value="0.9999" selected>0.9999 (VN-2000 múi 3°)</option>
             </select>
 
+            <!-- Bù offset local grid (nếu bản vẽ dùng hệ tọa độ công trình) -->
+            <div style="background:#fef3c7;padding:10px 12px;border-radius:6px;border-left:4px solid #f59e0b;margin-bottom:14px;">
+                <label style="display:block;font-size:12px;font-weight:700;color:#78350f;margin-bottom:2px;">🔀 Bù offset local grid (nếu bản vẽ dùng hệ tọa độ công trình)</label>
+                <div style="font-size:11px;color:#78350f;margin-bottom:6px;opacity:.85;">
+                    Nhiều dự án dùng grid cục bộ (VD Tham Lương lệch −391.75m E · +223.86m N so với VN-2000 chuẩn).<br>
+                    App sẽ TRỪ offset khỏi tọa độ DXF trước khi convert sang Lat/Lon.
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:6px;align-items:end;">
+                    <div>
+                        <label style="font-size:11px;font-weight:600;color:#78350f;margin-bottom:2px;">ΔE (Easting, m)</label>
+                        <input type="number" step="0.01" id="cadOffsetE" value="0" oninput="_onCadOffsetChange()"
+                               style="width:100%;padding:6px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;font-family:monospace;">
+                    </div>
+                    <div>
+                        <label style="font-size:11px;font-weight:600;color:#78350f;margin-bottom:2px;">ΔN (Northing, m)</label>
+                        <input type="number" step="0.01" id="cadOffsetN" value="0" oninput="_onCadOffsetChange()"
+                               style="width:100%;padding:6px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;font-family:monospace;">
+                    </div>
+                    <div>
+                        <button type="button" onclick="_applyThamLuongOffsetCad()" class="ctrl-btn"
+                                style="margin-bottom:0;padding:6px 10px;font-size:11px;white-space:nowrap;background:#f59e0b;color:#fff;border:none;">
+                            📍 Tham Lương
+                        </button>
+                    </div>
+                </div>
+                <div style="font-size:11px;color:#78350f;margin-top:4px;opacity:.75;">
+                    Để trống (0, 0) nếu bản vẽ đã ở VN-2000 chuẩn quốc gia. Giá trị sẽ tự nhớ cho lần sau.
+                </div>
+            </div>
+
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
                 <button onclick="_closeCadUpload()" class="ctrl-btn outline" style="margin-bottom:0;padding:10px;font-size:13px;">Hủy</button>
                 <button onclick="_handleCadUpload()" class="ctrl-btn primary" style="margin-bottom:0;padding:10px;font-size:13px;">Tải lên</button>
@@ -1055,19 +1085,25 @@
                 <option value="1">1.0000 (Không có scale)</option>
             </select>
 
-            <label style="display:block;font-size:12px;font-weight:700;color:#334155;margin-bottom:4px;">Dịch chuyển thêm (mét) — chỉnh vi mô</label>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px;">
+            <label style="display:block;font-size:12px;font-weight:700;color:#334155;margin-bottom:4px;">🔀 Bù offset local grid (ΔE, ΔN) — trừ khỏi tọa độ trước convert</label>
+            <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:6px;margin-bottom:10px;align-items:end;">
                 <div>
-                    <div style="font-size:10px;color:#64748b;margin-bottom:2px;">Đông (+) / Tây (-)</div>
-                    <input type="number" id="cadAdjOffsetX" step="10" value="0"
+                    <div style="font-size:10px;color:#64748b;margin-bottom:2px;">ΔE (Easting, m)</div>
+                    <input type="number" id="cadAdjOffsetX" step="0.01" value="0"
                            oninput="_updateCadAdjPreview()"
                            style="width:100%;padding:6px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;font-family:monospace;">
                 </div>
                 <div>
-                    <div style="font-size:10px;color:#64748b;margin-bottom:2px;">Bắc (+) / Nam (-)</div>
-                    <input type="number" id="cadAdjOffsetY" step="10" value="0"
+                    <div style="font-size:10px;color:#64748b;margin-bottom:2px;">ΔN (Northing, m)</div>
+                    <input type="number" id="cadAdjOffsetY" step="0.01" value="0"
                            oninput="_updateCadAdjPreview()"
                            style="width:100%;padding:6px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;font-family:monospace;">
+                </div>
+                <div>
+                    <button type="button" onclick="_applyThamLuongOffsetCadAdjust()" class="ctrl-btn"
+                            style="margin-bottom:0;padding:6px 10px;font-size:11px;white-space:nowrap;background:#f59e0b;color:#fff;border:none;">
+                        📍 Tham Lương
+                    </button>
                 </div>
             </div>
 
@@ -1366,6 +1402,21 @@
 
                     <div class="ctrl-divider"></div>
 
+                    <!-- Bản đồ nền (bật/tắt tile — hữu ích khi xem CAD overlay, in bản vẽ, ưu tiên marker) -->
+                    <div class="ctrl-section" id="sec-basemap">
+                        <div class="ctrl-title">🗺 Bản đồ nền</div>
+                        <button type="button" id="btnGlobalBasemap" onclick="_toggleBasemap()"
+                                class="ctrl-btn outline basemap-toggle-btn"
+                                style="width:100%;margin-bottom:0;font-size:12px;padding:8px;">
+                            🗺 Ẩn bản đồ nền
+                        </button>
+                        <div style="font-size:10px;color:var(--text-muted);margin-top:4px;line-height:1.4;">
+                            Ẩn tile để dễ nhìn marker/CAD/bản vẽ. Bấm lại để hiện lại. Không mất kết nối.
+                        </div>
+                    </div>
+
+                    <div class="ctrl-divider"></div>
+
                     <!-- Xoay bản đồ (compass rotate 2D) -->
                     <div class="ctrl-section" id="sec-rotate">
                         <div class="ctrl-title" style="display:flex;align-items:center;justify-content:space-between;">
@@ -1532,7 +1583,7 @@
                                     🗑 Gỡ
                                 </button>
                             </div>
-                            <button id="btnToggleBasemap" onclick="_toggleBasemap()" class="ctrl-btn outline"
+                            <button id="btnToggleBasemap" onclick="_toggleBasemap()" class="ctrl-btn outline basemap-toggle-btn"
                                     style="width:100%;margin-top:6px;font-size:11px;padding:5px;color:#64748b;border-color:#cbd5e1;">
                                 🗺 Ẩn bản đồ nền
                             </button>
@@ -6010,16 +6061,15 @@
             _cadTextLayer = L.layerGroup();
             const zone = _cadMeta.zone;
             const k0 = _cadMeta.k0 || 0.9996;
-            const offX = _cadMeta.offsetX || 0; // Đông (+) / Tây (-) mét
-            const offY = _cadMeta.offsetY || 0; // Bắc (+) / Nam (-) mét
-            // Convert mét → độ (approximation gần vĩ độ Cần Giuộc)
+            // Bù offset local grid (CSV convention): file_local = VN2000_chuẩn + (dE, dN)
+            // → chuẩn = file_local - (dE, dN)  → trừ TRƯỚC convert
+            const dE = _cadMeta.dE || 0;
+            const dN = _cadMeta.dN || 0;
             const affine = _cadMeta.affine || null;
             const _cvt = (p) => {
-                const c = convertVn2000ToLatLon(p.x, p.y, zone, k0);
-                if (offX || offY) {
-                    c.lat += offY / 111320;
-                    c.lon += offX / (111320 * Math.cos(c.lat * Math.PI / 180));
-                }
+                const xStd = p.x - dE;
+                const yStd = p.y - dN;
+                const c = convertVn2000ToLatLon(xStd, yStd, zone, k0);
                 // P19: Apply affine calibration nếu có (scale + rotate + translate)
                 if (affine) return _applyAffineToLatLon(c.lat, c.lon, affine);
                 return c;
@@ -6137,6 +6187,50 @@
             return _findNearestCadVertex(lat, lon, _cadSnapMaxDist);
         }
 
+        // Offset local grid CAD — cùng convention với CSV import:
+        // file_local = VN2000_chuẩn + (dE, dN)  → chuẩn = file_local - (dE, dN)
+        function _getCadOffset() {
+            const dE = parseFloat((document.getElementById('cadOffsetE') || {}).value) || 0;
+            const dN = parseFloat((document.getElementById('cadOffsetN') || {}).value) || 0;
+            return { dE, dN };
+        }
+
+        function _onCadOffsetChange() {
+            const o = _getCadOffset();
+            try {
+                localStorage.setItem('cad_offset_e', String(o.dE));
+                localStorage.setItem('cad_offset_n', String(o.dN));
+            } catch(_) {}
+        }
+
+        function _restoreCadOffset() {
+            try {
+                const dE = parseFloat(localStorage.getItem('cad_offset_e'));
+                const dN = parseFloat(localStorage.getItem('cad_offset_n'));
+                const inE = document.getElementById('cadOffsetE');
+                const inN = document.getElementById('cadOffsetN');
+                if (inE && isFinite(dE)) inE.value = dE;
+                if (inN && isFinite(dN)) inN.value = dN;
+            } catch(_) {}
+        }
+
+        function _applyThamLuongOffsetCad() {
+            const inE = document.getElementById('cadOffsetE');
+            const inN = document.getElementById('cadOffsetN');
+            if (inE) inE.value = -391.75;
+            if (inN) inN.value = 223.86;
+            _onCadOffsetChange();
+        }
+
+        // Preset trong Adjust modal — fill vào cadAdjOffsetX/Y (giờ dùng convention ΔE/ΔN)
+        function _applyThamLuongOffsetCadAdjust() {
+            const inX = document.getElementById('cadAdjOffsetX');
+            const inY = document.getElementById('cadAdjOffsetY');
+            if (inX) inX.value = -391.75;
+            if (inY) inY.value = 223.86;
+            if (typeof _updateCadAdjPreview === 'function') _updateCadAdjPreview();
+        }
+
         function _openCadUpload() {
             const modal = document.getElementById('cadUploadModal');
             if (!modal) return;
@@ -6148,6 +6242,8 @@
             if (fi) fi.value = '';
             const info = document.getElementById('cadFileInfo');
             if (info) info.textContent = '';
+            // Restore offset local grid từ localStorage
+            _restoreCadOffset();
             modal.style.display = 'flex';
             closeControlsModal && closeControlsModal();
         }
@@ -6190,6 +6286,9 @@
 
             const meridianDeg = parseFloat(document.getElementById('cadMeridianInput').value) || 105;
             const k0 = parseFloat(document.getElementById('cadK0Input').value) || 0.9996;
+            // Bù offset local grid (nếu bản vẽ dùng grid công trình)
+            const cadOff = _getCadOffset();
+            _onCadOffsetChange();  // persist vào localStorage
 
             displayInfo('Đang tải thư viện DXF...');
             try { await _loadDxfParser(); }
@@ -6277,6 +6376,8 @@
                 uploadedAt: new Date().toISOString(),
                 zone: meridianDeg,
                 k0,
+                dE: cadOff.dE,
+                dN: cadOff.dN,
                 layers,
                 entityCount: entities.length,
                 bounds
@@ -6322,8 +6423,24 @@
             if (btn) btn.textContent = _cadVisible ? '👁 Ẩn' : '👁 Hiện';
         }
 
+        // Sync text/style của tất cả buttons .basemap-toggle-btn (CAD section + Global ☰ panel)
+        function _syncBasemapButtons(hidden) {
+            document.querySelectorAll('.basemap-toggle-btn').forEach(btn => {
+                if (hidden) {
+                    btn.textContent = '🗺 Hiện bản đồ nền';
+                    btn.style.color = '#92400e';
+                    btn.style.borderColor = '#fde68a';
+                    btn.style.background = '#fef3c7';
+                } else {
+                    btn.textContent = '🗺 Ẩn bản đồ nền';
+                    btn.style.color = '';
+                    btn.style.borderColor = '';
+                    btn.style.background = '';
+                }
+            });
+        }
+
         function _toggleBasemap() {
-            const btn = document.getElementById('btnToggleBasemap');
             if (_hiddenTileLayers.length === 0) {
                 // Ẩn: lưu và xóa tất cả tile layers khỏi map
                 map.eachLayer(l => {
@@ -6332,20 +6449,12 @@
                         map.removeLayer(l);
                     }
                 });
-                if (btn) {
-                    btn.textContent = '🗺 Hiện bản đồ nền';
-                    btn.style.cssText += ';color:#92400e;border-color:#fde68a;background:#fef3c7;';
-                }
+                _syncBasemapButtons(true);
             } else {
                 // Restore
                 _hiddenTileLayers.forEach(l => l.addTo(map));
                 _hiddenTileLayers = [];
-                if (btn) {
-                    btn.textContent = '🗺 Ẩn bản đồ nền';
-                    btn.style.color = '#64748b';
-                    btn.style.borderColor = '#cbd5e1';
-                    btn.style.background = '';
-                }
+                _syncBasemapButtons(false);
             }
         }
 
@@ -6921,14 +7030,12 @@
             if (!p || !out) return;
             const mer = parseFloat(document.getElementById('cadAdjMeridianInput').value) || 105.75;
             const k0 = parseFloat(document.getElementById('cadAdjK0Input').value) || 0.9999;
-            const offX = parseFloat(document.getElementById('cadAdjOffsetX').value) || 0;
-            const offY = parseFloat(document.getElementById('cadAdjOffsetY').value) || 0;
+            // Convention mới: dE/dN — trừ khỏi tọa độ trước convert (giống CSV)
+            const dE = parseFloat(document.getElementById('cadAdjOffsetX').value) || 0;
+            const dN = parseFloat(document.getElementById('cadAdjOffsetY').value) || 0;
             const deltaEl = document.getElementById('cadAdjDelta');
             try {
-                const c = convertVn2000ToLatLon(p.x, p.y, mer, k0);
-                // Apply offset: mét → độ (1° lat ≈ 111.32km; 1° lon ≈ 111.32km × cos(lat))
-                c.lat += offY / 111320;
-                c.lon += offX / (111320 * Math.cos(c.lat * Math.PI / 180));
+                const c = convertVn2000ToLatLon(p.x - dE, p.y - dN, mer, k0);
                 out.textContent = `${c.lat.toFixed(6)}, ${c.lon.toFixed(6)}`;
                 out.style.color = '#059669';
                 // Tính delta so với trung tâm địa bàn hiện tại (không hardcode Cần Giuộc)
@@ -6979,8 +7086,9 @@
             const offY = document.getElementById('cadAdjOffsetY');
             if (merInp) merInp.value = String(_cadMeta.zone);
             if (k0Sel) k0Sel.value = String(_cadMeta.k0 || 0.9996);
-            if (offX) offX.value = String(_cadMeta.offsetX || 0);
-            if (offY) offY.value = String(_cadMeta.offsetY || 0);
+            // Convention mới: dE/dN (CSV convention). Input IDs giữ nguyên cho backward compat DOM.
+            if (offX) offX.value = String(_cadMeta.dE || 0);
+            if (offY) offY.value = String(_cadMeta.dN || 0);
             _updateCadAdjPreview();
             modal.style.display = 'flex';
             closeControlsModal && closeControlsModal();
@@ -6994,17 +7102,20 @@
             if (!_cadMeta) { _closeCadAdjust(); return; }
             const mer = parseFloat(document.getElementById('cadAdjMeridianInput').value) || 105.75;
             const k0 = parseFloat(document.getElementById('cadAdjK0Input').value) || 0.9999;
-            const offX = parseFloat(document.getElementById('cadAdjOffsetX').value) || 0;
-            const offY = parseFloat(document.getElementById('cadAdjOffsetY').value) || 0;
+            const dE = parseFloat(document.getElementById('cadAdjOffsetX').value) || 0;
+            const dN = parseFloat(document.getElementById('cadAdjOffsetY').value) || 0;
             _cadMeta.zone = mer;
             _cadMeta.k0 = k0;
-            _cadMeta.offsetX = offX;
-            _cadMeta.offsetY = offY;
+            _cadMeta.dE = dE;
+            _cadMeta.dN = dN;
+            // Clean up old convention fields nếu còn
+            delete _cadMeta.offsetX;
+            delete _cadMeta.offsetY;
             _renderCadLayer(true);
             // Update cache
             await _idbSetCad(currentSheet, { entities: _cadEntities, meta: _cadMeta });
             _closeCadAdjust();
-            displayInfo(`KTTT ${mer}°, k₀=${k0}, dịch (${offX}m, ${offY}m)`);
+            displayInfo(`KTTT ${mer}°, k₀=${k0}, offset ΔE=${dE}m, ΔN=${dN}m`);
         }
 
         async function _loadCachedCad(sheetName) {
@@ -7023,11 +7134,25 @@
             const needsClean = cached.entities.some(e =>
                 e.type === 'text' && e.text && (e.text.includes('{f') || e.text.includes('\\C') || e.text.includes('\\P') || e.text.includes('%%'))
             );
-            if (needsClean) {
-                cached.entities = cached.entities
-                    .map(e => e.type === 'text' ? { ...e, text: _cleanMText(e.text) } : e)
-                    .filter(e => e.type !== 'text' || e.text);
-                // Ghi lại cache đã clean để lần sau không cần re-clean
+            // Migration: convention cũ offsetX/Y (cộng sau convert, Đông+/Bắc+ mét) →
+            // convention mới dE/dN (trừ trước convert, ΔE/ΔN local grid). Sign đảo dấu.
+            const needsOffsetMigration =
+                (cached.meta.offsetX != null || cached.meta.offsetY != null) &&
+                (cached.meta.dE == null && cached.meta.dN == null);
+            if (needsOffsetMigration) {
+                cached.meta.dE = -(cached.meta.offsetX || 0);
+                cached.meta.dN = -(cached.meta.offsetY || 0);
+                delete cached.meta.offsetX;
+                delete cached.meta.offsetY;
+                console.log(`[CAD migration] ${sheetName}: offsetX/Y → dE/dN`, cached.meta.dE, cached.meta.dN);
+            }
+            if (needsClean || needsOffsetMigration) {
+                if (needsClean) {
+                    cached.entities = cached.entities
+                        .map(e => e.type === 'text' ? { ...e, text: _cleanMText(e.text) } : e)
+                        .filter(e => e.type !== 'text' || e.text);
+                }
+                // Ghi lại cache đã clean/migrated để lần sau không cần re-process
                 await _idbSetCad(sheetName, cached);
             }
             _cadEntities = cached.entities;
@@ -12302,21 +12427,124 @@
             }).catch(e => displayError('Lỗi: ' + e.message));
         }
 
-        // ── VERSION DỮ LIỆU ──────────────────────────────────────────────────
+        // ── VERSION DỮ LIỆU + NHẮC CẬP NHẬT ─────────────────────────────────
+        let _appLoadedVersion = null;   // {major, minor, patch} lúc app boot — baseline
+        let _lastVersionCheck = 0;      // timestamp ms lần fetch gần nhất
+        const _VERSION_CHECK_INTERVAL_MS = 10 * 60 * 1000;  // 10 phút giữa các poll
+
+        function _versionStr(v) { return `${v.major}.${v.minor}.${v.patch}`; }
+
+        // So sánh 2 version {major,minor,patch}. Trả về 1 nếu a>b, -1 nếu a<b, 0 bằng.
+        function _compareVersion(a, b) {
+            if (!a || !b) return 0;
+            for (const k of ['major', 'minor', 'patch']) {
+                const av = a[k] | 0, bv = b[k] | 0;
+                if (av > bv) return 1;
+                if (av < bv) return -1;
+            }
+            return 0;
+        }
+
         function _setDataVersion(v) {
-            const versionStr = `${v.major}.${v.minor}.${v.patch}`;
+            const versionStr = _versionStr(v);
             document.title = `Lighting System V${versionStr}`;
             const tag = document.getElementById('dataVersionTag');
             if (tag) tag.textContent = `Dữ liệu v${versionStr}`;
         }
+
         async function _loadDataVersion() {
             try {
                 const res = await fetch(
                     'https://raw.githubusercontent.com/neo-era/lighting-survey/main/data/version.json?t=' + Date.now()
                 );
-                if (res.ok) _setDataVersion(await res.json());
+                if (!res.ok) return;
+                const remote = await res.json();
+                _setDataVersion(remote);
+                _lastVersionCheck = Date.now();
+                if (!_appLoadedVersion) {
+                    // Lần đầu load — snapshot làm baseline
+                    _appLoadedVersion = { major: remote.major, minor: remote.minor, patch: remote.patch };
+                } else if (_compareVersion(remote, _appLoadedVersion) > 0) {
+                    // Có phiên bản mới hơn baseline lúc load app
+                    _maybeShowUpdateBanner(remote);
+                }
             } catch (_) {}
         }
+
+        function _maybeShowUpdateBanner(remote) {
+            // Không nhắc lại nếu user đã dismiss version này (hoặc mới hơn)
+            let dismissed = null;
+            try {
+                const raw = localStorage.getItem('dismissed_update_version');
+                if (raw) dismissed = JSON.parse(raw);
+            } catch (_) {}
+            if (dismissed && _compareVersion(remote, dismissed) <= 0) return;
+            _showUpdateBanner(remote);
+        }
+
+        function _showUpdateBanner(remote) {
+            const banner = document.getElementById('updateBanner');
+            const title = document.getElementById('updateBannerTitle');
+            const sub = document.getElementById('updateBannerSub');
+            if (!banner) return;
+            const cur = _appLoadedVersion ? _versionStr(_appLoadedVersion) : '?';
+            if (title) title.textContent = `🎉 Có phiên bản mới v${_versionStr(remote)}`;
+            if (sub)   sub.textContent   = `Bạn đang dùng v${cur}. Nhấn "Cập nhật" để tải bản mới với cải tiến & sửa lỗi.`;
+            banner.classList.add('show');
+        }
+
+        function _hideUpdateBanner() {
+            const banner = document.getElementById('updateBanner');
+            if (banner) banner.classList.remove('show');
+        }
+
+        function _dismissUpdate() {
+            // Lưu version hiện tại của banner để không nhắc lại
+            const title = (document.getElementById('updateBannerTitle') || {}).textContent || '';
+            const m = title.match(/v(\d+)\.(\d+)\.(\d+)/);
+            if (m) {
+                const v = { major: +m[1], minor: +m[2], patch: +m[3] };
+                try { localStorage.setItem('dismissed_update_version', JSON.stringify(v)); } catch(_) {}
+            }
+            _hideUpdateBanner();
+        }
+
+        async function _applyUpdate() {
+            _hideUpdateBanner();
+            try { if (typeof displayInfo === 'function') displayInfo('Đang tải phiên bản mới...'); } catch(_) {}
+            // Unregister tất cả Service Worker để buộc fetch code mới từ network
+            try {
+                if ('serviceWorker' in navigator) {
+                    const regs = await navigator.serviceWorker.getRegistrations();
+                    await Promise.all(regs.map(r => r.unregister()));
+                }
+            } catch (err) { console.warn('SW unregister lỗi:', err); }
+            // Xóa cache API (HTML network-first sẽ tự lấy mới, nhưng clear để chắc chắn)
+            try {
+                if (window.caches) {
+                    const names = await caches.keys();
+                    await Promise.all(names.map(n => caches.delete(n)));
+                }
+            } catch (err) { console.warn('Cache clear lỗi:', err); }
+            // Hard reload
+            location.reload();
+        }
+
+        // Poll khi tab visible + interval 10 phút
+        function _setupUpdatePolling() {
+            document.addEventListener('visibilitychange', () => {
+                if (document.visibilityState === 'visible') {
+                    if (Date.now() - _lastVersionCheck > _VERSION_CHECK_INTERVAL_MS / 2) {
+                        _loadDataVersion();
+                    }
+                }
+            });
+            setInterval(() => {
+                if (document.visibilityState === 'visible') _loadDataVersion();
+            }, _VERSION_CHECK_INTERVAL_MS);
+        }
+        // Chỉ setup polling sau khi login (đã có _showApp gọi _loadDataVersion lần đầu)
+        if (typeof window !== 'undefined') _setupUpdatePolling();
 
         function clearRoute() {
             if (routeLine) { map.removeLayer(routeLine); routeLine = null; }
@@ -13808,5 +14036,52 @@
          style="display:none;position:fixed;top:0;left:0;height:3px;background:#2563eb;
                 width:0;z-index:99999;pointer-events:none;border-radius:0 2px 2px 0;
                 transition:width .08s linear;"></div>
+
+    <!-- Banner nhắc cập nhật phiên bản mới -->
+    <style>
+        @keyframes updateBannerSlideDown {
+            from { transform: translateY(-100%); opacity: 0; }
+            to   { transform: translateY(0);     opacity: 1; }
+        }
+        #updateBanner {
+            position: fixed; top: 0; left: 0; right: 0;
+            background: linear-gradient(135deg, #059669, #10b981);
+            color: #fff; z-index: 99998;
+            padding: 12px 16px; box-shadow: 0 4px 12px rgba(0,0,0,.2);
+            display: none; align-items: center; gap: 12px;
+            font-size: 14px; animation: updateBannerSlideDown .35s ease-out;
+        }
+        #updateBanner.show { display: flex; }
+        #updateBanner .ub-icon { font-size: 20px; flex-shrink: 0; }
+        #updateBanner .ub-msg { flex: 1; line-height: 1.4; }
+        #updateBanner .ub-msg b { display: block; font-size: 14px; }
+        #updateBanner .ub-msg small { display: block; opacity: .85; font-size: 11px; margin-top: 1px; }
+        #updateBanner button {
+            border: none; cursor: pointer; padding: 8px 14px;
+            border-radius: 6px; font-size: 12px; font-weight: 700;
+            white-space: nowrap;
+        }
+        #updateBanner .ub-apply { background: #fff; color: #059669; }
+        #updateBanner .ub-apply:hover { background: #ecfdf5; }
+        #updateBanner .ub-dismiss {
+            background: transparent; color: #fff;
+            border: 1.5px solid rgba(255,255,255,.5);
+        }
+        #updateBanner .ub-dismiss:hover { background: rgba(255,255,255,.1); }
+        @media (max-width: 640px) {
+            #updateBanner { padding: 10px 12px; font-size: 12px; flex-wrap: wrap; }
+            #updateBanner .ub-msg { flex-basis: 100%; margin-bottom: 4px; }
+            #updateBanner button { flex: 1; font-size: 11px; padding: 6px 10px; }
+        }
+    </style>
+    <div id="updateBanner" role="alert">
+        <span class="ub-icon">🎉</span>
+        <div class="ub-msg">
+            <b id="updateBannerTitle">Có phiên bản mới</b>
+            <small id="updateBannerSub">Nhấn "Cập nhật" để tải bản mới nhất</small>
+        </div>
+        <button type="button" class="ub-apply" onclick="_applyUpdate()">🔄 Cập nhật</button>
+        <button type="button" class="ub-dismiss" onclick="_dismissUpdate()">Sau</button>
+    </div>
 </body>
 </html>

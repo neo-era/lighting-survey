@@ -6739,5 +6739,626 @@ Mở market thứ 2 với effort 40h thay vì build từ đầu 500h.
 **2027+** — Vertical:
 - P42 → mở rộng đèn tín hiệu → nước → viễn thông
 
+---
+---
 
+# BỘ PROMPT MỚI — SESSION 2026-08 (Tính năng 19-26)
+
+**Context**: sau khi đã implement CSV import + CAD offset local grid + update notification. User yêu cầu 3 tính năng chính (T19-T21) + 5 phụ trợ (T22-T26). Xem chi tiết tại [CLAUDE.md](CLAUDE.md#tính-năng-19).
+
+**Quan trọng**: Mỗi prompt tự đủ ngữ cảnh. Chạy tuần tự trong 1 session hoặc chia nhiều phiên.
+
+---
+
+## TÍNH NĂNG 19 — CAD Pre-flight Validation & Normalization
+
+### PROMPT 43 — Validation V1 (blocker + warning, chưa auto-fix)
+
+```
+Dự án: PWA khảo sát chiếu sáng, single-page app `index.html`. Đã có DXF upload feature với modal `#cadUploadModal` + `_handleCadUpload` (line ~6270).
+
+Nhiệm vụ: Thêm pre-flight validation cho DXF upload — chạy sau `_parseDxfEntities` nhưng trước `_renderCadLayer`. Nếu có blocker → chặn. Nếu có warning/info → hiện modal cho user quyết định.
+
+Yêu cầu:
+
+1. Thêm helper `_validateDxf(entities, bounds, layers)` return:
+   {
+     blockers: [{ msg, hint }],
+     warnings: [{ msg, suggestion, fixKey }],   // fixKey để V2 auto-fix (nay chưa dùng)
+     infos: [{ msg }]
+   }
+
+2. Rules kiểm tra:
+   - BLOCKER: entities.length === 0 → "DXF không có entity hỗ trợ"
+   - BLOCKER: bounds width/height > 1e9 → "Coord range > 1 triệu km — file hỏng"
+   - WARNING: bounds max dimension > 1e8 → "Nghi đơn vị = mm (÷1000)", fixKey='unit_mm'
+   - WARNING: bounds max dimension < 1000 → "Nghi đơn vị = km (×1000)", fixKey='unit_km'
+   - WARNING: bounds width > 100km hoặc height > 100km → "Bounds quá rộng — có thể sai zone"
+   - WARNING: layers.length === 1 && layers[0] === '0' → "Toàn bộ trên Layer 0 — thiếu chuẩn"
+   - INFO: entities.length < 10 → "Chỉ có <10 entity — file có thể chưa đầy đủ"
+   - INFO: !layers.some(l => /LIGHTING|POLE|CABLE/i.test(l)) → "Không có layer LIGHTING_*"
+
+3. Thêm modal `#cadPreflightModal` hiện với 3 section:
+   - 🚫 Blocker (đỏ) — chỉ hiện nút "Đóng"
+   - ⚠ Warning (vàng) — hiện + 2 nút "Bỏ qua & Upload" / "Hủy"
+   - ℹ Info (xanh) — chỉ hiển thị, không hỏi
+
+4. Modify `_handleCadUpload`:
+   - Sau `_computeCadBounds(entities)` + `layers = [...]`
+   - Gọi `_validateDxf(entities, bounds, layers)` → nếu blockers → hiện modal + return
+   - Nếu warnings.length > 0 → hiện modal, chờ user click "Bỏ qua & Upload" → tiếp tục; "Hủy" → return
+   - Nếu chỉ có infos → skip modal, log console
+
+5. Bump sw.js.
+6. Update huongdan.html section 16 — thêm subsection "Validation trước upload".
+
+Không cần auto-fix trong prompt này (V2 làm sau).
+```
+
+---
+
+### PROMPT 44 — Validation V2 (auto-fix layer + unit)
+
+```
+Tiếp nối PROMPT 43. Đã có `_validateDxf` với `fixKey`. Nhiệm vụ: implement auto-fix.
+
+Yêu cầu:
+
+1. Thêm helper `_applyDxfFix(fixKey, entities, meta)` return { entities, meta } đã fix:
+   - 'unit_mm': scale mọi coords ÷1000. Update meta.bounds.
+   - 'unit_km': scale mọi coords ×1000. Update meta.bounds.
+   - 'layer_map': rename layer theo dictionary:
+     const LAYER_MAP = {
+       'đèn|pole|cot|cột đèn|LIGHTING-POLE': 'LIGHTING_POLE',
+       'cáp|cable|dây|LIGHTING-CABLE': 'LIGHTING_CABLE',
+       'tủ|cabinet|LIGHTING-CABINET': 'LIGHTING_CABINET',
+       'text|nhãn|nhan|LABEL': 'LIGHTING_TEXT'
+     }
+     Iterate entities, match layer name (case-insensitive, không dấu) → rename.
+
+2. Modal `#cadPreflightModal` bổ sung nút "Sửa tất cả tự động" (áp dụng mọi fixKey của warning) và button "Áp dụng có chọn lọc" (mở checkbox list cho từng warning).
+
+3. Sau apply fix → gọi lại `_validateDxf` để show updated warnings, hoặc tiếp tục upload.
+
+4. Test cases:
+   - File bounds 45km×60km (thực ra mm) → warning "Nghi mm" → user click "Sửa" → ÷1000 → bounds 45m×60m → warning biến mất
+   - Layer "Đèn Cột" → auto-map thành "LIGHTING_POLE"
+
+5. Log actions vào console cho debugging: `[CAD fix] unit_mm applied: 1247 entities scaled`
+
+6. Bump sw.js. Update huongdan.html.
+```
+
+---
+
+## TÍNH NĂNG 20 — Preset library cho offset local grid
+
+### PROMPT 45 — Preset library V1 (localStorage)
+
+```
+Dự án: PWA khảo sát chiếu sáng. Đã có offset local grid (`_cadMeta.dE/dN`, `cad_offset_e/n` localStorage) + preset hardcode "Tham Lương" (-391.75, +223.86).
+
+Nhiệm vụ: Chuyển từ 1 preset hardcode → preset library với CRUD localStorage.
+
+Yêu cầu:
+
+1. Data structure trong `localStorage.cad_offset_presets` (JSON array):
+   [
+     {
+       id: "uuid",  // crypto.randomUUID()
+       name: "Tham Lương",
+       region: "Bình Tân, TPHCM",
+       dE: -391.75, dN: 223.86,
+       cm: 105.75, k0: 0.9999,
+       verify: "10 điểm C1.01-C1.10 sai lệch 0.000m",
+       createdAt: "2026-08-05T10:00:00Z"
+     }
+   ]
+
+2. Seed default preset "Tham Lương" khi lần đầu (nếu localStorage.cad_offset_presets null).
+
+3. 4 helpers:
+   - _getOffsetPresets() → array
+   - _saveOffsetPreset(preset) — id có = update, không có = add mới với UUID
+   - _deleteOffsetPreset(id)
+   - _findPresetByOffset(dE, dN) — tìm preset khớp giá trị (trong ±0.01m)
+
+4. UI update modal upload CAD — thay 2 input + 1 nút "Tham Lương" thành:
+   [Chọn preset ▾] hoặc [+ Tạo preset mới]
+   ΔE: [_____] m  ΔN: [_____] m   [💾 Lưu preset này]
+   Info bar: "Preset hiện tại: Tham Lương [✏ Sửa] [🗑]"
+
+5. Modal preset picker `#offsetPresetModal`:
+   - List presets với name + region + dE/dN + verify note
+   - Nút "Áp dụng" mỗi preset
+   - Nút "✏ Sửa" mở form edit inline
+   - Nút "🗑 Xóa" confirm
+
+6. Adjust modal `#cadAdjustModal` — cũng nhúng preset picker tương tự.
+
+7. Rename hàm cũ `_applyThamLuongOffsetCad` → `_applyPresetOffsetCad(presetId)`. Preset "📍 Tham Lương" giờ là 1 preset trong library, không hardcode.
+
+8. Bump sw.js. Update CLAUDE.md subsection về offset preset. Update huongdan.html section 16.
+```
+
+---
+
+### PROMPT 46 — Calibrate 2 điểm (killer)
+
+```
+Tiếp nối PROMPT 45. Đã có preset library.
+
+Nhiệm vụ: Cho phép user tự tìm offset khi có dự án mới bằng cách click 2 điểm.
+
+Yêu cầu:
+
+1. Nút mới "🎯 Calibrate 2 điểm" trong modal upload CAD (chỉ hiện SAU khi user chọn file).
+
+2. Flow:
+   Step 1. User bấm nút → app tạm upload DXF với offset (0, 0) để hiển thị bản vẽ
+   Step 2. Toast "Click điểm 1 trên bản vẽ CAD"
+   Step 3. User click → app lưu (x_local, y_local) của điểm click gần nhất trong _cadEntities
+   Step 4. Modal nhỏ hỏi "Tọa độ chuẩn của điểm này?":
+     Option A: Nhập lat/lon manually
+     Option B: Click 1 marker CSV đã import → auto lấy VN2000-X/Y
+     Option C: Nhập VN2000-X/Y manually
+   Step 5. Lặp lại cho điểm 2 (yêu cầu ≥100m từ điểm 1)
+   Step 6. Compute:
+     - Vector 1: (x_std_1 - x_local_1, y_std_1 - y_local_1)
+     - Vector 2: (x_std_2 - x_local_2, y_std_2 - y_local_2)
+     - Nếu 2 vector gần bằng nhau (chênh <5m) → pure translation: dE = avg(dx), dN = avg(dy)
+     - Nếu chênh nhiều → có xoay/scale → suggest dùng affine calibration (P19 đã có), không lưu preset
+   Step 7. Prompt "Lưu preset?"
+     - Name input, Region input, tự fill dE/dN/cm/k0
+     - Bấm "Lưu" → gọi _saveOffsetPreset(...)
+
+3. UI helper `_startCalibrateOffset()` state machine:
+   let _calibState = { step: 0, p1_local: null, p1_std: null, p2_local: null, p2_std: null };
+
+4. Helper `_findNearestCadEntity(clickLatLng, radiusPx=30)` — tìm entity/vertex gần nhất trong _cadEntities.
+
+5. Cancel button ở mỗi bước để thoát flow.
+
+6. Verify: sau calibrate → app apply preset mới → re-render bản vẽ → check bản vẽ chồng đúng marker CSV.
+
+7. Bump sw.js. Update CLAUDE.md + huongdan.html.
+```
+
+---
+
+### PROMPT 47 — Preset shared qua GAS (v2)
+
+```
+Tiếp nối PROMPT 45+46. Đã có preset localStorage.
+
+Nhiệm vụ: Nâng cấp lên shared preset qua Google Sheet — admin quản lý, toàn team dùng chung.
+
+Yêu cầu backend (gas-khaosat.js):
+
+1. Thêm sheet `OffsetPresets` với header: id, name, region, dE, dN, cm, k0, verify, createdBy, createdAt.
+
+2. 3 GAS actions:
+   - list_presets: return array preset
+   - save_preset: upsert theo id, chỉ admin (check role)
+   - delete_preset: xóa theo id, chỉ admin
+
+3. Log vào `LichSu` sheet mỗi action save/delete.
+
+Yêu cầu frontend (index.html):
+
+4. Modify `_getOffsetPresets()`:
+   - Nếu user role='admin' hoặc first load → fetch từ GAS
+   - Cache vào localStorage `cad_offset_presets_shared` với TTL 5 phút
+   - Merge với `cad_offset_presets_local` (user preset riêng, không share)
+
+5. UI phân biệt trong preset picker:
+   - 🌍 Shared preset (icon globe) — chỉ admin thấy nút Sửa/Xóa
+   - 👤 Local preset (icon person) — mọi user tự quản
+
+6. Save preset UI:
+   - Radio "Lưu local (chỉ mình bạn)" / "Lưu shared (cả team)" — shared chỉ hiện với admin
+
+7. Sync on login: gọi list_presets ngay sau `_showApp()`.
+
+8. Update GAS deploy — Redeploy New version bắt buộc.
+
+9. Bump sw.js. Update CLAUDE.md + huongdan.html.
+```
+
+---
+
+## TÍNH NĂNG 21 — CAD Generator: Bản vẽ thiết kế hoàn chỉnh
+
+### PROMPT 48 — Block library setup
+
+```
+Dự án: PWA khảo sát chiếu sáng. Chuẩn bị cho CAD Generator (T21).
+
+Nhiệm vụ: Tạo thư mục assets/dxf-blocks/ chứa 8 DXF block snippets pre-designed, và load helper.
+
+Yêu cầu:
+
+1. Tạo thư mục assets/dxf-blocks/ với 8 file:
+   - pole_stk.dxf
+   - pole_tt.dxf
+   - pole_htlt.dxf
+   - pole_ttlt.dxf
+   - cabinet_noi.dxf
+   - cabinet_ngam.dxf
+   - north_arrow.dxf
+   - scale_bar.dxf
+
+   Mỗi file là 1 DXF BLOCK definition đơn giản (10-30 LINE entities). Kích thước chuẩn: pole 3m tall, cabinet 1.5x1m. Ký hiệu theo TCVN 7722.
+
+   *NOTE*: user cần cung cấp bản vẽ mẫu để tôi trích xuất blocks chính xác. Nếu chưa có, tôi tạo placeholder blocks đơn giản (đường thẳng + text) và document TODO.
+
+2. Load helper trong index.html:
+   const CAD_BLOCK_URLS = {
+     pole_stk: 'assets/dxf-blocks/pole_stk.dxf',
+     // ...
+   };
+   let _cadBlockCache = {};
+
+   async function _loadCadBlock(name) {
+     if (_cadBlockCache[name]) return _cadBlockCache[name];
+     const res = await fetch(CAD_BLOCK_URLS[name]);
+     const text = await res.text();
+     _cadBlockCache[name] = text;
+     return text;
+   }
+
+3. Test: F12 console `await _loadCadBlock('pole_stk')` → hiển thị DXF text.
+
+4. Bump sw.js. Add assets to sw pre-cache STATIC_ASSETS list.
+```
+
+---
+
+### PROMPT 49 — Title block templates
+
+```
+Tiếp nối PROMPT 48. Chuẩn bị 4 title block templates DXF cho generator.
+
+Nhiệm vụ: Tạo assets/dxf-templates/ với 4 file DXF title block, mỗi file có ATTRIBUTES để fill metadata.
+
+Yêu cầu:
+
+1. Tạo thư mục assets/dxf-templates/ với 4 file:
+   - title_state.dxf (Nhà nước) — fields: TT_QLGT, CV_PHU_TRACH, CS_KHU_VUC, NGUOI_LAP, BV_SO, SHBV, NGAY
+   - title_consulting.dxf (Tư vấn thiết kế) — fields: CHU_DAU_TU, DON_VI_TK, CHU_NHIEM, KS_TK, NGUOI_VE, KIEM_TRA, NGAY
+   - title_contractor.dxf (Nhà thầu) — fields: BEN_A, BEN_B, GIAM_SAT, KT_THI_CONG, NGAY_DUYET
+   - title_custom.dxf (empty template với 10 ATTRIBUTES CUSTOM_1 → CUSTOM_10)
+
+   Mỗi template có khung 190×50mm (chuẩn TCVN 7285), placed góc dưới-phải bản vẽ A3.
+
+   *NOTE*: user sẽ gửi bản vẽ mẫu. Nếu chưa có, tôi tạo template placeholder (khung + text "TEMPLATE_STATE") và log TODO trong code.
+
+2. Config JS trong index.html:
+   const TITLE_TEMPLATES = {
+     state: {
+       label: '🏛 Nhà nước (UBND/Sở XD)',
+       file: 'assets/dxf-templates/title_state.dxf',
+       fields: [
+         { key: 'TT_QLGT', label: 'TT Quản lý giao thông', default: 'Trung tâm quản lý giao thông TP.HCM' },
+         { key: 'CV_PHU_TRACH', label: 'Chuyên viên phụ trách', default: '' },
+         // ...
+       ]
+     },
+     // consulting, contractor, custom
+   };
+
+3. Helper `_loadTitleTemplate(id)` fetch file DXF + parse ATTRIBUTES.
+
+4. Test: mount template → hiển thị preview khung tên trong `_showTitleBlockPreview()`.
+
+5. Bump sw.js. Add to STATIC_ASSETS.
+```
+
+---
+
+### PROMPT 50 — Generator MVP (1 template, DXF only, chưa preview)
+
+```
+Tiếp nối PROMPT 48+49. Đã có block library + 1 title template.
+
+Nhiệm vụ: Implement CAD Generator MVP — 1 template duy nhất, xuất DXF trực tiếp.
+
+Yêu cầu:
+
+1. Load dxf-writer lib từ CDN esm.sh (~50KB, lazy):
+   async function _loadDxfWriter() { ... }
+
+2. Modal `#cadGeneratorModal` với 5 field:
+   - Tủ điều khiển (multi-select checkbox, default = all)
+   - Khổ giấy: A3 landscape (fix cho MVP)
+   - Tỉ lệ: 1:500 / 1:1000 / 1:2000
+   - Kinh tuyến trung tâm: 105.75° (default HCM)
+   - Metadata form theo template.fields (input text cho mỗi field)
+
+3. Generator function `_generateCadDrawing(opts)`:
+   ```
+   const Drawing = await _loadDxfWriter();
+   const d = new Drawing();
+   d.setUnits('Meters');
+   d.addLayer('LIGHTING_POLE', 7, 'CONTINUOUS');
+   d.addLayer('LIGHTING_CABLE', 5, 'DASHED');
+   d.addLayer('LIGHTING_TEXT', 3, 'CONTINUOUS');
+   d.addLayer('TITLE_BLOCK', 7, 'CONTINUOUS');
+
+   // Load & insert blocks
+   const poleBlock = await _loadCadBlock('pole_stk');
+   d.addBlockFromDxf('POLE_STK', poleBlock);
+   // ... other blocks
+
+   // Iterate filtered markers
+   const rows = _filterRowsByTuSet(opts.selectedTus);
+   for (const r of rows) {
+     const type = r[6];
+     const vn = _wgs84ToVn2000(r[2], r[3], opts.cm);
+     const blockName = type === 5 ? 'CABINET_NOI' : 'POLE_STK';
+     d.insertBlock(blockName, vn.x, vn.y, 0, 1, r[1]);  // rotation 0, scale 1, tag = tên trụ
+     d.addText(vn.x + 2, vn.y - 1, 0.5, r[1], 'LIGHTING_TEXT');  // label
+   }
+
+   // Draw cables (POLYLINE dashed)
+   for (const r of rows) {
+     const parentName = r[14];
+     if (!parentName) continue;
+     const parent = rows.find(x => x[1] === parentName);
+     if (!parent) continue;
+     const p1 = _wgs84ToVn2000(r[2], r[3], opts.cm);
+     const p2 = _wgs84ToVn2000(parent[2], parent[3], opts.cm);
+     d.drawPolyline([[p1.x, p1.y], [p2.x, p2.y]], false, 0, 'LIGHTING_CABLE');
+   }
+
+   // Insert title block
+   const titleTemplate = await _loadTitleTemplate('state');
+   d.insertBlockWithAttrs('TITLE_STATE', -100, -50, opts.metadata);  // góc dưới-phải
+
+   // Compute bounds & center drawing
+   const bounds = _computeBoundsFromRows(rows);
+   d.setViewport({ ...bounds });
+
+   return d.toDxfString();
+   ```
+
+4. Save file: `saveAs(new Blob([dxfString]), 'thiet-ke-chieu-sang-${date}.dxf')` (dùng FileSaver hoặc URL.createObjectURL).
+
+5. UI trigger: nút mới "📐 Xuất bản vẽ thiết kế" trong ☰ panel section Xuất dữ liệu.
+
+6. Bump sw.js. Update huongdan.html.
+
+*NOTE*: Nếu block library chưa có (user chưa gửi mẫu), fallback dùng simple LINE để đại diện trụ (5x5m box). Log TODO.
+```
+
+---
+
+### PROMPT 51 — Generator Full (multi-template + preview PDF)
+
+```
+Tiếp nối PROMPT 50. Đã có generator MVP với 1 template.
+
+Nhiệm vụ: Nâng cấp full — multi-template picker + preview PDF trước khi save + multi-sheet split.
+
+Yêu cầu:
+
+1. Template picker trong modal generator:
+   Dropdown với 4 options: state / consulting / contractor / custom
+   Khi user chọn → metadata form re-render theo template.fields
+   Load custom template: user upload DXF file → parse ATTRIBUTES → hiện form dynamic
+
+2. Preview PDF:
+   - Sau khi generate DXF → convert sang PDF bằng jsPDF + render polylines/text
+   - Hoặc: reuse `exportDrawingPDF` (đã có in bản vẽ trên map) với data từ generator
+   - Hiển thị PDF trong modal (embed iframe) hoặc modal fullscreen
+   - 2 nút: "Xuất DXF" + "Xuất PDF" hoặc "Xuất cả 2 (zip)"
+
+3. Multi-sheet split:
+   - Nếu bounds > 1000m theo chiều dài → suggest chia 2 tờ A1 hoặc 3 tờ A2
+   - User chọn số tờ → app tự split rows theo khu vực (grid partition)
+   - Mỗi tờ 1 file DXF + PDF riêng, zip together
+
+4. Custom template upload UI:
+   - Modal "Upload template mới" với file input .dxf
+   - Parse → detect ATTRIBUTES → show list cho user confirm
+   - Save vào localStorage `cad_title_templates` với id + name + dxf content (base64) + fields
+
+5. Bump sw.js. Update CLAUDE.md + huongdan.html thêm subsection Custom template.
+```
+
+---
+
+## TÍNH NĂNG 22-26 — Field & UX enhancements
+
+### PROMPT 52 — Auto-generate tuyến cáp (MST)
+
+```
+Dự án: PWA khảo sát chiếu sáng. Có sẵn feature "Sơ đồ cáp" vẽ trên map từ `Marker gốc` + `Khoảng cách`, và feature "Vẽ cáp" thủ công.
+
+Nhiệm vụ: Thêm feature "Auto-gen tuyến cáp" — user chọn 1 tủ + N trụ → app tự tính Minimum Spanning Tree → điền Marker gốc + Khoảng cách tự động.
+
+Yêu cầu:
+
+1. Nút mới "🌳 Auto-gen tuyến cáp" trong toolbar "Sơ đồ cáp" (khi user đang xem cable layer).
+
+2. Modal `#autoCableModal`:
+   - Chọn tủ điều khiển (dropdown 1 tủ)
+   - Danh sách trụ trong tủ đó (auto-populate, checkbox all/none)
+   - Options:
+     Algorithm: [Prim MST (default) | Kruskal | Nearest-neighbor chain]
+     Max cable length per segment: [200m] (nếu vượt → chia thêm điểm phụ, chưa implement, chỉ warn)
+   - Nút "Tính toán" → preview trên map (đường xanh nét đứt)
+   - Nút "Áp dụng" → ghi vào loadedData + sync GAS batch
+
+3. MST algorithm (Prim, không dùng thư viện):
+   ```
+   function _computeMST(nodes) {  // nodes = [{name, lat, lon}]
+     const inTree = new Set([nodes[0].name]);
+     const edges = [];
+     while (inTree.size < nodes.length) {
+       let minEdge = null;
+       for (const n of nodes) {
+         if (inTree.has(n.name)) continue;
+         for (const t of nodes) {
+           if (!inTree.has(t.name)) continue;
+           const d = haversineM(n.lat, n.lon, t.lat, t.lon);
+           if (!minEdge || d < minEdge.dist) {
+             minEdge = { from: t.name, to: n.name, dist: d };
+           }
+         }
+       }
+       edges.push(minEdge);
+       inTree.add(minEdge.to);
+     }
+     return edges;  // [{from: parent, to: child, dist}]
+   }
+   ```
+
+4. Apply edges → cho mỗi edge: row_to.markerGoc = edge.from; row_to.khoangCach = round(edge.dist)
+   Sau đó sync GAS batch_match_update.
+
+5. Trong preview: cho phép user drag để đổi cha (giống edit cable đã có).
+
+6. Bump sw.js. Update CLAUDE.md + huongdan.html.
+```
+
+---
+
+### PROMPT 53 — Import Excel .xlsx (thay CSV)
+
+```
+Dự án: PWA khảo sát chiếu sáng. Đã có CSV import (`_onCsvImportChange`, modal `#csvImportModal`) với auto-detect format, mode, offset.
+
+Nhiệm vụ: Thêm option upload Excel .xlsx (reuse ExcelJS đã lazy-load). Cho phép user chọn sheet + map column.
+
+Yêu cầu:
+
+1. File input `#csvImportInput` extend accept: `.csv,.xlsx,.xls`.
+
+2. Trong `_onCsvImportChange(input)`, nếu file.name kết thúc `.xlsx` hoặc `.xls`:
+   - Lazy load ExcelJS
+   - Parse workbook, list sheets
+   - Nếu >1 sheet → hiện dialog cho user chọn sheet
+   - Convert sheet đã chọn thành `rows` (array of arrays) — reuse logic `_csvImportRows`
+   - Continue flow như CSV: `_detectCsvFormat`, `_openCsvImportModal`
+
+3. UI mapping column trong `#csvImportModal` (thêm section mới, chỉ hiện với xlsx):
+   - Dropdown chọn cột cho: Tên trụ / Lat / Lon / Northing / Easting / Accuracy / GPS mode
+   - Default map theo header nếu có, hoặc theo vị trí (col A/B/C...)
+
+4. Save mapping vào localStorage `xlsx_column_map_${filename_hash}` để lần sau upload cùng file tự restore.
+
+5. Bump sw.js. Update huongdan.html section 17 (CSV import) thêm subsection "Nhập từ Excel".
+```
+
+---
+
+### PROMPT 54 — Reverse-geocode batch
+
+```
+Dự án: PWA khảo sát chiếu sáng. Đã có helper `reverseGeocode(lat, lon)` gọi Nominatim (dùng khi thêm marker).
+
+Nhiệm vụ: Feature batch — scan toàn bộ marker chưa có `Đường` (col 17) hoặc `Phường/Xã` (col 18) → fetch Nominatim rate-limit 1 req/s → fill 2 cột.
+
+Yêu cầu:
+
+1. Nút mới "🌐 Điền địa chỉ tự động" trong ☰ panel section "Vị trí & Đồng bộ".
+
+2. Handler `_batchReverseGeocode()`:
+   - Filter rows: `!row[17] || !row[18]` (thiếu 1 trong 2 cột)
+   - Confirm dialog: "Sẽ điền địa chỉ cho N marker. Ước tính ~N/60 phút. Tiếp tục?"
+   - Progress bar hiển thị tiến độ (dùng `#loadProgressBar` đã có)
+   - Loop: mỗi 1 giây call reverseGeocode(lat, lon)
+     - Nếu thành công + có `road` + `village`/`suburb`/`ward` → update row[17], row[18]
+     - Batch update mỗi 10 marker → gọi GAS batch_match_update
+     - Cho phép user cancel giữa chừng (nút "Dừng")
+
+3. Toast progress: "Đã điền i/N marker..."
+
+4. Sau khi xong: reload CSV từ Google Sheet để confirm.
+
+5. Log actions: `_logAction('batch_geocode', ...)` với count.
+
+6. Bump sw.js. Update huongdan.html.
+```
+
+---
+
+### PROMPT 55 — Batch export bản vẽ theo tủ
+
+```
+Tiếp nối PROMPT 50 (Generator MVP đã có). Nhiệm vụ: Batch export N tủ → zip file.
+
+Yêu cầu:
+
+1. Nút mới "📦 Xuất tất cả tủ" trong modal generator (bên cạnh "Xuất DXF").
+
+2. Handler `_batchExportAllTus()`:
+   - Lấy danh sách tủ unique từ loadedData: `_getUniqueCabinets()`
+   - Progress bar
+   - Loop mỗi tủ:
+     - Gọi `_generateCadDrawing({ selectedTus: [tuName], ...currentOpts })`
+     - Nếu opts.includePdf → cũng gen PDF
+     - Append vào zip với tên `<tuName>.dxf` + `<tuName>.pdf`
+   - Save zip: `saveAs(zipBlob, 'ban-ve-tat-ca-tu-${date}.zip')`
+
+3. Dùng thư viện `jszip` (lazy load từ CDN ~30KB gzipped):
+   ```
+   async function _loadJSZip() { ... }
+   ```
+
+4. Skip tủ không có trụ (rows count = 0).
+
+5. Bump sw.js. Update huongdan.html.
+```
+
+---
+
+### PROMPT 56 — Live edit text CAD trên map
+
+```
+Dự án: PWA khảo sát chiếu sáng. Đã có CAD overlay (`_renderCadLayer`) với TEXT labels rendered dưới dạng `L.marker` với `L.divIcon`.
+
+Nhiệm vụ: Cho phép user drag TEXT labels đến vị trí mới, save vào IndexedDB cache. Không đụng LINE/POLYLINE.
+
+Yêu cầu:
+
+1. Thêm toggle "✏ Chế độ sửa text CAD" trong CAD info box (chỉ hiện khi CAD đang show).
+
+2. Khi toggle ON:
+   - `_cadTextEditMode = true`
+   - Text markers thành `draggable: true` (Leaflet)
+   - Wire event `dragend` → save vị trí mới vào entity trong `_cadEntities`
+   - Đổi cursor thành "move" khi hover text
+
+3. Data update:
+   - Entity gốc trong `_cadEntities` có e.type='text' và e.position = {x, y} (VN2000)
+   - Sau drag → convert Lat/Lon mới → VN2000 → update e.position
+   - Save vào IndexedDB: `_idbSetCad(currentSheet, {entities: _cadEntities, meta: _cadMeta})`
+
+4. Undo: nút "↶ Hoàn tác" giữ 10 lần undo cuối (stack trong memory, không persist).
+
+5. Reset all: nút "🔄 Reset về gốc" — reload từ file DXF gốc (cần user re-upload) hoặc từ snapshot đầu tiên (save khi load lần đầu).
+
+6. Snap to grid tùy chọn: input "Snap grid: [__] m" (0 = off) — khi drag, tọa độ VN2000 làm tròn về grid.
+
+7. Bump sw.js. Update huongdan.html.
+```
+
+---
+
+## 📋 Thứ tự thực hiện đề xuất (Q3-Q4 2026)
+
+Xem CLAUDE.md § "Roadmap 2026 Q3-Q4" — 5 phases, 10-12 tuần.
+
+**Bắt đầu ngay (không chờ user)**:
+1. P45 → P46 → P54 (Phase 1 nền tảng)
+2. P43 → P53 → P44 (Phase 2 upload UX)
+
+**Chờ user gửi bản vẽ mẫu**:
+3. P48 → P49 → P50 → P52 (Phase 3a killer)
+4. P51 → P55 → P56 (Phase 3b full)
+5. P47 (Phase 4 shared preset)
+
+**Tổng**: ~14 prompt cho 3 tháng dev thực tế.
 

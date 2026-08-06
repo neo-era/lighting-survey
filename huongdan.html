@@ -285,6 +285,7 @@
       <li>Cluster aggressive hơn trên mobile, label chỉ hiện zoom ≥ 18</li>
       <li>Tắt animation Leaflet trên mobile để mượt hơn</li>
       <li>Lazy load ảnh trong popup, CSS media query ẩn nút ít dùng</li>
+      <li><strong>🎉 Nhắc cập nhật</strong> — banner xanh xuất hiện khi có bản mới push lên GitHub, tự động phát hiện mỗi 10 phút</li>
     </ul>
 
     <h4 style="margin-top:14px;color:#1e40af;">⚡ Tối ưu hiệu năng</h4>
@@ -846,6 +847,34 @@
       <span class="note-icon">📱</span>
       <div>Sau khi cài, app mở toàn màn hình (không có thanh địa chỉ). Bản đồ, thư viện và dữ liệu địa bàn đã cache offline — vẫn xem được khi mất mạng.</div>
     </div>
+
+    <h3>🎉 Nhắc cập nhật phiên bản mới</h3>
+    <p>Khi có bản mới phát hành (developer push code lên GitHub), app tự phát hiện và hiện <strong>banner xanh phía trên</strong>:</p>
+    <div style="background:#f8fafc;padding:12px;border-radius:8px;border:1px solid #e2e8f0;margin:8px 0;font-family:monospace;font-size:12px;">
+      <div style="background:linear-gradient(135deg,#059669,#10b981);color:#fff;padding:10px 14px;border-radius:6px;display:flex;align-items:center;gap:12px;">
+        <span style="font-size:20px;">🎉</span>
+        <div style="flex:1;">
+          <b>Có phiên bản mới v1.0.77</b><br>
+          <small style="opacity:.85;">Bạn đang dùng v1.0.75. Nhấn "Cập nhật" để tải bản mới...</small>
+        </div>
+        <button style="background:#fff;color:#059669;border:none;padding:6px 12px;border-radius:6px;font-weight:700;font-size:11px;">🔄 Cập nhật</button>
+        <button style="background:transparent;color:#fff;border:1.5px solid rgba(255,255,255,.5);padding:6px 12px;border-radius:6px;font-size:11px;">Sau</button>
+      </div>
+    </div>
+    <div class="steps">
+      <div class="step"><div class="sn">1</div><div class="sc">App kiểm tra phiên bản mới <strong>mỗi 10 phút</strong> khi tab đang mở, và <strong>ngay khi bạn quay lại tab</strong> sau khi để yên &gt;5 phút.</div></div>
+      <div class="step"><div class="sn">2</div><div class="sc">Nếu có bản mới → banner xuất hiện với animation trượt xuống.</div></div>
+      <div class="step"><div class="sn">3</div><div class="sc">Nhấn <strong>🔄 Cập nhật</strong> → App tự xóa Service Worker + cache cũ, tải lại trang. Bạn sẽ có bản mới nhất sau ~2-3 giây.</div></div>
+      <div class="step"><div class="sn">4</div><div class="sc">Nhấn <strong>Sau</strong> → Ẩn banner. Không nhắc lại cho phiên bản này (chỉ nhắc khi có phiên bản mới hơn phát hành sau).</div></div>
+    </div>
+    <div class="note note-info">
+      <span class="note-icon">💡</span>
+      <div>App KHÔNG tự động reload — bạn chủ động chọn thời điểm cập nhật. Nếu đang khảo sát thì bấm "Sau", làm xong việc rồi update. Dữ liệu đã lưu vào Google Sheet không bị mất khi update.</div>
+    </div>
+    <div class="note note-warn">
+      <span class="note-icon">⚠️</span>
+      <div>Nếu banner không hiện dù developer đã push code mới: kiểm tra tab đang <strong>visible</strong> (không minimize / không ở tab khác). Poll bị tạm dừng khi tab hidden để tiết kiệm battery.</div>
+    </div>
   </section>
 
   <!-- 15. CẤU HÌNH GPS -->
@@ -1083,7 +1112,20 @@
       <div class="step"><div class="sn">1</div><div class="sc">Mở <kbd>☰</kbd> panel → cuộn tới section <strong>Bản vẽ CAD</strong> → click <strong>📐 Tải DXF</strong>.</div></div>
       <div class="step"><div class="sn">2</div><div class="sc">Chọn file <code>.dxf</code> từ máy.</div></div>
       <div class="step"><div class="sn">3</div><div class="sc">Chọn <strong>Kinh tuyến trung tâm</strong> (105° / 105.5° / 105.75° / 106°) và <strong>Scale factor k₀</strong> (0.9996 múi 6° hoặc 0.9999 múi 3°) — tùy hệ tọa độ của bản vẽ.</div></div>
-      <div class="step"><div class="sn">4</div><div class="sc">Click <strong>Tải lên</strong>. Parse xong app tự fit view lên bounds bản vẽ.</div></div>
+      <div class="step"><div class="sn">4</div><div class="sc"><strong>🔀 Bù offset local grid</strong> (tùy chọn): nếu bản vẽ dùng grid công trình (VD dự án Tham Lương), nhập ΔE/ΔN hoặc bấm <strong>📍 Tham Lương</strong>. Để trống nếu file đã ở VN-2000 chuẩn.</div></div>
+      <div class="step"><div class="sn">5</div><div class="sc">Click <strong>Tải lên</strong>. Parse xong app tự fit view lên bounds bản vẽ.</div></div>
+    </div>
+
+    <h3>🔀 Bù offset local grid</h3>
+    <p>Nhiều bản vẽ AutoCAD từ khảo sát trước dùng <strong>grid cục bộ</strong> — origin đã shift so với VN-2000 chuẩn quốc gia. Khi overlay lên map bị ghim lệch cả trăm mét (dự án Tham Lương lệch ~451m).</p>
+    <p>Section <strong>🔀 Bù offset local grid</strong> cho phép nhập ΔE / ΔN mét — app sẽ TRỪ khỏi tọa độ DXF trước khi convert. Công thức: <code>VN2000_chuẩn = tọa_độ_DXF - (ΔE, ΔN)</code>.</p>
+    <div class="note note-success">
+      <span class="note-icon">📍</span>
+      <div><strong>Nút "📍 Tham Lương"</strong> điền sẵn <code>ΔE = -391.75m, ΔN = +223.86m</code> — đúng offset của dự án chiếu sáng Tham Lương (đã verify với 10 điểm cặp chính xác 0.000m). Cùng preset với CSV import.</div>
+    </div>
+    <div class="note note-info">
+      <span class="note-icon">💾</span>
+      <div>Giá trị offset <strong>tự nhớ vào trình duyệt</strong> (localStorage key <code>cad_offset_e</code>, <code>cad_offset_n</code>) — lần sau mở modal upload sẽ tự restore. Để trống (0, 0) nếu file đã ở VN-2000 chuẩn quốc gia.</div>
     </div>
 
     <h3>Nếu bản vẽ hiển thị lệch vị trí</h3>
@@ -1092,38 +1134,50 @@
       <div class="step"><div class="sn">1</div><div class="sc">Info box CAD → click <strong>🎯 Chỉnh</strong>. Modal mở ra với preview realtime.</div></div>
       <div class="step"><div class="sn">2</div><div class="sc"><strong>Thử kinh tuyến khác</strong>: bước 0.001° = ~111m. Nút <code>1km←</code> / <code>1km→</code> nhảy ±0.01° = ~1.1km.</div></div>
       <div class="step"><div class="sn">3</div><div class="sc"><strong>Đổi k₀</strong>: 0.9996 (UTM múi 6°) vs 0.9999 (VN-2000 múi 3°). Chọn khác nhau tạo shift ~150m.</div></div>
-      <div class="step"><div class="sn">4</div><div class="sc"><strong>Dịch chuyển thêm (mét)</strong>: chỉnh vi mô Đông/Tây (X) và Bắc/Nam (Y) đơn vị mét, bước 10m. Áp dụng sau khi convert VN-2000 → lat/lon.</div></div>
-      <div class="step"><div class="sn">5</div><div class="sc">Xem <strong>delta so với trung tâm Cần Giuộc</strong> trong preview: 🟢 &lt; 1km = OK, 🟠 1-5km, 🔴 &gt; 5km. Click <strong>Áp dụng</strong> khi vừa ý.</div></div>
+      <div class="step"><div class="sn">4</div><div class="sc"><strong>🔀 Bù offset local grid (ΔE, ΔN)</strong>: nhập offset mét theo convention <code>VN2000_chuẩn = tọa_độ - (ΔE, ΔN)</code>. Bấm <strong>📍 Tham Lương</strong> để fill preset (-391.75, +223.86).</div></div>
+      <div class="step"><div class="sn">5</div><div class="sc">Xem <strong>delta so với trung tâm địa bàn</strong> trong preview: 🟢 &lt; 1km = OK, 🟠 1-5km, 🔴 &gt; 5km. Click <strong>Áp dụng</strong> khi vừa ý.</div></div>
     </div>
 
     <h3>Bộ thông số mẫu theo địa bàn</h3>
     <p>Các bộ thông số đã tinh chỉnh thủ công cho từng file DXF cụ thể. Áp vào modal 🎯 Chỉnh sau khi upload:</p>
 
+    <h4 style="margin-top:14px;color:#1e40af;">📍 Tham Lương — TP.HCM (Bình Tân)</h4>
+    <p>Dự án chiếu sáng Tham Lương, quận Bình Tân. File DXF từ khảo sát trước dùng grid công trình lệch VN-2000 chuẩn:</p>
+    <table>
+      <tr><th>Tham số</th><th>Giá trị</th><th>Ghi chú</th></tr>
+      <tr><td>Kinh tuyến trung tâm</td><td><code>105.75°</code></td><td>Chuẩn HCM 105°45'</td></tr>
+      <tr><td>Scale factor k₀</td><td><code>0.9999</code></td><td>VN-2000 múi 3° chuẩn</td></tr>
+      <tr><td>ΔE (Easting)</td><td><code>-391.75 m</code></td><td>Preset "📍 Tham Lương"</td></tr>
+      <tr><td>ΔN (Northing)</td><td><code>+223.86 m</code></td><td>Preset "📍 Tham Lương"</td></tr>
+      <tr><td>Verify</td><td>10 điểm cặp C1.01-C1.10</td><td>Sai lệch <strong>0.000m</strong> cả 2 chiều convert</td></tr>
+    </table>
+
     <h4 style="margin-top:14px;color:#1e40af;">🏘 Cần Giuộc — Long An</h4>
-    <p>File <code>Ban do xa CG.dxf</code> (46.66 MB, quy hoạch xã Cần Giuộc):</p>
+    <p>File <code>Ban do xa CG.dxf</code> (46.66 MB, quy hoạch xã Cần Giuộc) — <em>convention cũ đã migrate sang ΔE/ΔN, đảo dấu:</em></p>
     <table>
       <tr><th>Tham số</th><th>Giá trị</th><th>Ghi chú</th></tr>
       <tr><td>Kinh tuyến trung tâm</td><td><code>105.972°</code></td><td>Khác chuẩn Long An (105.75°) — file dùng local zone</td></tr>
       <tr><td>Scale factor k₀</td><td><code>0.9996</code></td><td>UTM múi 6°, không phải VN-2000 múi 3°</td></tr>
-      <tr><td>Offset Đông (X)</td><td><code>-38 m</code></td><td>Dịch trái 38m</td></tr>
-      <tr><td>Offset Bắc (Y)</td><td><code>-114 m</code></td><td>Dịch xuống 114m</td></tr>
+      <tr><td>ΔE (Easting)</td><td><code>+38 m</code></td><td>Cũ Offset Đông (X) = -38m → đảo dấu</td></tr>
+      <tr><td>ΔN (Northing)</td><td><code>+114 m</code></td><td>Cũ Offset Bắc (Y) = -114m → đảo dấu</td></tr>
       <tr><td>Điểm đầu tiên</td><td><code>10.596877, 106.702518</code></td><td>Preview</td></tr>
-      <tr><td>Trung tâm Cần Giuộc</td><td><code>10.601, 106.664</code></td><td>Reference</td></tr>
-      <tr><td>Delta</td><td>± 4.2 km (đông)</td><td>Chấp nhận được cho MVP — file phủ nhiều xã</td></tr>
     </table>
 
-    <h4 style="margin-top:14px;color:#1e40af;">🏙 TP.HCM</h4>
-    <p>Bản vẽ khu vực TP.HCM (chuẩn VN-2000 múi 3°):</p>
+    <h4 style="margin-top:14px;color:#1e40af;">🏙 TP.HCM (bản vẽ chung, không phải Tham Lương)</h4>
+    <p>Bản vẽ khu vực TP.HCM (chuẩn VN-2000 múi 3°) — <em>convention cũ đã migrate:</em></p>
     <table>
       <tr><th>Tham số</th><th>Giá trị</th><th>Ghi chú</th></tr>
       <tr><td>Kinh tuyến trung tâm</td><td><code>105.7515°</code></td><td>Rất gần chuẩn HCM 105°45' (105.75°) — chỉ lệch 0.0015°</td></tr>
       <tr><td>Scale factor k₀</td><td><code>0.9999</code></td><td>VN-2000 múi 3° chuẩn</td></tr>
-      <tr><td>Offset Đông (X)</td><td><code>+30 m</code></td><td>Dịch phải 30m</td></tr>
-      <tr><td>Offset Bắc (Y)</td><td><code>-110 m</code></td><td>Dịch xuống 110m</td></tr>
+      <tr><td>ΔE (Easting)</td><td><code>-30 m</code></td><td>Cũ Offset Đông (X) = +30m → đảo dấu</td></tr>
+      <tr><td>ΔN (Northing)</td><td><code>+110 m</code></td><td>Cũ Offset Bắc (Y) = -110m → đảo dấu</td></tr>
       <tr><td>Điểm đầu tiên (ví dụ)</td><td><code>10.794883, 106.687348</code></td><td>Preview — khu Bình Chánh / Tân Bình</td></tr>
-      <tr><td>Reference</td><td>TP.HCM (10.7769, 106.7009)</td><td>Đơn vị hành chính</td></tr>
-      <tr><td>Delta so với Cần Giuộc</td><td>21.7 km bắc</td><td>Bình thường — file là TP.HCM, không phải Cần Giuộc</td></tr>
     </table>
+
+    <div class="note note-info">
+      <span class="note-icon">🔄</span>
+      <div><strong>Convention thống nhất (2026-08)</strong>: CAD offset đã đổi từ "Đông+/Tây- (cộng sau convert)" sang <strong>ΔE/ΔN (trừ trước convert)</strong> — cùng với CSV import. Cache DXF cũ tự migrate đảo dấu khi load. Bản vẽ hiển thị không thay đổi.</div>
+    </div>
 
     <div class="note">
       <div class="ni">💡</div>
