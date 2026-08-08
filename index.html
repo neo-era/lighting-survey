@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="vi">
 <head>
     <title>Lighting System V1.2</title>
@@ -4290,6 +4290,9 @@
         async function exportDrawingPDF(opts) {
             opts = opts || {};
             const _returnBlob = opts.returnBlob === true;
+            // Bug fix: clear stale blob so failed re-export doesn't serve previous result
+            window._lastPdfBlob = null;
+            window._lastPdfFilename = null;
             const exportBtn = document.getElementById('pdExportBtn');
             if (exportBtn) { exportBtn.disabled = true; exportBtn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Đang xử lý...'; }
 
@@ -4442,7 +4445,8 @@
                     PRINT_CONFIG.captureScale = 1;
                     PRINT_CONFIG.captureScaleMobile = 1;
                     setTimeout(() => {
-                        exportDrawingPDF().finally(() => {
+                        // Bug fix: pass opts so returnBlob:true is preserved in retry
+                        exportDrawingPDF(opts).finally(() => {
                             PRINT_CONFIG.captureScale = oldScale;
                             PRINT_CONFIG.captureScaleMobile = oldScaleM;
                             window._pdfRetryLowScale = false;
@@ -4719,6 +4723,7 @@
         function logout() {
             if (!confirm('Đăng xuất?')) return;
             currentUser = null;
+            if (typeof _adminAuthCached !== 'undefined') _adminAuthCached = null;
             localStorage.removeItem('ks_user');
             // Đóng tất cả Bootstrap modal + xóa backdrop để input login không bị block
             $('.modal').modal('hide');
@@ -6624,8 +6629,9 @@
                     const v = lines[j + 1].trim();
                     if (c === '2' && !name) name = v.toUpperCase();
                     if (c === '0' && v === 'ENDBLK') {
-                        // Include ENDBLK + trailing layer code (2 lines: "  8" + value)
-                        end = j + 3;
+                        // Include ENDBLK + trailing layer code (4 lines: "0","ENDBLK","8","<layer>")
+                        // Bug fix: was j+3 which excluded layer value when it equals '0' (default layer)
+                        end = j + 4;
                         while (end < n && lines[end].trim() !== '0') end++;
                         break;
                     }
@@ -6666,11 +6672,13 @@
                     INSUNITS: 6,             // meters
                     DWGCODEPAGE: 'ANSI_1258' // tiếng Việt
                 };
-                this._insbase = [500000, 1000000, 0]; // VN2000 precision offset
+                this._insbase = [0, 0, 0]; // không trừ offset — tọa độ lưu nguyên (local grid hoặc VN2000 chuẩn)
+                this._extents = null;    // [minX, minY, maxX, maxY] — set sau khi tính bounds
             }
 
             setHeader(key, value) { this._headerVars[key] = value; return this; }
             setInsbase(x, y, z = 0) { this._insbase = [x, y, z]; return this; }
+            setExtents(minX, minY, maxX, maxY) { this._extents = [minX, minY, maxX, maxY]; return this; }
 
             addLayer(name, colorAci = 7, lineType = 'CONTINUOUS') {
                 this._layers.push({ name, color: colorAci, lineType });
@@ -6771,6 +6779,11 @@
                 L.push(' 10', this._insbase[0]);
                 L.push(' 20', this._insbase[1]);
                 L.push(' 30', this._insbase[2]);
+                if (this._extents) {
+                    const [x0, y0, x1, y1] = this._extents;
+                    L.push('  9', '$EXTMIN', ' 10', x0, ' 20', y0, ' 30', 0);
+                    L.push('  9', '$EXTMAX', ' 10', x1, ' 20', y1, ' 30', 0);
+                }
                 L.push('  0', 'ENDSEC');
                 return L.join('\n');
             }
@@ -7160,18 +7173,16 @@
         window._deleteCadOffsetPreset = _deleteCadOffsetPreset;
 
         // Helper: get admin credentials — reuse pattern từ admin user management (nếu chưa có, prompt)
-        // Store trong sessionStorage để không hỏi mỗi lần.
+        // Cache trong tab-scoped variable (cleared on reload/logout, not readable by external JS)
+        // Security fix: sessionStorage stores plaintext password accessible to any same-origin script
+        let _adminAuthCached = null;
         async function _getAdminAuth() {
-            try {
-                const cached = sessionStorage.getItem('admin_auth_cache');
-                if (cached) return JSON.parse(cached);
-            } catch (_) {}
+            if (_adminAuthCached) return _adminAuthCached;
             if (!currentUser || currentUser.role !== 'admin') return null;
             const pwd = prompt(`Xác nhận mật khẩu admin cho ${currentUser.username}:`);
             if (!pwd) return null;
-            const auth = { username: currentUser.username, password: pwd };
-            try { sessionStorage.setItem('admin_auth_cache', JSON.stringify(auth)); } catch (_) {}
-            return auth;
+            _adminAuthCached = { username: currentUser.username, password: pwd };
+            return _adminAuthCached;
         }
 
         // ── Filter persistence localStorage ───────────────────────────────
@@ -7203,7 +7214,9 @@
             const rows = _filterRowsForCadExport(filters);
             if (rows.length === 0) throw new Error('Filter không match marker nào để xuất');
 
-            const cm = opts.cm || 105.75;
+            const cm  = opts.cm || 105.75;
+            // k0 theo múi: 6° (cm≈105°) → 0.9996; 3° (cm≈105.75°...) → 0.9999
+            const k0  = Math.abs(cm - 105.0) < 0.01 ? 0.9996 : 0.9999;
             const scale = opts.scale || 1000;
             const outDE = (opts.outputOffset && opts.outputOffset.dE) || 0;
             const outDN = (opts.outputOffset && opts.outputOffset.dN) || 0;
@@ -7235,7 +7248,7 @@
             for (const r of rows) {
                 const lat = parseCoord(r[2]), lon = parseCoord(r[3]);
                 if (!isFinite(lat) || !isFinite(lon)) continue;
-                const vn = convertLatLonToVn2000(lat, lon, cm);
+                const vn = convertLatLonToVn2000(lat, lon, cm, k0);
                 const xOut = vn.x + outDE;
                 const yOut = vn.y + outDN;
 
@@ -7269,14 +7282,19 @@
                 const lat1 = parseCoord(r[2]), lon1 = parseCoord(r[3]);
                 const lat2 = parseCoord(parent[2]), lon2 = parseCoord(parent[3]);
                 if (!isFinite(lat1) || !isFinite(lat2)) continue;
-                const vn1 = convertLatLonToVn2000(lat1, lon1, cm);
-                const vn2 = convertLatLonToVn2000(lat2, lon2, cm);
+                const vn1 = convertLatLonToVn2000(lat1, lon1, cm, k0);
+                const vn2 = convertLatLonToVn2000(lat2, lon2, cm, k0);
                 const p1 = [vn1.x + outDE, vn1.y + outDN];
                 const p2 = [vn2.x + outDE, vn2.y + outDN];
                 d.drawPolyline([p1, p2], false, 'LIGHTING_CABLE');
                 const mx = (p1[0] + p2[0]) / 2, my = (p1[1] + p2[1]) / 2;
                 const dist = r[15] || Math.round(haversineM(lat1, lon1, lat2, lon2));
                 d.drawText(mx, my, 3, `${dist}m`, 'LIGHTING_TEXT');
+            }
+
+            // Ghi EXTMIN/EXTMAX vào header để AutoCAD zoom-to-fit khi mở
+            if (isFinite(bounds.minX)) {
+                d.setExtents(bounds.minX, bounds.minY, bounds.maxX, bounds.maxY);
             }
 
             // Insert title block với ATTRIBUTES (góc dưới-phải bản vẽ)
@@ -7465,7 +7483,9 @@
         function _esc(s) { return String(s).replace(/[<>&"']/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&#39;'}[c])); }
 
         function _cgToggleDim(key, value, checked) {
-            const arr = _cgCurrentFilters[key] || [];
+            // Bug fix: strip '__NONE__' sentinel before operating so it doesn't pollute the array
+            // when user checks an item after "Bỏ chọn tất cả"
+            let arr = (_cgCurrentFilters[key] || []).filter(v => v !== '__NONE__');
             if (checked && !arr.includes(value)) arr.push(value);
             else if (!checked) {
                 const idx = arr.indexOf(value);
@@ -7528,6 +7548,9 @@
                 document.getElementById('cgBtnDxf').disabled = true;
                 document.getElementById('cgBtnPdf').disabled = true;
                 document.getElementById('cgBtnBoth').disabled = true;
+                // Bug fix: disable batch button when no markers match
+                const batchBtn = document.getElementById('cgBtnBatch');
+                if (batchBtn) batchBtn.disabled = true;
             } else {
                 el.style.background = '#f0fdf4';
                 el.style.color = '#166534';
@@ -7535,6 +7558,8 @@
                 document.getElementById('cgBtnDxf').disabled = false;
                 document.getElementById('cgBtnPdf').disabled = false;
                 document.getElementById('cgBtnBoth').disabled = false;
+                const batchBtn2 = document.getElementById('cgBtnBatch');
+                if (batchBtn2) batchBtn2.disabled = false;
             }
         }
 
@@ -7678,44 +7703,18 @@
                 if (typeof displayInfo === 'function') displayInfo('Đang tạo bản vẽ...');
                 const stamp = _dateStamp();
 
-                // Multi-sheet split
+                // DXF luôn xuất 1 file duy nhất — chia tờ chỉ áp dụng cho in/PDF
+                if (mode === 'dxf') {
+                    const dxfText = await _generateCadDrawing(opts);
+                    const label = `thiet-ke-${opts.templateId}-${stamp}.dxf`;
+                    _saveBlob(new Blob([dxfText], { type: 'application/dxf' }), label);
+                    displayInfo && displayInfo('✅ Đã xuất DXF');
+                    return;
+                }
+
+                // Multi-sheet split (dùng cho PDF / both)
                 const { partitions } = _cgComputeSheetsForCurrentOpts();
                 const isMultiSheet = partitions.length > 1;
-
-                // Build DXF files (mỗi partition 1 file)
-                const dxfFiles = [];
-                if (mode === 'dxf' || mode === 'both') {
-                    for (const sb of partitions) {
-                        const subOpts = { ...opts };
-                        if (isMultiSheet) subOpts.sheetBounds = sb;
-                        try {
-                            const dxfText = await _generateCadDrawing(subOpts);
-                            const label = isMultiSheet
-                                ? `thiet-ke-${opts.templateId}-${stamp}_${String(sb.index).padStart(2, '0')}-of-${String(sb.total).padStart(2, '0')}.dxf`
-                                : `thiet-ke-${opts.templateId}-${stamp}.dxf`;
-                            dxfFiles.push({ name: label, content: dxfText });
-                        } catch (err) {
-                            // Sheet có thể không có marker sau khi filter bounds
-                            console.warn(`[CAD Gen] Sheet ${sb.index}/${sb.total} skip:`, err.message);
-                        }
-                    }
-                    if (mode === 'dxf') {
-                        if (dxfFiles.length === 1) {
-                            _saveBlob(new Blob([dxfFiles[0].content], { type: 'application/dxf' }), dxfFiles[0].name);
-                            displayInfo && displayInfo('✅ Đã xuất DXF');
-                        } else if (dxfFiles.length > 1) {
-                            const JSZip = await _loadJSZip();
-                            const zip = new JSZip();
-                            dxfFiles.forEach(f => zip.file(f.name, f.content));
-                            const zipBlob = await zip.generateAsync({ type: 'blob' });
-                            _saveBlob(zipBlob, `ban-ve-${stamp}.zip`);
-                            displayInfo && displayInfo(`✅ Đã xuất ${dxfFiles.length} tờ DXF (zip)`);
-                        } else {
-                            displayError && displayError('Không có sheet nào có marker để xuất');
-                        }
-                        return;
-                    }
-                }
 
                 if (mode === 'pdf') {
                     if (isMultiSheet) {
@@ -7727,6 +7726,24 @@
                 }
 
                 if (mode === 'both') {
+                    if (partitions.length > 10 && !confirm(`Bản vẽ có ${partitions.length} tờ. Việc xuất zip có thể mất nhiều thời gian. Tiếp tục?`)) return;
+
+                    // Build DXF files (mỗi partition 1 file)
+                    const dxfFiles = [];
+                    for (const sb of partitions) {
+                        const subOpts = { ...opts };
+                        if (isMultiSheet) subOpts.sheetBounds = sb;
+                        try {
+                            const dxfText = await _generateCadDrawing(subOpts);
+                            const label = isMultiSheet
+                                ? `thiet-ke-${opts.templateId}-${stamp}_${String(sb.index).padStart(2, '0')}-of-${String(sb.total).padStart(2, '0')}.dxf`
+                                : `thiet-ke-${opts.templateId}-${stamp}.dxf`;
+                            dxfFiles.push({ name: label, content: dxfText });
+                        } catch (err) {
+                            console.warn(`[CAD Gen] Sheet ${sb.index}/${sb.total} skip:`, err.message);
+                        }
+                    }
+
                     // Gen PDF Blob (không auto-save) + zip cùng với DXF files
                     _closeCadGenerator();
                     displayInfo && displayInfo('Đang tạo PDF cho zip...');
@@ -7784,7 +7801,14 @@
                     btn.textContent = `⏳ ${i+1}/${allTus.length}...`;
                     const opts = {
                         ...baseOpts,
-                        filters: { tus: [tu], basenames: [], nguoiKS: [], phuongXa: [] },
+                        // Bug fix: respect active dimension filters (basenames/nguoiKS/phuongXa)
+                        // Only override the 'tus' dimension to iterate per-cabinet
+                        filters: {
+                            tus: [tu],
+                            basenames: _cgCurrentFilters.basenames || [],
+                            nguoiKS:   _cgCurrentFilters.nguoiKS   || [],
+                            phuongXa:  _cgCurrentFilters.phuongXa  || []
+                        },
                         metadata: {
                             ...baseOpts.metadata,
                             CS_KHU_VUC: baseOpts.metadata.CS_KHU_VUC || tu,
@@ -8071,8 +8095,9 @@
             if (!tpl) throw new Error(`Unknown template: ${templateId}`);
             let text;
             if (tpl._customDxfContent) {
-                // Custom template — base64 decode
-                text = atob(tpl._customDxfContent);
+                // Custom template — base64 decode with UTF-8 support for Vietnamese diacritics
+                // Bug fix: plain atob() returns Latin-1 byte string, mojibaking Vietnamese text
+                text = decodeURIComponent(escape(atob(tpl._customDxfContent)));
             } else {
                 const res = await fetch(tpl.file);
                 if (!res.ok) throw new Error(`Fetch ${tpl.file} failed: ${res.status}`);
@@ -8251,19 +8276,25 @@
         _generateCadDrawing = async function(opts) {
             if (!opts.sheetBounds) return _origGenerateCadDrawing(opts);
             // Wrap filter để chỉ giữ marker trong sheetBounds
-            const filters = opts.filters || {};
             const sb = opts.sheetBounds;
             const cm = opts.cm || 105.75;
+            // Bug fix: apply output offset before comparing against offset-shifted bounds
+            const outDE = (opts.outputOffset && opts.outputOffset.dE) || 0;
+            const outDN = (opts.outputOffset && opts.outputOffset.dN) || 0;
+            // Use local var to avoid monkey-patching the global during async awaits
             const origFilter = _filterRowsForCadExport;
-            _filterRowsForCadExport = function(f) {
+            const _patchedFilter = function(f) {
                 const rows = origFilter(f);
                 return rows.filter(r => {
                     const lat = parseCoord(r[2]), lon = parseCoord(r[3]);
                     if (!isFinite(lat) || !isFinite(lon)) return false;
                     const vn = convertLatLonToVn2000(lat, lon, cm);
-                    return vn.x >= sb.minX && vn.x <= sb.maxX && vn.y >= sb.minY && vn.y <= sb.maxY;
+                    const xOut = vn.x + outDE;
+                    const yOut = vn.y + outDN;
+                    return xOut >= sb.minX && xOut <= sb.maxX && yOut >= sb.minY && yOut <= sb.maxY;
                 });
             };
+            _filterRowsForCadExport = _patchedFilter;
             try {
                 // Add sheet index to metadata
                 const optsWithIdx = { ...opts, metadata: { ...opts.metadata } };
@@ -8330,6 +8361,9 @@
         }
 
         function _onMstTuChange() {
+            // Bug fix: reset stale MST result so Apply doesn't use edges from previous cabinet
+            _mstResult = null;
+            _mstRemovePreview();
             const tu = document.getElementById('mstTuSelect').value;
             const nodes = _mstGetNodesForTu(tu);
             const preview = document.getElementById('mstPreview');
