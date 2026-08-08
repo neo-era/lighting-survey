@@ -3353,3 +3353,419 @@ Toggle `✏ Chế độ sửa vị trí text CAD` trong CAD info box → text ma
 **Deploy requirements**:
 - ⚠ **P47 cần redeploy GAS New version** — sheet `OffsetPresets` auto-created, không cần setup tay
 - P43-P56 khác client-side thuần túy — chỉ cần hard refresh (SW auto-invalidate)
+
+---
+
+# 🚀 Tech Overhaul Roadmap (2026-08 → 2027)
+
+Đề xuất kỹ thuật lớn sau khi hoàn thành 14 prompts P43-P56. **Áp dụng khi có nhu cầu scale hoặc >2 dev cùng làm**. Với dự án hiện tại 15K+ dòng `index.html`, tech debt đang cản trở dev velocity — cần refactor có hệ thống.
+
+## Vấn đề kỹ thuật cốt lõi
+
+| Vấn đề | Hệ quả hiện tại | Ceiling |
+|---|---|---|
+| `index.html` monolith 15K dòng | Debug khó, merge conflict, không tree-shake | Solo dev 6 tháng nữa sẽ khó nhớ code |
+| Leaflet DOM markers (`L.marker + divIcon`) | 1 marker = 1 DOM element → freeze khi >5K | ~1000 markers 60 FPS |
+| Google Sheet làm DB | Rate limit 100 req/100s, no transactions, no spatial index | ~5K markers, 5 users concurrent |
+| Vanilla JS + jQuery + Bootstrap 4 | Bundle 200KB+, no HMR, no type safety | Prototype OK, SaaS không nổi |
+| Sheet write blocking | UI phải chờ 500-2000ms mỗi CRUD | User experience kém khi mạng chậm |
+
+## Ma trận Impact vs Effort
+
+```
+       IMPACT
+        ↑
+  Cao   │ A2 Canvas          A1 Modularize     B2 MapLibre GL
+        │ (1 tuần)           (3-4 tuần)        (3-4 tuần)
+        │
+  Vừa   │ C1 Web Worker      C2 Vite+TS        B1 Supabase
+        │ (3 ngày)           (1 tuần)          (3-4 tuần)
+        │
+  Thấp  │ C3 Debounce        D1 UnoCSS         E1 Solid/Svelte
+        │ (1 ngày)           (2 tuần)          (4-6 tuần)
+        └──────────────────────────────────────→ EFFORT
+          Thấp                Vừa                Cao
+```
+
+## Decision matrix theo scale
+
+| Scale hiện tại | Recommended action |
+|---|---|
+| **Prototype 1 khách, <2K markers, 1-2 user** | Sprint 1 only (Quick Wins) |
+| **MVP 1 khách chính thức, 2-10K markers, 3-5 user** | Sprint 1 + 2 (Quick Wins + Modularize) |
+| **Multi khách hàng, 10K+ markers, 10+ user** | Sprint 1 + 2 + 3 (thêm Scale) |
+| **SaaS scale, >5 khách, 100K+ markers** | Full 4 sprints (~11 tuần) |
+
+---
+
+## Sprint 1 — Quick Wins (2 tuần) ⚡
+
+**Mục tiêu**: 3× render speed + không freeze UI, không refactor lớn.
+
+### S1.1 — Canvas renderer cho markers (2 ngày)
+
+**Vấn đề**: `L.marker + L.divIcon` tạo 1 DOM element / marker → freeze khi >1K markers.
+
+**Giải pháp**: Chuyển sang `L.circleMarker + L.canvas()` renderer — vẽ trên 1 canvas thay 1000 DOM elements.
+
+**Files thay đổi**:
+- `index.html`: `addMarkerRowToMap()` (line ~3350) — thay `L.marker([lat,lon], {icon: L.divIcon(...)})` bằng `L.circleMarker([lat,lon], {renderer: L.canvas(), radius, fillColor, ...})`
+- Trade-off: mất icon SVG lampcomplex → dùng `circleMarker` với color theo type. Zoom cao (≥17) mới render `L.marker + divIcon` cho detail
+
+**Deliverables**:
+- Function `addMarkerRowToMapCanvas(row)` alternate implementation
+- Config `USE_CANVAS_RENDERER = true` toggle test
+- Verify: load 5K markers → pan/zoom smooth 60 FPS
+
+**Dependencies**: None.
+
+### S1.2 — Web Worker cho CSV/DXF parse (3 ngày)
+
+**Vấn đề**: Parse CSV 10MB hoặc DXF 40MB freeze main thread 5-30s.
+
+**Giải pháp**: Move parse logic vào Web Worker.
+
+**Files mới**:
+- `workers/csv-parser.worker.js` — post `{file}` → return `{rows, headers, format}`
+- `workers/dxf-parser.worker.js` — post `{text}` → return `{entities, bounds, layers}`
+
+**Files thay đổi**:
+- `index.html`: `_onCsvImportChange` — spawn worker thay parse trực tiếp
+- `index.html`: `_handleCadUpload` — parse via worker
+- Add helper `_runWorker(scriptUrl, message)` return Promise
+
+**Deliverables**:
+- 2 worker scripts
+- Progress reporting qua `postMessage({type:'progress', pct})`
+- Fallback nếu worker fail → parse main thread
+
+**Dependencies**: None.
+
+### S1.3 — Debounce mọi map listeners (1 ngày)
+
+**Vấn đề**: `map.on('moveend')` fire nhiều lần khi pan liên tục → re-render lãng phí.
+
+**Files thay đổi**:
+- `index.html`: wrap tất cả `map.on('moveend' | 'zoomend' | 'move' | 'zoom')` với `debounce(fn, 150ms)` (hàm `debounce` đã có ở line ~3038)
+
+**Deliverables**:
+- Grep `map.on(` — audit + wrap từng listener
+- Config `DEBOUNCE_MS = 150` global
+
+**Dependencies**: None.
+
+### S1.4 — Vite build pipeline setup (3 ngày)
+
+**Vấn đề**: Không có bundler — không code splitting, không tree shake, không HMR.
+
+**Files mới**:
+- `package.json` — deps: `vite`, `@types/leaflet`
+- `vite.config.js` — legacy plugin cho browser cũ, target ES2020
+- `index.html` — thêm `<script type="module" src="/src/main.js">` (nếu chưa có main.js thì tạo empty)
+
+**Deliverables**:
+- `npm run dev` — HMR working
+- `npm run build` — output `dist/` deploy được lên GitHub Pages
+- CI GitHub Action build + publish `dist/` thay serve raw
+
+**Dependencies**: None (nhưng nền tảng cho Sprint 2).
+
+### S1 Verification
+- Load sheet 5000 markers → pan/zoom 60 FPS smooth
+- Upload CSV 10MB → UI không freeze, progress bar mượt
+- Bundle output `dist/` < 500KB gzipped (giảm từ raw 800KB)
+
+---
+
+## Sprint 2 — Modularize (3 tuần) 📦
+
+**Mục tiêu**: Codebase maintainable, testable, 10× dev velocity.
+
+### S2.1 — Extract core modules (5 ngày)
+
+**Cấu trúc mới**:
+```
+src/
+├── core/
+│   ├── vn2000.js          — convert lat/lon ↔ VN2000 (đã có `lib/vn2000.js`)
+│   ├── haversine.js       — haversineM, distance calculations
+│   ├── format.js          — parseCoord, formatCoordVN, normalizeText
+│   ├── dxf-parser.js      — _extractDxfBlock, _extractAttdefs, _parseDxfEntities
+│   └── cad-drawing.js     — class CadDrawing từ Phase A
+├── data/
+│   ├── csv-parser.js      — _parseCsvSmart, _detectCsvFormat, _extractLatLon
+│   ├── indexeddb.js       — _idbOpen, _idbGet, _idbSet cho CSV cache + CAD cache
+│   ├── gas-client.js      — wrapper fetch tới KHAOSAT_GAS_URL với error handling
+│   └── offset-presets.js  — _getCadOffsetPresets, _syncSharedPresets
+├── map/
+│   ├── leaflet-setup.js   — init map, layers, tile setup
+│   ├── markers.js         — addMarkerRowToMap + canvas renderer
+│   ├── cluster.js         — markerCluster + zoom-tier logic
+│   └── cable.js           — _buildCableLines + edit mode
+├── modules/
+│   ├── cad-import/        — parser + preflight + auto-fix (T19)
+│   ├── cad-generator/     — generator + templates + preview (T21)
+│   ├── mst-cable/         — Prim + apply (T22)
+│   ├── csv-import/        — 3 modes + calibrate 2 điểm (T20)
+│   └── admin/             — user management (đã có admin UI)
+├── ui/
+│   ├── modals/            — 20+ modal components
+│   ├── panels/            — ☰ controls panel, cable toolbar
+│   └── forms/             — marker popup form
+└── main.js                — entry point, bootstrap
+```
+
+**Migration strategy**: incremental — mỗi PR chuyển 1 module. Giữ `index.html` shell + `<script type="module" src="/src/main.js">`.
+
+**Deliverables**:
+- 6 modules chính extract xong
+- `index.html` giảm từ 15K → ~5K dòng (chỉ HTML shell)
+- Import graph rõ ràng (no circular deps)
+
+### S2.2 — TypeScript incremental (5 ngày)
+
+**Strategy**: Add types cho pure functions trước (không có DOM), sau đó đến modules.
+
+**Priority order**:
+1. `src/core/*` — hoàn toàn pure, dễ type
+2. `src/data/*` — data structures
+3. `src/modules/*/*.ts` — business logic
+4. `src/ui/*` — DOM types phức tạp, làm cuối
+
+**Files mới**:
+- `tsconfig.json` — strict: true, target ES2020, allowJs: true (dual JS/TS)
+- `src/types/marker.ts` — `Row = [id, tenTru, lat, lon, ...]` với discriminated union
+- `src/types/cad.ts` — Entity, Block, Meta types
+
+**Deliverables**:
+- 80% pure functions typed (không any)
+- `tsc --noEmit` pass
+- IDE autocomplete + type check working
+
+### S2.3 — Vitest test suite (5 ngày)
+
+**Coverage target**: 80% pure functions.
+
+**Test files**:
+- `tests/unit/vn2000.test.js` (đã có — mở rộng)
+- `tests/unit/haversine.test.js` — verify công thức
+- `tests/unit/dxf-parser.test.js` — extract block/attdef
+- `tests/unit/cad-drawing.test.js` — build DXF end-to-end
+- `tests/unit/mst.test.js` — Prim + Nearest với 10 điểm Tham Lương
+- `tests/unit/csv-parser.test.js` — auto-detect format, edge cases
+- `tests/unit/calibrate.test.js` — 2-point detection
+- `tests/integration/cad-generator.test.js` — full pipeline
+
+**Deliverables**:
+- CI GitHub Action: PR block nếu tests fail
+- Coverage report qua `vitest run --coverage`
+
+### S2 Verification
+- Tất cả tests pass local + CI
+- `index.html` <5K dòng
+- Add feature mới không đụng file khác > 3 modules
+- 2 dev pull request cùng lúc: không conflict
+
+---
+
+## Sprint 3 — Scale (4 tuần) 🔥
+
+**Mục tiêu**: 100K+ markers 60 FPS, 20+ users concurrent OK.
+
+### S3.1 — MapLibre GL migration (2 tuần)
+
+**Strategy**: Replace Leaflet cho marker layer, GIỮ Leaflet cho CAD overlay (WebGL không hỗ trợ dxf-parser output tốt).
+
+**Approach**:
+- MapLibre GL basemap + markers (100K+ points)
+- Leaflet vẫn dùng cho CAD DXF overlay (few thousand lines/polys)
+- Dual map instance sync qua `move`/`zoom` events
+
+**Files mới**:
+- `src/map/maplibre-setup.js` — init MapLibre với vector tile style
+- `src/map/marker-source.js` — GeoJSON source + layer với clustering built-in
+- Sprite atlas cho pole/cabinet icons (PNG generated từ SVG)
+
+**Files thay đổi**:
+- `src/map/markers.js` — mode dual: legacy Leaflet (fallback) hoặc MapLibre (default)
+- Config flag `MAP_ENGINE = 'maplibre' | 'leaflet'`
+
+**Deliverables**:
+- 100K markers render 60 FPS
+- Clustering nhanh 10× so `leaflet.markercluster`
+- Sprite atlas 512×512 chứa 8 pole/cabinet icons
+- Vector tile from OSM (miễn phí qua MapTiler free tier)
+
+### S3.2 — Supabase migration (2 tuần)
+
+**Schema**:
+```sql
+CREATE TABLE markers (
+  id TEXT PRIMARY KEY,
+  tenant_id UUID REFERENCES tenants(id),
+  ten_tru TEXT NOT NULL,
+  lat DOUBLE PRECISION,
+  lon DOUBLE PRECISION,
+  geom GEOGRAPHY(POINT, 4326) GENERATED ALWAYS AS (ST_SetSRID(ST_MakePoint(lon, lat), 4326)) STORED,
+  loai INT,
+  tu_dieu_khien TEXT,
+  -- ... 22 cột khác tương ứng schema Google Sheet
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX ON markers USING GIST (geom);  -- Spatial index
+CREATE INDEX ON markers (tenant_id, tu_dieu_khien);
+
+CREATE TABLE offset_presets (
+  id TEXT PRIMARY KEY,
+  tenant_id UUID REFERENCES tenants(id),
+  -- ... schema từ OffsetPresets sheet
+);
+
+-- RLS
+ALTER TABLE markers ENABLE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation ON markers
+  USING (tenant_id = auth.tenant_id());
+```
+
+**Migration approach**:
+- Sheet vẫn giữ làm backup + non-tech user xem
+- 2-way sync qua Supabase Edge Function trigger:
+  - Sheet edit → webhook → Supabase update
+  - Supabase update → GAS trigger → Sheet update
+- Client đọc trực tiếp Supabase (Postgres REST API)
+
+**Files mới**:
+- `src/data/supabase-client.js` — @supabase/supabase-js wrapper
+- `supabase/migrations/*.sql` — schema versioning
+- `supabase/functions/sheet-sync/` — Edge Function 2-way sync
+
+**Files thay đổi**:
+- `src/data/gas-client.js` — deprecate CRUD, giữ chỉ auth + admin
+- `src/modules/csv-import/` — write vào Supabase thay GAS
+
+**Deliverables**:
+- Multi-tenant RLS working
+- Spatial query "markers trong bán kính 100m" <50ms
+- Real-time subscriptions: user A add marker → user B thấy ngay không refresh
+- 2-way Sheet sync latency <5s
+
+### S3.3 — Real-time subscriptions (3 ngày)
+
+**Replace poll CSV mỗi 5 phút** bằng Supabase Realtime:
+```js
+supabase.channel('markers')
+  .on('postgres_changes', { event: '*', schema: 'public', table: 'markers' },
+    payload => _handleMarkerChange(payload))
+  .subscribe();
+```
+
+**Files thay đổi**:
+- `src/data/csv-parser.js` — mode 'realtime' bypass CSV fetch
+- Update `loadFromCSVWithCache` để switch nguồn tùy config
+
+**Deliverables**:
+- Multiple users see updates instantly
+- Battery-friendly (WebSocket vs poll)
+
+### S3 Verification
+- Load 100K markers từ Supabase → render 60 FPS trên laptop trung bình
+- 20 users concurrent add markers → no conflict, no data loss
+- Spatial query ST_DWithin trên 100K rows <50ms
+
+---
+
+## Sprint 4 — Polish (2 tuần) ✨
+
+**Mục tiêu**: Bundle giảm 40%, load time <2s, component-based UI.
+
+### S4.1 — Component library (Solid.js hoặc Svelte 5) (1 tuần)
+
+**Chọn Solid.js** — closest to vanilla JS, không VDOM, compile-away.
+
+**Migration**: chỉ migrate UI components mới, giữ modals cũ.
+- New modals dùng Solid components
+- Old modals migrate dần khi có bug fix
+
+**Files mới**:
+- `src/components/` — 20+ components (Modal, Button, Table, Dropdown, ...)
+- `src/hooks/` — custom hooks (`useMarkers`, `usePresets`, ...)
+
+**Deliverables**:
+- Component reuse: 1 Modal component thay 20+ modal HTML
+- Type-safe props
+
+### S4.2 — CSS framework migration (3 ngày)
+
+**Bootstrap 4 → UnoCSS** (atomic CSS, on-demand generation).
+
+**Files thay đổi**:
+- Remove `bootstrap.min.css` + `jquery.min.js`
+- Add UnoCSS preset
+- Migrate classes: `class="btn btn-primary"` → `class="px-4 py-2 bg-blue-600 rounded"`
+
+**Deliverables**:
+- Bundle giảm ~200KB (Bootstrap + jQuery removed)
+- CSS on-demand: chỉ ship class thực sự dùng
+
+### S4.3 — Bundle analyzer + optimization (3 ngày)
+
+**Tools**:
+- `rollup-plugin-visualizer` — treemap bundle
+- Analyze duplicate deps, large chunks
+
+**Actions**:
+- Code splitting per route/modal (lazy load)
+- Dynamic import cho ExcelJS/jsPDF/html2canvas/JSZip (đã có 1 phần)
+- Preload critical, prefetch non-critical
+
+**Deliverables**:
+- Initial bundle <200KB gzipped (từ 800KB hiện tại)
+- Time-to-interactive <2s trên 3G
+
+### S4 Verification
+- Bundle analyzer report: no chunk >100KB
+- Lighthouse score ≥95 (hiện ~75)
+- Full app load <2s trên network Fast 3G throttling
+
+---
+
+## Timeline tổng thể
+
+```
+Aug 2026  ├─ Sprint 1 (Quick Wins, 2w)           ← ROI cao nhất
+Sep 2026  ├─ Sprint 2 (Modularize, 3w)           ← bắt buộc nếu code >5K dòng
+Oct 2026  ├─ Sprint 3 (Scale, 4w)                ← khi có scale pressure
+Nov 2026  ├─ Sprint 4 (Polish, 2w)               ← khi target SaaS
+Dec 2026  └─ Buffer + docs + user testing
+```
+
+**Total**: 11 tuần dev focus. **App vẫn chạy production suốt** (incremental migration).
+
+## Nếu chỉ 1 tuần
+
+**ROI cao nhất**:
+```
+Day 1-2: S1.1 Canvas renderer         → 3× perf render
+Day 3:   S1.2 Web Worker CSV          → không freeze UI
+Day 4-5: S2.1 Extract 3 core modules  → -3K dòng index.html
+Day 6-7: S1.3 Debounce + DevTools     → fix top 3 bottleneck
+                Performance profile
+```
+
+## Cần chốt trước khi start
+
+1. **Số marker peak / sheet hiện tại?** 1K / 10K / 100K?
+2. **User concurrent hàng ngày?** 1-5 / 5-20 / 50+?
+3. **Định hướng?** 1 khách / Multi khách / SaaS scale?
+4. **Team size?** Solo / 2+ dev?
+5. **Budget freeze feature mới trong 3 tháng?** Có / Không?
+
+**Trả lời xong** → sprint order + effort estimate chốt chính xác.
+
+## Không làm trong roadmap này (defer)
+
+- React/Vue migration — Solid/Svelte nhẹ hơn, cần thiết hơn
+- Rust WASM cho DXF parser — overkill, JS đủ nhanh với Web Worker
+- Docker containerize — không cần cho static hosting
+- Server-side rendering — không cần cho PWA client-side
+- GraphQL — Supabase REST đủ dùng
