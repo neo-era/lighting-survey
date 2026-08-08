@@ -2226,20 +2226,39 @@
                         <span aria-hidden="true">&times;</span>
                     </button>
                 </div>
-                <div class="modal-body">
-                    <div class="form-group">
-                        <label for="exportCadType">Chọn loại marker để xuất</label>
-                        <select id="exportCadType" class="form-control">
+                <div class="modal-body" style="padding:12px 16px">
+                    <div class="form-group" style="margin-bottom:10px">
+                        <label style="font-size:11px;font-weight:700;letter-spacing:.04em;color:#6b7280;text-transform:uppercase;margin-bottom:4px;display:block">Nguồn dữ liệu</label>
+                        <select id="exportCadType" class="form-control form-control-sm" onchange="updateExportCadCountInfo()">
+                            <option value="all" selected>Tất cả marker</option>
                             <option value="new">Chỉ marker mới nhập</option>
-                            <option value="all">Tất cả marker</option>
                         </select>
                     </div>
-                    <div class="form-group">
-                        <label for="exportCadBasename">Lọc theo basename</label>
-                        <input type="text" id="exportCadBasename" class="form-control" placeholder="Ví dụ: T1, T2..." list="cadBasenameList" autocomplete="off">
-                        <datalist id="cadBasenameList"></datalist>
+                    <div class="form-group" style="margin-bottom:10px">
+                        <label style="font-size:11px;font-weight:700;letter-spacing:.04em;color:#6b7280;text-transform:uppercase;margin-bottom:4px;display:block">Tủ điều khiển</label>
+                        <input type="text" id="cadExpTuSearch" class="form-control form-control-sm" placeholder="Tìm tủ..." style="margin-bottom:3px" oninput="_cadExpFilterOpts('cadExpTuSelect',this.value)">
+                        <select id="cadExpTuSelect" class="form-control form-control-sm" multiple style="height:90px" onchange="updateExportCadCountInfo()"></select>
                     </div>
-                    <div id="exportCadCountInfo"></div>
+                    <div class="form-group" style="margin-bottom:10px">
+                        <label style="font-size:11px;font-weight:700;letter-spacing:.04em;color:#6b7280;text-transform:uppercase;margin-bottom:4px;display:block">Basename</label>
+                        <input type="text" id="cadExpBnSearch" class="form-control form-control-sm" placeholder="Tìm basename..." style="margin-bottom:3px" oninput="_cadExpFilterOpts('cadExpBnSelect',this.value)">
+                        <select id="cadExpBnSelect" class="form-control form-control-sm" multiple style="height:90px" onchange="updateExportCadCountInfo()"></select>
+                    </div>
+                    <div class="form-group" style="margin-bottom:10px">
+                        <label style="font-size:11px;font-weight:700;letter-spacing:.04em;color:#6b7280;text-transform:uppercase;margin-bottom:4px;display:block">Người khảo sát</label>
+                        <input type="text" id="cadExpKsSearch" class="form-control form-control-sm" placeholder="Tìm người KS..." style="margin-bottom:3px" oninput="_cadExpFilterOpts('cadExpKsSelect',this.value)">
+                        <select id="cadExpKsSelect" class="form-control form-control-sm" multiple style="height:70px" onchange="updateExportCadCountInfo()"></select>
+                    </div>
+                    <div style="font-size:11px;color:#94a3b8;margin-bottom:10px">Giữ Ctrl/⌘ để chọn nhiều — không chọn = tất cả</div>
+                    <div class="form-group" style="margin-bottom:6px">
+                        <label style="font-size:11px;font-weight:700;letter-spacing:.04em;color:#6b7280;text-transform:uppercase;margin-bottom:4px;display:block">🔀 Hệ tọa độ output</label>
+                        <select id="cadExpPreset" class="form-control form-control-sm" style="margin-bottom:4px" onchange="_cadExpOnPresetChange(this.value)"></select>
+                        <div style="display:flex;gap:6px">
+                            <div style="flex:1"><label style="font-size:10px;color:#94a3b8">ΔE (m)</label><input type="number" id="cadExpDE" class="form-control form-control-sm" step="0.01" value="0" onchange="updateExportCadCountInfo()"></div>
+                            <div style="flex:1"><label style="font-size:10px;color:#94a3b8">ΔN (m)</label><input type="number" id="cadExpDN" class="form-control form-control-sm" step="0.01" value="0" onchange="updateExportCadCountInfo()"></div>
+                        </div>
+                    </div>
+                    <div id="exportCadCountInfo" style="font-weight:600;color:#2563eb;font-size:13px"></div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" onclick="closeExportCadModal()">Hủy</button>
@@ -3088,37 +3107,66 @@
     <script>
         // ─── Export to CAD Modal ───
         function showExportCadModal() {
-            document.getElementById('exportCadType').value = 'new';
-            document.getElementById('exportCadBasename').value = '';
-            // Populate datalist basename
-            const dl = document.getElementById('cadBasenameList');
-            if (dl && Array.isArray(loadedData) && loadedData.length > 1) {
-                const bnSet = new Set();
-                loadedData.slice(1).forEach(r => {
-                    const name = String(r[1] || '').trim();
-                    if (!name) return;
-                    const bn = name.replace(/[_\s\-]*\d+$/, '').trim();
-                    if (bn) bnSet.add(bn);
-                });
-                dl.innerHTML = [...bnSet].sort().map(b => `<option value="${b}">`).join('');
+            document.getElementById('exportCadType').value = 'all';
+            ['cadExpTuSearch', 'cadExpBnSearch', 'cadExpKsSearch'].forEach(function(id) {
+                var el = document.getElementById(id); if (el) el.value = '';
+            });
+            var src = (Array.isArray(loadedData) && loadedData.length > 1) ? loadedData.slice(1) : [];
+            var tuSel = document.getElementById('cadExpTuSelect');
+            var bnSel = document.getElementById('cadExpBnSelect');
+            var ksSel = document.getElementById('cadExpKsSelect');
+            if (tuSel) {
+                var tuVals = Array.from(new Set(src.map(function(r) { return String(r[7] || '').trim(); }).filter(Boolean))).sort();
+                tuSel.innerHTML = tuVals.map(function(v) { return '<option value="' + v + '">' + v + '</option>'; }).join('');
+            }
+            if (bnSel) {
+                var bnVals = Array.from(new Set(src.map(function(r) { return normalizeMarkerBaseName(String(r[1] || '')); }).filter(Boolean))).sort();
+                bnSel.innerHTML = bnVals.map(function(v) { return '<option value="' + v + '">' + v + '</option>'; }).join('');
+            }
+            if (ksSel) {
+                var ksVals = Array.from(new Set(src.map(function(r) { return String(r[5] || '').trim(); }).filter(Boolean))).sort();
+                ksSel.innerHTML = ksVals.map(function(v) { return '<option value="' + v + '">' + v + '</option>'; }).join('');
+            }
+            // Populate preset dropdown từ T20 preset library
+            var presetSel = document.getElementById('cadExpPreset');
+            if (presetSel) {
+                var presets = (typeof _getCadOffsetPresets === 'function') ? _getCadOffsetPresets() : [];
+                if (!presets.length) presets = [{id:'std', name:'VN2000 chuẩn', dE:0, dN:0}, {id:'tl', name:'Tham Lương', dE:-391.75, dN:223.86}];
+                presetSel.innerHTML = presets.map(function(p) {
+                    var suffix = (p.dE === 0 && p.dN === 0) ? '' : ' (ΔE=' + p.dE + ' ΔN=' + p.dN + ')';
+                    return '<option value="' + p.id + '">' + p.name + suffix + '</option>';
+                }).join('');
+                // Restore last used preset
+                var lastPid = localStorage.getItem('cad_exp_preset_id');
+                if (lastPid && presets.find(function(p){return p.id===lastPid;})) presetSel.value = lastPid;
+                _cadExpOnPresetChange(presetSel.value);
             }
             updateExportCadCountInfo();
             if (typeof $ !== 'undefined' && $.fn.modal) {
                 $('#exportCadModal').modal('show');
             } else {
-                const modal = document.getElementById('exportCadModal');
+                var modal = document.getElementById('exportCadModal');
                 if (modal) {
                     modal.style.display = 'block';
                     modal.classList.add('show');
                     document.body.classList.add('modal-open');
-                    const backdrop = document.createElement('div');
+                    var backdrop = document.createElement('div');
                     backdrop.className = 'modal-backdrop show';
                     document.body.appendChild(backdrop);
-                    backdrop.onclick = () => closeExportCadModal();
+                    backdrop.onclick = function() { closeExportCadModal(); };
                 }
             }
-            document.getElementById('exportCadType').onchange = updateExportCadCountInfo;
-            document.getElementById('exportCadBasename').oninput = updateExportCadCountInfo;
+        }
+
+        function _cadExpOnPresetChange(pid) {
+            var presets = (typeof _getCadOffsetPresets === 'function') ? _getCadOffsetPresets() : [];
+            var p = presets.find(function(x){return x.id===pid;});
+            if (!p) return;
+            var deEl = document.getElementById('cadExpDE');
+            var dnEl = document.getElementById('cadExpDN');
+            if (deEl) deEl.value = p.dE;
+            if (dnEl) dnEl.value = p.dN;
+            localStorage.setItem('cad_exp_preset_id', pid);
         }
 
         function closeExportCadModal() {
@@ -4508,37 +4556,52 @@
             }
         }
 
+        function _cadExpFilterOpts(selectId, q) {
+            var sel = document.getElementById(selectId);
+            if (!sel) return;
+            var norm = (q || '').replace(/đ/gi, 'd').replace(/Đ/gi, 'D').normalize('NFD').replace(/\p{Diacritic}/gu, '').replace(/[^a-z0-9]/gi, '').toLowerCase();
+            Array.from(sel.options).forEach(function(opt) {
+                var v = opt.value.replace(/đ/gi, 'd').replace(/Đ/gi, 'D').normalize('NFD').replace(/\p{Diacritic}/gu, '').replace(/[^a-z0-9]/gi, '').toLowerCase();
+                opt.style.display = (opt.selected || !norm || v.includes(norm)) ? '' : 'none';
+            });
+            updateExportCadCountInfo();
+        }
+
+        function _cadExpGetRows() {
+            var type = (document.getElementById('exportCadType') || {}).value || 'all';
+            var rows = (type === 'new')
+                ? (Array.isArray(newMarkerRows) ? newMarkerRows : [])
+                : (Array.isArray(loadedData) && loadedData.length > 1 ? loadedData.slice(1) : []);
+            var tuSel = document.getElementById('cadExpTuSelect');
+            var bnSel = document.getElementById('cadExpBnSelect');
+            var ksSel = document.getElementById('cadExpKsSelect');
+            var tuSet = tuSel ? new Set(Array.from(tuSel.selectedOptions).map(function(o) { return o.value; })) : new Set();
+            var bnSet = bnSel ? new Set(Array.from(bnSel.selectedOptions).map(function(o) { return o.value; })) : new Set();
+            var ksSet = ksSel ? new Set(Array.from(ksSel.selectedOptions).map(function(o) { return o.value; })) : new Set();
+            if (tuSet.size) rows = rows.filter(function(r) { return tuSet.has(String(r[7] || '').trim()); });
+            if (bnSet.size) rows = rows.filter(function(r) { return bnSet.has(normalizeMarkerBaseName(String(r[1] || ''))); });
+            if (ksSet.size) rows = rows.filter(function(r) { return ksSet.has(String(r[5] || '').trim()); });
+            return rows;
+        }
+
         function updateExportCadCountInfo() {
-            const type = document.getElementById('exportCadType').value;
-            const basename = document.getElementById('exportCadBasename').value.trim();
-            let rows = (type === 'new') ? (Array.isArray(newMarkerRows) ? newMarkerRows : []) : (Array.isArray(loadedData) ? loadedData : []);
-            if (basename) {
-                const normBase = normalizeMarkerBaseName(basename);
-                rows = rows.filter(row => normalizeMarkerBaseName(row[1] || row[0] || '') === normBase);
-            }
-            document.getElementById('exportCadCountInfo').textContent = `Số marker sẽ xuất: ${rows.length}`;
+            var rows = _cadExpGetRows();
+            var total = (Array.isArray(loadedData) && loadedData.length > 1) ? loadedData.length - 1 : 0;
+            var el = document.getElementById('exportCadCountInfo');
+            if (el) el.innerHTML = 'Sẽ xuất: <strong>' + rows.length + '</strong> / ' + total + ' marker';
         }
 
         function confirmExportCad() {
-            const type = document.getElementById('exportCadType').value;
-            const basename = document.getElementById('exportCadBasename').value.trim();
-            let rows = [];
-            if (type === 'new') {
-                rows = Array.isArray(newMarkerRows) ? newMarkerRows : [];
-            } else {
-                rows = (Array.isArray(loadedData) && loadedData.length > 1) ? loadedData.slice(1) : [];
-            }
-            if (basename) {
-                const normBase = normalizeMarkerBaseName(basename);
-                rows = rows.filter(row => normalizeMarkerBaseName(row[1] || row[0] || '') === normBase);
-            }
+            var rows = _cadExpGetRows();
             if (!rows.length) { displayError('Không có marker phù hợp để xuất.'); return; }
-            const dxf = createDxfForMarkers(rows);
-            const baseNameForFile = basename ? sanitizeFileName(basename) : (type === 'new' ? 'marker-moi' : 'tat-ca-marker');
-            const fileName = `export-${baseNameForFile}.dxf`;
+            var dE = parseFloat((document.getElementById('cadExpDE') || {}).value) || 0;
+            var dN = parseFloat((document.getElementById('cadExpDN') || {}).value) || 0;
+            var dxf = createDxfForMarkers(rows, { dE: dE, dN: dN });
+            var stamp = new Date().toISOString().slice(0, 10);
+            var fileName = 'export-cad-' + stamp + '.dxf';
             downloadTextFile(fileName, dxf);
             closeExportCadModal();
-            displayError(`Đã xuất file CAD: ${fileName}`);
+            if (typeof displayInfo === 'function') displayInfo('Đã xuất ' + rows.length + ' marker → ' + fileName);
         }
 
         // ─── Auth ───
@@ -12074,7 +12137,11 @@
             setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
         }
 
-        function createDxfForMarkers(rows) {
+        function createDxfForMarkers(rows, opts) {
+            const dE  = (opts && opts.dE  != null) ? Number(opts.dE)  : 0;
+            const dN  = (opts && opts.dN  != null) ? Number(opts.dN)  : 0;
+            const cm  = (opts && opts.cm  != null) ? Number(opts.cm)  : 105.75;
+            const k0  = (opts && opts.k0  != null) ? Number(opts.k0)  : 0.9999;
             const lines = [];
             const L2 = t => lines.push(t);
             L2('0');L2('SECTION');L2('2');L2('HEADER');L2('0');L2('ENDSEC');
@@ -12085,8 +12152,8 @@
                 const rawX = parseCoord(row[3]), rawY = parseCoord(row[2]);
                 if (!Number.isFinite(rawX)||!Number.isFinite(rawY)) return;
                 const label = name.replace(/\r?\n/g,' ');
-                const vn = convertLatLonToVn2000(rawY, rawX);
-                const x = vn.x, y = vn.y;
+                const vn = convertLatLonToVn2000(rawY, rawX, cm, k0);
+                const x = vn.x + dE, y = vn.y + dN;
                 L2('0');L2('CIRCLE');L2('8');L2('0');L2('10');L2(x.toFixed(6));L2('20');L2(y.toFixed(6));L2('30');L2('0');L2('40');L2('1.0');
                 if (previousPoint) {
                     L2('0');L2('LINE');L2('8');L2('0');
