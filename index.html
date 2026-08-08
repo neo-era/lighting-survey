@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="vi">
 <head>
     <title>Lighting System V1.2</title>
@@ -2226,20 +2226,39 @@
                         <span aria-hidden="true">&times;</span>
                     </button>
                 </div>
-                <div class="modal-body">
-                    <div class="form-group">
-                        <label for="exportCadType">Chọn loại marker để xuất</label>
-                        <select id="exportCadType" class="form-control">
+                <div class="modal-body" style="padding:12px 16px">
+                    <div class="form-group" style="margin-bottom:10px">
+                        <label style="font-size:11px;font-weight:700;letter-spacing:.04em;color:#6b7280;text-transform:uppercase;margin-bottom:4px;display:block">Nguồn dữ liệu</label>
+                        <select id="exportCadType" class="form-control form-control-sm" onchange="updateExportCadCountInfo()">
+                            <option value="all" selected>Tất cả marker</option>
                             <option value="new">Chỉ marker mới nhập</option>
-                            <option value="all">Tất cả marker</option>
                         </select>
                     </div>
-                    <div class="form-group">
-                        <label for="exportCadBasename">Lọc theo basename</label>
-                        <input type="text" id="exportCadBasename" class="form-control" placeholder="Ví dụ: T1, T2..." list="cadBasenameList" autocomplete="off">
-                        <datalist id="cadBasenameList"></datalist>
+                    <div class="form-group" style="margin-bottom:10px">
+                        <label style="font-size:11px;font-weight:700;letter-spacing:.04em;color:#6b7280;text-transform:uppercase;margin-bottom:4px;display:block">Tủ điều khiển</label>
+                        <input type="text" id="cadExpTuSearch" class="form-control form-control-sm" placeholder="Tìm tủ..." style="margin-bottom:3px" oninput="_cadExpFilterOpts('cadExpTuSelect',this.value)">
+                        <select id="cadExpTuSelect" class="form-control form-control-sm" multiple style="height:90px" onchange="updateExportCadCountInfo()"></select>
                     </div>
-                    <div id="exportCadCountInfo"></div>
+                    <div class="form-group" style="margin-bottom:10px">
+                        <label style="font-size:11px;font-weight:700;letter-spacing:.04em;color:#6b7280;text-transform:uppercase;margin-bottom:4px;display:block">Basename</label>
+                        <input type="text" id="cadExpBnSearch" class="form-control form-control-sm" placeholder="Tìm basename..." style="margin-bottom:3px" oninput="_cadExpFilterOpts('cadExpBnSelect',this.value)">
+                        <select id="cadExpBnSelect" class="form-control form-control-sm" multiple style="height:90px" onchange="updateExportCadCountInfo()"></select>
+                    </div>
+                    <div class="form-group" style="margin-bottom:10px">
+                        <label style="font-size:11px;font-weight:700;letter-spacing:.04em;color:#6b7280;text-transform:uppercase;margin-bottom:4px;display:block">Người khảo sát</label>
+                        <input type="text" id="cadExpKsSearch" class="form-control form-control-sm" placeholder="Tìm người KS..." style="margin-bottom:3px" oninput="_cadExpFilterOpts('cadExpKsSelect',this.value)">
+                        <select id="cadExpKsSelect" class="form-control form-control-sm" multiple style="height:70px" onchange="updateExportCadCountInfo()"></select>
+                    </div>
+                    <div style="font-size:11px;color:#94a3b8;margin-bottom:10px">Giữ Ctrl/⌘ để chọn nhiều — không chọn = tất cả</div>
+                    <div class="form-group" style="margin-bottom:6px">
+                        <label style="font-size:11px;font-weight:700;letter-spacing:.04em;color:#6b7280;text-transform:uppercase;margin-bottom:4px;display:block">🔀 Hệ tọa độ output</label>
+                        <select id="cadExpPreset" class="form-control form-control-sm" style="margin-bottom:4px" onchange="_cadExpOnPresetChange(this.value)"></select>
+                        <div style="display:flex;gap:6px">
+                            <div style="flex:1"><label style="font-size:10px;color:#94a3b8">ΔE (m)</label><input type="number" id="cadExpDE" class="form-control form-control-sm" step="0.01" value="0" onchange="updateExportCadCountInfo()"></div>
+                            <div style="flex:1"><label style="font-size:10px;color:#94a3b8">ΔN (m)</label><input type="number" id="cadExpDN" class="form-control form-control-sm" step="0.01" value="0" onchange="updateExportCadCountInfo()"></div>
+                        </div>
+                    </div>
+                    <div id="exportCadCountInfo" style="font-weight:600;color:#2563eb;font-size:13px"></div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" onclick="closeExportCadModal()">Hủy</button>
@@ -3088,37 +3107,66 @@
     <script>
         // ─── Export to CAD Modal ───
         function showExportCadModal() {
-            document.getElementById('exportCadType').value = 'new';
-            document.getElementById('exportCadBasename').value = '';
-            // Populate datalist basename
-            const dl = document.getElementById('cadBasenameList');
-            if (dl && Array.isArray(loadedData) && loadedData.length > 1) {
-                const bnSet = new Set();
-                loadedData.slice(1).forEach(r => {
-                    const name = String(r[1] || '').trim();
-                    if (!name) return;
-                    const bn = name.replace(/[_\s\-]*\d+$/, '').trim();
-                    if (bn) bnSet.add(bn);
-                });
-                dl.innerHTML = [...bnSet].sort().map(b => `<option value="${b}">`).join('');
+            document.getElementById('exportCadType').value = 'all';
+            ['cadExpTuSearch', 'cadExpBnSearch', 'cadExpKsSearch'].forEach(function(id) {
+                var el = document.getElementById(id); if (el) el.value = '';
+            });
+            var src = (Array.isArray(loadedData) && loadedData.length > 1) ? loadedData.slice(1) : [];
+            var tuSel = document.getElementById('cadExpTuSelect');
+            var bnSel = document.getElementById('cadExpBnSelect');
+            var ksSel = document.getElementById('cadExpKsSelect');
+            if (tuSel) {
+                var tuVals = Array.from(new Set(src.map(function(r) { return String(r[7] || '').trim(); }).filter(Boolean))).sort();
+                tuSel.innerHTML = tuVals.map(function(v) { return '<option value="' + v + '">' + v + '</option>'; }).join('');
+            }
+            if (bnSel) {
+                var bnVals = Array.from(new Set(src.map(function(r) { return normalizeMarkerBaseName(String(r[1] || '')); }).filter(Boolean))).sort();
+                bnSel.innerHTML = bnVals.map(function(v) { return '<option value="' + v + '">' + v + '</option>'; }).join('');
+            }
+            if (ksSel) {
+                var ksVals = Array.from(new Set(src.map(function(r) { return String(r[5] || '').trim(); }).filter(Boolean))).sort();
+                ksSel.innerHTML = ksVals.map(function(v) { return '<option value="' + v + '">' + v + '</option>'; }).join('');
+            }
+            // Populate preset dropdown từ T20 preset library
+            var presetSel = document.getElementById('cadExpPreset');
+            if (presetSel) {
+                var presets = (typeof _getCadOffsetPresets === 'function') ? _getCadOffsetPresets() : [];
+                if (!presets.length) presets = [{id:'std', name:'VN2000 chuẩn', dE:0, dN:0}, {id:'tl', name:'Tham Lương', dE:-391.75, dN:223.86}];
+                presetSel.innerHTML = presets.map(function(p) {
+                    var suffix = (p.dE === 0 && p.dN === 0) ? '' : ' (ΔE=' + p.dE + ' ΔN=' + p.dN + ')';
+                    return '<option value="' + p.id + '">' + p.name + suffix + '</option>';
+                }).join('');
+                // Restore last used preset
+                var lastPid = localStorage.getItem('cad_exp_preset_id');
+                if (lastPid && presets.find(function(p){return p.id===lastPid;})) presetSel.value = lastPid;
+                _cadExpOnPresetChange(presetSel.value);
             }
             updateExportCadCountInfo();
             if (typeof $ !== 'undefined' && $.fn.modal) {
                 $('#exportCadModal').modal('show');
             } else {
-                const modal = document.getElementById('exportCadModal');
+                var modal = document.getElementById('exportCadModal');
                 if (modal) {
                     modal.style.display = 'block';
                     modal.classList.add('show');
                     document.body.classList.add('modal-open');
-                    const backdrop = document.createElement('div');
+                    var backdrop = document.createElement('div');
                     backdrop.className = 'modal-backdrop show';
                     document.body.appendChild(backdrop);
-                    backdrop.onclick = () => closeExportCadModal();
+                    backdrop.onclick = function() { closeExportCadModal(); };
                 }
             }
-            document.getElementById('exportCadType').onchange = updateExportCadCountInfo;
-            document.getElementById('exportCadBasename').oninput = updateExportCadCountInfo;
+        }
+
+        function _cadExpOnPresetChange(pid) {
+            var presets = (typeof _getCadOffsetPresets === 'function') ? _getCadOffsetPresets() : [];
+            var p = presets.find(function(x){return x.id===pid;});
+            if (!p) return;
+            var deEl = document.getElementById('cadExpDE');
+            var dnEl = document.getElementById('cadExpDN');
+            if (deEl) deEl.value = p.dE;
+            if (dnEl) dnEl.value = p.dN;
+            localStorage.setItem('cad_exp_preset_id', pid);
         }
 
         function closeExportCadModal() {
@@ -4290,6 +4338,9 @@
         async function exportDrawingPDF(opts) {
             opts = opts || {};
             const _returnBlob = opts.returnBlob === true;
+            // Bug fix: clear stale blob so failed re-export doesn't serve previous result
+            window._lastPdfBlob = null;
+            window._lastPdfFilename = null;
             const exportBtn = document.getElementById('pdExportBtn');
             if (exportBtn) { exportBtn.disabled = true; exportBtn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Đang xử lý...'; }
 
@@ -4442,7 +4493,8 @@
                     PRINT_CONFIG.captureScale = 1;
                     PRINT_CONFIG.captureScaleMobile = 1;
                     setTimeout(() => {
-                        exportDrawingPDF().finally(() => {
+                        // Bug fix: pass opts so returnBlob:true is preserved in retry
+                        exportDrawingPDF(opts).finally(() => {
                             PRINT_CONFIG.captureScale = oldScale;
                             PRINT_CONFIG.captureScaleMobile = oldScaleM;
                             window._pdfRetryLowScale = false;
@@ -4504,37 +4556,52 @@
             }
         }
 
+        function _cadExpFilterOpts(selectId, q) {
+            var sel = document.getElementById(selectId);
+            if (!sel) return;
+            var norm = (q || '').replace(/đ/gi, 'd').replace(/Đ/gi, 'D').normalize('NFD').replace(/\p{Diacritic}/gu, '').replace(/[^a-z0-9]/gi, '').toLowerCase();
+            Array.from(sel.options).forEach(function(opt) {
+                var v = opt.value.replace(/đ/gi, 'd').replace(/Đ/gi, 'D').normalize('NFD').replace(/\p{Diacritic}/gu, '').replace(/[^a-z0-9]/gi, '').toLowerCase();
+                opt.style.display = (opt.selected || !norm || v.includes(norm)) ? '' : 'none';
+            });
+            updateExportCadCountInfo();
+        }
+
+        function _cadExpGetRows() {
+            var type = (document.getElementById('exportCadType') || {}).value || 'all';
+            var rows = (type === 'new')
+                ? (Array.isArray(newMarkerRows) ? newMarkerRows : [])
+                : (Array.isArray(loadedData) && loadedData.length > 1 ? loadedData.slice(1) : []);
+            var tuSel = document.getElementById('cadExpTuSelect');
+            var bnSel = document.getElementById('cadExpBnSelect');
+            var ksSel = document.getElementById('cadExpKsSelect');
+            var tuSet = tuSel ? new Set(Array.from(tuSel.selectedOptions).map(function(o) { return o.value; })) : new Set();
+            var bnSet = bnSel ? new Set(Array.from(bnSel.selectedOptions).map(function(o) { return o.value; })) : new Set();
+            var ksSet = ksSel ? new Set(Array.from(ksSel.selectedOptions).map(function(o) { return o.value; })) : new Set();
+            if (tuSet.size) rows = rows.filter(function(r) { return tuSet.has(String(r[7] || '').trim()); });
+            if (bnSet.size) rows = rows.filter(function(r) { return bnSet.has(normalizeMarkerBaseName(String(r[1] || ''))); });
+            if (ksSet.size) rows = rows.filter(function(r) { return ksSet.has(String(r[5] || '').trim()); });
+            return rows;
+        }
+
         function updateExportCadCountInfo() {
-            const type = document.getElementById('exportCadType').value;
-            const basename = document.getElementById('exportCadBasename').value.trim();
-            let rows = (type === 'new') ? (Array.isArray(newMarkerRows) ? newMarkerRows : []) : (Array.isArray(loadedData) ? loadedData : []);
-            if (basename) {
-                const normBase = normalizeMarkerBaseName(basename);
-                rows = rows.filter(row => normalizeMarkerBaseName(row[1] || row[0] || '') === normBase);
-            }
-            document.getElementById('exportCadCountInfo').textContent = `Số marker sẽ xuất: ${rows.length}`;
+            var rows = _cadExpGetRows();
+            var total = (Array.isArray(loadedData) && loadedData.length > 1) ? loadedData.length - 1 : 0;
+            var el = document.getElementById('exportCadCountInfo');
+            if (el) el.innerHTML = 'Sẽ xuất: <strong>' + rows.length + '</strong> / ' + total + ' marker';
         }
 
         function confirmExportCad() {
-            const type = document.getElementById('exportCadType').value;
-            const basename = document.getElementById('exportCadBasename').value.trim();
-            let rows = [];
-            if (type === 'new') {
-                rows = Array.isArray(newMarkerRows) ? newMarkerRows : [];
-            } else {
-                rows = (Array.isArray(loadedData) && loadedData.length > 1) ? loadedData.slice(1) : [];
-            }
-            if (basename) {
-                const normBase = normalizeMarkerBaseName(basename);
-                rows = rows.filter(row => normalizeMarkerBaseName(row[1] || row[0] || '') === normBase);
-            }
+            var rows = _cadExpGetRows();
             if (!rows.length) { displayError('Không có marker phù hợp để xuất.'); return; }
-            const dxf = createDxfForMarkers(rows);
-            const baseNameForFile = basename ? sanitizeFileName(basename) : (type === 'new' ? 'marker-moi' : 'tat-ca-marker');
-            const fileName = `export-${baseNameForFile}.dxf`;
+            var dE = parseFloat((document.getElementById('cadExpDE') || {}).value) || 0;
+            var dN = parseFloat((document.getElementById('cadExpDN') || {}).value) || 0;
+            var dxf = createDxfForMarkers(rows, { dE: dE, dN: dN });
+            var stamp = new Date().toISOString().slice(0, 10);
+            var fileName = 'export-cad-' + stamp + '.dxf';
             downloadTextFile(fileName, dxf);
             closeExportCadModal();
-            displayError(`Đã xuất file CAD: ${fileName}`);
+            if (typeof displayInfo === 'function') displayInfo('Đã xuất ' + rows.length + ' marker → ' + fileName);
         }
 
         // ─── Auth ───
@@ -4719,6 +4786,7 @@
         function logout() {
             if (!confirm('Đăng xuất?')) return;
             currentUser = null;
+            if (typeof _adminAuthCached !== 'undefined') _adminAuthCached = null;
             localStorage.removeItem('ks_user');
             // Đóng tất cả Bootstrap modal + xóa backdrop để input login không bị block
             $('.modal').modal('hide');
@@ -6624,8 +6692,9 @@
                     const v = lines[j + 1].trim();
                     if (c === '2' && !name) name = v.toUpperCase();
                     if (c === '0' && v === 'ENDBLK') {
-                        // Include ENDBLK + trailing layer code (2 lines: "  8" + value)
-                        end = j + 3;
+                        // Include ENDBLK + trailing layer code (4 lines: "0","ENDBLK","8","<layer>")
+                        // Bug fix: was j+3 which excluded layer value when it equals '0' (default layer)
+                        end = j + 4;
                         while (end < n && lines[end].trim() !== '0') end++;
                         break;
                     }
@@ -6666,11 +6735,13 @@
                     INSUNITS: 6,             // meters
                     DWGCODEPAGE: 'ANSI_1258' // tiếng Việt
                 };
-                this._insbase = [500000, 1000000, 0]; // VN2000 precision offset
+                this._insbase = [0, 0, 0]; // không trừ offset — tọa độ lưu nguyên (local grid hoặc VN2000 chuẩn)
+                this._extents = null;    // [minX, minY, maxX, maxY] — set sau khi tính bounds
             }
 
             setHeader(key, value) { this._headerVars[key] = value; return this; }
             setInsbase(x, y, z = 0) { this._insbase = [x, y, z]; return this; }
+            setExtents(minX, minY, maxX, maxY) { this._extents = [minX, minY, maxX, maxY]; return this; }
 
             addLayer(name, colorAci = 7, lineType = 'CONTINUOUS') {
                 this._layers.push({ name, color: colorAci, lineType });
@@ -6771,6 +6842,11 @@
                 L.push(' 10', this._insbase[0]);
                 L.push(' 20', this._insbase[1]);
                 L.push(' 30', this._insbase[2]);
+                if (this._extents) {
+                    const [x0, y0, x1, y1] = this._extents;
+                    L.push('  9', '$EXTMIN', ' 10', x0, ' 20', y0, ' 30', 0);
+                    L.push('  9', '$EXTMAX', ' 10', x1, ' 20', y1, ' 30', 0);
+                }
                 L.push('  0', 'ENDSEC');
                 return L.join('\n');
             }
@@ -7160,18 +7236,16 @@
         window._deleteCadOffsetPreset = _deleteCadOffsetPreset;
 
         // Helper: get admin credentials — reuse pattern từ admin user management (nếu chưa có, prompt)
-        // Store trong sessionStorage để không hỏi mỗi lần.
+        // Cache trong tab-scoped variable (cleared on reload/logout, not readable by external JS)
+        // Security fix: sessionStorage stores plaintext password accessible to any same-origin script
+        let _adminAuthCached = null;
         async function _getAdminAuth() {
-            try {
-                const cached = sessionStorage.getItem('admin_auth_cache');
-                if (cached) return JSON.parse(cached);
-            } catch (_) {}
+            if (_adminAuthCached) return _adminAuthCached;
             if (!currentUser || currentUser.role !== 'admin') return null;
             const pwd = prompt(`Xác nhận mật khẩu admin cho ${currentUser.username}:`);
             if (!pwd) return null;
-            const auth = { username: currentUser.username, password: pwd };
-            try { sessionStorage.setItem('admin_auth_cache', JSON.stringify(auth)); } catch (_) {}
-            return auth;
+            _adminAuthCached = { username: currentUser.username, password: pwd };
+            return _adminAuthCached;
         }
 
         // ── Filter persistence localStorage ───────────────────────────────
@@ -7203,7 +7277,9 @@
             const rows = _filterRowsForCadExport(filters);
             if (rows.length === 0) throw new Error('Filter không match marker nào để xuất');
 
-            const cm = opts.cm || 105.75;
+            const cm  = opts.cm || 105.75;
+            // k0 theo múi: 6° (cm≈105°) → 0.9996; 3° (cm≈105.75°...) → 0.9999
+            const k0  = Math.abs(cm - 105.0) < 0.01 ? 0.9996 : 0.9999;
             const scale = opts.scale || 1000;
             const outDE = (opts.outputOffset && opts.outputOffset.dE) || 0;
             const outDN = (opts.outputOffset && opts.outputOffset.dN) || 0;
@@ -7235,7 +7311,7 @@
             for (const r of rows) {
                 const lat = parseCoord(r[2]), lon = parseCoord(r[3]);
                 if (!isFinite(lat) || !isFinite(lon)) continue;
-                const vn = convertLatLonToVn2000(lat, lon, cm);
+                const vn = convertLatLonToVn2000(lat, lon, cm, k0);
                 const xOut = vn.x + outDE;
                 const yOut = vn.y + outDN;
 
@@ -7269,14 +7345,19 @@
                 const lat1 = parseCoord(r[2]), lon1 = parseCoord(r[3]);
                 const lat2 = parseCoord(parent[2]), lon2 = parseCoord(parent[3]);
                 if (!isFinite(lat1) || !isFinite(lat2)) continue;
-                const vn1 = convertLatLonToVn2000(lat1, lon1, cm);
-                const vn2 = convertLatLonToVn2000(lat2, lon2, cm);
+                const vn1 = convertLatLonToVn2000(lat1, lon1, cm, k0);
+                const vn2 = convertLatLonToVn2000(lat2, lon2, cm, k0);
                 const p1 = [vn1.x + outDE, vn1.y + outDN];
                 const p2 = [vn2.x + outDE, vn2.y + outDN];
                 d.drawPolyline([p1, p2], false, 'LIGHTING_CABLE');
                 const mx = (p1[0] + p2[0]) / 2, my = (p1[1] + p2[1]) / 2;
                 const dist = r[15] || Math.round(haversineM(lat1, lon1, lat2, lon2));
                 d.drawText(mx, my, 3, `${dist}m`, 'LIGHTING_TEXT');
+            }
+
+            // Ghi EXTMIN/EXTMAX vào header để AutoCAD zoom-to-fit khi mở
+            if (isFinite(bounds.minX)) {
+                d.setExtents(bounds.minX, bounds.minY, bounds.maxX, bounds.maxY);
             }
 
             // Insert title block với ATTRIBUTES (góc dưới-phải bản vẽ)
@@ -7465,7 +7546,9 @@
         function _esc(s) { return String(s).replace(/[<>&"']/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&#39;'}[c])); }
 
         function _cgToggleDim(key, value, checked) {
-            const arr = _cgCurrentFilters[key] || [];
+            // Bug fix: strip '__NONE__' sentinel before operating so it doesn't pollute the array
+            // when user checks an item after "Bỏ chọn tất cả"
+            let arr = (_cgCurrentFilters[key] || []).filter(v => v !== '__NONE__');
             if (checked && !arr.includes(value)) arr.push(value);
             else if (!checked) {
                 const idx = arr.indexOf(value);
@@ -7528,6 +7611,9 @@
                 document.getElementById('cgBtnDxf').disabled = true;
                 document.getElementById('cgBtnPdf').disabled = true;
                 document.getElementById('cgBtnBoth').disabled = true;
+                // Bug fix: disable batch button when no markers match
+                const batchBtn = document.getElementById('cgBtnBatch');
+                if (batchBtn) batchBtn.disabled = true;
             } else {
                 el.style.background = '#f0fdf4';
                 el.style.color = '#166534';
@@ -7535,6 +7621,8 @@
                 document.getElementById('cgBtnDxf').disabled = false;
                 document.getElementById('cgBtnPdf').disabled = false;
                 document.getElementById('cgBtnBoth').disabled = false;
+                const batchBtn2 = document.getElementById('cgBtnBatch');
+                if (batchBtn2) batchBtn2.disabled = false;
             }
         }
 
@@ -7678,44 +7766,18 @@
                 if (typeof displayInfo === 'function') displayInfo('Đang tạo bản vẽ...');
                 const stamp = _dateStamp();
 
-                // Multi-sheet split
+                // DXF luôn xuất 1 file duy nhất — chia tờ chỉ áp dụng cho in/PDF
+                if (mode === 'dxf') {
+                    const dxfText = await _generateCadDrawing(opts);
+                    const label = `thiet-ke-${opts.templateId}-${stamp}.dxf`;
+                    _saveBlob(new Blob([dxfText], { type: 'application/dxf' }), label);
+                    displayInfo && displayInfo('✅ Đã xuất DXF');
+                    return;
+                }
+
+                // Multi-sheet split (dùng cho PDF / both)
                 const { partitions } = _cgComputeSheetsForCurrentOpts();
                 const isMultiSheet = partitions.length > 1;
-
-                // Build DXF files (mỗi partition 1 file)
-                const dxfFiles = [];
-                if (mode === 'dxf' || mode === 'both') {
-                    for (const sb of partitions) {
-                        const subOpts = { ...opts };
-                        if (isMultiSheet) subOpts.sheetBounds = sb;
-                        try {
-                            const dxfText = await _generateCadDrawing(subOpts);
-                            const label = isMultiSheet
-                                ? `thiet-ke-${opts.templateId}-${stamp}_${String(sb.index).padStart(2, '0')}-of-${String(sb.total).padStart(2, '0')}.dxf`
-                                : `thiet-ke-${opts.templateId}-${stamp}.dxf`;
-                            dxfFiles.push({ name: label, content: dxfText });
-                        } catch (err) {
-                            // Sheet có thể không có marker sau khi filter bounds
-                            console.warn(`[CAD Gen] Sheet ${sb.index}/${sb.total} skip:`, err.message);
-                        }
-                    }
-                    if (mode === 'dxf') {
-                        if (dxfFiles.length === 1) {
-                            _saveBlob(new Blob([dxfFiles[0].content], { type: 'application/dxf' }), dxfFiles[0].name);
-                            displayInfo && displayInfo('✅ Đã xuất DXF');
-                        } else if (dxfFiles.length > 1) {
-                            const JSZip = await _loadJSZip();
-                            const zip = new JSZip();
-                            dxfFiles.forEach(f => zip.file(f.name, f.content));
-                            const zipBlob = await zip.generateAsync({ type: 'blob' });
-                            _saveBlob(zipBlob, `ban-ve-${stamp}.zip`);
-                            displayInfo && displayInfo(`✅ Đã xuất ${dxfFiles.length} tờ DXF (zip)`);
-                        } else {
-                            displayError && displayError('Không có sheet nào có marker để xuất');
-                        }
-                        return;
-                    }
-                }
 
                 if (mode === 'pdf') {
                     if (isMultiSheet) {
@@ -7727,6 +7789,24 @@
                 }
 
                 if (mode === 'both') {
+                    if (partitions.length > 10 && !confirm(`Bản vẽ có ${partitions.length} tờ. Việc xuất zip có thể mất nhiều thời gian. Tiếp tục?`)) return;
+
+                    // Build DXF files (mỗi partition 1 file)
+                    const dxfFiles = [];
+                    for (const sb of partitions) {
+                        const subOpts = { ...opts };
+                        if (isMultiSheet) subOpts.sheetBounds = sb;
+                        try {
+                            const dxfText = await _generateCadDrawing(subOpts);
+                            const label = isMultiSheet
+                                ? `thiet-ke-${opts.templateId}-${stamp}_${String(sb.index).padStart(2, '0')}-of-${String(sb.total).padStart(2, '0')}.dxf`
+                                : `thiet-ke-${opts.templateId}-${stamp}.dxf`;
+                            dxfFiles.push({ name: label, content: dxfText });
+                        } catch (err) {
+                            console.warn(`[CAD Gen] Sheet ${sb.index}/${sb.total} skip:`, err.message);
+                        }
+                    }
+
                     // Gen PDF Blob (không auto-save) + zip cùng với DXF files
                     _closeCadGenerator();
                     displayInfo && displayInfo('Đang tạo PDF cho zip...');
@@ -7784,7 +7864,14 @@
                     btn.textContent = `⏳ ${i+1}/${allTus.length}...`;
                     const opts = {
                         ...baseOpts,
-                        filters: { tus: [tu], basenames: [], nguoiKS: [], phuongXa: [] },
+                        // Bug fix: respect active dimension filters (basenames/nguoiKS/phuongXa)
+                        // Only override the 'tus' dimension to iterate per-cabinet
+                        filters: {
+                            tus: [tu],
+                            basenames: _cgCurrentFilters.basenames || [],
+                            nguoiKS:   _cgCurrentFilters.nguoiKS   || [],
+                            phuongXa:  _cgCurrentFilters.phuongXa  || []
+                        },
                         metadata: {
                             ...baseOpts.metadata,
                             CS_KHU_VUC: baseOpts.metadata.CS_KHU_VUC || tu,
@@ -8071,8 +8158,9 @@
             if (!tpl) throw new Error(`Unknown template: ${templateId}`);
             let text;
             if (tpl._customDxfContent) {
-                // Custom template — base64 decode
-                text = atob(tpl._customDxfContent);
+                // Custom template — base64 decode with UTF-8 support for Vietnamese diacritics
+                // Bug fix: plain atob() returns Latin-1 byte string, mojibaking Vietnamese text
+                text = decodeURIComponent(escape(atob(tpl._customDxfContent)));
             } else {
                 const res = await fetch(tpl.file);
                 if (!res.ok) throw new Error(`Fetch ${tpl.file} failed: ${res.status}`);
@@ -8251,19 +8339,25 @@
         _generateCadDrawing = async function(opts) {
             if (!opts.sheetBounds) return _origGenerateCadDrawing(opts);
             // Wrap filter để chỉ giữ marker trong sheetBounds
-            const filters = opts.filters || {};
             const sb = opts.sheetBounds;
             const cm = opts.cm || 105.75;
+            // Bug fix: apply output offset before comparing against offset-shifted bounds
+            const outDE = (opts.outputOffset && opts.outputOffset.dE) || 0;
+            const outDN = (opts.outputOffset && opts.outputOffset.dN) || 0;
+            // Use local var to avoid monkey-patching the global during async awaits
             const origFilter = _filterRowsForCadExport;
-            _filterRowsForCadExport = function(f) {
+            const _patchedFilter = function(f) {
                 const rows = origFilter(f);
                 return rows.filter(r => {
                     const lat = parseCoord(r[2]), lon = parseCoord(r[3]);
                     if (!isFinite(lat) || !isFinite(lon)) return false;
                     const vn = convertLatLonToVn2000(lat, lon, cm);
-                    return vn.x >= sb.minX && vn.x <= sb.maxX && vn.y >= sb.minY && vn.y <= sb.maxY;
+                    const xOut = vn.x + outDE;
+                    const yOut = vn.y + outDN;
+                    return xOut >= sb.minX && xOut <= sb.maxX && yOut >= sb.minY && yOut <= sb.maxY;
                 });
             };
+            _filterRowsForCadExport = _patchedFilter;
             try {
                 // Add sheet index to metadata
                 const optsWithIdx = { ...opts, metadata: { ...opts.metadata } };
@@ -8330,6 +8424,9 @@
         }
 
         function _onMstTuChange() {
+            // Bug fix: reset stale MST result so Apply doesn't use edges from previous cabinet
+            _mstResult = null;
+            _mstRemovePreview();
             const tu = document.getElementById('mstTuSelect').value;
             const nodes = _mstGetNodesForTu(tu);
             const preview = document.getElementById('mstPreview');
@@ -12040,7 +12137,11 @@
             setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
         }
 
-        function createDxfForMarkers(rows) {
+        function createDxfForMarkers(rows, opts) {
+            const dE  = (opts && opts.dE  != null) ? Number(opts.dE)  : 0;
+            const dN  = (opts && opts.dN  != null) ? Number(opts.dN)  : 0;
+            const cm  = (opts && opts.cm  != null) ? Number(opts.cm)  : 105.75;
+            const k0  = (opts && opts.k0  != null) ? Number(opts.k0)  : 0.9999;
             const lines = [];
             const L2 = t => lines.push(t);
             L2('0');L2('SECTION');L2('2');L2('HEADER');L2('0');L2('ENDSEC');
@@ -12051,8 +12152,8 @@
                 const rawX = parseCoord(row[3]), rawY = parseCoord(row[2]);
                 if (!Number.isFinite(rawX)||!Number.isFinite(rawY)) return;
                 const label = name.replace(/\r?\n/g,' ');
-                const vn = convertLatLonToVn2000(rawY, rawX);
-                const x = vn.x, y = vn.y;
+                const vn = convertLatLonToVn2000(rawY, rawX, cm, k0);
+                const x = vn.x + dE, y = vn.y + dN;
                 L2('0');L2('CIRCLE');L2('8');L2('0');L2('10');L2(x.toFixed(6));L2('20');L2(y.toFixed(6));L2('30');L2('0');L2('40');L2('1.0');
                 if (previousPoint) {
                     L2('0');L2('LINE');L2('8');L2('0');
