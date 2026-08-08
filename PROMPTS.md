@@ -6969,201 +6969,547 @@ Yêu cầu frontend (index.html):
 
 ## TÍNH NĂNG 21 — CAD Generator: Bản vẽ thiết kế hoàn chỉnh
 
-### PROMPT 48 — Block library setup
+**Spec đã chốt (2026-08-07)**: DXF+PDF, A3 landscape, 1:1000, AutoCAD 2021, multi-template, cable label mét, placeholder + kỹ sư CAD track song song. Chi tiết xem [CLAUDE.md § Tính năng 21](CLAUDE.md#tính-năng-21).
+
+### PROMPT 48 — Phase A: Foundation (dxf-writer + placeholder blocks + injector)
 
 ```
-Dự án: PWA khảo sát chiếu sáng. Chuẩn bị cho CAD Generator (T21).
+Dự án: PWA khảo sát chiếu sáng, single-page app `index.html`. Chuẩn bị cho T21 CAD Generator.
 
-Nhiệm vụ: Tạo thư mục assets/dxf-blocks/ chứa 8 DXF block snippets pre-designed, và load helper.
+Nhiệm vụ Phase A (Tuần 1): Setup dxf-writer + 8 placeholder blocks + custom BLOCK injection code.
+
+Spec chốt:
+- DXF format R2018 (AC1032) — AutoCAD 2021 backward-compatible
+- HEADER: $INSUNITS=6 (meters), $DWGCODEPAGE=ANSI_1258 (tiếng Việt), $INSBASE=(500000, 1000000, 0) để giữ precision cm cho VN2000
+- Ghi entity: x_dxf = vn2000.x - 500000, y_dxf = vn2000.y - 1000000
+- INSERT scale = 10 (biểu tượng 10m thực → 1cm giấy trên tỉ lệ 1:1000)
 
 Yêu cầu:
 
-1. Tạo thư mục assets/dxf-blocks/ với 8 file:
-   - pole_stk.dxf
-   - pole_tt.dxf
-   - pole_htlt.dxf
-   - pole_ttlt.dxf
-   - cabinet_noi.dxf
-   - cabinet_ngam.dxf
-   - north_arrow.dxf
-   - scale_bar.dxf
+1. Thêm helper `_loadDxfWriter()` lazy load từ `https://esm.sh/dxf-writer@1.2` — cache-first qua SW `cdn-libs-v2`. Store Drawing class vào global cache.
 
-   Mỗi file là 1 DXF BLOCK definition đơn giản (10-30 LINE entities). Kích thước chuẩn: pole 3m tall, cabinet 1.5x1m. Ký hiệu theo TCVN 7722.
+2. Tạo thư mục `assets/dxf-blocks/` với 8 file placeholder (simple LINE + CIRCLE, kích thước dưới):
 
-   *NOTE*: user cần cung cấp bản vẽ mẫu để tôi trích xuất blocks chính xác. Nếu chưa có, tôi tạo placeholder blocks đơn giản (đường thẳng + text) và document TODO.
+   | File | Ký hiệu | Size |
+   |---|---|---|
+   | pole_stk_1l.dxf | Cột + 1 cần trái + circle đèn | 1×2m |
+   | pole_stk_2l.dxf | Cột + 2 cần đối xứng + 2 circles | 2×2m |
+   | pole_tt.dxf | Cột + hình bát giác | 1.5×2m |
+   | pole_htlt.dxf | Cột + tam giác | 1×2m |
+   | pole_ttlt.dxf | Cột + hình vuông | 1×2m |
+   | cabinet_noi.dxf | Hình chữ nhật viền dày | 1×1.5m |
+   | cabinet_ngam.dxf | Hình chữ nhật gạch chéo | 1×0.5m |
+   | north_arrow.dxf | Mũi tên + chữ "B" | 2m tall |
 
-2. Load helper trong index.html:
+   Mỗi file là 1 DXF BLOCK definition (~30 dòng). Origin (0,0) = base point.
+
+3. Config JS trong index.html:
+   ```js
    const CAD_BLOCK_URLS = {
-     pole_stk: 'assets/dxf-blocks/pole_stk.dxf',
-     // ...
+     pole_stk_1l: 'assets/dxf-blocks/pole_stk_1l.dxf',
+     pole_stk_2l: 'assets/dxf-blocks/pole_stk_2l.dxf',
+     pole_tt: 'assets/dxf-blocks/pole_tt.dxf',
+     pole_htlt: 'assets/dxf-blocks/pole_htlt.dxf',
+     pole_ttlt: 'assets/dxf-blocks/pole_ttlt.dxf',
+     cabinet_noi: 'assets/dxf-blocks/cabinet_noi.dxf',
+     cabinet_ngam: 'assets/dxf-blocks/cabinet_ngam.dxf',
+     north_arrow: 'assets/dxf-blocks/north_arrow.dxf',
    };
    let _cadBlockCache = {};
 
    async function _loadCadBlock(name) {
      if (_cadBlockCache[name]) return _cadBlockCache[name];
-     const res = await fetch(CAD_BLOCK_URLS[name]);
-     const text = await res.text();
-     _cadBlockCache[name] = text;
-     return text;
+     const text = await fetch(CAD_BLOCK_URLS[name]).then(r => r.text());
+     _cadBlockCache[name] = _extractDxfBlock(text, name.toUpperCase());
+     return _cadBlockCache[name];
    }
+   ```
 
-3. Test: F12 console `await _loadCadBlock('pole_stk')` → hiển thị DXF text.
+4. Helper `_extractDxfBlock(dxfText, blockName)`:
+   - Parse text, tìm BLOCKS section (giữa `0\nSECTION\n2\nBLOCKS` và `0\nENDSEC`)
+   - Lọc block có `2\n<blockName>\n`
+   - Return object `{name, entities: [{type, x, y, ...}]}` hoặc raw block text để inject sau
 
-4. Bump sw.js. Add assets to sw pre-cache STATIC_ASSETS list.
+5. Extend `Drawing.prototype` trong dxf-writer (viết monkey-patch sau khi lazy load):
+   ```js
+   Drawing.prototype.addBlockFromDxf = function(name, blockDef) {
+     // Store block def, sẽ emit ra BLOCKS section khi toDxfString
+     this._customBlocks = this._customBlocks || {};
+     this._customBlocks[name] = blockDef;
+   };
+
+   Drawing.prototype.insertBlock = function(name, x, y, rotation, scale) {
+     // Store INSERT entity, emit ra ENTITIES section
+     this._customInserts = this._customInserts || [];
+     this._customInserts.push({name, x, y, rotation, scale});
+   };
+   ```
+
+6. Override `toDxfString()` (proxy pattern):
+   - Sau khi dxf-writer emit gốc, inject BLOCKS section + INSERT entities
+   - Set HEADER $INSUNITS=6, $DWGCODEPAGE=ANSI_1258, $INSBASE=(500000, 1000000, 0)
+
+7. Update sw.js:
+   - Bump cache version
+   - Add 8 file `assets/dxf-blocks/*.dxf` vào STATIC_ASSETS pre-cache
+
+8. Verify (F12 console):
+   ```js
+   const Drawing = await _loadDxfWriter();
+   const d = new Drawing();
+   d.addBlockFromDxf('POLE_STK_2L', await _loadCadBlock('pole_stk_2l'));
+   d.insertBlock('POLE_STK_2L', 100, 200, 0, 10);
+   const dxf = d.toDxfString();
+   // Copy dxf → save file .dxf → mở AutoCAD 2021 → không error, thấy 1 trụ
+   ```
+
+Không code Phase B/C trong prompt này. Không đụng generator function (đó là P49).
 ```
 
 ---
 
-### PROMPT 49 — Title block templates
+### PROMPT 49 — Phase B: Title templates + Generator function + PDF path
 
 ```
-Tiếp nối PROMPT 48. Chuẩn bị 4 title block templates DXF cho generator.
+Tiếp nối PROMPT 48 (Phase A đã xong: dxf-writer + 8 blocks + inject code hoạt động).
 
-Nhiệm vụ: Tạo assets/dxf-templates/ với 4 file DXF title block, mỗi file có ATTRIBUTES để fill metadata.
+Nhiệm vụ Phase B (Tuần 2-3): 3 title block templates + ATTRIBUTE injection + generator function `_generateCadDrawing` + refactor `exportDrawingPDF` nhận opts.
 
 Yêu cầu:
 
-1. Tạo thư mục assets/dxf-templates/ với 4 file:
-   - title_state.dxf (Nhà nước) — fields: TT_QLGT, CV_PHU_TRACH, CS_KHU_VUC, NGUOI_LAP, BV_SO, SHBV, NGAY
-   - title_consulting.dxf (Tư vấn thiết kế) — fields: CHU_DAU_TU, DON_VI_TK, CHU_NHIEM, KS_TK, NGUOI_VE, KIEM_TRA, NGAY
-   - title_contractor.dxf (Nhà thầu) — fields: BEN_A, BEN_B, GIAM_SAT, KT_THI_CONG, NGAY_DUYET
-   - title_custom.dxf (empty template với 10 ATTRIBUTES CUSTOM_1 → CUSTOM_10)
+1. Tạo thư mục `assets/dxf-templates/` với 3 file placeholder (khung 190×50mm chuẩn TCVN 7285):
 
-   Mỗi template có khung 190×50mm (chuẩn TCVN 7285), placed góc dưới-phải bản vẽ A3.
+   | File | ATTDEF tags |
+   |---|---|
+   | title_state.dxf | TT_QLGT, CV_PHU_TRACH, CS_KHU_VUC, NGUOI_LAP, BV_SO, SHBV, NGAY, TI_LE |
+   | title_consulting.dxf | CHU_DAU_TU, DON_VI_TK, CHU_NHIEM, KS_TK, NGUOI_VE, KIEM_TRA, NGAY, TI_LE |
+   | title_contractor.dxf | BEN_A, BEN_B, GIAM_SAT, KT_THI_CONG, NGAY_DUYET, TI_LE |
 
-   *NOTE*: user sẽ gửi bản vẽ mẫu. Nếu chưa có, tôi tạo template placeholder (khung + text "TEMPLATE_STATE") và log TODO trong code.
+   Mỗi file là 1 BLOCK definition với LINE (khung) + TEXT (labels tĩnh "Người lập:", "Ngày:", ...) + ATTDEF (fields dynamic sẽ fill runtime).
 
-2. Config JS trong index.html:
+2. Config JS:
+   ```js
    const TITLE_TEMPLATES = {
      state: {
-       label: '🏛 Nhà nước (UBND/Sở XD)',
+       label: '🏛 Nhà nước',
        file: 'assets/dxf-templates/title_state.dxf',
+       blockName: 'TITLE_STATE',
        fields: [
          { key: 'TT_QLGT', label: 'TT Quản lý giao thông', default: 'Trung tâm quản lý giao thông TP.HCM' },
          { key: 'CV_PHU_TRACH', label: 'Chuyên viên phụ trách', default: '' },
-         // ...
+         { key: 'CS_KHU_VUC', label: 'Chiếu sáng khu vực', default: '' },
+         { key: 'NGUOI_LAP', label: 'Người lập', default: '' },
+         { key: 'BV_SO', label: 'Bản vẽ số', default: '' },
+         { key: 'SHBV', label: 'SHBV', default: '' },
+         { key: 'NGAY', label: 'Ngày', default: () => new Date().toLocaleDateString('vi') },
+         { key: 'TI_LE', label: 'Tỉ lệ', default: '1:1000' },
        ]
      },
-     // consulting, contractor, custom
+     consulting: {
+       label: '🏢 Tư vấn thiết kế',
+       file: 'assets/dxf-templates/title_consulting.dxf',
+       blockName: 'TITLE_CONSULTING',
+       fields: [/* CHU_DAU_TU, DON_VI_TK, CHU_NHIEM, KS_TK, NGUOI_VE, KIEM_TRA, NGAY, TI_LE */]
+     },
+     contractor: {
+       label: '🏗 Nhà thầu thi công',
+       file: 'assets/dxf-templates/title_contractor.dxf',
+       blockName: 'TITLE_CONTRACTOR',
+       fields: [/* BEN_A, BEN_B, GIAM_SAT, KT_THI_CONG, NGAY_DUYET, TI_LE */]
+     }
    };
+   ```
 
-3. Helper `_loadTitleTemplate(id)` fetch file DXF + parse ATTRIBUTES.
+3. Helper `_loadTitleTemplate(id)`:
+   - Fetch file, extract block với ATTDEF
+   - Return object có `blockDef` + `attdefs` (list {tag, defaultText, x, y})
 
-4. Test: mount template → hiển thị preview khung tên trong `_showTitleBlockPreview()`.
+4. Extend Drawing với ATTRIBUTE injection (dxf-writer thiếu):
+   ```js
+   Drawing.prototype.insertBlockWithAttrs = function(name, x, y, attrs) {
+     this._customAttrInserts = this._customAttrInserts || [];
+     this._customAttrInserts.push({name, x, y, attrs});
+   };
+   ```
+   Emit khi toDxfString: INSERT với group 66=1 (attrib follow) + N ATTRIB entities (group 0=ATTRIB, 8=layer, 10/20=xy, 1=value, 2=tag, 40=height) + SEQEND. Reference DXF spec R2018.
 
-5. Bump sw.js. Add to STATIC_ASSETS.
+5. Helpers unique values cho populate UI (thêm nếu chưa có):
+   ```js
+   function _getUniqueBasenames() {
+     const s = new Set();
+     (loadedData || []).slice(1).forEach(r => {
+       const b = normalizeMarkerBaseName(String(r[1] || '').trim());
+       if (b) s.add(b);
+     });
+     return [...s].sort();
+   }
+   function _getUniqueSurveyors() {
+     const s = new Set();
+     (loadedData || []).slice(1).forEach(r => {
+       const v = String(r[5] || '').trim();
+       if (v) s.add(v);
+     });
+     return [...s].sort();
+   }
+   function _getUniquePhuongXa() {
+     const s = new Set();
+     (loadedData || []).slice(1).forEach(r => {
+       const v = String(r[18] || '').trim();
+       if (v) s.add(v);
+     });
+     return [...s].sort();
+   }
+   // _getUniqueCabinets() đã có sẵn từ Feature 10
+   ```
+
+6. Filter helper AND đa dimension:
+   ```js
+   function _filterRowsForCadExport(filters) {
+     const rows = (loadedData || []).slice(1);
+     const tuSet = new Set(filters.tus || []);
+     const bnSet = new Set(filters.basenames || []);
+     const ksSet = new Set(filters.nguoiKS || []);
+     const pxSet = new Set(filters.phuongXa || []);
+     return rows.filter(r => {
+       if (tuSet.size && !tuSet.has(String(r[7] || '').trim())) return false;
+       if (bnSet.size && !bnSet.has(normalizeMarkerBaseName(String(r[1] || '').trim()))) return false;
+       if (ksSet.size && !ksSet.has(String(r[5] || '').trim())) return false;
+       if (pxSet.size && !pxSet.has(String(r[18] || '').trim())) return false;
+       return true;
+     });
+   }
+   ```
+
+7. Generator function `_generateCadDrawing(opts)` — opts:
+   ```
+   {
+     templateId, metadata,
+     filters: { tus:[], basenames:[], nguoiKS:[], phuongXa:[] },
+     outputOffset: { dE:0, dN:0, presetName:'VN2000 chuẩn' },  // xuất khớp bản vẽ nào
+     paper:'a3', scale:1000, cm:105.75
+   }
+   ```
+
+   **Output offset**: sau khi convert Lat/Lon → VN2000 chuẩn, CỘNG `(dE, dN)` để về hệ tọa độ output.
+   - Default `{dE:0, dN:0}` → xuất VN2000 chuẩn quốc gia
+   - Preset "📍 Tham Lương" `{dE:-391.75, dN:+223.86}` → xuất khớp bản vẽ Tham Lương cũ
+   - Chia sẻ preset library `localStorage.cad_offset_presets` với T20 import (đối xứng convention)
+
+   ```js
+   async function _generateCadDrawing(opts) {
+     const Drawing = await _loadDxfWriter();
+     const d = new Drawing();
+
+     // HEADER
+     d.setUnits('Meters');  // $INSUNITS = 6
+     d._customHeader = {
+       DWGCODEPAGE: 'ANSI_1258',
+       INSBASE: [500000, 1000000, 0]
+     };
+
+     // Layers
+     d.addLayer('LIGHTING_POLE', 1, 'CONTINUOUS');
+     d.addLayer('LIGHTING_CABLE', 6, 'DASHED');
+     d.addLayer('LIGHTING_TEXT', 3, 'CONTINUOUS');
+     d.addLayer('TITLE_BLOCK', 7, 'CONTINUOUS');
+
+     // Register 8 blocks
+     for (const key of Object.keys(CAD_BLOCK_URLS)) {
+       d.addBlockFromDxf(key.toUpperCase(), await _loadCadBlock(key));
+     }
+
+     // Register title template
+     const template = TITLE_TEMPLATES[opts.templateId];
+     const titleBlock = await _loadTitleTemplate(opts.templateId);
+     d.addBlockFromDxf(template.blockName, titleBlock.blockDef);
+
+     // Filter rows theo 4 dimensions AND
+     const rows = _filterRowsForCadExport(opts.filters || {});
+     if (rows.length === 0) throw new Error('Filter không match marker nào');
+
+     const filteredNames = new Set(rows.map(r => String(r[1] || '').trim()));
+
+     // Output offset — CỘNG sau convert để xuất khớp bản vẽ tham chiếu
+     const outDE = (opts.outputOffset && opts.outputOffset.dE) || 0;
+     const outDN = (opts.outputOffset && opts.outputOffset.dN) || 0;
+
+     let bounds = { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity };
+     for (const r of rows) {
+       const lat = parseCoord(r[2]), lon = parseCoord(r[3]);
+       if (!isFinite(lat) || !isFinite(lon)) continue;
+       const vn = convertLatLonToVn2000(lat, lon, opts.cm);
+       // Apply output offset (chuẩn → local grid nếu preset chọn ≠ VN2000 chuẩn)
+       const xOut = vn.x + outDE, yOut = vn.y + outDN;
+       const x = xOut - 500000, y = yOut - 1000000;
+
+       // Chọn block theo type + soLuongDen
+       const type = parseInt(r[6]);
+       const soL = parseInt(r[21]) || 1;
+       let blockName;
+       if (type === 5) blockName = 'CABINET_NOI';
+       else if (type === 6) blockName = 'CABINET_NGAM';
+       else if (type === 1) blockName = soL >= 2 ? 'POLE_STK_2L' : 'POLE_STK_1L';
+       else if (type === 2) blockName = 'POLE_TT';
+       else if (type === 3) blockName = 'POLE_HTLT';
+       else if (type === 4) blockName = 'POLE_TTLT';
+       else continue;
+
+       d.insertBlock(blockName, x, y, 0, 10);
+       d.drawText(x + 2, y - 1, 0.5, r[1], 'LIGHTING_TEXT');
+
+       bounds.minX = Math.min(bounds.minX, x - 10);
+       bounds.minY = Math.min(bounds.minY, y - 10);
+       bounds.maxX = Math.max(bounds.maxX, x + 10);
+       bounds.maxY = Math.max(bounds.maxY, y + 10);
+     }
+
+     // Draw cables — CHỈ nối nếu CẢ parent lẫn child đều pass filter
+     const rowByName = new Map(rows.map(r => [String(r[1] || '').trim(), r]));
+     for (const r of rows) {
+       const parentName = String(r[14] || '').trim();
+       if (!parentName) continue;
+       if (!filteredNames.has(parentName)) continue;  // skip dangling
+       const parent = rowByName.get(parentName);
+       if (!parent) continue;
+       const vn1 = convertLatLonToVn2000(parseCoord(r[2]), parseCoord(r[3]), opts.cm);
+       const vn2 = convertLatLonToVn2000(parseCoord(parent[2]), parseCoord(parent[3]), opts.cm);
+       // Apply output offset cho cable endpoints
+       const p1 = [vn1.x + outDE - 500000, vn1.y + outDN - 1000000];
+       const p2 = [vn2.x + outDE - 500000, vn2.y + outDN - 1000000];
+       d.drawPolyline([p1, p2], false, 0, 'LIGHTING_CABLE');
+       const mx = (p1[0] + p2[0]) / 2, my = (p1[1] + p2[1]) / 2;
+       const dist = r[15] || Math.round(haversineM(parseCoord(r[2]), parseCoord(r[3]), parseCoord(parent[2]), parseCoord(parent[3])));
+       d.drawText(mx, my, 0.3, `${dist}m`, 'LIGHTING_TEXT');
+     }
+
+     // Insert title block
+     const attrs = {};
+     template.fields.forEach(f => {
+       const v = opts.metadata[f.key];
+       attrs[f.key] = (v != null && v !== '') ? v : (typeof f.default === 'function' ? f.default() : f.default);
+     });
+     d.insertBlockWithAttrs(template.blockName, bounds.maxX - 190, bounds.minY, attrs);
+
+     return d.toDxfString();
+   }
+   ```
+
+6b. Refactor `exportDrawingPDF(opts)` — nhận opts từ generator (backward compat: nếu opts null → dùng form pdCVPhuTrach/pdCSKhuVuc như cũ):
+   - `opts.filters` → filter rows qua `_filterRowsForCadExport(opts.filters)` (thay activeTu)
+   - `opts.metadata` → title block (thay form fields hiện tại)
+   - `opts.scale` → dùng `_zoomToScale(opts.scale, 420, 297)` cho A3 landscape
+
+8. Modal `#cadGeneratorModal`:
+   ```
+   ┌─ Xuất bản vẽ thiết kế ──────────────────────────┐
+   │ Khổ giấy: A3 landscape (fix)                     │
+   │ Tỉ lệ: [1:1000 ▾ default]                        │
+   │ Kinh tuyến: [105.75° ▾]                          │
+   │                                                   │
+   │ 🔀 Hệ tọa độ output:                              │
+   │   [VN2000 chuẩn (mặc định) ▾ / 📍 Tham Lương]    │
+   │   ΔE: [0.00] m    ΔN: [0.00] m                    │
+   │   [💾 Lưu preset mới]                             │
+   │   ℹ 'VN2000 chuẩn' cho nhà nước · 'Tham Lương'   │
+   │     cho khớp bản vẽ Tham Lương cũ                 │
+   │                                                   │
+   │ 🎯 Bộ lọc đối tượng xuất (AND đa dimension):     │
+   │                                                   │
+   │   ▶ Tủ điều khiển (N) [Chọn tất cả]              │
+   │     [ô tìm kiếm]                                 │
+   │     ☑ CS.C1  ☑ CS.C2  ☐ CS.C3 ...                │
+   │                                                   │
+   │   ▶ Basename (N) [Chọn tất cả]                   │
+   │     ☑ C1  ☑ C2  ☐ VTS_H232VTS ...                │
+   │                                                   │
+   │   ▶ Người khảo sát (N) [Chọn tất cả]             │
+   │     ☑ lamvt  ☑ hungnt  ☐ adminuser ...           │
+   │                                                   │
+   │   ▶ Phường/Xã (N) [Chọn tất cả]                  │
+   │     ☑ P.Bình Hưng Hòa  ☐ P.Tân Tạo ...           │
+   │                                                   │
+   │   → Sẽ xuất 87/1247 marker (7 tủ · 3 tuyến)      │
+   │                                                   │
+   │ Template khung tên:                               │
+   │   [🏛 Nhà nước ▾ / 🏢 Tư vấn / 🏗 Nhà thầu]      │
+   │                                                   │
+   │ Metadata (dynamic theo template):                 │
+   │   [Người lập: _________]                          │
+   │   [Ngày: 2026-08-07]                              │
+   │   ...                                             │
+   │                                                   │
+   │  [Xuất DXF]  [Xuất PDF]  [Xuất cả 2 zip]         │
+   └───────────────────────────────────────────────────┘
+   ```
+
+   Chi tiết:
+   - Trigger: nút "📐 Xuất bản vẽ thiết kế" trong ☰ panel Xuất dữ liệu
+   - 4 filter sections dạng collapsible accordion — click ▶ mở/đóng
+   - Mỗi section có ô tìm kiếm (nếu >10 option) + [Chọn tất cả] / [Bỏ chọn tất cả]
+   - Populate từ `_getUniqueCabinets` / `_getUniqueBasenames` / `_getUniqueSurveyors` / `_getUniquePhuongXa`
+   - Empty section = không lọc dimension đó (chọn tất cả)
+   - **Live counter** ở dưới 4 filter — update mỗi khi checkbox đổi (`_updateExportCount()`):
+     ```
+     Sẽ xuất N/M marker (X tủ · Y tuyến cáp sẽ vẽ)
+     ```
+     Bằng cách gọi `_filterRowsForCadExport(currentFilters).length`
+   - Nếu filter → 0 marker → disable nút Xuất + hiện warning màu đỏ
+   - Đổi template → re-render metadata form dynamic
+
+   **Section "🔀 Hệ tọa độ output"** — chi tiết:
+   - Dropdown preset: fetch từ `localStorage.cad_offset_presets` (chia sẻ với T20 import) + option đầu "VN2000 chuẩn quốc gia" (dE=0, dN=0)
+   - Chọn preset → auto-fill 2 input dE/dN
+   - User có thể sửa dE/dN manually → chuyển sang preset "Tùy chỉnh" trong dropdown
+   - Nút "💾 Lưu preset mới": prompt tên → append vào `cad_offset_presets` với current dE/dN → dropdown refresh
+   - Sample flow:
+     * Xuất cho báo cáo nhà nước → giữ default "VN2000 chuẩn"
+     * Xuất để chồng lên bản vẽ Tham Lương cũ → chọn "📍 Tham Lương" → dE=-391.75, dN=+223.86 auto-fill → xuất DXF có tọa độ khớp file gốc
+
+9. Persistence — save filter state vào localStorage:
+   ```js
+   function _saveCadExportFilters(filters) {
+     try { localStorage.setItem('cad_export_filters', JSON.stringify(filters)); } catch(_) {}
+   }
+   function _restoreCadExportFilters() {
+     try {
+       const raw = localStorage.getItem('cad_export_filters');
+       return raw ? JSON.parse(raw) : { tus:[], basenames:[], nguoiKS:[], phuongXa:[] };
+     } catch(_) { return { tus:[], basenames:[], nguoiKS:[], phuongXa:[] }; }
+   }
+   ```
+   Restore khi mở modal, save mỗi lần checkbox đổi (debounce 500ms).
+
+10. Save file handler:
+    ```js
+    async function _handleExportCad(opts, mode) {
+      if (mode === 'dxf' || mode === 'both') {
+        const dxfText = await _generateCadDrawing(opts);
+        _saveBlob(new Blob([dxfText]), `thiet-ke-${opts.templateId}-${_dateStamp()}.dxf`);
+      }
+      if (mode === 'pdf' || mode === 'both') {
+        await exportDrawingPDF(opts);
+      }
+      if (mode === 'both') {
+        // Lazy load JSZip → zip 2 file → save
+        const JSZip = await _loadJSZip();  // https://esm.sh/jszip@3
+        const zip = new JSZip();
+        zip.file(`ban-ve.dxf`, dxfText);
+        zip.file(`ban-ve.pdf`, pdfBlob);
+        const zipBlob = await zip.generateAsync({type: 'blob'});
+        _saveBlob(zipBlob, `ban-ve-${_dateStamp()}.zip`);
+      }
+    }
+    ```
+
+11. Bump sw.js + add `assets/dxf-templates/*.dxf` vào STATIC_ASSETS.
+
+12. Verify:
+    - Modal → chọn 1 tủ + 2 basename + 1 người KS + 1 phường → live counter update → "Xuất DXF" → open AutoCAD 2021 không error
+    - Verify chỉ marker match TẤT CẢ 4 filter được vẽ, cable chỉ nối trong cùng filter set
+    - Đổi filter (uncheck basename) → counter giảm → xuất lại → verify subset đúng
+    - Tiếng Việt "Nguyễn Văn A" hiển thị đúng trong ATTRIBUTE
+    - "Xuất PDF" → khớp DXF về scope filter
+    - "Xuất cả 2" → zip có cả 2 file
+    - Reload trang → mở lại modal → filter cuối cùng restore từ localStorage
+
+    **Output offset test**:
+    - Giữ default "VN2000 chuẩn" (dE=0, dN=0) → xuất DXF của C1.01 Tham Lương → mở AutoCAD → tọa độ pole ≈ (591846, 1189511) — VN2000 chuẩn quốc gia
+    - Đổi sang preset "📍 Tham Lương" (dE=-391.75, dN=+223.86) → xuất lại → tọa độ pole ≈ (591454.343, 1189735.245) — khớp file DXF gốc Tham Lương
+    - So khớp: `AutoCAD_pole_x = 591454.343` ± 0.01m với hàng CSV Tham Lương gốc C1.01
 ```
 
 ---
 
-### PROMPT 50 — Generator MVP (1 template, DXF only, chưa preview)
+### PROMPT 50 — Phase C: Preview PDF + Custom template upload + Multi-sheet
 
 ```
-Tiếp nối PROMPT 48+49. Đã có block library + 1 title template.
+Tiếp nối PROMPT 49 (Phase B xong: generator + modal + DXF/PDF/zip export hoạt động).
 
-Nhiệm vụ: Implement CAD Generator MVP — 1 template duy nhất, xuất DXF trực tiếp.
+Nhiệm vụ Phase C (Tuần 4-5): Preview PDF trong modal + Custom template upload + Multi-sheet split.
 
 Yêu cầu:
 
-1. Load dxf-writer lib từ CDN esm.sh (~50KB, lazy):
-   async function _loadDxfWriter() { ... }
+1. Preview PDF flow:
+   - Sau khi user fill metadata + chọn options, thêm nút "👁 Preview" bên cạnh "Xuất DXF/PDF/cả 2"
+   - Click Preview → chạy pipeline PDF (không save, giữ Blob)
+   - Show modal fullscreen với `<iframe src="${URL.createObjectURL(pdfBlob)}"></iframe>`
+   - 2 nút trong preview: "Xuất DXF" / "Xuất PDF" / "Sửa lại" (đóng preview về modal generator)
+   - Auto revoke URL.createObjectURL khi đóng preview
 
-2. Modal `#cadGeneratorModal` với 5 field:
-   - Tủ điều khiển (multi-select checkbox, default = all)
-   - Khổ giấy: A3 landscape (fix cho MVP)
-   - Tỉ lệ: 1:500 / 1:1000 / 1:2000
-   - Kinh tuyến trung tâm: 105.75° (default HCM)
-   - Metadata form theo template.fields (input text cho mỗi field)
-
-3. Generator function `_generateCadDrawing(opts)`:
-   ```
-   const Drawing = await _loadDxfWriter();
-   const d = new Drawing();
-   d.setUnits('Meters');
-   d.addLayer('LIGHTING_POLE', 7, 'CONTINUOUS');
-   d.addLayer('LIGHTING_CABLE', 5, 'DASHED');
-   d.addLayer('LIGHTING_TEXT', 3, 'CONTINUOUS');
-   d.addLayer('TITLE_BLOCK', 7, 'CONTINUOUS');
-
-   // Load & insert blocks
-   const poleBlock = await _loadCadBlock('pole_stk');
-   d.addBlockFromDxf('POLE_STK', poleBlock);
-   // ... other blocks
-
-   // Iterate filtered markers
-   const rows = _filterRowsByTuSet(opts.selectedTus);
-   for (const r of rows) {
-     const type = r[6];
-     const vn = _wgs84ToVn2000(r[2], r[3], opts.cm);
-     const blockName = type === 5 ? 'CABINET_NOI' : 'POLE_STK';
-     d.insertBlock(blockName, vn.x, vn.y, 0, 1, r[1]);  // rotation 0, scale 1, tag = tên trụ
-     d.addText(vn.x + 2, vn.y - 1, 0.5, r[1], 'LIGHTING_TEXT');  // label
-   }
-
-   // Draw cables (POLYLINE dashed)
-   for (const r of rows) {
-     const parentName = r[14];
-     if (!parentName) continue;
-     const parent = rows.find(x => x[1] === parentName);
-     if (!parent) continue;
-     const p1 = _wgs84ToVn2000(r[2], r[3], opts.cm);
-     const p2 = _wgs84ToVn2000(parent[2], parent[3], opts.cm);
-     d.drawPolyline([[p1.x, p1.y], [p2.x, p2.y]], false, 0, 'LIGHTING_CABLE');
-   }
-
-   // Insert title block
-   const titleTemplate = await _loadTitleTemplate('state');
-   d.insertBlockWithAttrs('TITLE_STATE', -100, -50, opts.metadata);  // góc dưới-phải
-
-   // Compute bounds & center drawing
-   const bounds = _computeBoundsFromRows(rows);
-   d.setViewport({ ...bounds });
-
-   return d.toDxfString();
-   ```
-
-4. Save file: `saveAs(new Blob([dxfString]), 'thiet-ke-chieu-sang-${date}.dxf')` (dùng FileSaver hoặc URL.createObjectURL).
-
-5. UI trigger: nút mới "📐 Xuất bản vẽ thiết kế" trong ☰ panel section Xuất dữ liệu.
-
-6. Bump sw.js. Update huongdan.html.
-
-*NOTE*: Nếu block library chưa có (user chưa gửi mẫu), fallback dùng simple LINE để đại diện trụ (5x5m box). Log TODO.
-```
-
----
-
-### PROMPT 51 — Generator Full (multi-template + preview PDF)
-
-```
-Tiếp nối PROMPT 50. Đã có generator MVP với 1 template.
-
-Nhiệm vụ: Nâng cấp full — multi-template picker + preview PDF trước khi save + multi-sheet split.
-
-Yêu cầu:
-
-1. Template picker trong modal generator:
-   Dropdown với 4 options: state / consulting / contractor / custom
-   Khi user chọn → metadata form re-render theo template.fields
-   Load custom template: user upload DXF file → parse ATTRIBUTES → hiện form dynamic
-
-2. Preview PDF:
-   - Sau khi generate DXF → convert sang PDF bằng jsPDF + render polylines/text
-   - Hoặc: reuse `exportDrawingPDF` (đã có in bản vẽ trên map) với data từ generator
-   - Hiển thị PDF trong modal (embed iframe) hoặc modal fullscreen
-   - 2 nút: "Xuất DXF" + "Xuất PDF" hoặc "Xuất cả 2 (zip)"
+2. Custom template upload:
+   - Nút "+ Upload template mới" trong dropdown template picker
+   - Modal upload:
+     - File input .dxf
+     - Parse → `_extractAttdefs(dxfText)` return array `[{tag, defaultText, x, y}]`
+     - Hiện list ATTDEF → user confirm + đặt label tiếng Việt cho mỗi tag (VD tag `CDT` → label "Chủ đầu tư")
+     - Name input cho template
+   - Save vào `localStorage.cad_title_templates`:
+     ```js
+     {
+       id: crypto.randomUUID(),
+       label: 'Template khách hàng X',
+       blockName: 'TITLE_CUSTOM_<id>',
+       dxfContent: btoa(dxfText),  // base64
+       fields: [{key: 'CDT', label: 'Chủ đầu tư', default: ''}, ...]
+     }
+     ```
+   - Merge vào TITLE_TEMPLATES runtime: `Object.assign(TITLE_TEMPLATES, _loadCustomTemplates())`
+   - CRUD: sửa label/fields, xóa template
+   - Export/Import JSON cho backup
 
 3. Multi-sheet split:
-   - Nếu bounds > 1000m theo chiều dài → suggest chia 2 tờ A1 hoặc 3 tờ A2
-   - User chọn số tờ → app tự split rows theo khu vực (grid partition)
-   - Mỗi tờ 1 file DXF + PDF riêng, zip together
+   - Detect: A3 landscape @ 1:1000 → view 420m × 297m
+   - Nếu bounds `width > 400` hoặc `height > 280` → warning + suggest split
+   - UI: dropdown "Số tờ: [Auto / 1 / 2 / 3 / 4]"
+   - Auto split logic: grid partition theo width (nếu wide) hoặc height (nếu tall), mỗi tờ overlap 10%
+   - Mỗi tờ 1 DXF + 1 PDF riêng
+   - Zip N pairs với naming: `01-of-05.dxf`, `01-of-05.pdf`, `02-of-05.dxf`, ...
+   - Title block mỗi tờ có index (VD "Tờ 01/05")
 
-4. Custom template upload UI:
-   - Modal "Upload template mới" với file input .dxf
-   - Parse → detect ATTRIBUTES → show list cho user confirm
-   - Save vào localStorage `cad_title_templates` với id + name + dxf content (base64) + fields
+4. Helper `_computeSheetPartitions(bounds, sheetW, sheetH, overlap=0.1)`:
+   - Return array `[{minX, minY, maxX, maxY, index, total}]`
+   - Grid tự tính: numCols = ceil(width / (sheetW * (1-overlap))), numRows tương tự
+   - Iterate row × col → sub-bounds
 
-5. Bump sw.js. Update CLAUDE.md + huongdan.html thêm subsection Custom template.
+5. Modify `_generateCadDrawing` nhận thêm `opts.sheetBounds` (nếu multi-sheet) — filter rows trong sub-bounds thay full.
+
+6. UI update modal:
+   - Thêm section "Preview & Xuất":
+     [👁 Preview PDF] [Xuất DXF] [Xuất PDF] [Xuất cả 2 (zip)]
+   - Nếu multi-sheet: nút "Xuất N tờ (zip)"
+
+7. Bump sw.js. Update CLAUDE.md + huongdan.html:
+   - Section 18 "Xuất bản vẽ thiết kế CAD" — thêm subsection Preview, Custom template, Multi-sheet
+   - Screenshot mockup preview modal + custom template upload flow
+
+8. Verify:
+   - Preview PDF hiển thị đúng bản vẽ (không phải trắng, có blocks + cables + title)
+   - Upload custom template có 5 ATTDEF → confirm labels tiếng Việt → save → xuất hiện trong dropdown
+   - Chọn custom template → metadata form có 5 fields đúng label → xuất DXF có khung tên custom
+   - Test multi-sheet: chọn tủ có bounds ~500m → warning + Auto = 2 tờ → export zip có 2 pair DXF+PDF, tọa độ overlap 10%
+```
+
+---
+
+### PROMPT 51 — Phase C+: Auto-cable MST (T22) trước khi kết hợp T21
+
+```
+Chú ý: T22 (auto-gen tuyến cáp MST) là feature độc lập với T21 nhưng CẦN LÀM TRƯỚC hoặc SONG SONG.
+
+Lý do: T21 generator vẽ cáp dựa vào `row[14]` (Marker gốc) + `row[15]` (Khoảng cách). Nếu user chưa điền → generator không vẽ được cable → bản vẽ trống. Với 100+ trụ, điền tay mất 30+ phút.
+
+Nhiệm vụ: Implement T22 để user 1 click có tuyến cáp đầy đủ trước khi xuất bản vẽ T21.
+
+Xem PROMPT 52 (đã có trong prompts.md) — MST algorithm (Prim/Kruskal/nearest-neighbor chain) tự động điền Marker gốc + Khoảng cách cho toàn bộ trụ trong 1 tủ.
+
+Sau P52 → P50 T21 sẽ có data cable đầy đủ → generator xuất bản vẽ hoàn chỉnh.
+
+Thứ tự đề xuất:
+1. P48 (T21 Phase A — foundation)
+2. P49 (T21 Phase B — generator + modal + DXF/PDF)
+3. P52 (T22 — auto MST)
+4. P50 (T21 Phase C — preview + custom + multi-sheet)
+5. P55 (T25 — batch export N tủ)
 ```
 
 ---

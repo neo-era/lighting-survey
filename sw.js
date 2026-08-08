@@ -1,10 +1,23 @@
-const CACHE = 'lighting-survey-v57';
+const CACHE = 'lighting-survey-v65';
 
-// Assets tĩnh pre-cache khi install (icon + ảnh mẫu)
+// Assets tĩnh pre-cache khi install (icon + ảnh mẫu + CAD blocks + title templates T21)
 const STATIC_ASSETS = [
   '/images/1.png','/images/2.png','/images/3.png','/images/4.png','/images/5.png',
   '/images/6.png','/images/7.png','/images/8.png','/images/9.png','/images/10.png',
   '/images/blank.png','/images/icon-192.png','/images/icon-512.png',
+  // T21 CAD Generator — 8 placeholder blocks (kỹ sư CAD sẽ thay file sau)
+  '/assets/dxf-blocks/pole_stk_1l.dxf',
+  '/assets/dxf-blocks/pole_stk_2l.dxf',
+  '/assets/dxf-blocks/pole_tt.dxf',
+  '/assets/dxf-blocks/pole_htlt.dxf',
+  '/assets/dxf-blocks/pole_ttlt.dxf',
+  '/assets/dxf-blocks/cabinet_noi.dxf',
+  '/assets/dxf-blocks/cabinet_ngam.dxf',
+  '/assets/dxf-blocks/north_arrow.dxf',
+  // T21 Phase B — 3 title block templates với ATTDEF
+  '/assets/dxf-templates/title_state.dxf',
+  '/assets/dxf-templates/title_consulting.dxf',
+  '/assets/dxf-templates/title_contractor.dxf',
 ];
 
 // CDN libraries cache riêng — cache-first, không pre-install (tải lần đầu rồi cache)

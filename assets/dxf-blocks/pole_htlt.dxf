@@ -1,0 +1,68 @@
+999
+Placeholder block POLE_HTLT (1m x 2m) - Cot + tam giac tren dinh
+  0
+SECTION
+  2
+BLOCKS
+  0
+BLOCK
+  8
+0
+  2
+POLE_HTLT
+ 70
+     0
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  3
+POLE_HTLT
+  1
+
+  0
+LINE
+  8
+0
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+ 11
+0.0
+ 21
+2.0
+ 31
+0.0
+  0
+LWPOLYLINE
+  8
+0
+ 90
+        3
+ 70
+     1
+ 10
+-0.5
+ 20
+1.5
+ 10
+0.5
+ 20
+1.5
+ 10
+0.0
+ 20
+2.3
+  0
+ENDBLK
+  8
+0
+  0
+ENDSEC
+  0
+EOF

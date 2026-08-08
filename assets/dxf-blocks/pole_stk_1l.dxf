@@ -1,0 +1,76 @@
+999
+Placeholder block POLE_STK_1L (1m x 2m) - Cot + 1 can trai + circle den
+  0
+SECTION
+  2
+BLOCKS
+  0
+BLOCK
+  8
+0
+  2
+POLE_STK_1L
+ 70
+     0
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  3
+POLE_STK_1L
+  1
+
+  0
+LINE
+  8
+0
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+ 11
+0.0
+ 21
+2.0
+ 31
+0.0
+  0
+LINE
+  8
+0
+ 10
+0.0
+ 20
+2.0
+ 30
+0.0
+ 11
+-0.5
+ 21
+2.0
+ 31
+0.0
+  0
+CIRCLE
+  8
+0
+ 10
+-0.5
+ 20
+2.0
+ 30
+0.0
+ 40
+0.15
+  0
+ENDBLK
+  8
+0
+  0
+ENDSEC
+  0
+EOF

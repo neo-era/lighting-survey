@@ -1,0 +1,58 @@
+999
+Placeholder block CABINET_NOI (1m x 1.5m) - Hinh chu nhat vien day
+  0
+SECTION
+  2
+BLOCKS
+  0
+BLOCK
+  8
+0
+  2
+CABINET_NOI
+ 70
+     0
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  3
+CABINET_NOI
+  1
+
+  0
+LWPOLYLINE
+  8
+0
+ 90
+        4
+ 70
+     1
+ 43
+0.05
+ 10
+-0.5
+ 20
+0.0
+ 10
+0.5
+ 20
+0.0
+ 10
+0.5
+ 20
+1.5
+ 10
+-0.5
+ 20
+1.5
+  0
+ENDBLK
+  8
+0
+  0
+ENDSEC
+  0
+EOF

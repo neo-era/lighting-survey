@@ -163,14 +163,29 @@
           <li><a href="#s16" style="font-weight:400;color:#4b5563;">Bộ thông số mẫu cho từng địa bàn</a></li>
         </ul>
       </li>
-      <li><a href="#s17">Nhập CSV tọa độ (VN-2000 / Lat-Lon)</a>
+      <li><a href="#s17">Nhập CSV / Excel tọa độ (VN-2000 / Lat-Lon)</a>
         <ul style="margin-top:4px;padding-left:16px;">
           <li><a href="#s17" style="font-weight:400;color:#4b5563;">3 chế độ import: Tự động / Chỉ cập nhật / Thêm mới</a></li>
           <li><a href="#s17" style="font-weight:400;color:#4b5563;">Auto-detect format hoặc ép Lat/Lon / VN-2000</a></li>
           <li><a href="#s17" style="font-weight:400;color:#4b5563;">Bù offset local grid (dự án Tham Lương)</a></li>
+          <li><a href="#s17" style="font-weight:400;color:#4b5563;">Nhập Excel .xlsx (chọn sheet nếu &gt;1)</a></li>
           <li><a href="#s17" style="font-weight:400;color:#4b5563;">Preview + Δ vs marker cũ trước khi ghi</a></li>
         </ul>
       </li>
+      <li><a href="#s18">🎯 Calibrate 2 điểm — tự tìm offset local grid</a></li>
+      <li><a href="#s19">🌐 Điền địa chỉ tự động (Reverse-geocode)</a></li>
+      <li><a href="#s20">📐 Xuất bản vẽ thiết kế CAD (DXF + PDF)</a>
+        <ul style="margin-top:4px;padding-left:16px;">
+          <li><a href="#s20" style="font-weight:400;color:#4b5563;">3 title block templates + custom upload</a></li>
+          <li><a href="#s20" style="font-weight:400;color:#4b5563;">Bộ lọc 4 dimensions (tủ / basename / người KS / phường-xã)</a></li>
+          <li><a href="#s20" style="font-weight:400;color:#4b5563;">Hệ tọa độ output: VN2000 chuẩn / Tham Lương / custom</a></li>
+          <li><a href="#s20" style="font-weight:400;color:#4b5563;">Multi-sheet split + preview PDF iframe</a></li>
+          <li><a href="#s20" style="font-weight:400;color:#4b5563;">Batch export N tủ → zip</a></li>
+          <li><a href="#s20" style="font-weight:400;color:#4b5563;">🌳 Auto-generate tuyến cáp MST</a></li>
+          <li><a href="#s20" style="font-weight:400;color:#4b5563;">✏ Live edit text CAD trên map</a></li>
+        </ul>
+      </li>
+      <li><a href="#s21">🔍 Validation DXF trước upload (auto-fix)</a></li>
     </ol>
   </div>
 
@@ -1381,6 +1396,182 @@
     <div class="note note-warn">
       <span class="note-icon">⚠</span>
       <div><strong>Cập nhật ghi đè</strong> — Với mode "Tự động" và "Chỉ cập nhật", tọa độ marker cũ sẽ bị ghi đè bằng tọa độ mới trong CSV. Backup trước khi import file lớn (nút <strong>GitHub</strong> để tạo snapshot Excel).</div>
+    </div>
+
+    <h3>📥 Nhập Excel .xlsx (thay CSV)</h3>
+    <p>App hỗ trợ upload trực tiếp file <code>.xlsx</code> / <code>.xls</code> — không cần convert sang CSV:</p>
+    <div class="steps">
+      <div class="step"><div class="sn">1</div><div class="sc">Bấm nút <strong>📂 Nhập tọa độ CSV/Excel</strong> → chọn file <code>.xlsx</code>.</div></div>
+      <div class="step"><div class="sn">2</div><div class="sc">Nếu workbook có &gt;1 sheet, app sẽ prompt hỏi tên sheet cần import.</div></div>
+      <div class="step"><div class="sn">3</div><div class="sc">Sau đó flow y hệt CSV: auto-detect format, chọn chế độ, offset preset, preview 100 dòng đầu.</div></div>
+    </div>
+    <div class="note note-info">
+      <span class="note-icon">💡</span>
+      <div>Excel parser dùng <strong>ExcelJS</strong> lazy-load (~200KB). Cells số/text/date đều được stringify thành text như CSV — logic detect format hoạt động giống hệt.</div>
+    </div>
+  </section>
+
+  <!-- 18. CALIBRATE 2 ĐIỂM -->
+  <section id="s18">
+    <h2><span class="num">18</span> 🎯 Calibrate 2 điểm — tự tìm offset local grid</h2>
+    <p>Khi có dự án mới dùng grid cục bộ (không phải Tham Lương), <strong>không cần đoán offset</strong> — dùng calibrate 2 điểm để app tự tính:</p>
+
+    <h3>Cách dùng</h3>
+    <div class="steps">
+      <div class="step"><div class="sn">1</div><div class="sc">Mở modal <strong>Nhập CSV</strong> HOẶC <strong>Xuất bản vẽ thiết kế</strong> → section "🔀 Bù offset local grid" → bấm <strong>🎯 Calibrate 2 điểm</strong>.</div></div>
+      <div class="step"><div class="sn">2</div><div class="sc">Chuẩn bị <strong>2 điểm tham chiếu</strong> — cùng vị trí thực tế nhưng theo 2 hệ:
+        <ul style="margin-top:4px;">
+          <li><strong>Local</strong>: từ file DXF/CSV cũ (VD tọa độ Tham Lương local grid)</li>
+          <li><strong>Chuẩn</strong>: từ marker CSV đã import HOẶC báo cáo trắc địa VN-2000 chuẩn quốc gia</li>
+        </ul>
+      </div></div>
+      <div class="step"><div class="sn">3</div><div class="sc">Điểm 1 và điểm 2 phải cách nhau <strong>≥ 100m</strong> để đảm bảo chính xác.</div></div>
+      <div class="step"><div class="sn">4</div><div class="sc">Bấm <strong>Tính offset</strong> — app compute vector translation cho mỗi điểm, so sánh:
+        <ul style="margin-top:4px;">
+          <li>Err &lt; 5m → ✅ Pure translation — offset chính xác</li>
+          <li>Err 5-30m → ⚠ Có xoay/scale nhẹ, dùng translation-only vẫn OK</li>
+          <li>Err &gt; 30m → ❌ File dùng affine transform — cần P19 calibration khác</li>
+        </ul>
+      </div></div>
+      <div class="step"><div class="sn">5</div><div class="sc">Bấm <strong>Áp dụng + Lưu preset</strong> → nhập tên → offset auto-fill vào form CSV/CAD; preset lưu library dùng lại cho lần sau.</div></div>
+    </div>
+
+    <div class="note note-success">
+      <span class="note-icon">✅</span>
+      <div><strong>Đã verify</strong>: 2 điểm Tham Lương thực tế → detect chính xác <code>dE = -391.75m, dN = +223.86m</code> (khớp preset built-in), err = 0.0000m.</div>
+    </div>
+  </section>
+
+  <!-- 19. REVERSE-GEOCODE BATCH -->
+  <section id="s19">
+    <h2><span class="num">19</span> 🌐 Điền địa chỉ tự động (Reverse-geocode batch)</h2>
+    <p>Nếu nhiều marker chưa có <strong>Đường</strong> hoặc <strong>Phường/Xã</strong>, app có thể tự điền hàng loạt từ Nominatim (OpenStreetMap):</p>
+
+    <div class="steps">
+      <div class="step"><div class="sn">1</div><div class="sc">☰ → section Xuất dữ liệu → bấm <strong>🌐 Điền địa chỉ tự động (Nominatim)</strong>.</div></div>
+      <div class="step"><div class="sn">2</div><div class="sc">App scan tất cả marker thiếu Đường hoặc Phường/Xã → confirm với <strong>ước tính thời gian</strong> (~ N/60 phút do rate limit 1 request/giây của Nominatim).</div></div>
+      <div class="step"><div class="sn">3</div><div class="sc">Loop query từng marker → sync GAS batch mỗi 10 marker. Progress bar hiển thị i/N.</div></div>
+      <div class="step"><div class="sn">4</div><div class="sc">Nhấn <kbd>ESC</kbd> bất kỳ lúc nào để <strong>dừng giữa chừng</strong> — kết quả đã điền được giữ nguyên.</div></div>
+    </div>
+
+    <div class="note note-warn">
+      <span class="note-icon">⚠</span>
+      <div><strong>Rate limit</strong>: Nominatim public API giới hạn 1 request/giây. Với 500 marker → ~9 phút. Với 1000+ marker → chia đợt nhỏ hơn để tránh mất kết quả nếu mạng gián đoạn.</div>
+    </div>
+    <div class="note note-info">
+      <span class="note-icon">🌐</span>
+      <div>Chỉ điền cột thiếu — cột đã có sẽ được giữ nguyên. Nếu Nominatim không trả về địa chỉ (ví dụ vùng nông thôn không có road name), marker đó bị skip.</div>
+    </div>
+  </section>
+
+  <!-- 20. CAD GENERATOR -->
+  <section id="s20">
+    <h2><span class="num">20</span> 📐 Xuất bản vẽ thiết kế CAD (DXF + PDF)</h2>
+    <p>Feature lớn nhất — biến dữ liệu khảo sát thành <strong>bản vẽ kỹ thuật hoàn chỉnh</strong> tương thích AutoCAD 2021, có khung tên chuẩn, ký hiệu trụ + tủ, đường cáp, bảng thống kê.</p>
+
+    <h3>Trigger + Modal</h3>
+    <p>☰ → section Xuất dữ liệu → nút <strong>📐 Xuất bản vẽ thiết kế (DXF + PDF)</strong> (gradient xanh).</p>
+
+    <h3>5 sections trong modal</h3>
+    <div class="steps">
+      <div class="step"><div class="sn">1</div><div class="sc"><strong>Format bản vẽ</strong>: Khổ giấy A3 landscape (fix), Tỉ lệ (1:500 / 1:1000 / 1:2000), Kinh tuyến trung tâm (105° / 105.5° / 105.75° / 106°).</div></div>
+      <div class="step"><div class="sn">2</div><div class="sc"><strong>🔀 Hệ tọa độ output</strong>: Preset dropdown (🌍 shared / 👤 local), input ΔE/ΔN thủ công, nút <strong>💾 Lưu preset</strong> mới, nút <strong>🎯 Calibrate 2 điểm</strong>.</div></div>
+      <div class="step"><div class="sn">3</div><div class="sc"><strong>🎯 Bộ lọc 4 dimensions</strong> (AND, accordion collapsible):
+        <ul style="margin-top:4px;">
+          <li>Tủ điều khiển · Basename · Người khảo sát · Phường/Xã</li>
+          <li>Ô search cho mỗi dimension, nút "Chọn tất cả" / "Bỏ chọn tất cả"</li>
+          <li>Live counter: "Sẽ xuất N/M marker (X tủ · Y tuyến cáp)"</li>
+        </ul>
+      </div></div>
+      <div class="step"><div class="sn">4</div><div class="sc"><strong>📋 Template khung tên</strong>: dropdown 3 built-in (🏛 Nhà nước / 🏢 Tư vấn / 🏗 Nhà thầu) + nút <strong>➕ Upload</strong> template custom (.dxf có ATTDEF).</div></div>
+      <div class="step"><div class="sn">5</div><div class="sc"><strong>📄 Chia tờ</strong>: Auto / 1 / 2 / 3 / 4 / 6 tờ với overlap 10%. Info hiển thị bounds thực tế và số tờ dự kiến.</div></div>
+      <div class="step"><div class="sn">6</div><div class="sc"><strong>Metadata form</strong> dynamic theo template — nhập Người lập, SHBV, BV_SO, Chủ đầu tư, Chủ nhiệm, KS thiết kế, v.v.</div></div>
+    </div>
+
+    <h3>5 nút export</h3>
+    <table>
+      <tr><th>Nút</th><th>Kết quả</th></tr>
+      <tr><td>👁 Preview</td><td>Mở modal fullscreen với PDF trong iframe — có thể xuất DXF/PDF/zip từ đây</td></tr>
+      <tr><td>DXF</td><td>1 hoặc N file .dxf (zip nếu multi-sheet)</td></tr>
+      <tr><td>PDF</td><td>1 file .pdf (dùng flow print bản vẽ đã có)</td></tr>
+      <tr><td>Cả 2 (zip)</td><td>1 file .zip chứa cả DXF (multi-sheet nếu có) + PDF</td></tr>
+      <tr><td>📦 Batch N tủ</td><td>Iterate tất cả tủ trong dữ liệu — mỗi tủ 1 DXF riêng, gộp zip</td></tr>
+    </table>
+
+    <h3>🌳 Auto-generate tuyến cáp (MST)</h3>
+    <p>Nếu marker chưa có Marker gốc + Khoảng cách, dùng auto MST để app tự tính:</p>
+    <div class="steps">
+      <div class="step"><div class="sn">1</div><div class="sc">Bật "Sơ đồ cáp" trong ☰ panel → cable toolbar hiện.</div></div>
+      <div class="step"><div class="sn">2</div><div class="sc">Bấm <strong>🌳 Auto MST</strong> → chọn tủ + thuật toán (Prim MST tối ưu hoặc Nearest-neighbor chain đơn giản).</div></div>
+      <div class="step"><div class="sn">3</div><div class="sc">Config "Cảnh báo đoạn cáp dài quá" (mặc định 200m).</div></div>
+      <div class="step"><div class="sn">4</div><div class="sc">Bấm <strong>Preview map</strong> → tuyến hiện màu xanh nét đứt trên map, đoạn &gt; ngưỡng hiện màu đỏ.</div></div>
+      <div class="step"><div class="sn">5</div><div class="sc">Bấm <strong>Áp dụng + Sync GAS</strong> → tự điền vào cột Marker gốc + Khoảng cách + sync Google Sheet.</div></div>
+    </div>
+
+    <h3>✏ Live edit vị trí text CAD</h3>
+    <p>Sau khi upload bản vẽ CAD (DXF), có thể drag các text label đến vị trí đẹp hơn (tránh chồng lên marker):</p>
+    <div class="steps">
+      <div class="step"><div class="sn">1</div><div class="sc">Trong CAD info box → tick <strong>✏ Chế độ sửa vị trí text CAD</strong> → toolbar hiện với 3 tool: Undo / Reset / Snap grid.</div></div>
+      <div class="step"><div class="sn">2</div><div class="sc">Text trên map có <strong>background vàng dashed</strong> + cursor move → drag đến vị trí mới → auto-save vào IndexedDB.</div></div>
+      <div class="step"><div class="sn">3</div><div class="sc"><strong>Snap grid</strong>: nhập số (m) → text auto-snap về grid. 0 = tắt.</div></div>
+      <div class="step"><div class="sn">4</div><div class="sc"><strong>Undo</strong>: bấm ↶ hoặc <kbd>Ctrl</kbd>+<kbd>Z</kbd> — giữ 10 lần thao tác cuối.</div></div>
+      <div class="step"><div class="sn">5</div><div class="sc"><strong>Reset</strong>: 🔄 khôi phục toàn bộ vị trí gốc từ file DXF ban đầu.</div></div>
+    </div>
+
+    <div class="note note-info">
+      <span class="note-icon">💾</span>
+      <div>Tất cả edit tự lưu vào IndexedDB (không lên Google Sheet). Refresh trang → text giữ nguyên vị trí đã edit. File DXF gốc không bị sửa.</div>
+    </div>
+
+    <h3>🌍 Preset shared vs 👤 local (T20 v2)</h3>
+    <p>Bộ preset offset local grid có 2 tier:</p>
+    <table>
+      <tr><th>Tier</th><th>Ai lưu</th><th>Ai xem</th><th>Storage</th></tr>
+      <tr><td>🌍 <strong>Shared</strong></td><td>Chỉ admin</td><td>Toàn team</td><td>Google Sheet <code>OffsetPresets</code></td></tr>
+      <tr><td>👤 <strong>Local</strong></td><td>Bất kỳ user</td><td>Chỉ trình duyệt cá nhân</td><td>localStorage</td></tr>
+    </table>
+    <p>Khi admin lưu preset mới → confirm dialog hỏi Shared hay Local. Shared cần password admin (cache 1 lần/session). Cache shared TTL 5 phút, auto-sync sau login.</p>
+  </section>
+
+  <!-- 21. VALIDATION DXF -->
+  <section id="s21">
+    <h2><span class="num">21</span> 🔍 Validation DXF trước upload (auto-fix)</h2>
+    <p>Khi upload bản vẽ CAD, app tự kiểm tra format và cho phép <strong>sửa lỗi tự động</strong> trước khi render lên map:</p>
+
+    <h3>3-tier validation</h3>
+    <table>
+      <tr><th>Tier</th><th>Ví dụ</th><th>Auto-fix</th></tr>
+      <tr><td>🚫 <strong>Blocker</strong></td><td>DXF không có entity, coord range &gt; 1 triệu km, file hỏng</td><td>Không — chặn upload</td></tr>
+      <tr><td>⚠ <strong>Warning</strong></td><td>Đơn vị nghi = mm (bounds ~1e9), = km (&lt; 1000), bounds &gt; 100km, Layer toàn "0"</td><td>Có — nút "Sửa tất cả" hoặc chọn từng cái</td></tr>
+      <tr><td>ℹ <strong>Info</strong></td><td>Entity count &lt; 10, không có Layer LIGHTING_*</td><td>Chỉ báo, không fix</td></tr>
+    </table>
+
+    <h3>Auto-fix rules</h3>
+    <ul>
+      <li><code>unit_mm</code> — Scale × 1/1000 (bao gồm radius CIRCLE)</li>
+      <li><code>unit_km</code> — Scale × 1000</li>
+      <li><code>layer_map</code> — Rename layer theo dict:
+        <ul style="margin-top:4px;">
+          <li>đèn / den / pole / cột → <code>LIGHTING_POLE</code></li>
+          <li>cáp / cable / dây → <code>LIGHTING_CABLE</code></li>
+          <li>tủ / cabinet → <code>LIGHTING_CABINET</code></li>
+          <li>text / nhãn / label → <code>LIGHTING_TEXT</code></li>
+        </ul>
+      </li>
+    </ul>
+
+    <h3>UI</h3>
+    <p>Modal <strong>🔍 Kiểm tra bản vẽ DXF</strong> hiện sau parse — 3 button:</p>
+    <ul>
+      <li><strong>🔧 Sửa tất cả tự động</strong> — apply mọi fix có sẵn</li>
+      <li><strong>🔧 Áp dụng có chọn lọc</strong> — checkbox từng warning, chọn cái nào apply</li>
+      <li><strong>Bỏ qua &amp; Upload</strong> — kệ warnings, upload như cũ</li>
+    </ul>
+    <p>Sau khi apply → app re-validate. Nếu hết warnings → auto-close + upload. Nếu còn → modal refresh cho user quyết định tiếp.</p>
+
+    <div class="note note-success">
+      <span class="note-icon">📝</span>
+      <div>Mọi fix được log vào sheet <code>LichSu</code> với action <code>dxf_fix</code> và danh sách fixKey — audit trail đầy đủ.</div>
     </div>
   </section>
 

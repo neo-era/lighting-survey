@@ -1015,6 +1015,11 @@ function doPost(e) {
     if (data.action === 'reset_password')   return handleResetPassword(data);
     if (data.action === 'delete_user')      return handleDeleteUser(data);
 
+    // P47: Preset library offset local grid (list = mọi user, save/delete = admin)
+    if (data.action === 'list_presets')     return handleListPresets(data);
+    if (data.action === 'save_preset')      return handleSavePreset(data);
+    if (data.action === 'delete_preset')    return handleDeletePreset(data);
+
     return jsonResponse({ status: 'error', message: 'action không hợp lệ: ' + data.action });
   } catch (err) {
     return jsonResponse({ status: 'error', message: err.message });
@@ -1044,6 +1049,158 @@ function handleBatchImport(sheetName, rows, clearFirst) {
   }
 
   return jsonResponse({ status: 'ok', count: rows.length, sheet: sheetName });
+}
+
+// ── P47: PRESET LIBRARY OFFSET LOCAL GRID (shared qua sheet OffsetPresets) ──
+
+// Header + get-or-create sheet
+function _getOrCreatePresetSheet() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('OffsetPresets');
+  if (!sheet) {
+    sheet = ss.insertSheet('OffsetPresets');
+    sheet.getRange(1, 1, 1, 10).setValues([[
+      'id', 'name', 'region', 'dE', 'dN', 'cm', 'k0', 'verify', 'createdBy', 'createdAt'
+    ]]);
+    sheet.setFrozenRows(1);
+    // Seed default 2 presets
+    var now = new Date().toISOString();
+    sheet.appendRow(['vn2000_std', '🌍 VN2000 chuẩn quốc gia', 'Toàn quốc', 0, 0, 105.75, 0.9999, 'Không offset — báo cáo nhà nước', 'system', now]);
+    sheet.appendRow(['tham_luong', '📍 Tham Lương', 'Bình Tân, TPHCM', -391.75, 223.86, 105.75, 0.9999, '10 điểm C1.01-C1.10 sai lệch 0.000m', 'system', now]);
+  }
+  return sheet;
+}
+
+// GET list — không yêu cầu admin (mọi user cần đọc)
+function handleListPresets(data) {
+  try {
+    var sheet = _getOrCreatePresetSheet();
+    var lastRow = sheet.getLastRow();
+    if (lastRow < 2) return jsonResponse({ status: 'ok', presets: [] });
+    var rows = sheet.getRange(2, 1, lastRow - 1, 10).getValues();
+    var presets = rows.map(function(r) {
+      return {
+        id: String(r[0] || ''),
+        name: String(r[1] || ''),
+        region: String(r[2] || ''),
+        dE: Number(r[3]) || 0,
+        dN: Number(r[4]) || 0,
+        cm: Number(r[5]) || 105.75,
+        k0: Number(r[6]) || 0.9999,
+        verify: String(r[7] || ''),
+        createdBy: String(r[8] || ''),
+        createdAt: String(r[9] || '')
+      };
+    }).filter(function(p) { return p.id; });
+    return jsonResponse({ status: 'ok', presets: presets });
+  } catch (err) {
+    return jsonResponse({ status: 'error', message: err.message });
+  }
+}
+
+// UPSERT theo id — chỉ admin
+function handleSavePreset(data) {
+  var auth = _requireAdmin(data);
+  if (!auth.ok) return jsonResponse({ status: 'error', message: auth.error });
+  try {
+    var p = data.preset || {};
+    if (!p.id || !p.name) return jsonResponse({ status: 'error', message: 'Thiếu id hoặc name' });
+    var sheet = _getOrCreatePresetSheet();
+    var lastRow = sheet.getLastRow();
+    var rowNum = -1;
+    if (lastRow >= 2) {
+      var ids = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
+      for (var i = 0; i < ids.length; i++) {
+        if (String(ids[i][0]) === String(p.id)) { rowNum = i + 2; break; }
+      }
+    }
+    var now = new Date().toISOString();
+    var values = [
+      String(p.id),
+      String(p.name || ''),
+      String(p.region || ''),
+      Number(p.dE) || 0,
+      Number(p.dN) || 0,
+      Number(p.cm) || 105.75,
+      Number(p.k0) || 0.9999,
+      String(p.verify || ''),
+      String(p.createdBy || auth.adminUser),
+      p.createdAt || now
+    ];
+    if (rowNum > 0) {
+      sheet.getRange(rowNum, 1, 1, 10).setValues([values]);
+    } else {
+      sheet.appendRow(values);
+    }
+    // Log
+    _logToHistory({
+      loaiThaoTac: rowNum > 0 ? 'preset_update' : 'preset_create',
+      id: p.id,
+      tenTru: p.name,
+      nguoiThucHien: auth.adminUser,
+      chiTiet: JSON.stringify({ dE: p.dE, dN: p.dN, region: p.region })
+    });
+    return jsonResponse({ status: 'ok', preset: values });
+  } catch (err) {
+    return jsonResponse({ status: 'error', message: err.message });
+  }
+}
+
+// DELETE theo id — chỉ admin. Không cho xóa seed default.
+function handleDeletePreset(data) {
+  var auth = _requireAdmin(data);
+  if (!auth.ok) return jsonResponse({ status: 'error', message: auth.error });
+  try {
+    var id = String(data.id || '');
+    if (!id) return jsonResponse({ status: 'error', message: 'Thiếu id' });
+    if (id === 'vn2000_std' || id === 'tham_luong') {
+      return jsonResponse({ status: 'error', message: 'Không cho xóa preset mặc định hệ thống' });
+    }
+    var sheet = _getOrCreatePresetSheet();
+    var lastRow = sheet.getLastRow();
+    if (lastRow < 2) return jsonResponse({ status: 'error', message: 'Không có preset' });
+    var ids = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
+    for (var i = 0; i < ids.length; i++) {
+      if (String(ids[i][0]) === id) {
+        var name = String(sheet.getRange(i + 2, 2).getValue() || '');
+        sheet.deleteRow(i + 2);
+        _logToHistory({
+          loaiThaoTac: 'preset_delete',
+          id: id,
+          tenTru: name,
+          nguoiThucHien: auth.adminUser,
+          chiTiet: ''
+        });
+        return jsonResponse({ status: 'ok', id: id });
+      }
+    }
+    return jsonResponse({ status: 'error', message: 'Không tìm thấy preset id=' + id });
+  } catch (err) {
+    return jsonResponse({ status: 'error', message: err.message });
+  }
+}
+
+// Helper log — tránh dependency lẫn nhau với handleLogAction (không dùng jsonResponse)
+function _logToHistory(entry) {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var sheet = ss.getSheetByName('LichSu');
+    if (!sheet) {
+      sheet = ss.insertSheet('LichSu');
+      sheet.getRange(1, 1, 1, 6).setValues([[
+        'Thời gian', 'Người thực hiện', 'Thao tác', 'ID đối tượng', 'Tên trụ', 'Chi tiết'
+      ]]);
+      sheet.setFrozenRows(1);
+    }
+    sheet.appendRow([
+      new Date().toISOString(),
+      entry.nguoiThucHien || '',
+      entry.loaiThaoTac || '',
+      entry.id || '',
+      entry.tenTru || '',
+      entry.chiTiet || ''
+    ]);
+  } catch (_) { /* silent */ }
 }
 
 // ── LOG LỊCH SỬ THAO TÁC ──────────────────────────────────────────────────
