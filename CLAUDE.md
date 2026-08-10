@@ -3087,6 +3087,47 @@ const TITLE_TEMPLATES = {
 
 **Custom template upload** (Phase C): user upload .dxf → app parse ATTDEF → hiện form dynamic → save vào `localStorage.cad_title_templates` với id/label/dxfContent base64/fields.
 
+**Template `dienluc`** (`⚡ Tư vấn điện lực`) — strip đáy đơn giản, cùng renderer `_drawKnop12TitleStrip`.
+
+### Template `knop12` — KNỞ P12 Trần Thiện Chánh (chuẩn TP.HCM)
+
+**Trigger**: `templateId === 'knop12'` → `_drawTitleBlockKnop12()` render inline (không load .dxf file).
+
+**Hàm**: `_drawTitleBlockKnop12(push, escape, wrap, md, tbX, tbY, sheetIdx, sheetTotal, tbWOverride)` — index.html line ~9763.
+
+**Layout khung tên** (baseW=320m @ 1:1000, tbH=55m):
+
+```
+colBase = [0, 70, 88, 158, 196, 289, 320]  → 6 cột
+ C0(TT QLGT,70m) | C1(logo,18m) | C2(CTCP,70m) | C3(NL,38m) | C4(BẢN VẼ,93m) | C5(SHBV,31m)
+ Tên TT QLGT     | ○ logo       | Tên CTCP     | NGƯỜI LẬP  | "BẢN VẼ..."     | Soát xét
+────────────────────────────────────────────────────────────────────────── r12 = tbY+27 (full-width)
+ Chuyên viên...  |              | Chiếu sáng.. | (nhãn)     | BẢN VẼ: [tên]   | Bản vẽ số ──── rShbv=tbY+20
+                 |              |              |            | Tỷ lệ: 1/1000   | Ngày:
+────────────────────────────────────────────────────────────────────────── r23 = tbY+13 (full-width)
+ [NV TT QLGT]   |              | [NV CTCP]    | [Người lập]|                  |
+──────────────────────────────────────────────────────────────────────────────────── y1 = tbY+55
+```
+
+**Rows**: `r12 = tbY+27` (full-width: tên tổ chức ↑ / nhãn ↓), `r23 = tbY+13` (full-width: nhãn ↑ / tên ↓), `rShbv = tbY+20` (SHBV-only: chia "Soát xét" / "Bản vẽ số").
+
+**Text center-justify**: DXF group `72=1` + alignment point `11/21` tại trung tâm cột (thay vì manual offset).
+
+**Fields** trong `TITLE_TEMPLATES.knop12`:
+```
+TT_QLGT_NAME, CV_PHU_TRACH, NV_TT_QLGT   → C0
+CTCP_NAME, CS_KHU_VUC, NV_CTCP           → C2
+NGUOI_LAP                                 → C3
+TEN_BAN_VE, DIA_CHI, TI_LE, SHBV_PATTERN, NGAY → C4+C5
+```
+
+**Title strip** — `_drawKnop12TitleStrip()` vẽ thêm 25m chiều cao trên vùng marker (line ~9872):
+- Separator ngang
+- Dòng 1 (sz=7m): "BẢN VẼ SƠ ĐỒ TUYẾN TRẠM ĐÈN HỆ THỐNG CHIẾU SÁNG ĐÔ THỊ"
+- Dòng 2 (sz=4.5m): "TỦ ĐIỀU KHIỂN - [TEN_BAN_VE]    TL: 1/[scale]"
+
+**Frame expansion**: `bounds.maxY += 25` trước khi render để frame ôm đủ title strip.
+
 ### 21.5 Generator function pipeline
 
 `_generateCadDrawing(opts)` — opts:
