@@ -1133,8 +1133,11 @@
                 <div id="cgSectionFormat" style="margin-bottom:14px;">
                     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">
                         <div>
-                            <label style="display:block;font-size:11px;font-weight:700;color:#334155;margin-bottom:3px;">Khổ giấy</label>
-                            <input type="text" value="A3 landscape" disabled style="width:100%;padding:6px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;background:#f1f5f9;color:#64748b;">
+                            <label style="display:block;font-size:11px;font-weight:700;color:#334155;margin-bottom:3px;" title="Chế độ khung ngoài (A3 landscape)">Khung A3</label>
+                            <select id="cgFrameMode" style="width:100%;padding:6px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;" title="A3 chuẩn: khung LUÔN = 420×297m (tỉ lệ 1:1000 chính xác) — markers dư sẽ auto split N tờ. Auto-fit: khung co giãn theo markers.">
+                                <option value="auto-fit" selected>Auto-fit markers</option>
+                                <option value="a3-standard">A3 chuẩn 1:1000</option>
+                            </select>
                         </div>
                         <div>
                             <label style="display:block;font-size:11px;font-weight:700;color:#334155;margin-bottom:3px;">Tỉ lệ</label>
@@ -8808,6 +8811,45 @@
                 push('1', `${dist}m`);
             }
 
+            // P65+P66: Fetch + draw OSM basemap (roads/buildings/water/admin) — nếu user bật
+            if (opts.osmOptions && typeof _fetchOsmBasemap === 'function' && typeof _drawOsmBasemapInDxf === 'function') {
+                try {
+                    // Compute bbox lat/lon từ rows (trực tiếp, không convert ngược)
+                    let minLat = Infinity, maxLat = -Infinity, minLon = Infinity, maxLon = -Infinity;
+                    for (const r of rows) {
+                        const lat = parseCoord(r[2]), lon = parseCoord(r[3]);
+                        if (!isFinite(lat) || !isFinite(lon)) continue;
+                        if (lat < minLat) minLat = lat;
+                        if (lat > maxLat) maxLat = lat;
+                        if (lon < minLon) minLon = lon;
+                        if (lon > maxLon) maxLon = lon;
+                    }
+                    if (isFinite(minLat)) {
+                        // Padding 100m ~ 0.001 độ (đủ để nền không "cụt" ngay biên marker)
+                        const pad = 0.001;
+                        const bbox = {
+                            minLat: minLat - pad, maxLat: maxLat + pad,
+                            minLon: minLon - pad, maxLon: maxLon + pad
+                        };
+                        const osmData = await _fetchOsmBasemap(bbox, opts.osmOptions);
+                        // Trim OSM tại bounds markers + padding 30m → KHÔNG scale bản vẽ
+                        const CLIP_PAD = 30;
+                        const clipBounds = {
+                            minX: bounds.minX - CLIP_PAD, minY: bounds.minY - CLIP_PAD,
+                            maxX: bounds.maxX + CLIP_PAD, maxY: bounds.maxY + CLIP_PAD
+                        };
+                        const stats = _drawOsmBasemapInDxf(push, osmData, cm, outDE, outDN, clipBounds);
+                        console.log('[CAD Gen] OSM basemap drawn:', stats.entityCount, 'entities, skipped:', stats.skipped);
+                    }
+                } catch (err) {
+                    // Không throw — OSM fail không được block export
+                    console.warn('[CAD Gen] OSM basemap skip:', err.message);
+                    if (typeof displayError === 'function') {
+                        displayError('⚠ Nền OSM lỗi (' + err.message + ') — bản vẽ vẫn xuất bình thường không có nền.');
+                    }
+                }
+            }
+
             // Snapshot bounds markers TRƯỚC khi expand bằng title block/polish
             // → dùng để đặt legend + north arrow trong khu vực markers
             const mapBounds = { ...bounds };
@@ -8932,24 +8974,41 @@
                     bounds.maxX = Math.max(bounds.maxX, mapBounds.minX + 85);   // legend width 80m + 5m padding
                 }
 
-                // P59: Force aspect ratio A3 landscape (420/297 ≈ 1.414) — auto-pad ngang nếu bounds portrait
+                // Force aspect ratio A3 landscape (420/297 ≈ 1.414) — auto-pad ngang nếu bounds portrait
                 // Ngăn bản vẽ hiển thị portrait khi cluster hẹp / title block cao.
                 const A3_RATIO = 420 / 297;  // landscape
                 const bW = bounds.maxX - bounds.minX;
                 const bH = bounds.maxY - bounds.minY;
-                const currentRatio = bW / bH;
-                if (currentRatio < A3_RATIO) {
-                    // Cần rộng ngang thêm để đạt ratio A3
-                    const targetW = bH * A3_RATIO;
-                    const padH = (targetW - bW) / 2;
-                    bounds.minX -= padH;
-                    bounds.maxX += padH;
-                } else if (currentRatio > A3_RATIO * 1.2) {
-                    // Cần cao thêm nếu quá ngang (hiếm — chỉ khi tuyến chạy dài theo trục X)
-                    const targetH = bW / A3_RATIO;
-                    const padV = (targetH - bH) / 2;
-                    bounds.minY -= padV;
-                    bounds.maxY += padV;
+
+                if (opts.frameMode === 'a3-standard') {
+                    // A3 chuẩn 1:1000 — khung LUÔN = paperMmW × scale/1000 (mét thực), centered around markers
+                    const paperMmW = 420, paperMmH = 297;
+                    const targetW = paperMmW * scale / 1000;
+                    const targetH = paperMmH * scale / 1000;
+                    const cx = (bounds.minX + bounds.maxX) / 2;
+                    const cy = (bounds.minY + bounds.maxY) / 2;
+                    // Warn nếu markers vượt frame (user có thể muốn split N tờ)
+                    if (bW > targetW || bH > targetH) {
+                        console.warn(`[CAD Gen] Markers ${bW.toFixed(0)}×${bH.toFixed(0)}m vượt khung A3 chuẩn ${targetW}×${targetH}m — cân nhắc bấm "Chia tờ" để split.`);
+                    }
+                    bounds.minX = cx - targetW / 2;
+                    bounds.maxX = cx + targetW / 2;
+                    bounds.minY = cy - targetH / 2;
+                    bounds.maxY = cy + targetH / 2;
+                } else {
+                    // Auto-fit: chỉ ép aspect ratio, không ép kích thước
+                    const currentRatio = bW / bH;
+                    if (currentRatio < A3_RATIO) {
+                        const targetW = bH * A3_RATIO;
+                        const padH = (targetW - bW) / 2;
+                        bounds.minX -= padH;
+                        bounds.maxX += padH;
+                    } else if (currentRatio > A3_RATIO * 1.2) {
+                        const targetH = bW / A3_RATIO;
+                        const padV = (targetH - bH) / 2;
+                        bounds.minY -= padV;
+                        bounds.maxY += padV;
+                    }
                 }
 
                 // === 1. FRAME TCVN 7285 (outer + inner) — vẽ SAU khi bounds đã expand ===
@@ -10217,7 +10276,9 @@
                 cm: parseFloat(document.getElementById('cgMeridian').value) || 105.75,
                 excludeOutliers: cbOut ? cbOut.checked : false,
                 stamps: stampsMeta,  // null nếu tắt → generator skip stamps
-                drawingType: drawingType   // P60: 'site-plan' | 'single-line' | 'overview'
+                drawingType: drawingType,  // P60: 'site-plan' | 'single-line' | 'overview'
+                osmOptions: (typeof _cgCollectOsmOpts === 'function') ? _cgCollectOsmOpts() : null,  // P65+P66: null nếu tắt
+                frameMode: (document.getElementById('cgFrameMode') || {}).value || 'auto-fit'   // 'auto-fit' | 'a3-standard'
             };
 
             // P60/P61/P62: Dispatch generator theo loại bản vẽ
@@ -13550,9 +13611,29 @@
         // Layers: OSM_ROAD_MAJOR (weight 1.5) / OSM_ROAD_MINOR (0.5) /
         //         OSM_BUILDING / OSM_WATER / ADMIN_BOUNDARY
         // ─────────────────────────────────────────────────────────────
-        function _drawOsmBasemapInDxf(push, osmData, cm, outDE, outDN) {
+        function _drawOsmBasemapInDxf(push, osmData, cm, outDE, outDN, clipBounds) {
             if (!osmData) return { entityCount: 0 };
-            let entityCount = 0;
+            let entityCount = 0, skipped = 0;
+            const hasClip = clipBounds && isFinite(clipBounds.minX) && isFinite(clipBounds.maxX);
+            // Liang-Barsky line clip vào AABB clipBounds. Return {x1,y1,x2,y2} đã clip hoặc null.
+            const clipSeg = (x1, y1, x2, y2) => {
+                if (!hasClip) return { x1, y1, x2, y2 };
+                let t0 = 0, t1 = 1;
+                const dx = x2 - x1, dy = y2 - y1;
+                const p = [-dx, dx, -dy, dy];
+                const q = [x1 - clipBounds.minX, clipBounds.maxX - x1,
+                           y1 - clipBounds.minY, clipBounds.maxY - y1];
+                for (let i = 0; i < 4; i++) {
+                    if (p[i] === 0) { if (q[i] < 0) return null; }
+                    else {
+                        const t = q[i] / p[i];
+                        if (p[i] < 0) { if (t > t1) return null; if (t > t0) t0 = t; }
+                        else          { if (t < t0) return null; if (t < t1) t1 = t; }
+                    }
+                }
+                return { x1: x1 + t0 * dx, y1: y1 + t0 * dy,
+                         x2: x1 + t1 * dx, y2: y1 + t1 * dy };
+            };
             // Convert GeoJSON [lon, lat] → VN2000 + apply offset
             const convert = (coords) => coords.map(([lon, lat]) => {
                 const vn = convertLatLonToVn2000(lat, lon, cm);
@@ -13560,9 +13641,11 @@
             });
             const drawPolyline = (pts, layer) => {
                 for (let i = 1; i < pts.length; i++) {
+                    const s = clipSeg(pts[i-1].x, pts[i-1].y, pts[i].x, pts[i].y);
+                    if (!s) { skipped++; continue; }
                     push('0', 'LINE', '8', layer,
-                        '10', pts[i-1].x.toFixed(4), '20', pts[i-1].y.toFixed(4), '30', '0',
-                        '11', pts[i].x.toFixed(4), '21', pts[i].y.toFixed(4), '31', '0');
+                        '10', s.x1.toFixed(4), '20', s.y1.toFixed(4), '30', '0',
+                        '11', s.x2.toFixed(4), '21', s.y2.toFixed(4), '31', '0');
                     entityCount++;
                 }
             };
@@ -13585,19 +13668,23 @@
             (osmData.admin || []).forEach(w => {
                 const pts = convert(w.coords);
                 drawPolyline(pts, 'ADMIN_BOUNDARY');
-                // Label at centroid
+                // Label at centroid — chỉ vẽ nếu centroid trong clipBounds
                 if (pts.length > 0 && w.tags.name) {
                     let cx = 0, cy = 0;
                     pts.forEach(p => { cx += p.x; cy += p.y; });
                     cx /= pts.length; cy /= pts.length;
-                    push('0', 'TEXT', '8', 'ADMIN_BOUNDARY');
-                    push('10', cx.toFixed(4), '20', cy.toFixed(4), '30', '0');
-                    push('40', '4.0');
-                    push('1', _dxfEscape(w.tags.name));
-                    entityCount++;
+                    const inClip = !hasClip || (cx >= clipBounds.minX && cx <= clipBounds.maxX
+                                             && cy >= clipBounds.minY && cy <= clipBounds.maxY);
+                    if (inClip) {
+                        push('0', 'TEXT', '8', 'ADMIN_BOUNDARY');
+                        push('10', cx.toFixed(4), '20', cy.toFixed(4), '30', '0');
+                        push('40', '4.0');
+                        push('1', _dxfEscape(w.tags.name));
+                        entityCount++;
+                    }
                 }
             });
-            return { entityCount };
+            return { entityCount, skipped };
         }
         window._drawOsmBasemapInDxf = _drawOsmBasemapInDxf;
 
