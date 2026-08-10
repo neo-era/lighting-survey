@@ -70,6 +70,11 @@ const KHAOSAT_CSV_URL = '...';   // URL publish CSV của Google Sheet (DanhSach
 | [22]  | Loại cáp           | loaiCap         | `'noi'` (default) hoặc `'ngam'` |
 | [23]  | Độ chính xác (m)   | accuracy        | Raw `pos.coords.accuracy` (vd `0.018`) |
 | [24]  | Chế độ GPS         | gpsMode         | `'phone'` hoặc `'rtk'` |
+| [25]  | Label offset       | labelOffset     | `"dlat,dlon"` — offset nhãn tên trụ so với vị trí trụ (drag label mode) |
+| [26]  | Phase electric     | phase           | **P57** `'A'` / `'B'` / `'C'` — cân bằng 3 pha cho sơ đồ nguyên lý |
+| [27]  | Chiều cao trụ (m)  | heightM         | **P57** integer 6/8/12 — dùng cho BOM + spec bản vẽ |
+| [28]  | Cáp specification  | cableSpec       | **P57** `'CXV/DSTA 4X25MM²-0,6/1kV'` (preset hoặc custom) |
+| [29]  | Trạng thái cải tạo | trangThai       | **P59+** `''`/`'giu'`/`'thu'`/`'thu_can'`/`'thu_udc'`/`'thu_can_udc'`/`'moi_led'`/`'moi_led_thay'`/`'thao_lap'` |
 
 **VN2000**: Tọa độ phẳng Gauss-Krüger, múi 6°, ellipsoid GRS80 (hàm `convertLatLonToVn2000(lat,lon)` → `{x, y, zone}`).
 Tự động cập nhật tại 2 điểm: `saveMarkerPopup()` (thêm/sửa marker) và `updateMarkerCoordinatesInData()` (kéo marker).
@@ -3769,3 +3774,132 @@ Day 6-7: S1.3 Debounce + DevTools     → fix top 3 bottleneck
 - Docker containerize — không cần cho static hosting
 - Server-side rendering — không cần cho PWA client-side
 - GraphQL — Supabase REST đủ dùng
+
+---
+
+# 🏛 Tính năng 27 — Hồ sơ thiết kế nhà nước (Full Automation)
+
+Roadmap tự động hóa hồ sơ chiếu sáng đô thị chuẩn Sở Xây dựng — mục tiêu app auto-gen full hồ sơ có thể nộp thẩm định.
+
+## Context & tham chiếu
+
+- **Reference PDF**: `II.3.8 BAN VE CHIEU SANG DEN TIN HIEU GIAO THONG.pdf` (13 trang, Sở XD TP.HCM duyệt 2022, gói thầu chiếu sáng cầu Bà Hom → cống Hồng Kỳ, L=3.570M)
+- **Đã phân tích**: 3 loại bản vẽ + 7 element quan trọng chưa có trong app
+- **Prompts**: P57-P70 trong `prompts.md` (14 prompts, 15 tuần dev)
+
+## App hiện tại vs hồ sơ mẫu
+
+| Element | App | Mẫu | Phase fix |
+|---|:---:|:---:|:---:|
+| Bản vẽ mặt bằng bố trí | ✅ | ✅ | Đã có (T21) |
+| Khung tên đầy đủ TCVN 7285 | ⚠ | ✅ | Phase 1 (P59) |
+| 4 ô con dấu góc trên | ❌ | ✅ | Phase 1 (P58) |
+| Con dấu tròn đỏ + chữ ký scan | ❌ | ✅ | Phase 4 (P63-64) |
+| Bảng revision | ❌ | ✅ | Phase 1 (P59) |
+| SHBV + số trang bản vẽ | ❌ | ✅ | Phase 1 (P59) |
+| Bình đồ tổng thể (Overview) | ❌ | ✅ | Phase 3 (P62) |
+| Sơ đồ nguyên lý (Single-line) | ❌ | ✅ | Phase 2 (P60-61) |
+| Basemap (đường + nhà từ OSM) | ❌ | ✅ | Phase 5 (P65-66) |
+| Ranh giới hành chính (phường/quận) | ❌ | ✅ | Phase 5 (P67) |
+| Bảng vật tư (BOM) | ⚠ (partial) | ✅ | Phase 6 (P68) |
+| Tính toán điện (ΔU, I, P) | ❌ | ✅ | Phase 6 (P69) |
+| Compile hồ sơ full PDF | ❌ | ✅ | Phase 7 (P70) |
+
+**Đánh giá**: app hiện đạt **~30% chuẩn hồ sơ nhà nước**. Sau 15 tuần dev → **100%**.
+
+## 8 Phase implementation
+
+### Phase 0 — Extend data model (1 tuần) — ✅ **DONE (2026-08-09)**
+- **P57 ✅**: Thêm 3 cột vào sheet + client + GAS action `assign_phases`:
+  - `phase` (A/B/C — cân bằng 3 pha, có nút 🔄 auto round-robin trong popup)
+  - `heightM` (chiều cao trụ 6/8/12m, datalist preset)
+  - `cableSpec` (spec cáp: dropdown 6 preset + "Khác..." custom)
+- ⚠ **Cần redeploy GAS New Version** để có 3 cột header + action `assign_phases`
+- Sheet SW cache: v79 → v80
+
+### Phase 1 — Khung tên nhà nước (2 tuần) — Phase 1a ✅ DONE (2026-08-09)
+- **P58 ✅**: 4 ô con dấu góc trên (Thẩm định / Phê duyệt / Thẩm tra / CĐT)
+  - `STAMPS_CONFIG` — 4 preset organizations + default văn bản label
+  - Modal section "🔴 Chèn 4 ô con dấu" (toggle checkbox → hiện 4 forms: org/vbSo/ngay/nguoiKy)
+  - Persist meta qua `localStorage.cad_stamps_meta` (auto-restore khi mở modal lần sau)
+  - `_drawApprovalStamps` inline trong `_generateCadDrawing`: center-aligned trên đỉnh bản vẽ, mỗi ô 60×40m @1:1000, LINE + TEXT (R12 compat)
+  - Frame TCVN auto-expand bounds để ôm cả stamps
+  - Cache: v80 → v81
+- **P59 ✅ DONE (2026-08-09)**: Khung tên phải TCVN 7285 (7 rows: tên DA + địa điểm + CĐT/TV + revision + gói thầu + 4 người ký + SHBV) 190×215m
+  - `TITLE_TEMPLATES.state` mở rộng 8 → **17 fields** (DU_AN multiline, DIA_DIEM, CHU_DAU_TU, TU_VAN_TK, GOI_THAU_CODE, GOI_THAU_DOAN, KM_BAT_DAU, KM_KET_THUC, L_TUYEN, HANG_MUC, NOI_DUNG_BV, CHU_NHIEM_TK, CHU_TRI_TK, THIET_KE, QLCL, SHBV_PATTERN, NGAY, TI_LE)
+  - Form metadata: hỗ trợ textarea cho `multiline: true` fields, auto L_TUYEN từ Km diff (`_parseKmDiff`), persist draft `localStorage.cad_metadata_draft_<templateId>`
+  - Revision history: `_loadRevisionHistory`/`_pushRevisionOnExport` — auto-track mỗi export thành công, max 4 entries (drop oldest)
+  - `_drawTitleBlockStateFull()` — vẽ 7 rows LINE + TEXT (R12 compat) với wrap text
+  - Dispatch: `opts.templateId === 'state'` → full 190×215m; khác → old simple 190×50m (backward compat consulting/contractor/custom)
+  - Multi-sheet: SHBV pattern `22-TLBC-03-07-XX` → replace `XX` với sheet index; số trang `05/10` ở góc dưới-phải row 5
+  - Cache: v84 → v85
+
+### Phase 2 — Sơ đồ nguyên lý (2 tuần) — HIGH VALUE
+- **P60**: Generator `_generateSingleLineDrawing()` — 6 hàng ngang tủ, phase A/B/C, cọc tiếp địa, cáp phân loại
+- **P61**: UI radio "Loại bản vẽ" (mặt bằng / nguyên lý / tổng thể) + integration
+
+### Phase 3 — Bình đồ tổng thể (1 tuần)
+- **P62**: `_generateOverviewDrawing()` — 1 tờ A3 overview, tủ + compass + tọa độ VN-2000 + ghi chú
+
+### Phase 4 — Dấu tròn + chữ ký scan ✅ DONE (2026-08-10)
+- **P63 ✅**: Modal `#stampManagerModal` — 7 upload slots (3 dấu + 4 chữ ký), auto-compress 500KB / 400×400px, save `localStorage.cad_stamps_images`
+- **P64 ✅**: Helper `_maybeZipWithStamps` — zip DXF + PNG folder + HUONG-DAN.txt. User Insert Image manually vào AutoCAD
+
+### Phase 5 — Basemap từ OSM ✅ DONE (2026-08-10)
+- **P65 ✅**: `_fetchOsmBasemap(bounds, opts)` — Overpass API + IndexedDB cache 30 ngày + rate limit 5s
+- **P66 ✅**: `_drawOsmBasemapInDxf(push, osmData, cm, dE, dN)` — 5 layers OSM_ROAD_MAJOR/MINOR/BUILDING/WATER/ADMIN
+- **P67 ✅**: Admin boundary rendered + label centroid (dùng OSM `admin_level=9/10` tags — không cần GeoJSON riêng)
+- UI: checkbox `#cgIncludeOsm` + 4 sub-checkbox (đường/nhà/sông/ranh)
+
+### Phase 6 — BOM + tính toán điện ✅ DONE (2026-08-10)
+- **P68 ✅**: `_aggregateBom(rows)` + `_exportBomExcel` — group by loại+công suất+chiều cao, xuất Excel với header dự án
+- **P69 ✅**: `_calcCabinetElectrical` — tính ΔU/I/P theo IEC 60364, cảnh báo >5% ΔU hoặc >95% capacity
+- UI: 2 nút `📊 BOM Excel` + `🔌 Tính điện` trong footer modal
+
+### Phase 7 — Compile hồ sơ full ✅ DONE (2026-08-10)
+- **P70 ✅**: `_onCgCompileFullDossier()` — zip 5 items + README:
+  1. Mặt bằng DXF | 2. Sơ đồ nguyên lý DXF | 3. Bình đồ tổng thể DXF
+  4. BOM Excel | 5. Tính điện Excel | 6. Folder dấu+chữ ký PNG | README.txt
+- Nút "🗎 Compile hồ sơ" (đỏ, bold) trong footer với progress hiển thị
+- MVP: dùng ZIP thay PDF merge (user tự Print PDF từ AutoCAD nếu cần)
+
+## Milestones
+
+| Milestone | Tuần | Deliverable | Verify được gì |
+|---|---|---|---|
+| **M1** — Data ready | 1 | 3 cột mới + auto phase | Nhập được phase trong popup |
+| **M2** — Khung tên | 2-3 | Bản vẽ có 4 dấu + khung TCVN | Nộp thử thẩm định visual OK |
+| **M3** — 3 loại BV ⭐ | 4-6 | Mặt bằng + Nguyên lý + Overview | **VERIFY VỚI KHÁCH HÀNG THỰC** |
+| **M4** — Dấu/chữ ký | 7-8 | Hồ sơ có dấu đỏ tròn | Nhìn hoàn thiện |
+| **M5** — Basemap | 9-12 | Bản vẽ có nền đường/nhà | Chuyên nghiệp như mẫu |
+| **M6** — BOM + Điện | 13-14 | Bảng vật tư + tính toán | Full data attachment |
+| **M7** — Compile | 15 | 1 file PDF hồ sơ ~15MB | **NỘP ĐƯỢC** |
+
+**Total**: 15 tuần (3-4 tháng) cho 100% automation.
+
+**Milestone 3 (Tuần 6)** là **checkpoint quan trọng** — verify với 1 khách hàng thực tế trước khi đầu tư tiếp Phase 4-7.
+
+## Dependencies giữa các Phase
+
+```
+P57 (data) ─┬─→ P58,P59 (khung tên)
+            ├─→ P60,P61 (nguyên lý — cần phase A/B/C từ P57)
+            ├─→ P62 (overview)
+            └─→ P68,P69 (BOM/điện — cần cableSpec, phase từ P57)
+
+P58,P59 (khung tên) ─→ P63,P64 (dấu/chữ ký chèn vào khung)
+
+P60,P61,P62 (3 loại BV) ─→ P70 (compile)
+
+P65 (OSM fetch) ─→ P66,P67 (render basemap + ranh)
+
+P68,P69 (BOM/điện) ─→ P70 (compile — attachment)
+```
+
+**Critical path**: P57 → P58,P59 → P60 → P70 (~9 tuần).
+
+## Không auto được (accept)
+
+- **Chi tiết cột đèn/tủ điện/tiếp địa** (mặt cắt kỹ thuật) — quá phức tạp, dùng template DXF từ kỹ sư CAD 1 lần rồi reference
+- **Ảnh hiện trạng phụ lục** — user upload manual sau
+- **Nội dung thuyết minh custom** — dùng Word template với placeholders, user fill thủ công cho phần đặc thù

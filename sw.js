@@ -1,10 +1,17 @@
-const CACHE = 'lighting-survey-v65';
+const CACHE = 'lighting-survey-v98';
 
-// Assets tĩnh pre-cache khi install (icon + ảnh mẫu + CAD blocks + title templates T21)
+// Assets tĩnh pre-cache khi install (icon + ảnh mẫu + CAD blocks + title templates T21 + core modules)
 const STATIC_ASSETS = [
   '/images/1.png','/images/2.png','/images/3.png','/images/4.png','/images/5.png',
   '/images/6.png','/images/7.png','/images/8.png','/images/9.png','/images/10.png',
   '/images/blank.png','/images/icon-192.png','/images/icon-512.png',
+  // Sprint 2 Modularize — 6 core modules extracted từ index.html
+  '/src/core/text.js',
+  '/src/core/utils.js',
+  '/src/core/vn2000.js',
+  '/src/core/dxf-utils.js',
+  '/src/core/cad-drawing.js',
+  '/src/core/mst.js',
   // T21 CAD Generator — 8 placeholder blocks (kỹ sư CAD sẽ thay file sau)
   '/assets/dxf-blocks/pole_stk_1l.dxf',
   '/assets/dxf-blocks/pole_stk_2l.dxf',

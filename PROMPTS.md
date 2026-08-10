@@ -7708,3 +7708,966 @@ Xem CLAUDE.md § "Roadmap 2026 Q3-Q4" — 5 phases, 10-12 tuần.
 
 **Tổng**: ~14 prompt cho 3 tháng dev thực tế.
 
+---
+
+# Session Tính năng 27 — Hồ sơ thiết kế nhà nước (P57-P70)
+
+**Context**: User cung cấp hồ sơ tham chiếu (Sở XD TP.HCM duyệt 2022, gói thầu chiếu sáng cầu Bà Hom → cống Hồng Kỳ, L=3.570M). Hồ sơ gồm 3 loại bản vẽ:
+1. Bình đồ tổng thể (Overview) — 1 tờ A3, 6 tủ CS-C1→CS-C6 với tọa độ VN-2000
+2. Mặt bằng bố trí (Site Plan) — 10 tờ A3, tỉ lệ 1:1000 (app đã có T21)
+3. Sơ đồ nguyên lý (Single-line) — 1 tờ A3, 6 hàng ngang tủ, phase A/B/C, cọc tiếp địa
+
+App hiện chỉ có #2 (đạt ~30% chuẩn hồ sơ). Cần bổ sung 8 phase để đạt 100% chuẩn nhà nước.
+
+Xem CLAUDE.md § "Tính năng 27 — Hồ sơ thiết kế nhà nước" cho chi tiết roadmap 10-14 tuần.
+
+---
+
+### PROMPT 57 — Extend data model: phase / height / cableSpec (Phase 0)
+
+```
+Dự án: PWA khảo sát chiếu sáng. Sheet DanhSachTru hiện có 25 cột (index 0-24).
+
+Nhiệm vụ: Thêm 3 cột mới để hỗ trợ tạo sơ đồ nguyên lý + BOM chi tiết.
+
+Cột thêm:
+| Idx | Tên cột            | Key payload    | Ví dụ                          |
+|-----|--------------------|--------------  |--------------------------------|
+| 26  | Phase electric     | phase          | 'A' / 'B' / 'C'                |
+| 27  | Chiều cao trụ (m)  | heightM        | 6 / 8 / 12                     |
+| 28  | Cáp specification  | cableSpec      | 'CXV/DSTA 4X25MM²-0,6/1kV'    |
+
+Yêu cầu:
+
+1. **GAS** (gas-khaosat.js):
+   - `HEADER` array thêm 3 tên cột
+   - `FIELD_MAP` object thêm 3 key
+   - `ensureHeader()` tự thêm cột nếu sheet chưa có
+   - Cần function util `assignPhasesForCabinet(sheetName, cabinetName)` — sort trụ theo tên trong tủ, round-robin gán A/B/C
+   - **Bắt buộc REDEPLOY New Version sau khi update**
+
+2. **Client** (index.html):
+   - Update `syncRowToGAS` payload thêm 3 field
+   - `openEditMarker` restore 3 field
+   - Popup marker form thêm 3 input:
+     - Phase: `<select><option>A</option><option>B</option><option>C</option></select>` với nút "🔄 Auto" (fetch GAS assignPhases)
+     - Chiều cao: number input với dropdown preset 6/8/12
+     - Cáp spec: dropdown 4 preset (CXV/DSTA 4X25MM², CXV/DSTA 4X10MM² + C25MM², CXV/DSTA 4X6MM², "Khác..." → custom input)
+   - Preset lưu trong `const CABLE_SPEC_PRESETS = [...]`
+
+3. **Auto phase assignment tại client**:
+   - Function `_autoAssignPhases(cabinetName)`:
+     - Filter loadedData theo row[7] = cabinetName
+     - Sort theo tên trụ (natural sort: C1.01, C1.02, ..., C1.10)
+     - Round-robin gán row[26] = ['A','B','C'][index % 3]
+     - Batch syncRowToGAS mỗi 10 trụ
+   - Trigger: nút "🔄 Auto assign phase" trong ☰ panel section "Xuất dữ liệu"
+
+4. Update CLAUDE.md § "Cấu trúc cột" → 28 cột.
+5. Bump sw.js.
+
+Verification:
+- Sheet có 3 cột mới
+- Popup marker cho phép nhập/sửa 3 field
+- Auto phase button chạy → toàn bộ tủ có phase cân đối (A: 33%, B: 33%, C: 33%)
+```
+
+---
+
+### PROMPT 58 — 4 ô con dấu trên đỉnh bản vẽ (Phase 1a)
+
+```
+Dự án: PWA khảo sát chiếu sáng. Đã có T21 CAD Generator xuất DXF mặt bằng.
+
+Nhiệm vụ: Thêm 4 ô con dấu ở đỉnh bản vẽ theo mẫu hồ sơ Sở XD TP.HCM.
+
+Layout: 4 ô chữ nhật xếp ngang phía trên bản vẽ, mỗi ô ~60×40mm giấy (60×40m thực địa @ 1:1000):
+
+┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐
+│  SỞ XÂY DỰNG│ │  BAN QUẢN LÝ│ │ CÔNG TY CP  │ │  CHỦ ĐẦU TƯ │
+│  TP.HCM     │ │  DỰ ÁN ĐTXD │ │ TV XD ...   │ │  (dấu tròn) │
+│  THẨM ĐỊNH  │ │  PHÊ DUYỆT  │ │  THẨM TRA   │ │  (chữ ký)   │
+├─────────────┤ ├─────────────┤ ├─────────────┤ ├─────────────┤
+│ Theo Văn bản│ │ Theo QĐ số  │ │ Theo VB số  │ │ (trống ký)  │
+│ 14573/SXD   │ │ 174/QĐ-...  │ │ 13/BCTT     │ │             │
+│ ngày ../../.│ │ Ngày ../..  │ │ Ngày ../..  │ │             │
+│ Ký tên:     │ │ Ký tên:     │ │ Ký duyệt:   │ │             │
+└─────────────┘ └─────────────┘ └─────────────┘ └─────────────┘
+
+Yêu cầu:
+
+1. **UI Modal CAD Generator** — thêm section "🔴 Con dấu phê duyệt":
+   - 4 accordion (Thẩm định / Phê duyệt / Thẩm tra / CĐT), mỗi cái có:
+     - Toggle checkbox "Hiển thị ô này"
+     - Input: Tên tổ chức (dòng 1-2)
+     - Input: Số văn bản
+     - Input: Ngày ban hành (date picker)
+     - Placeholder tên người ký
+   - Persist qua localStorage `cad_stamps_meta`
+
+2. **Generator function `_drawApprovalStamps(opts, bounds)`**:
+   - Chỉ vẽ nếu opts.stamps đủ data
+   - Position: `y = bounds.maxY + 30 + M` (30m trên bounds top, để có khoảng trống với frame)
+   - 4 ô cách nhau 5m, mỗi ô 60×40m
+   - Sử dụng LINE + TEXT primitives (R12 compat)
+   - Text style: uppercase bold cho header, normal cho body
+   - Font Times New Roman đã setup (STYLE STANDARD trong TABLES)
+
+3. **Expand bounds**:
+   - `bounds.maxY = stampsTopY + 40 + 10` (include stamps + padding)
+   - Frame outer sẽ tự ôm cả stamps
+
+4. **Position tự động cho multi-sheet**:
+   - Mỗi tờ đều có stamps ở đỉnh
+   - Data giống nhau (từ metadata)
+
+5. Bump sw.js.
+
+Verification:
+- Xuất DXF → mở AutoCAD 2021 → thấy 4 ô ở đỉnh với text đúng format
+- Các dấu tròn tạm thời để trống (Phase 4 sẽ upload image chèn)
+```
+
+---
+
+### PROMPT 59 — Khung tên phải mở rộng chuẩn TCVN 7285 (Phase 1b)
+
+```
+Dự án: T21 CAD Generator. Khung tên phải hiện chỉ 190×50m với 4 field cơ bản.
+
+Nhiệm vụ: Refactor khung tên chuẩn TCVN 7285 kích thước 190×220m, 5 cột.
+
+Layout khung tên (bottom-right corner của bản vẽ):
+
+┌────────────────────────────────────────────────────────────────────────┐
+│  TÊN DỰ ÁN (bold uppercase, wrap 3-4 dòng)                            │
+├────────────────────────────────────────────────────────────────────────┤
+│  ĐỊA ĐIỂM XÂY DỰNG (2-3 dòng)                                        │
+├──────────────────────────┬─────────────────────────────────────────────┤
+│  CHỦ ĐẦU TƯ (2 dòng)     │  TƯ VẤN THIẾT KẾ (2 dòng)                 │
+│  [chỗ trống chèn dấu]    │  [chỗ trống chèn dấu]                     │
+├──────────────────────────┴─────────────────────────────────────────────┤
+│  C.Sửa │ Ngày phát hành │ Mục đích phát hành │ Ký duyệt   (revision) │
+│  00    │ ../../....     │ Bản gốc            │            (row 1)    │
+│  01    │                │                    │            (row 2)    │
+│  02    │                │                    │            (row 3)    │
+│  03    │                │                    │            (row 4)    │
+├────────────────────────────────────────────────────────────────────────┤
+│  GÓI THẦU XL-03                                                        │
+│  ĐOẠN TỪ CẦU BÀ HOM ĐẾN CỐNG HỒNG KỲ                                  │
+│  (K6+300 - K9+870, L=3.570M)                                          │
+│  HẠNG MỤC: CHIẾU SÁNG                                                  │
+│  Nội dung bản vẽ: BÌNH ĐỒ BỐ TRÍ HỆ THỐNG CHIẾU SÁNG                 │
+│                                                    05/10               │
+├────────────────────────────────────────────────────────────────────────┤
+│  Chủ nhiệm thiết kế: [tên]           [chữ ký scan]                    │
+│  Chủ trì thiết kế:   [tên]           [chữ ký scan]                    │
+│  Thiết kế:           [tên]           [chữ ký scan]                    │
+│  Quản lý chất lượng: [tên]           [chữ ký scan]                    │
+├────────────────────────────────────────────────────────────────────────┤
+│  SHBV: 22-TLBC-03-07-11                                                │
+└────────────────────────────────────────────────────────────────────────┘
+
+Yêu cầu:
+
+1. **UI Modal metadata form** thêm fields:
+   - TÊN DỰ ÁN (multiline)
+   - ĐỊA ĐIỂM XÂY DỰNG (multiline)
+   - Gói thầu code (VD "XL-03")
+   - Đoạn từ / Đến (2 text)
+   - Km bắt đầu / Km kết thúc (VD "K6+300" / "K9+870")
+   - Chiều dài tuyến (auto tính từ Km diff, cho phép override)
+   - Hạng mục (default "CHIẾU SÁNG")
+   - Nội dung bản vẽ (auto theo loại bản vẽ đang xuất)
+   - SHBV pattern (VD "22-TLBC-03-07-XX" — XX auto từ sheet index)
+   - 4 người ký (tên + role)
+
+2. **Revision table (auto-history)**:
+   - Track mỗi lần export DXF vào localStorage `cad_export_history_<templateId>`
+   - Structure: `[{index, date, purpose, approvedBy}]`
+   - Row 00 = Bản gốc, tự tạo lần đầu
+   - Row 01+ = mỗi lần export sau, user optional điền "Mục đích phát hành"
+   - Max 4 rows hiển thị (bỏ oldest)
+
+3. **Refactor `_drawTitleBlock(opts, bounds)`**:
+   - Position: `bounds.maxX - 190, bounds.minY - 220`
+   - Grid 5 hàng: 30 (tên dự án) + 20 (địa điểm) + 25 (CĐT/TV split) + 40 (revision 5 rows) + 60 (gói thầu) + 25 (4 người ký) + 15 (SHBV) = 215m + margin
+   - Text style: 
+     - Header row: TCVN Times bold 3.5mm
+     - Body: 2.5mm
+     - Small (Km, SHBV): 2mm
+
+4. **Sheet index auto-format**:
+   - Multi-sheet: SHBV = pattern replace `XX` bằng `07`, `08`, ..., `07+sheetIndex`
+   - Số trang bản vẽ trong nội dung: `05/10` — 05=sheet.index, 10=sheet.total
+
+5. Bump sw.js. Update CLAUDE.md § T21.
+
+Verification:
+- DXF có khung tên đúng 5 cột structure
+- Multi-sheet: mỗi tờ có SHBV khác + số trang khác (05/10, 06/10, ...)
+- Revision table hiển thị đúng history
+```
+
+---
+
+### PROMPT 60 — Sơ đồ nguyên lý generator (Phase 2)
+
+```
+Dự án: T21 CAD Generator. Chỉ có mặt bằng. Cần thêm loại "Sơ đồ nguyên lý" (single-line electric diagram).
+
+Reference: hồ sơ Sở XD TP.HCM trang 21 (đã đọc PDF trước đó).
+
+Layout sơ đồ nguyên lý:
+
+CS.C1 → ⊥ → 🔵A → ──── → 🔵B → ──── → 🔵C → ──── → 🔵A → ... → [đến lưới hạ thế]
+         C1.01     C1.02     C1.03     C1.04
+
+CS.C2 → ⊥ → 🔵A → ──── → 🔵B → ──── → 🔵C → ... → [đến lưới hạ thế]
+         C2.01     C2.02     C2.03
+
+... (6 hàng cho 6 tủ)
+
+Legend:
+- 🔵 Trụ đèn cao 12M lắp bộ đèn LED 170W
+- 🟢 Trụ đèn cao 6M lắp 2 bộ đèn pha LED 60W
+- 🟡 Bộ đèn pha LED 40W chiếu sáng dạ cầu
+- ⊥ Cọc tiếp địa
+- ▬▬ Cáp CXV/DSTA 4X25MM²-0,6/1kV (trục chính)
+- ▬ ▬ Cáp CXV/DSTA 4X10MM²-0,6/1kV + C25MM² (nhánh)
+
+Yêu cầu:
+
+1. **Generator function `_generateSingleLineDrawing(opts)`**:
+   - Input opts: cùng như `_generateCadDrawing` (templateId, metadata, filters, cm, scale, ...)
+   - Filter rows theo filters (tủ / basename)
+   - Group by row[7] (tủ điều khiển): `Map<tuName, rows[]>`
+   - Sort rows trong mỗi tủ theo tên trụ (natural sort — dùng `Intl.Collator` với `numeric: true`)
+
+2. **Layout tọa độ VN-2000 giả (fictitious cho single-line — không dùng lat/lon thực)**:
+   - Origin: (0, 0)
+   - Mỗi tủ: `tuY = -rowIndex * 60m` (60m gap giữa các hàng)
+   - Mỗi trụ trong tủ: `poleX = colIndex * 15m` (15m gap ngang giữa các trụ)
+   - Nhãn CS.CN ở bên trái mỗi hàng (`x = -30m`)
+   - Nhãn "Đến lưới hạ thế" ở bên phải cuối hàng
+   - Cọc tiếp địa ở đầu hàng (giữa CS và trụ đầu)
+
+3. **Vẽ per marker**:
+   - **Trụ đèn** (loại 1-4): 
+     - Cột dọc: LINE (poleX, tuY) → (poleX, tuY + 8m)
+     - Đầu tròn: CIRCLE (poleX, tuY + 8m), r=1m
+     - Phase label (A/B/C từ row[26]): TEXT trên đỉnh (poleX-0.5, tuY + 10m), height 2.5m
+     - Nhãn tên trụ dưới (poleX-3, tuY - 3m), height 2m, text = row[1]
+   - **Tủ** (loại 5-6): hình chữ nhật 4×4m tại (poleX-2, tuY-2)
+   
+4. **Đường cáp giữa các trụ liền nhau**:
+   - LINE ngang giữa 2 trụ liền: (prevX, tuY + 4m) → (currX, tuY + 4m)
+   - Style tùy theo row[28] (cableSpec):
+     - Chứa "4X25MM²" → weight 3, LTYPE CONTINUOUS
+     - Chứa "4X10MM²" → weight 2, LTYPE DASHED
+
+5. **Cọc tiếp địa** (đầu mỗi hàng, giữa tủ và trụ đầu):
+   - Ký hiệu ⊥: 3 LINE (1 dọc + 2 ngang ngắn)
+   - Position: (tuX + 5m, tuY + 4m)
+
+6. **Legend box** (góc dưới cùng bản vẽ):
+   - Frame 4 LINE
+   - 8 hàng iterate qua các loại xuất hiện trong data
+   - Count per type từ rows
+
+7. **Khung tên bên phải** (reuse `_drawTitleBlock` từ P59):
+   - "Nội dung bản vẽ" = "SƠ ĐỒ NGUYÊN LÝ HỆ THỐNG CHIẾU SÁNG"
+   - SHBV format `22-TLBC-03-07-13` (số cuối = "13" cho single-line)
+
+8. **Ghi chú kỹ thuật dưới bảng legend**:
+   - "GHI CHÚ:" header
+   - Liệt kê 3-4 dòng note (config qua metadata)
+
+9. Bump sw.js. Test AutoCAD 2021.
+
+Verification:
+- Tạo sơ đồ nguyên lý cho 6 tủ (~200 trụ) → mở AutoCAD → thấy 6 hàng ngang gọn gàng
+- Phase A/B/C hiển thị đúng trên đỉnh mỗi trụ
+- Cáp chính (dày) vs nhánh (mỏng) phân biệt rõ
+```
+
+---
+
+### PROMPT 61 — UI Loại bản vẽ + integration Single-line (Phase 2b)
+
+```
+Dự án: T21 CAD Generator. Đã có `_generateSingleLineDrawing` (P60) và `_generateCadDrawing` (mặt bằng).
+
+Nhiệm vụ: UI cho user chọn loại bản vẽ + integrate PDF preview + export.
+
+Yêu cầu:
+
+1. **Modal CAD Generator** thêm section "📐 Loại bản vẽ" ở đầu:
+   - Radio group:
+     - ⚪ Mặt bằng bố trí (default)
+     - ⚪ Sơ đồ nguyên lý
+     - ⚪ Bình đồ tổng thể (Phase 3 — placeholder disabled)
+   - Onchange → update UI:
+     - Show/hide sections không phù hợp:
+       - "Sơ đồ nguyên lý" ẩn: chia tờ, output offset (không cần vì tọa độ giả)
+       - "Bình đồ tổng thể" ẩn: chia tờ
+     - Đổi Nội dung bản vẽ tự động trong metadata
+
+2. **Router function `_onCgExport(mode)` refactor**:
+   ```
+   const drawingType = document.querySelector('input[name="cgDrawingType"]:checked').value;
+   const generator = {
+     'site-plan':     _generateCadDrawing,       // mặt bằng (đã có)
+     'single-line':   _generateSingleLineDrawing, // P60
+     'overview':      _generateOverviewDrawing    // P62 (chưa có)
+   }[drawingType];
+   ```
+
+3. **PDF preview integration**:
+   - `_cgOpenPreview(opts)` — reuse infrastructure, chỉ đổi generator theo type
+   - Preview modal fullscreen với iframe embed PDF
+   - Nút "Xuất DXF" / "Xuất PDF" trực tiếp từ preview
+
+4. **Persistence**:
+   - `localStorage.cad_last_drawing_type` — nhớ loại vừa dùng
+
+5. **Auto SHBV numbering theo loại**:
+   - Mặt bằng: SHBV suffix `-07` + sheet index (07, 08, ..., 10)
+   - Sơ đồ nguyên lý: SHBV suffix `-13`
+   - Bình đồ tổng thể: SHBV suffix `-01`
+
+6. Bump sw.js. Update huongdan.html section "18. Xuất bản vẽ thiết kế CAD".
+
+Verification:
+- Chọn "Sơ đồ nguyên lý" → modal ẩn các option không liên quan
+- Bấm Preview → thấy iframe PDF single-line hiển thị đúng
+- Xuất DXF/PDF → file có metadata đúng loại
+```
+
+---
+
+### PROMPT 62 — Bình đồ tổng thể generator (Phase 3)
+
+```
+Dự án: T21 CAD Generator.
+
+Nhiệm vụ: Thêm loại bản vẽ "Bình đồ tổng thể" — 1 tờ A3 overview toàn dự án.
+
+Reference: hồ sơ Sở XD TP.HCM trang 9.
+
+Layout:
+- Zoom out tự động fit tất cả tủ trong 1 khung A3
+- Chỉ hiện tủ (chấm to có label CS.CN) + đường trục chính
+- KHÔNG hiện trụ chi tiết (tránh clutter khi zoom out toàn dự án)
+- Compass rose lớn ở góc (mũi tên N/E/S/W)
+- Text tọa độ VN-2000 tại tủ chính (VD "1191487.81 / 590448.58")
+- Ghi chú kỹ thuật bên dưới bản vẽ:
+  1. "TRONG PHẠM VI GÓI THẦU GỒM CÓ N TỦ ĐIỀU KHIỂN CHIẾU SÁNG: CS-C1, CS-C2, ..."
+  2. "TỌA ĐỘ TRONG BẢN VẼ THEO TỌA ĐỘ VN-2000"
+  3. "CÔNG SUẤT MỖI TỦ ĐIỀU KHIỂN CHIẾU SÁNG ≤ 10 KVA"
+
+Yêu cầu:
+
+1. **Function `_generateOverviewDrawing(opts)`**:
+   - Filter rows: chỉ giữ tủ (type 5, 6) từ loadedData
+   - Tính bounds VN-2000 từ tủ positions
+   - Auto compute scale để fit khung A3 landscape (~420m×297m thực địa)
+   - Scale gợi ý: 1:2000 hoặc 1:5000 (auto tùy bounds)
+
+2. **Vẽ per tủ**:
+   - Icon: hình vuông đen 5×5m + label CS.CN bên dưới
+   - Nếu có metadata "coord_visible": vẽ text tọa độ VN-2000 bên cạnh
+   - Vẽ đường viền ranh gói thầu (convex hull hoặc bounding box quanh cluster tủ)
+
+3. **Đường nối giữa các tủ**:
+   - Nếu tủ liền kề trong chuỗi (row[14] chỉ tủ khác) → vẽ LINE nối
+   - Mảnh, style dashed
+
+4. **Compass rose** (góc trên phải bản vẽ):
+   - Mũi tên 4 hướng: 4 tam giác từ center point
+   - Labels: N (up), E (right), S (down), W (left)
+   - Kích thước: 20×20m thực địa
+   - N nhấn mạnh (in đậm + tô đen)
+
+5. **Text ghi chú** (bên dưới bảng legend):
+   - "GHI CHÚ:" header + 3-4 dòng
+   - Cột 1 (số thứ tự) + cột 2 (nội dung)
+   - Config qua metadata (mảng ghichu[])
+
+6. **Khung tên**: 
+   - "Nội dung bản vẽ" = "BÌNH ĐỒ TỔNG THỂ HỆ THỐNG CHIẾU SÁNG"
+   - SHBV suffix `-01`
+
+7. Bump sw.js.
+
+Verification:
+- Xuất bình đồ tổng thể cho dự án 6 tủ → mở AutoCAD → thấy 6 chấm tủ + compass + ghi chú
+- Không có chi tiết trụ (tránh clutter)
+- Bounds nhỏ hơn 1 tờ A3 → không cần multi-sheet
+```
+
+---
+
+### PROMPT 63 — Modal quản lý con dấu + chữ ký scan (Phase 4a)
+
+```
+Dự án: T21 CAD Generator. Hồ sơ Sở XD TP.HCM cần dấu tròn đỏ + chữ ký scan.
+
+Nhiệm vụ: Modal upload/quản lý dấu và chữ ký, save vào localStorage (offline-first).
+
+UI:
+
+┌─ Quản lý con dấu & chữ ký ─────────────────────────────────┐
+│                                                              │
+│ 🔴 CON DẤU TỔ CHỨC                                          │
+│ ┌────────────┐ ┌────────────┐ ┌────────────┐              │
+│ │ CĐT        │ │ TV Thiết kế│ │ Thẩm định  │              │
+│ │ [preview]  │ │ [preview]  │ │ [ chưa có ]│              │
+│ │ [Xóa]      │ │ [Xóa]      │ │ [Upload]   │              │
+│ └────────────┘ └────────────┘ └────────────┘              │
+│                                                              │
+│ ✍ CHỮ KÝ CÁ NHÂN                                            │
+│ ┌────────────┐ ┌────────────┐ ┌────────────┐ ┌───────────┐│
+│ │ Chủ nhiệm  │ │ Chủ trì    │ │ Thiết kế   │ │ QL chất   ││
+│ │ [preview]  │ │ [preview]  │ │ [preview]  │ │  lượng    ││
+│ │ [Xóa]      │ │ [Xóa]      │ │ [Xóa]      │ │ [preview] ││
+│ └────────────┘ └────────────┘ └────────────┘ └───────────┘│
+│                                                              │
+│ [Lưu tất cả] [Đóng]                                         │
+└──────────────────────────────────────────────────────────────┘
+
+Yêu cầu:
+
+1. **Modal `#stampManagerModal`** với 7 upload slots:
+   - 3 dấu tổ chức: Chủ đầu tư / TV Thiết kế / Thẩm định
+   - 4 chữ ký cá nhân: Chủ nhiệm TK / Chủ trì TK / Thiết kế / QL chất lượng
+
+2. **Upload flow**:
+   - Input `<input type="file" accept=".png,.jpg,.jpeg">`
+   - Max size 500KB mỗi file (resize nếu lớn hơn dùng canvas)
+   - Convert sang PNG base64, save localStorage:
+     ```
+     localStorage.cad_stamps = {
+       cdt:         'data:image/png;base64,...',
+       tv:          'data:image/png;base64,...',
+       thamdinh:    null,
+       chunhiem_tk: 'data:...',
+       chutri_tk:   'data:...',
+       thietke:     'data:...',
+       qlcl:        'data:...'
+     }
+     ```
+
+3. **Preview**:
+   - Sau upload → hiện thumbnail 100×100px
+   - Nút "Xóa" xóa từ localStorage
+
+4. **Compress logic**:
+   - Nếu file > 500KB → dùng canvas resize xuống 400×400 max, JPG quality 80
+   - Nếu vẫn > 500KB → warn user
+
+5. **Trigger**: nút "🖋 Quản lý dấu & chữ ký" trong modal CAD Generator (footer)
+
+6. Bump sw.js.
+
+Verification:
+- Upload 3 dấu + 4 chữ ký → thấy preview
+- Reload page → dấu vẫn còn (localStorage persist)
+- Xóa 1 dấu → refresh → không còn
+```
+
+---
+
+### PROMPT 64 — Embed dấu/chữ ký vào DXF IMAGE entity (Phase 4b)
+
+```
+Dự án: T21 CAD Generator. Đã có localStorage.cad_stamps (P63) với 7 ảnh base64.
+
+Nhiệm vụ: Chèn ảnh dấu/chữ ký vào DXF khi export.
+
+Cách 1 (đơn giản): AutoCAD IMAGE entity
+- Cần OBJECTS + BLOCKS section + IMAGEDEF
+- Complex spec R2018
+
+Cách 2 (fallback): Convert PNG → vector traces (dùng thư viện potrace-like)
+
+Approach chọn: **Hybrid** — mặc định dùng IMAGE. Nếu AutoCAD không support (test error), fallback vector trace hoặc chỉ chèn placeholder text.
+
+Yêu cầu:
+
+1. **DXF IMAGE entity structure**:
+   ```
+   0 SECTION
+   2 OBJECTS
+   0 DICTIONARY
+   3 ACAD_IMAGE_DICT
+   0 IMAGEDEF
+   1 <image_path>     (path to external PNG file)
+   10 <width_px>
+   20 <height_px>
+   ...
+   0 ENDSEC
+   
+   0 SECTION
+   2 ENTITIES
+   0 IMAGE
+   8 LAYER_STAMPS
+   10 <x> 20 <y> 30 0    (insertion point VN2000)
+   11 <u_vec_x> 21 0 31 0  (u-vector = width scale)
+   12 0 22 <v_vec_y> 32 0  (v-vector = height scale)
+   340 <handle_imagedef>
+   ...
+   ```
+
+2. **Function `_embedStampInDxf(stampBase64, x, y, widthM, heightM, layer)`**:
+   - Extract PNG base64 → binary
+   - Save file `.dxf-stamps/stamp_<hash>.png` (co-located với DXF)
+   - Return `{imagedef, imageEntity}` — DXF text strings
+
+3. **Zip output**:
+   - Không thể save external PNG cạnh DXF nếu chỉ 1 file
+   - Nên: **luôn output ZIP** khi có stamps: `bản vẽ.zip` chứa `bản vẽ.dxf` + `.dxf-stamps/*.png`
+   - Nếu không có stamps → output DXF thuần
+
+4. **Fallback nếu AutoCAD không load được IMAGE**:
+   - Vẽ khung placeholder 4 LINE + text "[Dấu CĐT]" / "[Chữ ký chủ nhiệm]"
+   - User có thể manual chèn ảnh trong AutoCAD sau
+
+5. **Vị trí chèn**:
+   - Dấu Thẩm định: trong ô "Thẩm định" (P58) — center 25×25m
+   - Dấu Phê duyệt: trong ô "Phê duyệt" — center 25×25m
+   - Dấu Thẩm tra: trong ô "Thẩm tra" — center 25×25m
+   - Dấu CĐT: trong ô CĐT của khung tên (P59) — 20×20m
+   - Dấu TV: trong ô TV của khung tên — 20×20m
+   - 4 chữ ký: trong 4 ô ký của khung tên (P59) — 15×8m mỗi cái
+
+6. **Config**:
+   - Checkbox trong modal CAD Generator: "☑ Chèn dấu và chữ ký từ thư viện"
+   - Nếu tắt → vẽ placeholder text
+
+7. Bump sw.js. Test AutoCAD 2021 mở IMAGE OK.
+
+Verification:
+- Upload 3 dấu + 4 chữ ký (P63) → xuất DXF (checkbox ON) → nhận zip
+- Extract zip → mở .dxf trong AutoCAD → dấu tròn đỏ hiện đúng vị trí
+- Nếu AutoCAD báo lỗi IMAGE → fallback placeholder text
+```
+
+---
+
+### PROMPT 65 — Overpass API fetch OSM data (Phase 5a)
+
+```
+Dự án: PWA khảo sát chiếu sáng.
+
+Nhiệm vụ: Query OpenStreetMap qua Overpass API để lấy road/building outline làm basemap cho bản vẽ CAD.
+
+Endpoint: https://overpass-api.de/api/interpreter (free, rate limit 1 req/s)
+
+Query template (bounding box):
+```
+[out:json][timeout:30];
+(
+  way["highway"](bbox);           // roads
+  way["building"](bbox);          // buildings
+  way["waterway"](bbox);          // rivers/canals
+  way["boundary"="administrative"]["admin_level"="9"](bbox);  // phường
+);
+out geom;
+```
+
+Yêu cầu:
+
+1. **Function `_fetchOsmBasemap(bounds, options)`**:
+   - Input: `bounds = {minLat, minLon, maxLat, maxLon}` + options `{roads: true, buildings: true, water: false}`
+   - Build Overpass QL query theo options
+   - POST to Overpass API
+   - Parse response.elements → GeoJSON features
+   - Return `{roads, buildings, water, admin}` — mỗi cái array of features
+
+2. **IndexedDB cache**:
+   - Key: `osm_<bbox_hash>` (hash MD5 của bounds)
+   - TTL 30 ngày (OSM không đổi thường xuyên)
+   - Cache full response (~1-5MB) để offline sau
+
+3. **UI trong modal CAD Generator**:
+   - Section "🗺 Nền bản đồ (OSM)":
+     - Checkbox "☑ Đường phố", "☑ Nhà cửa", "☑ Sông ngòi", "☑ Ranh phường"
+     - Nút "🔄 Tải OSM" (chỉ hiện khi bounds đã compute)
+     - Status: "Đã tải: N tuyến đường, M nhà, X sông"
+
+4. **Rate limit**:
+   - Không spam Overpass — Toast warning nếu user click "Tải" nhiều lần trong 10s
+   - Retry với backoff nếu 429
+
+5. **Error handling**:
+   - Timeout 30s → error toast "OSM chậm, thử lại sau"
+   - Bounds quá lớn (>10km²) → warn + confirm
+
+6. Bump sw.js.
+
+Verification:
+- Chọn 1 tủ (bounds ~500m) → click Tải OSM → nhận ~200 roads + 500 buildings
+- Reload page → click Tải OSM lại → tức thì (cache hit)
+```
+
+---
+
+### PROMPT 66 — Render OSM basemap trong DXF (Phase 5b)
+
+```
+Dự án: T21 CAD Generator. Đã có OSM data từ P65 (roads + buildings + water + admin).
+
+Nhiệm vụ: Render OSM data vào DXF làm basemap layer, đè bên dưới trụ đèn + cáp.
+
+Yêu cầu:
+
+1. **Function `_drawOsmBasemapInDxf(osmData, opts)`**:
+   - Input: `osmData = {roads, buildings, water, admin}` + opts (cm, outputOffset)
+   - Convert mỗi feature: coordinates GeoJSON [lon, lat] → VN2000 → apply outputOffset
+   - Emit DXF entities theo layer:
+
+2. **Layers OSM**:
+   ```
+   OSM_ROAD_MAJOR    Color 8 (dark gray)   Weight 1.5   Highway primary/secondary
+   OSM_ROAD_MINOR    Color 9 (light gray)  Weight 0.5   Highway tertiary/residential
+   OSM_BUILDING      Color 253 (very light) Weight 0.3   Building outlines
+   OSM_WATER         Color 5 (blue)        Weight 1     Rivers/canals
+   OSM_ADMIN         Color 3 (green)       Weight 1     Dashed boundary line
+   ```
+
+3. **Filter theo bounds bản vẽ**:
+   - Chỉ vẽ feature có ít nhất 1 vertex trong bounds
+   - Clip vertices ngoài bounds (optional, giữ để simple)
+
+4. **Density optimization**:
+   - Nếu >5000 features → warn + auto simplify (Ramer-Douglas-Peucker tolerance 0.5m)
+   - Nếu >10000 → refuse + suggest zoom sát hơn
+
+5. **Building fill**:
+   - Building = polygon closed
+   - Không HATCH (không R12) → chỉ vẽ outline
+   - User có thể HATCH thủ công trong AutoCAD
+
+6. **Text label roads (optional)**:
+   - Nếu road có `tags.name` → vẽ TEXT dọc theo road tại midpoint
+   - Kích thước text nhỏ 1.5m (~1.5mm giấy)
+   - Chỉ vẽ nếu opts.showRoadNames = true
+
+7. **Integration vào `_generateCadDrawing`**:
+   - Nếu opts.osmBasemap → load cached OSM (P65) → call `_drawOsmBasemapInDxf`
+   - Draw OSM ĐẦU TIÊN → cáp/trụ đè lên
+
+8. Bump sw.js.
+
+Verification:
+- Xuất DXF có OSM basemap → mở AutoCAD → thấy nền đường/nhà mờ mờ bên dưới trụ
+- Tắt/bật layers OSM_ROAD_MINOR → thấy visual thay đổi rõ
+```
+
+---
+
+### PROMPT 67 — Ranh giới hành chính từ GeoJSON (Phase 5c)
+
+```
+Dự án: T21 CAD Generator.
+
+Nhiệm vụ: Add ranh giới hành chính (phường/xã, quận/huyện) vào bản vẽ CAD.
+
+Nguồn data:
+- **Option 1**: Overpass API `boundary=administrative admin_level=9/10` (đã có từ P65)
+- **Option 2**: Download GeoJSON từ VN gov open data → serve từ `data/vn-admin-boundaries.geojson`
+
+Approach: **Hybrid** — ưu tiên option 2 (chính xác hơn), fallback option 1.
+
+Yêu cầu:
+
+1. **Download file `data/vn-admin-boundaries.geojson`** (1 lần, ~50MB compressed):
+   - Nguồn: https://github.com/vietnam-opendata/vietnam-administrative-division hoặc tương đương
+   - Chứa: 63 tỉnh, 705 quận/huyện, 10,000+ phường/xã
+   - Format GeoJSON FeatureCollection với properties: {code, name, level: 1/2/3}
+
+2. **Load lazy khi cần**:
+   - `_loadVnAdminBoundaries()` — fetch từ `data/vn-admin-boundaries.geojson`, cache IndexedDB
+   - Return `{tinh, huyen, xa}` — 3 arrays
+
+3. **UI trong modal**:
+   - Section "🏛 Ranh giới hành chính":
+     - Checkbox: "☑ Ranh phường/xã", "☑ Ranh quận/huyện"
+     - Chỉ hiện nếu detect được phường/quận từ metadata bản vẽ
+   - Auto detect từ metadata `phuongXa` field
+
+4. **Function `_drawAdminBoundariesInDxf(opts)`**:
+   - Filter boundaries theo phường/xã trong bounds bản vẽ
+   - Convert GeoJSON polygon → VN2000 → emit LINE (mỗi cạnh 1 LINE)
+   - Layer `ADMIN_BOUNDARY_PHUONG` (dashed, cyan)
+   - Layer `ADMIN_BOUNDARY_QUAN` (dashed dày, đỏ)
+
+5. **Text label**:
+   - Vẽ TEXT tên phường/xã tại centroid polygon
+   - "Phường Bình Trị Đông A"
+   - Height 4m, italic style
+
+6. **Integration**:
+   - Similar P66 — draw sau OSM basemap, trước cáp/trụ
+   - Opt.showAdminBoundaries = boolean
+
+7. Bump sw.js.
+
+Verification:
+- Xuất DXF có ranh phường → mở AutoCAD → thấy đường viền dashed + text "Phường XY" tại giữa
+```
+
+---
+
+### PROMPT 68 — Bảng vật tư BOM auto-gen (Phase 6a)
+
+```
+Dự án: PWA khảo sát chiếu sáng. Data có đủ để tính BOM (loại đèn, công suất, số bóng, loại cáp).
+
+Nhiệm vụ: Auto-generate bảng vật tư (Bill of Materials) từ data khảo sát.
+
+Output: Excel .xlsx + PDF (1 trang riêng trong hồ sơ)
+
+Yêu cầu:
+
+1. **Function `_generateBOM(rows, opts)`**:
+   - Input: filtered rows (theo tủ / basename / ...) + opts (project name, contract, ...)
+   - Group by:
+     - Loại + công suất đèn (row[10], row[11]) + số bóng (row[21])
+     - Loại tủ (row[6] = 5/6)
+     - Loại cáp (row[28] cableSpec)
+   - Count + unit + estimate cable length
+
+2. **BOM structure** (Vietnamese):
+   ```
+   ┌─────┬───────────────────────────────────────────────┬────────┬──────────┐
+   │ STT │ TÊN VẬT TƯ, THIẾT BỊ                          │ ĐVT    │ SỐ LƯỢNG│
+   ├─────┼───────────────────────────────────────────────┼────────┼──────────┤
+   │  1  │ Trụ đèn cao 12M lắp bộ đèn LED 170W          │ Bộ     │   145    │
+   │  2  │ Trụ đèn cao 6M lắp 2 bộ đèn pha LED 60W      │ Bộ     │    22    │
+   │  3  │ Bộ đèn pha LED 40W chiếu sáng dạ cầu         │ Bộ     │    18    │
+   │  4  │ Tủ điều khiển chiếu sáng PLC-50A              │ Cái    │     6    │
+   │  5  │ Cáp CXV/DSTA 4X25MM²-0,6/1kV                  │ m      │ 12,450   │
+   │  6  │ Cáp CXV/DSTA 4X10MM²-0,6/1kV + C25MM²         │ m      │ 24,890   │
+   │  7  │ Cọc tiếp địa                                   │ Cái    │     6    │
+   └─────┴───────────────────────────────────────────────┴────────┴──────────┘
+   ```
+
+3. **Cable length calculation**:
+   - Group cables theo spec (row[28])
+   - Sum row[15] (khoảng cách) của tất cả markers có row[14] chỉ về trụ khác
+   - Round lên nearest 10m
+
+4. **Excel export**:
+   - Sheet 1: "Tổng hợp" — bảng như trên
+   - Sheet 2: "Chi tiết theo tủ" — split BOM per cabinet
+   - Sử dụng ExcelJS (đã lazy load)
+   - Format:
+     - Header row: bold, fill color yellow
+     - Border cell full grid
+     - Number format `#,##0` cho SỐ LƯỢNG
+     - Font Times New Roman 12
+
+5. **PDF export**:
+   - 1 trang A4 portrait
+   - Header: tên dự án + gói thầu
+   - Bảng BOM chính giữa
+   - Footer: số trang + ngày lập
+   - Dùng jsPDF (lazy load)
+
+6. **UI**: nút mới "📊 Bảng vật tư (BOM)" trong ☰ panel section "Xuất dữ liệu"
+
+7. Bump sw.js.
+
+Verification:
+- Bấm nút → generate BOM cho toàn bộ marker → download .xlsx + .pdf
+- Total counts khớp với data thực (đếm tay 1-2 loại để verify)
+```
+
+---
+
+### PROMPT 69 — Tính toán điện (sụt áp, công suất) (Phase 6b)
+
+```
+Dự án: PWA khảo sát chiếu sáng. Đã có BOM (P68), sơ đồ nguyên lý (P60).
+
+Nhiệm vụ: Auto-tính toán điện cho mỗi tủ — sụt áp, công suất, cảnh báo vượt tủ.
+
+Công thức (IEC 60364):
+- Công suất mỗi trụ: `P_pole = congSuat × soBong` (W)
+- Công suất tủ: `P_cab = Σ P_pole` (kW)
+- Dòng điện danh định 3 pha: `I = P / (√3 × U × cosφ)` (A) với U=380V, cosφ=0.85
+- Sụt áp: `ΔU = 2·L·I·(R·cosφ + X·sinφ) / U` (V)
+  - L = chiều dài cáp (m)
+  - I = dòng điện nhánh (A)
+  - R, X = điện trở/kháng cáp per 100m (từ bảng datasheet cáp)
+- Sụt áp phần trăm: `ΔU% = ΔU / U × 100`
+- **Pass criteria**: ΔU% ≤ 5% (chuẩn TCVN 7447)
+
+Yêu cầu:
+
+1. **Cable spec database** (const `CABLE_ELECTRICAL_SPECS`):
+   ```
+   'CXV/DSTA 4X25MM²-0,6/1kV':   { R100m: 0.727, X100m: 0.078, Imax: 106 A }
+   'CXV/DSTA 4X10MM²-0,6/1kV':   { R100m: 1.83,  X100m: 0.086, Imax: 63 A }
+   'CXV/DSTA 4X6MM²-0,6/1kV':    { R100m: 3.05,  X100m: 0.089, Imax: 46 A }
+   ```
+
+2. **Function `_calculateCabinetElectrical(rows, tuName)`**:
+   - Filter rows thuộc tủ
+   - Sort theo thứ tự chuỗi Marker gốc (BFS từ tủ ra)
+   - Với mỗi nhánh (child branch từ tủ):
+     - Accumulate load từ far → near
+     - Compute I, ΔU tại mỗi trụ
+   - Return array of trees với ΔU% mỗi node
+
+3. **Result structure**:
+   ```
+   {
+     tuName: 'CS-C1',
+     totalPower_kW: 8.4,
+     totalCurrent_A: 15.2,
+     ratedCapacity_kVA: 10,
+     usagePercent: 84,        // 8.4/10 × 100
+     dropVoltage: {
+       max: 4.2,              // ΔU% max trong tất cả trụ
+       maxAtPole: 'C1.29',
+       byPole: { 'C1.01': 0.1, 'C1.02': 0.3, ..., 'C1.29': 4.2 }
+     },
+     warnings: ['Sụt áp gần vượt ngưỡng tại C1.29 (4.2% > 4%)']
+   }
+   ```
+
+4. **UI Modal "🔌 Tính toán điện"**:
+   - Table với columns: Tủ | Công suất (kW) | Sử dụng % | Dòng điện (A) | ΔU max % | Tại trụ | Trạng thái
+   - Row màu:
+     - Xanh: usagePercent < 80% và ΔU < 4%
+     - Vàng: 80-95% hoặc ΔU 4-5%
+     - Đỏ: >95% hoặc ΔU >5%
+   - Nút "Xuất Excel" — chi tiết đầy đủ ΔU mỗi trụ
+
+5. **Đưa kết quả vào bản vẽ nguyên lý (P60)**:
+   - Text bên phải mỗi tủ: `P=8.4kW, I=15.2A, ΔU max=4.2%`
+   - Highlight đỏ nếu warning
+
+6. Bump sw.js.
+
+Verification:
+- Verify 1 tủ manual: nhập 3 trụ 170W → tổng 510W, I ≈ 0.9A, ΔU ≈ 0.05% cho 100m cáp 25mm² → match tool
+```
+
+---
+
+### PROMPT 70 — Compile hồ sơ đầy đủ PDF (Phase 7)
+
+```
+Dự án: T21+ CAD Generator. Đã có: mặt bằng, sơ đồ nguyên lý (P60), bình đồ tổng thể (P62), BOM (P68), tính toán điện (P69).
+
+Nhiệm vụ: Compile tất cả thành 1 hồ sơ PDF hoàn chỉnh theo thứ tự chuẩn.
+
+Cấu trúc hồ sơ:
+1. Bìa (Cover page) — logo + tên dự án + đơn vị TK + ngày
+2. Danh mục bản vẽ (Drawing List) — auto sinh
+3. Thuyết minh thiết kế — template Word/PDF với placeholders
+4. Bình đồ tổng thể (1 trang)
+5. Bản vẽ mặt bằng bố trí (N trang, multi-sheet)
+6. Sơ đồ nguyên lý (1 trang)
+7. Bảng vật tư BOM (1-2 trang)
+8. Bảng tính toán điện (1 trang)
+
+Yêu cầu:
+
+1. **Template Bìa (`assets/covers/cover-standard.html`)**:
+   - HTML template với placeholders `{{DU_AN}}`, `{{DIA_DIEM}}`, `{{DON_VI_TK}}`, `{{NGAY}}`, `{{LOGO_URL}}`
+   - Layout A4 portrait, chuẩn TCVN 8-2:2000
+   - Render qua html2canvas → PDF
+
+2. **Danh mục bản vẽ auto-sinh**:
+   - Table structure:
+     ```
+     STT | Số hiệu bản vẽ | Tên bản vẽ                       | Tỉ lệ  | Ghi chú
+     1   | 22-TLBC-03-07-01 | Bình đồ tổng thể                | 1:5000 |
+     2   | 22-TLBC-03-07-05 | Bản vẽ bố trí 05/10             | 1:1000 |
+     3   | 22-TLBC-03-07-06 | Bản vẽ bố trí 06/10             | 1:1000 |
+     ...
+     N   | 22-TLBC-03-07-13 | Sơ đồ nguyên lý                 | -      |
+     N+1 | 22-TLBC-03-07-14 | Bảng thống kê vật tư            | -      |
+     ```
+   - Tự sinh từ list các file được include
+
+3. **Thuyết minh template (`assets/docs/thuyet-minh-template.docx`)**:
+   - Word template với placeholders (dùng docxtemplater lib client-side)
+   - Sections: Cơ sở pháp lý, Hiện trạng, Giải pháp, Tính toán, Kết luận
+   - Convert Word → PDF trước khi merge (dùng LibreOffice server-side hoặc mammoth.js + html2canvas)
+
+4. **Merge PDF**:
+   - Dùng thư viện `pdf-lib` (~100KB gzipped, lazy load)
+   - Order: Bìa → Danh mục → Thuyết minh → Bình đồ → Mặt bằng (multi-sheet) → Nguyên lý → BOM → Tính điện
+   - Auto add page numbers footer "Trang X / Y"
+
+5. **Modal `#compileFullDossierModal`**:
+   - Section 1: Chọn thành phần include (checkbox)
+     - ☑ Bìa
+     - ☑ Danh mục bản vẽ
+     - ☑ Thuyết minh (upload custom Word nếu có)
+     - ☑ Bình đồ tổng thể
+     - ☑ Mặt bằng bố trí (N tờ)
+     - ☑ Sơ đồ nguyên lý
+     - ☑ BOM
+     - ☑ Tính toán điện
+   - Section 2: Metadata bìa (tên dự án, chủ đầu tư, ...)
+   - Nút "🗎 Compile hồ sơ PDF" — tạo file `.pdf` (~10-20MB)
+
+6. **Progress bar** — mỗi step 1 tick:
+   - Generating cover... 10%
+   - Generating drawing list... 20%
+   - Compiling thuyết minh... 30%
+   - Generating drawings... (mỗi bản vẽ +5%)
+   - Merging... 90%
+   - Done 100%
+
+7. Bump sw.js.
+
+Verification:
+- Compile full → nhận PDF ~15MB có đủ 8 section theo thứ tự
+- Mở PDF trong Adobe → verify page numbers + section headers đúng
+- Print 1 trang test → chất lượng in OK
+```
+
+---
+
+## 📋 Thứ tự thực hiện đề xuất (Q3 2026 → Q1 2027)
+
+### Milestone 1 — Bổ sung data model (Tuần 1)
+- P57 (Extend 3 cột)
+
+### Milestone 2 — Khung tên chuẩn nhà nước (Tuần 2-3) 🎯
+- P58 (4 ô con dấu)
+- P59 (Khung tên đầy đủ)
+
+### Milestone 3 — 2 loại bản vẽ mới (Tuần 4-6) ⭐ HIGH VALUE
+- P60 (Sơ đồ nguyên lý)
+- P61 (UI integration)
+- P62 (Bình đồ tổng thể)
+
+### Milestone 4 — Dấu + chữ ký (Tuần 7-8)
+- P63 (Modal quản lý)
+- P64 (Embed DXF IMAGE)
+
+### Milestone 5 — Basemap OSM (Tuần 9-12)
+- P65 (Overpass fetch)
+- P66 (Render basemap)
+- P67 (Ranh hành chính)
+
+### Milestone 6 — BOM + tính điện (Tuần 13-14)
+- P68 (BOM auto-gen)
+- P69 (Tính toán điện)
+
+### Milestone 7 — Compile hồ sơ (Tuần 15)
+- P70 (Merge full PDF)
+
+**Total**: ~15 tuần (3-4 tháng) cho hồ sơ 100% auto giống mẫu Sở XD.
+
+**Milestone 3 xong (Tuần 6) — có thể verify với 1 khách hàng thực tế** vì đã có 3 loại bản vẽ chính + khung tên chuẩn.
+

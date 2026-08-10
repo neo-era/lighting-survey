@@ -24,7 +24,9 @@ const HEADER = [
   'Loại', 'Tủ điều khiển', 'Loại trụ', 'Loại cần', 'Loại đèn',
   'Công suất', 'Ảnh', 'Thời gian cập nhật', 'Marker gốc', 'Khoảng cách (m)', 'Mã PE', 'Đường', 'Phường/ Xã',
   'VN2000-X', 'VN2000-Y', 'Số lượng đèn', 'Loại cáp',
-  'Độ chính xác (m)', 'Chế độ GPS', 'Label offset'
+  'Độ chính xác (m)', 'Chế độ GPS', 'Label offset',
+  'Phase electric', 'Chiều cao trụ (m)', 'Cáp specification',
+  'Trạng thái cải tạo'
 ];
 
 // Header sheet SuCo (báo sự cố)
@@ -77,6 +79,10 @@ const FIELD_MAP = {
   'accuracy':     'Độ chính xác (m)',
   'gpsMode':      'Chế độ GPS',
   'labelOffset':  'Label offset',
+  'phase':        'Phase electric',
+  'heightM':      'Chiều cao trụ (m)',
+  'cableSpec':    'Cáp specification',
+  'trangThai':    'Trạng thái cải tạo',
 };
 
 // ── UTILS ──────────────────────────────────────────────────────────────────
@@ -1020,6 +1026,9 @@ function doPost(e) {
     if (data.action === 'save_preset')      return handleSavePreset(data);
     if (data.action === 'delete_preset')    return handleDeletePreset(data);
 
+    // P57: Auto phase assignment (round-robin A/B/C) cho toàn tủ
+    if (data.action === 'assign_phases')    return handleAssignPhases(data);
+
     return jsonResponse({ status: 'error', message: 'action không hợp lệ: ' + data.action });
   } catch (err) {
     return jsonResponse({ status: 'error', message: err.message });
@@ -1049,6 +1058,67 @@ function handleBatchImport(sheetName, rows, clearFirst) {
   }
 
   return jsonResponse({ status: 'ok', count: rows.length, sheet: sheetName });
+}
+
+// ── P57: AUTO PHASE ASSIGNMENT (A/B/C round-robin cho toàn tủ) ────────────
+// Sort trụ trong tủ theo tên (natural sort), gán round-robin A→B→C→A→B→C→...
+// Payload: { action: 'assign_phases', sheet: '<sheetName>', cabinet: '<tenTuDieuKhien>' }
+function handleAssignPhases(data) {
+  const sheetName = data.sheet || SHEET_NAME;
+  const cabinet   = String(data.cabinet || '').trim();
+  if (!cabinet) return jsonResponse({ status: 'error', message: 'Thiếu tên tủ điều khiển' });
+
+  const sheet = getSheet(sheetName);
+  ensureHeader(sheet);
+  const all = sheet.getDataRange().getValues();
+  if (all.length < 2) return jsonResponse({ status: 'ok', updated: 0, cabinet: cabinet });
+
+  const headers = all[0];
+  const hIdx    = buildHeaderIndex(headers);
+  const iTenTru = hIdx[norm('Tên trụ')];
+  const iTuDK   = hIdx[norm('Tủ điều khiển')];
+  const iPhase  = hIdx[norm('Phase electric')];
+  if (iTenTru == null || iTuDK == null || iPhase == null) {
+    return jsonResponse({ status: 'error', message: 'Thiếu cột (Tên trụ / Tủ điều khiển / Phase electric)' });
+  }
+
+  // Collect rows matching cabinet
+  const targets = [];
+  for (let r = 1; r < all.length; r++) {
+    if (String(all[r][iTuDK] || '').trim() === cabinet) {
+      targets.push({ rowNum: r + 1, name: String(all[r][iTenTru] || '').trim() });
+    }
+  }
+  if (targets.length === 0) {
+    return jsonResponse({ status: 'ok', updated: 0, cabinet: cabinet, message: 'Không có trụ nào trong tủ' });
+  }
+
+  // Natural sort by name (VD: C1.02 < C1.10 < C1.20)
+  const collator = new Intl.Collator('vi', { numeric: true, sensitivity: 'base' });
+  targets.sort((a, b) => collator.compare(a.name, b.name));
+
+  // Round-robin A/B/C
+  const phases = ['A', 'B', 'C'];
+  const updates = targets.map((t, i) => [phases[i % 3]]);   // 2D array N×1
+  // Ghi liền mạch: cần đảm bảo rows contiguous — nhưng targets có thể scatter
+  // → dùng setValue per row (chậm hơn nhưng đúng)
+  targets.forEach((t, i) => {
+    sheet.getRange(t.rowNum, iPhase + 1).setValue(phases[i % 3]);
+  });
+
+  // Log vào LichSu
+  try {
+    _logToHistory({
+      sheet: sheetName,
+      loaiThaoTac: 'assign_phases',
+      id: '',
+      tenTru: cabinet,
+      nguoiThucHien: data.nguoiThucHien || 'system',
+      chiTiet: JSON.stringify({ cabinet: cabinet, count: targets.length })
+    });
+  } catch(e) { /* ignore log errors */ }
+
+  return jsonResponse({ status: 'ok', updated: targets.length, cabinet: cabinet });
 }
 
 // ── P47: PRESET LIBRARY OFFSET LOCAL GRID (shared qua sheet OffsetPresets) ──
