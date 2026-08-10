@@ -7911,7 +7911,7 @@ Verification:
 
 ---
 
-### PROMPT 60 — Sơ đồ nguyên lý generator (Phase 2)
+### PROMPT 60 — Sơ đồ nguyên lý generator (Phase 2) ✅ DONE 2026-08-10
 
 ```
 Dự án: T21 CAD Generator. Chỉ có mặt bằng. Cần thêm loại "Sơ đồ nguyên lý" (single-line electric diagram).
@@ -7993,7 +7993,7 @@ Verification:
 
 ---
 
-### PROMPT 61 — UI Loại bản vẽ + integration Single-line (Phase 2b)
+### PROMPT 61 — UI Loại bản vẽ + integration Single-line (Phase 2b) ✅ DONE 2026-08-10
 
 ```
 Dự án: T21 CAD Generator. Đã có `_generateSingleLineDrawing` (P60) và `_generateCadDrawing` (mặt bằng).
@@ -8046,7 +8046,7 @@ Verification:
 
 ---
 
-### PROMPT 62 — Bình đồ tổng thể generator (Phase 3)
+### PROMPT 62 — Bình đồ tổng thể generator (Phase 3) ✅ DONE 2026-08-10
 
 ```
 Dự án: T21 CAD Generator.
@@ -8646,10 +8646,10 @@ Verification:
 - P58 (4 ô con dấu)
 - P59 (Khung tên đầy đủ)
 
-### Milestone 3 — 2 loại bản vẽ mới (Tuần 4-6) ⭐ HIGH VALUE
-- P60 (Sơ đồ nguyên lý)
-- P61 (UI integration)
-- P62 (Bình đồ tổng thể)
+### Milestone 3 — 2 loại bản vẽ mới (Tuần 4-6) ⭐ HIGH VALUE ✅ DONE 2026-08-10
+- P60 (Sơ đồ nguyên lý) ✅
+- P61 (UI integration) ✅
+- P62 (Bình đồ tổng thể) ✅
 
 ### Milestone 4 — Dấu + chữ ký (Tuần 7-8)
 - P63 (Modal quản lý)
