@@ -9765,16 +9765,16 @@
             const tbW = tbWOverride && tbWOverride > baseW ? tbWOverride : baseW;
             const sc = tbW / baseW;
 
-            // Column X boundaries (7 values for 6 columns)
-            // C0=TT QLGT(100), C1=logo(14), C2=CTCP(80), C3=Người lập(16), C4=BẢN VẼ(90), C5=SHBV(20)
-            const colBase = [0, 100, 114, 194, 210, 300, 320];
+            // Column X boundaries — khớp form KNỞ P12 Trần Thiện Chánh
+            // C0(TT QLGT):70 | C1(logo):18 | C2(CTCP CSCC):70 | C3(NGƯỜI LẬP):38 | C4(BẢN VẼ):93 | C5(SHBV):31
+            const colBase = [0, 70, 88, 158, 196, 289, 320];
             const CX = colBase.map(b => tbX + b * sc);
             const y1 = tbY + tbH;
 
-            // Row Y separators (y increases upward in DXF)
-            const r12 = tbY + 35;   // R1/R2 boundary (20m from top)
-            const r23 = tbY + 25;   // R2/R3 boundary (10m below r12)
-            const r34 = tbY + 15;   // R3/R4 boundary (10m below r23)
+            // 3 rows (2 full separators + 1 SHBV-only) — khớp tỷ lệ ~50%/25%/25%
+            const r12   = tbY + 27;   // full-width: tên tổ chức ↑ / nhãn vai trò ↓
+            const r23   = tbY + 13;   // full-width: nhãn vai trò ↑ / tên người ký ↓
+            const rShbv = tbY + 20;   // SHBV-only: "Số soát xét" ↑ / "Bản vẽ số" ↓
 
             // Helpers
             const hl = (xa, xb, y) => push('0', 'LINE', '8', '0',
@@ -9786,32 +9786,48 @@
             const tl = (x, y, t, sz) => {
                 push('0', 'TEXT', '8', '0');
                 push('10', x.toFixed(4), '20', y.toFixed(4), '30', '0');
-                push('40', sz);
+                push('40', String(sz));
                 push('1', escape(t));
             };
-            const tc = (cx, y, t, sz) => tl(cx - t.length * parseFloat(sz) * 0.4, y, t, sz);
+            // Center-justified text (DXF group 72=1 + alignment point 11/21)
+            const tc = (cx, y, t, sz) => {
+                push('0', 'TEXT', '8', '0');
+                push('10', cx.toFixed(4), '20', y.toFixed(4), '30', '0');
+                push('40', String(sz));
+                push('1', escape(t));
+                push('72', '1');
+                push('11', cx.toFixed(4), '21', y.toFixed(4), '31', '0');
+            };
 
             // Outer frame
             hl(CX[0], CX[6], y1); hl(CX[0], CX[6], tbY);
             vl(CX[0], tbY, y1);   vl(CX[6], tbY, y1);
 
-            // Row separators (full width)
-            hl(CX[0], CX[6], r12); hl(CX[0], CX[6], r23); hl(CX[0], CX[6], r34);
+            // Full-width separators
+            hl(CX[0], CX[6], r12);
+            hl(CX[0], CX[6], r23);
 
-            // Column separators (5 internal verticals)
+            // Column separators (full height)
             for (let i = 1; i < 6; i++) vl(CX[i], tbY, y1);
+
+            // SHBV-only extra separator
+            hl(CX[5], CX[6], rShbv);
 
             // ── C0: TT QUẢN LÝ GIAO THÔNG ──
             const c0W = CX[1] - CX[0], c0cx = CX[0] + c0W / 2;
             const ttName = md.TT_QLGT_NAME || 'TT QUẢN LÝ GIAO THÔNG VÀ HẠ TẦNG KỸ THUẬT TP.HCM';
-            let yT = y1 - 6;
-            wrap(ttName, Math.floor(c0W / 1.5)).slice(0, 2).forEach(line => { tc(c0cx, yT, line, '2.0'); yT -= 5; });
-            tl(CX[0] + 2, r12 - 6, md.CV_PHU_TRACH || 'CHUYÊN VIÊN PHỤ TRÁCH ĐỊA BÀN', '2.0');
-            tc(c0cx, tbY + 7, md.NV_TT_QLGT || '', '2.5');
+            let yT = y1 - 4;
+            // Wrap at ~17 chars/line for 70m column, sz=2.0
+            wrap(ttName, Math.floor(c0W / (2.0 * 0.9))).slice(0, 3).forEach(l => { tc(c0cx, yT, l, '2.0'); yT -= 4.5; });
+            // Middle row: role label
+            tl(CX[0] + 2 * sc, r12 - 5, md.CV_PHU_TRACH || 'CHUYÊN VIÊN PHỤ TRÁCH ĐỊA BÀN', '1.8');
+            // Bottom row: name
+            tc(c0cx, tbY + 4, md.NV_TT_QLGT || '', '2.2');
 
-            // ── C1: Logo circle placeholder ──
-            const lX = (CX[1] + CX[2]) / 2, lY = y1 - 12;
-            const lR = Math.min((CX[2] - CX[1]) * 0.45, 5.5);
+            // ── C1: Logo circle ──
+            const lX = (CX[1] + CX[2]) / 2;
+            const lY = (r12 + y1) / 2;
+            const lR = Math.min((CX[2] - CX[1]) * 0.4, 7.5);
             push('0', 'CIRCLE', '8', '0');
             push('10', lX.toFixed(4), '20', lY.toFixed(4), '30', '0');
             push('40', lR.toFixed(4));
@@ -9819,35 +9835,37 @@
             // ── C2: CÔNG TY CỔ PHẦN CHIẾU SÁNG CÔNG CỘNG ──
             const c2W = CX[3] - CX[2], c2cx = CX[2] + c2W / 2;
             const ctcpName = md.CTCP_NAME || 'CÔNG TY CỔ PHẦN CHIẾU SÁNG CÔNG CỘNG TP.HCM';
-            yT = y1 - 6;
-            wrap(ctcpName, Math.floor(c2W / 1.5)).slice(0, 2).forEach(line => { tc(c2cx, yT, line, '2.0'); yT -= 5; });
-            tl(CX[2] + 2, r12 - 6, md.CS_KHU_VUC || 'CHIẾU SÁNG KHU VỰC TRUNG TÂM', '2.0');
-            tc(c2cx, tbY + 7, md.NV_CTCP || '', '2.5');
+            yT = y1 - 4;
+            wrap(ctcpName, Math.floor(c2W / (2.0 * 0.9))).slice(0, 3).forEach(l => { tc(c2cx, yT, l, '2.0'); yT -= 4.5; });
+            tl(CX[2] + 2 * sc, r12 - 5, md.CS_KHU_VUC || 'CHIẾU SÁNG KHU VỰC TRUNG TÂM', '1.8');
+            tc(c2cx, tbY + 4, md.NV_CTCP || '', '2.2');
 
             // ── C3: NGƯỜI LẬP ──
-            const c3W = CX[4] - CX[3], c3cx = CX[3] + c3W / 2;
-            tl(CX[3] + 1, r12 - 5, 'NGƯỜI LẬP', '1.8');
-            tc(c3cx, tbY + 7, md.NGUOI_LAP || '', '2.5');
+            const c3cx = CX[3] + (CX[4] - CX[3]) / 2;
+            tc(c3cx, r12 - 5, 'NGƯỜI LẬP', '1.8');
+            tc(c3cx, tbY + 4, md.NGUOI_LAP || '', '2.2');
 
-            // ── C4: BẢN VẼ — main title + drawing info ──
+            // ── C4: BẢN VẼ SƠ ĐỒ — tiêu đề + thông tin bản vẽ ──
             const c4W = CX[5] - CX[4], c4cx = CX[4] + c4W / 2;
+            // Row 1 (top): BẢN VẼ SƠ ĐỒ TUYẾN TRẠM ĐÈN... — 2 dòng căn giữa
             const bvTitle = 'BẢN VẼ SƠ ĐỒ TUYẾN TRẠM ĐÈN HỆ THỐNG CHIẾU SÁNG ĐÔ THỊ';
-            yT = y1 - 8;
-            wrap(bvTitle, Math.floor(c4W / 2.2)).slice(0, 2).forEach(line => { tc(c4cx, yT, line, '3.5'); yT -= 7; });
-            // R2: BẢN VẼ label + Tỷ lệ
-            tl(CX[4] + 2, r12 - 5, 'BẢN VẼ:', '2.0');
-            tl(CX[4] + c4W - 28 * sc, r12 - 5, 'Tỷ lệ: ' + (md.TI_LE || '1/1000'), '2.0');
-            // R3: drawing name
-            tl(CX[4] + 2, r23 - 5, md.TEN_BAN_VE || '', '2.5');
-            // R4: address / description
-            tl(CX[4] + 2, tbY + 8, md.DIA_CHI || '', '2.0');
+            yT = y1 - 6;
+            wrap(bvTitle, Math.floor(c4W / (3.0 * 0.9))).slice(0, 2).forEach(l => { tc(c4cx, yT, l, '3.0'); yT -= 7; });
+            // Row 2 (middle): BẢN VẼ: [left] + Tỷ lệ [right]
+            tl(CX[4] + 2 * sc, r12 - 4.5, 'BẢN VẼ:', '1.8');
+            const tileStr = 'Tỷ lệ: ' + (md.TI_LE || '1/1000');
+            tl(CX[5] - (tileStr.length + 1) * 1.8 * 0.7 * sc, r12 - 4.5, tileStr, '1.8');
+            // Row 2 (middle): TEN_BAN_VE — nổi bật, căn giữa
+            tc(c4cx, r23 + (r12 - r23) * 0.55, md.TEN_BAN_VE || '', '2.8');
+            // Row 3 (bottom): địa chỉ
+            if (md.DIA_CHI) tl(CX[4] + 2 * sc, tbY + 4, md.DIA_CHI, '1.8');
 
-            // ── C5: SHBV codes — 4 cells aligned with main row separators ──
+            // ── C5: SHBV — 4 ô (SHBV / Số soát xét / Bản vẽ số / Ngày) ──
             const shbvVal = (md.SHBV_PATTERN || '').replace(/XX/g, String(sheetIdx).padStart(2, '0'));
-            tl(CX[5] + 1, y1 - 5,   shbvVal ? 'SHBV: ' + shbvVal : 'SHBV:', '1.8');
-            tl(CX[5] + 1, r12 - 5,  'Soát xét:', '1.8');
-            tl(CX[5] + 1, r23 - 5,  'Bản vẽ số:', '1.8');
-            tl(CX[5] + 1, tbY + 7,  'Ngày: ' + (md.NGAY || ''), '1.8');
+            tl(CX[5] + 1 * sc, y1 - 4.5,                    shbvVal ? 'SHBV: ' + shbvVal : 'SHBV:', '1.6');
+            tl(CX[5] + 1 * sc, rShbv + (y1 - rShbv) / 2 - 1.5, 'Số soát xét:', '1.5');
+            tl(CX[5] + 1 * sc, r23 + (rShbv - r23) / 2 - 1.5,   'Bản vẽ số:', '1.5');
+            tl(CX[5] + 1 * sc, tbY + 4,                       'Ngày: ' + (md.NGAY || ''), '1.5');
         }
 
         // Dải tiêu đề ngang phía trên content area — KNỞ P12
