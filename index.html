@@ -13688,7 +13688,7 @@
             }
             if (!map.hasLayer(labelLayerGroup)) map.addLayer(labelLayerGroup);
             // zoom ≥ 17: filter theo bán kính 300m quanh center (cùng logic marker nearby)
-            const useRadius = zoom >= 17;
+            const useRadius = zoom >= 15;
             const center = useRadius ? map.getCenter() : null;
             const bounds  = useRadius ? null : map.getBounds().pad(0.3);
             _lblMarkers.forEach(function(lbl, rid) {
@@ -13711,13 +13711,13 @@
         }
 
         // Nearby filter: zoom ≥ 17 → tự động chỉ hiện marker + label trong 300m quanh center
-        const _NEARBY_SHOW = 300; // m — show/restore threshold
-        const _NEARBY_HIDE = 400; // m — hide threshold (hysteresis ±100m tránh nhấp nháy)
+        const _NEARBY_SHOW = 200; // m — show/restore threshold
+        const _NEARBY_HIDE = 280; // m — hide threshold (hysteresis ±80m tránh nhấp nháy)
 
         function _refreshNearbyMarkers() {
             if (!markers.length) return;
             const zoom = map.getZoom();
-            if (zoom < 17) {
+            if (zoom < 15) {
                 // Zoom thấp — restore toàn bộ marker bị ẩn
                 _nearbyHidden.forEach(m => { try { markersCluster.addLayer(m); } catch(_) {} });
                 _nearbyHidden.clear();
