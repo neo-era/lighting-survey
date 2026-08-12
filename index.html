@@ -1916,6 +1916,11 @@
                             🌐 Điền địa chỉ tự động (Nominatim)
                         </button>
 
+                        <!-- Recalc tất cả Khoảng cách cáp bằng Haversine -->
+                        <button onclick="_recalcAllCableDistances()" class="ctrl-btn outline" style="margin-bottom:0;font-size:12px;padding:8px;margin-top:6px;width:100%;color:#0369a1;border-color:#bae6fd;">
+                            📏 Tính lại khoảng cách cáp (Haversine)
+                        </button>
+
                         <div id="cableToolbar" style="display:none;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-top:6px;">
                             <button id="btnCableEdit" onclick="toggleCableEditMode()" class="ctrl-btn outline" style="margin-bottom:0;font-size:12px;padding:8px;">
                                 <i class="fa fa-pencil"></i> Sửa cáp
@@ -11647,6 +11652,83 @@
             } catch (_) {}
         }
         window._batchReverseGeocode = _batchReverseGeocode;
+
+        // ═══════════════════════════════════════════════════════════════════
+        // Recalc tất cả Khoảng cách cáp bằng Haversine
+        // ═══════════════════════════════════════════════════════════════════
+        async function _recalcAllCableDistances() {
+            if (!loadedData || loadedData.length < 2) {
+                displayError && displayError('Chưa có dữ liệu marker');
+                return;
+            }
+            const rows = loadedData.slice(1);
+
+            // Build position index: tên trụ → [lat, lon]
+            const posIdx = {};
+            rows.forEach(r => {
+                const name = String(r[1] || '').trim();
+                const lat = parseCoord(r[2]), lon = parseCoord(r[3]);
+                if (name && isFinite(lat) && isFinite(lon)) posIdx[name] = [lat, lon];
+            });
+
+            // Tìm các row có Marker gốc hợp lệ
+            const toCalc = [], notFound = [];
+            rows.forEach(r => {
+                const parentName = String(r[14] || '').trim();
+                if (!parentName) return;
+                const cLat = parseCoord(r[2]), cLon = parseCoord(r[3]);
+                if (!isFinite(cLat) || !isFinite(cLon)) return;
+                if (!posIdx[parentName]) { notFound.push(String(r[1] || '')); return; }
+                toCalc.push(r);
+            });
+
+            if (toCalc.length === 0) {
+                displayInfo && displayInfo('Không có marker nào có Marker gốc hợp lệ để tính');
+                return;
+            }
+            const notFoundMsg = notFound.length ? `\n⚠ ${notFound.length} trụ gốc không tìm thấy (bỏ qua).` : '';
+            if (!confirm(`Sẽ tính lại khoảng cách Haversine cho ${toCalc.length} marker có Marker gốc.${notFoundMsg}\nCột "Khoảng cách (m)" sẽ bị GHI ĐÈ. Tiếp tục?`)) return;
+
+            const bar = document.getElementById('loadProgressBar');
+            const setBar = pct => {
+                if (!bar) return;
+                if (pct === null) { bar.style.display = 'none'; bar.style.width = '0'; return; }
+                bar.style.display = 'block';
+                bar.style.width = pct + '%';
+            };
+
+            let ok = 0, fail = 0;
+            for (let i = 0; i < toCalc.length; i++) {
+                const r = toCalc[i];
+                const parentName = String(r[14] || '').trim();
+                const [pLat, pLon] = posIdx[parentName];
+                const cLat = parseCoord(r[2]), cLon = parseCoord(r[3]);
+                const dist = haversineM(cLat, cLon, pLat, pLon);
+                r[15] = dist;
+                r[13] = new Date().toISOString();
+                setBar(Math.round(i / toCalc.length * 100));
+                displayInfo && displayInfo(`⏳ ${i + 1}/${toCalc.length}: ${r[1] || '?'} ← ${parentName} = ${dist}m`);
+                try {
+                    if (typeof syncRowToGAS === 'function') await syncRowToGAS(r, { silent: true });
+                    ok++;
+                } catch (_) { fail++; }
+            }
+
+            setBar(null);
+            displayInfo && displayInfo(`✅ Tính lại ${ok} khoảng cách cáp${fail ? ` (${fail} lỗi sync)` : ''}${notFound.length ? ` | ${notFound.length} bỏ qua` : ''}`);
+
+            // Redraw sơ đồ cáp nếu đang hiện
+            if (typeof _cableVisible !== 'undefined' && _cableVisible && typeof _buildCableLines === 'function') {
+                _buildCableLines(rows);
+            }
+
+            try {
+                if (typeof _logAction === 'function') {
+                    _logAction('batch_recalc_dist', '', '', JSON.stringify({ total: toCalc.length, ok, fail, notFound: notFound.length }));
+                }
+            } catch (_) {}
+        }
+        window._recalcAllCableDistances = _recalcAllCableDistances;
 
         // ═══════════════════════════════════════════════════════════════════
         // (End T24 Reverse-geocode batch)
