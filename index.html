@@ -1920,10 +1920,6 @@
                         <button onclick="_recalcAllCableDistances()" class="ctrl-btn outline" style="margin-bottom:0;font-size:12px;padding:8px;margin-top:6px;width:100%;color:#0369a1;border-color:#bae6fd;">
                             📏 Tính lại khoảng cách cáp (Haversine)
                         </button>
-                        <!-- Nearby mode — chỉ hiện marker trong 500m khi zoom > 15 -->
-                        <button id="btnNearbyMode" onclick="_toggleNearbyMode()" class="ctrl-btn outline" style="margin-bottom:0;font-size:12px;padding:8px;margin-top:6px;width:100%;color:#374151;border-color:#d1d5db;">
-                            📍 Chỉ hiện marker gần (≤300m)
-                        </button>
 
                         <div id="cableToolbar" style="display:none;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-top:6px;">
                             <button id="btnCableEdit" onclick="toggleCableEditMode()" class="ctrl-btn outline" style="margin-bottom:0;font-size:12px;padding:8px;">
@@ -3731,8 +3727,7 @@
         let _cableEditMode = false;
         let _pickParentActive = false;
         let _drawCableMode = false;
-        let _nearbyMode = false;           // chỉ hiện marker trong bán kính _nearbyRadius quanh center
-        const _nearbyHidden = new Set();   // L.marker đang bị ẩn bởi nearby filter
+        const _nearbyHidden = new Set();   // L.marker đang bị ẩn bởi nearby filter (auto khi zoom ≥ 17)
         let _cableDrawChild = null; // { name, lat, lon, row }
 
         function toggleDrawCableMode() {
@@ -13686,14 +13681,24 @@
         }
 
         function _refreshLabelViewport() {
-            if (map.getZoom() < labelZoomThreshold) {
+            const zoom = map.getZoom();
+            if (zoom < labelZoomThreshold) {
                 map.removeLayer(labelLayerGroup);
                 return;
             }
             if (!map.hasLayer(labelLayerGroup)) map.addLayer(labelLayerGroup);
-            const bounds = map.getBounds().pad(0.3);
+            // zoom ≥ 17: filter theo bán kính 300m quanh center (cùng logic marker nearby)
+            const useRadius = zoom >= 17;
+            const center = useRadius ? map.getCenter() : null;
+            const bounds  = useRadius ? null : map.getBounds().pad(0.3);
             _lblMarkers.forEach(function(lbl, rid) {
-                const inView = bounds.contains(lbl.getLatLng());
+                let inView;
+                if (useRadius) {
+                    const ll = lbl.getLatLng();
+                    inView = haversineM(center.lat, center.lng, ll.lat, ll.lng) <= _NEARBY_SHOW;
+                } else {
+                    inView = bounds.contains(lbl.getLatLng());
+                }
                 const inGroup = labelLayerGroup.hasLayer(lbl);
                 if (inView && !inGroup) {
                     if (labelEditMode) { if (lbl.dragging) lbl.dragging.enable(); }
@@ -13705,16 +13710,15 @@
             });
         }
 
-        // Nearby-mode: chỉ hiện marker trong bán kính _NEARBY_SHOW m quanh center khi zoom > 15
-        const _NEARBY_SHOW = 300; // m — add/show threshold
-        const _NEARBY_HIDE = 400; // m — remove/hide threshold (hysteresis ±100m tránh nhấp nháy)
-        const _NEARBY_ZOOM = 15;  // zoom tối thiểu để kích hoạt filter
+        // Nearby filter: zoom ≥ 17 → tự động chỉ hiện marker + label trong 300m quanh center
+        const _NEARBY_SHOW = 300; // m — show/restore threshold
+        const _NEARBY_HIDE = 400; // m — hide threshold (hysteresis ±100m tránh nhấp nháy)
 
         function _refreshNearbyMarkers() {
-            if (!_nearbyMode || !markers.length) return;
+            if (!markers.length) return;
             const zoom = map.getZoom();
-            if (zoom <= _NEARBY_ZOOM) {
-                // Dưới zoom threshold — restore mọi marker bị ẩn
+            if (zoom < 17) {
+                // Zoom thấp — restore toàn bộ marker bị ẩn
                 _nearbyHidden.forEach(m => { try { markersCluster.addLayer(m); } catch(_) {} });
                 _nearbyHidden.clear();
                 return;
@@ -13732,22 +13736,6 @@
                 }
             });
         }
-
-        function _toggleNearbyMode() {
-            _nearbyMode = !_nearbyMode;
-            const btn = document.getElementById('btnNearbyMode');
-            if (_nearbyMode) {
-                if (btn) { btn.style.background='#eff6ff'; btn.style.borderColor='#2563eb'; btn.style.color='#1d4ed8'; btn.style.fontWeight='600'; }
-                _refreshNearbyMarkers();
-                displayInfo && displayInfo('📍 Bật: chỉ hiện marker ≤300m quanh tâm màn hình (zoom >15)');
-            } else {
-                if (btn) { btn.style.background=''; btn.style.borderColor='#d1d5db'; btn.style.color='#374151'; btn.style.fontWeight=''; }
-                _nearbyHidden.forEach(m => { try { markersCluster.addLayer(m); } catch(_) {} });
-                _nearbyHidden.clear();
-                displayInfo && displayInfo('📍 Tắt: hiện toàn bộ marker');
-            }
-        }
-        window._toggleNearbyMode = _toggleNearbyMode;
         window._refreshNearbyMarkers = _refreshNearbyMarkers;
 
         function updateAddMarkerButton() {
