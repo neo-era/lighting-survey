@@ -9179,20 +9179,27 @@
                 const bH = bounds.maxY - bounds.minY;
 
                 if (opts.frameMode === 'a3-standard') {
-                    // A3 chuẩn 1:1000 — khung LUÔN = paperMmW × scale/1000 (mét thực), centered around markers
-                    const paperMmW = 420, paperMmH = 297;
-                    const targetW = paperMmW * scale / 1000;
-                    const targetH = paperMmH * scale / 1000;
+                    // A3 chuẩn 1:1000 — khung viền ngoài = 420×297mm chính xác
+                    // bounds = content area; viền ngoài = bounds + 2×M (M=20) → trừ trước
+                    const paperMmW = 420, paperMmH = 297, frameM = 20;
+                    const targetW = paperMmW * scale / 1000 - 2 * frameM;  // 380m @ 1:1000
+                    const targetH = paperMmH * scale / 1000 - 2 * frameM;  // 257m @ 1:1000
                     const cx = (bounds.minX + bounds.maxX) / 2;
                     const cy = (bounds.minY + bounds.maxY) / 2;
-                    // Warn nếu markers vượt frame (user có thể muốn split N tờ)
+                    // Warn nếu markers vượt content area (user có thể muốn split N tờ)
                     if (bW > targetW || bH > targetH) {
-                        console.warn(`[CAD Gen] Markers ${bW.toFixed(0)}×${bH.toFixed(0)}m vượt khung A3 chuẩn ${targetW}×${targetH}m — cân nhắc bấm "Chia tờ" để split.`);
+                        console.warn(`[CAD Gen] Markers ${bW.toFixed(0)}×${bH.toFixed(0)}m vượt nội dung A3 ${targetW}×${targetH}m — cân nhắc bấm "Chia tờ" để split.`);
                     }
                     bounds.minX = cx - targetW / 2;
                     bounds.maxX = cx + targetW / 2;
                     bounds.minY = cy - targetH / 2;
                     bounds.maxY = cy + targetH / 2;
+                    // Re-align title strip to inner frame top after enforcement
+                    if (_titleRender && _titleRender.type === 'knop12') {
+                        // innerTop = bounds.maxY + M - IM = bounds.maxY + 15
+                        // strip y1 = origMaxY + 24 → set origMaxY = innerTop - 24 = bounds.maxY - 9
+                        _titleRender.origMaxY = bounds.maxY - 9;
+                    }
                 } else {
                     // Auto-fit: chỉ ép aspect ratio, không ép kích thước
                     const currentRatio = bW / bH;
@@ -9403,6 +9410,13 @@
             }
 
             push('0', 'ENDSEC', '0', 'EOF');
+
+            // Patch HEADER with final EXTMIN/EXTMAX — AutoCAD auto-zoom to fit on open
+            { const hM = 20;
+              L.splice(0, 6, '0', 'SECTION', '2', 'HEADER',
+                  '9', '$EXTMIN', '10', (bounds.minX - hM).toFixed(4), '20', (bounds.minY - hM).toFixed(4), '30', '0',
+                  '9', '$EXTMAX', '10', (bounds.maxX + hM).toFixed(4), '20', (bounds.maxY + hM).toFixed(4), '30', '0',
+                  '9', '$INSUNITS', '70', '6', '0', 'ENDSEC'); }
 
             // CRLF line-ending — AutoCAD strict
             return L.join('\r\n');
