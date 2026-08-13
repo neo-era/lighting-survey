@@ -8932,6 +8932,9 @@
             push('0', 'STYLE', '2', 'STANDARD', '70', '0', '40', '0', '41', '1',
                  '50', '0', '71', '0', '42', '2.5', '3', 'times.ttf', '4', '');
             push('0', 'ENDTAB', '0', 'ENDSEC');
+            // BLOCKS section injected here after entity generation (if any block defs created)
+            const _blocksDefL = [];
+            const _entitiesStartIdx = L.length;
             push('0', 'SECTION', '2', 'ENTITIES');
 
             const filteredNames = new Set(rows.map(r => String(r[1] || '').trim()));
@@ -9072,8 +9075,8 @@
                         bounds.minX = bounds.maxX - tbW;
                     }
                 } else if (opts.templateId === 'knop12') {
-                    // KNỞ P12: Horizontal strip 320×55m — same footprint as dienluc
-                    const tbW = 320, tbH = 55;
+                    // KNỞ P12: Horizontal strip 320×28m — compact, khớp mẫu CTCP CSCC TP.HCM PDF
+                    const tbW = 320, tbH = 28;
                     const origMaxY = bounds.maxY;
                     _titleRender = { type: 'knop12', tbW, tbH, origMaxY };
                     bounds.minY -= (tbH + 10);
@@ -9261,11 +9264,25 @@
                         const tbY = innerBottom;
                         _drawTitleBlockDienluc(push, _dxfEscape, _wrapText, md, tbX, tbY, sheetIdx, sheetTotal, tbW);
                     } else if (_titleRender.type === 'knop12') {
-                        // KNỞ P12: same footprint as dienluc
+                        // KNỞ P12: generate title block as DXF BLOCK definition + INSERT at actual position
                         const availableW = innerRight - innerLeft;
                         const tbX = innerLeft;
                         const tbY = innerBottom;
-                        _drawTitleBlockKnop12(push, _dxfEscape, _wrapText, md, tbX, tbY, sheetIdx, sheetTotal, availableW);
+                        // 1. Collect title block entities at (0,0) base point
+                        const _tbBL = [];
+                        const _tbBP = (...a) => { for (const x of a) _tbBL.push(x); };
+                        _drawTitleBlockKnop12(_tbBP, _dxfEscape, _wrapText, md, 0, 0, sheetIdx, sheetTotal, availableW);
+                        // 2. Register BLOCK definition (injected into BLOCKS section later)
+                        _blocksDefL.push(
+                            '0', 'BLOCK', '8', '0', '2', 'TITLE_KNOP12',
+                            '70', '0', '10', '0.0000', '20', '0.0000', '30', '0.0000',
+                            '3', 'TITLE_KNOP12',
+                            ..._tbBL,
+                            '0', 'ENDBLK', '8', '0'
+                        );
+                        // 3. INSERT block at actual drawing position
+                        push('0', 'INSERT', '8', '0', '2', 'TITLE_KNOP12',
+                             '10', tbX.toFixed(4), '20', tbY.toFixed(4), '30', '0');
                         _drawKnop12TitleStrip(push, _dxfEscape, innerLeft, innerRight, _titleRender.origMaxY, md, opts.scale || 1000);
                     }
                 }
@@ -9410,6 +9427,19 @@
             }
 
             push('0', 'ENDSEC', '0', 'EOF');
+
+            // Inject BLOCKS section between TABLES and ENTITIES (if any blocks were registered)
+            if (_blocksDefL.length > 0) {
+                const _blockSec = [
+                    '0', 'SECTION', '2', 'BLOCKS',
+                    '0', 'BLOCK', '8', '0', '2', '*Model_Space', '70', '0',
+                    '10', '0.0000', '20', '0.0000', '30', '0.0000', '3', '*Model_Space',
+                    '0', 'ENDBLK', '8', '0',
+                    ..._blocksDefL,
+                    '0', 'ENDSEC'
+                ];
+                L.splice(_entitiesStartIdx, 0, ..._blockSec);
+            }
 
             // Patch HEADER with final EXTMIN/EXTMAX — AutoCAD auto-zoom to fit on open
             { const hM = 20;
@@ -9815,7 +9845,7 @@
         // Layout: [TT QLGT(31%)|logo(4.4%)|CTCP(25%)|Người lập(5%)|BẢN VẼ(28%)|SHBV(6.3%)]
         // 4 hàng ngang: R1 org names(20m) | R2 role labels(10m) | R3 sig space(10m) | R4 names+date(15m)
         function _drawTitleBlockKnop12(push, escape, wrap, md, tbX, tbY, sheetIdx, sheetTotal, tbWOverride) {
-            const baseW = 320, tbH = 55;
+            const baseW = 320, tbH = 28;   // 28m = 28mm on A3 @ 1:1000 — khớp mẫu CTCP CSCC TP.HCM
             const tbW = tbWOverride && tbWOverride > baseW ? tbWOverride : baseW;
             const sc = tbW / baseW;
 
@@ -9825,10 +9855,10 @@
             const CX = colBase.map(b => tbX + b * sc);
             const y1 = tbY + tbH;
 
-            // 3 rows (2 full separators + 1 SHBV-only) — khớp tỷ lệ ~50%/25%/25%
-            const r12   = tbY + 27;   // full-width: tên tổ chức ↑ / nhãn vai trò ↓
-            const r23   = tbY + 13;   // full-width: nhãn vai trò ↑ / tên người ký ↓
-            const rShbv = tbY + 20;   // SHBV-only: "Số soát xét" ↑ / "Bản vẽ số" ↓
+            // 3 rows trong 28m — tỷ lệ ~50%/25%/25%
+            const r12   = tbY + 14;   // full-width: tên tổ chức ↑ / nhãn vai trò ↓  (50% of 28)
+            const r23   = tbY + 7;    // full-width: nhãn vai trò ↑ / tên người ký ↓ (25% of 28)
+            const rShbv = tbY + 10;   // SHBV-only: "Số soát xét" ↑ / "Bản vẽ số" ↓
 
             // Helpers
             const hl = (xa, xb, y) => push('0', 'LINE', '8', '0',
@@ -9870,18 +9900,18 @@
             // ── C0: TT QUẢN LÝ GIAO THÔNG ──
             const c0W = CX[1] - CX[0], c0cx = CX[0] + c0W / 2;
             const ttName = md.TT_QLGT_NAME || 'TT QUẢN LÝ GIAO THÔNG VÀ HẠ TẦNG KỸ THUẬT TP.HCM';
-            let yT = y1 - 4;
-            // Wrap at ~17 chars/line for 70m column, sz=2.0
-            wrap(ttName, Math.floor(c0W / (2.0 * 0.9))).slice(0, 3).forEach(l => { tc(c0cx, yT, l, '2.0'); yT -= 4.5; });
-            // Middle row: role label
-            tl(CX[0] + 2 * sc, r12 - 5, md.CV_PHU_TRACH || 'CHUYÊN VIÊN PHỤ TRÁCH ĐỊA BÀN', '1.8');
-            // Bottom row: name
-            tc(c0cx, tbY + 4, md.NV_TT_QLGT || '', '2.2');
+            let yT = y1 - 3;
+            // sz=1.8, line gap 3.5m → 3 lines fit above r12=tbY+14 (top zone 14m)
+            wrap(ttName, Math.floor(c0W / (1.8 * 0.9))).slice(0, 3).forEach(l => { tc(c0cx, yT, l, '1.8'); yT -= 3.5; });
+            // Middle row (r23=tbY+7 → r12=tbY+14): role label
+            tl(CX[0] + 2 * sc, r12 - 2.5, md.CV_PHU_TRACH || 'CHUYÊN VIÊN PHỤ TRÁCH ĐỊA BÀN', '1.5');
+            // Bottom row (tbY → r23=tbY+7): name
+            tc(c0cx, tbY + 2.5, md.NV_TT_QLGT || '', '2.0');
 
             // ── C1: Logo circle ──
             const lX = (CX[1] + CX[2]) / 2;
             const lY = (r12 + y1) / 2;
-            const lR = Math.min((CX[2] - CX[1]) * 0.4, 7.5);
+            const lR = Math.min((CX[2] - CX[1]) * 0.4, 5);
             push('0', 'CIRCLE', '8', '0');
             push('10', lX.toFixed(4), '20', lY.toFixed(4), '30', '0');
             push('40', lR.toFixed(4));
@@ -9889,38 +9919,39 @@
             // ── C2: CÔNG TY CỔ PHẦN CHIẾU SÁNG CÔNG CỘNG ──
             const c2W = CX[3] - CX[2], c2cx = CX[2] + c2W / 2;
             const ctcpName = md.CTCP_NAME || 'CÔNG TY CỔ PHẦN CHIẾU SÁNG CÔNG CỘNG TP.HCM';
-            yT = y1 - 4;
-            wrap(ctcpName, Math.floor(c2W / (2.0 * 0.9))).slice(0, 3).forEach(l => { tc(c2cx, yT, l, '2.0'); yT -= 4.5; });
-            tl(CX[2] + 2 * sc, r12 - 5, md.CS_KHU_VUC || 'CHIẾU SÁNG KHU VỰC TRUNG TÂM', '1.8');
-            tc(c2cx, tbY + 4, md.NV_CTCP || '', '2.2');
+            yT = y1 - 3;
+            wrap(ctcpName, Math.floor(c2W / (1.8 * 0.9))).slice(0, 3).forEach(l => { tc(c2cx, yT, l, '1.8'); yT -= 3.5; });
+            tl(CX[2] + 2 * sc, r12 - 2.5, md.CS_KHU_VUC || 'CHIẾU SÁNG KHU VỰC TRUNG TÂM', '1.5');
+            tc(c2cx, tbY + 2.5, md.NV_CTCP || '', '2.0');
 
             // ── C3: NGƯỜI LẬP ──
             const c3cx = CX[3] + (CX[4] - CX[3]) / 2;
-            tc(c3cx, r12 - 5, 'NGƯỜI LẬP', '1.8');
-            tc(c3cx, tbY + 4, md.NGUOI_LAP || '', '2.2');
+            tc(c3cx, r12 - 2.5, 'NGƯỜI LẬP', '1.5');
+            tc(c3cx, tbY + 2.5, md.NGUOI_LAP || '', '2.0');
 
             // ── C4: BẢN VẼ SƠ ĐỒ — tiêu đề + thông tin bản vẽ ──
             const c4W = CX[5] - CX[4], c4cx = CX[4] + c4W / 2;
-            // Row 1 (top): BẢN VẼ SƠ ĐỒ TUYẾN TRẠM ĐÈN... — 2 dòng căn giữa
+            // Row 1 (top, r12=tbY+14 → y1=tbY+28): title 2 dòng sz=2.5, start từ y1-4=tbY+24
             const bvTitle = 'BẢN VẼ SƠ ĐỒ TUYẾN TRẠM ĐÈN HỆ THỐNG CHIẾU SÁNG ĐÔ THỊ';
-            yT = y1 - 6;
-            wrap(bvTitle, Math.floor(c4W / (3.0 * 0.9))).slice(0, 2).forEach(l => { tc(c4cx, yT, l, '3.0'); yT -= 7; });
-            // Row 2 (middle): nhãn "BẢN VẼ:" + Tỷ lệ — đẩy lên sát r12 để tránh đè TEN_BAN_VE
-            tl(CX[4] + 2 * sc, r12 - 3, 'BẢN VẼ:', '1.8');
+            yT = y1 - 4;
+            wrap(bvTitle, Math.floor(c4W / (2.5 * 0.9))).slice(0, 2).forEach(l => { tc(c4cx, yT, l, '2.5'); yT -= 5.5; });
+            // Row 2 (middle, r23=tbY+7 → r12=tbY+14): nhãn BẢN VẼ + Tỷ lệ ở r12-2=tbY+12
+            tl(CX[4] + 2 * sc, r12 - 2, 'BẢN VẼ:', '1.5');
             const tileStr = 'Tỷ lệ: ' + (md.TI_LE || '1/1000');
-            tl(CX[5] - (tileStr.length + 1) * 1.8 * 0.7 * sc, r12 - 3, tileStr, '1.8');
-            // TEN_BAN_VE — nổi bật, căn giữa, đặt phần dưới của middle zone
-            tc(c4cx, r23 + 4, md.TEN_BAN_VE || '', '2.8');
-            // Row 3 (bottom): địa chỉ
-            if (md.DIA_CHI) tl(CX[4] + 2 * sc, tbY + 4, md.DIA_CHI, '1.8');
+            tl(CX[5] - (tileStr.length + 1) * 1.5 * 0.7 * sc, r12 - 2, tileStr, '1.5');
+            // TEN_BAN_VE — nổi bật, căn giữa, r23+2=tbY+9
+            tc(c4cx, r23 + 2, md.TEN_BAN_VE || '', '2.2');
+            // Row 3 (bottom, tbY → r23=tbY+7): địa chỉ sz=1.5
+            if (md.DIA_CHI) tl(CX[4] + 2 * sc, tbY + 2, md.DIA_CHI, '1.5');
 
-            // ── C5: SHBV — 4 ô (SHBV / Số soát xét / Bản vẽ số / Ngày) ──
+            // ── C5: SHBV — 4 ô trong 28m (giảm tương ứng) ──
             const shbvVal = (md.SHBV_PATTERN || '').replace(/XX/g, String(sheetIdx).padStart(2, '0'));
-            tl(CX[5] + 1 * sc, y1 - 4.5,                       shbvVal ? 'SHBV: ' + shbvVal : 'SHBV:', '1.6');
-            // "Số soát xét" nằm GIỮA rShbv(tbY+20) và r12(tbY+27) — dùng r12 không phải y1
-            tl(CX[5] + 1 * sc, rShbv + (r12 - rShbv) / 2 - 1.5, 'Số soát xét:', '1.5');
-            tl(CX[5] + 1 * sc, r23 + (rShbv - r23) / 2 - 1.5,   'Bản vẽ số:', '1.5');
-            tl(CX[5] + 1 * sc, tbY + 4,                          'Ngày: ' + (md.NGAY || ''), '1.5');
+            tl(CX[5] + 1 * sc, y1 - 3.5,                                  shbvVal ? 'SHBV: ' + shbvVal : 'SHBV:', '1.4');
+            // Số soát xét: center giữa rShbv=tbY+10 và r12=tbY+14 → tbY+10.5
+            tl(CX[5] + 1 * sc, rShbv + (r12 - rShbv) / 2 - 1,            'Số soát xét:', '1.3');
+            // Bản vẽ số: center giữa r23=tbY+7 và rShbv=tbY+10 → tbY+7.75
+            tl(CX[5] + 1 * sc, r23  + (rShbv - r23)  / 2 - 0.75,         'Bản vẽ số:', '1.3');
+            tl(CX[5] + 1 * sc, tbY + 2,                                   'Ngày: ' + (md.NGAY || ''), '1.3');
         }
 
         // Dải tiêu đề ngang phía trên content area — KNỞ P12
