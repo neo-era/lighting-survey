@@ -1266,6 +1266,16 @@
                     </div>
                 </div>
 
+                <!-- Section 4c3: Nền CAD đã upload (từ feature CAD Upload T17-T20) -->
+                <div id="cgCadBaseSection" style="margin-bottom:14px;">
+                    <label style="display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;color:#334155;cursor:pointer;user-select:none;">
+                        <input type="checkbox" id="cgIncludeCadBase" onchange="_cgUpdateCadBaseInfo()" style="width:16px;height:16px;cursor:pointer;">
+                        📐 Chèn nền CAD đã upload (bản vẽ hiện trạng)
+                    </label>
+                    <div id="cgCadBaseInfo" style="display:none;margin-top:6px;padding:6px;font-size:11px;color:#065f46;background:#d1fae5;border-radius:4px;">—</div>
+                    <div id="cgCadBaseWarn" style="display:none;margin-top:6px;padding:6px;font-size:11px;color:#7f1d1d;background:#fef2f2;border-radius:4px;">⚠ Sheet này chưa có CAD upload. Bấm nút CAD trên topbar để upload trước.</div>
+                </div>
+
                 <!-- Section 4d: Con dấu phê duyệt (P58) -->
                 <div style="margin-bottom:14px;">
                     <label style="display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;color:#334155;cursor:pointer;user-select:none;">
@@ -9039,6 +9049,24 @@
                 }
             }
 
+            // CAD nền: entities từ file DXF đã upload (T17-T20)
+            if (opts.cadBaseOptions && typeof _drawCadBaseInDxf === 'function' && isFinite(bounds.minX)) {
+                try {
+                    const CLIP_PAD = 30;
+                    const clipBounds = {
+                        minX: bounds.minX - CLIP_PAD, minY: bounds.minY - CLIP_PAD,
+                        maxX: bounds.maxX + CLIP_PAD, maxY: bounds.maxY + CLIP_PAD
+                    };
+                    const stats = _drawCadBaseInDxf(push, opts.cadBaseOptions, cm, outDE, outDN, clipBounds);
+                    console.log('[CAD Gen] CAD base drawn:', stats.entityCount, 'entities, skipped:', stats.skipped);
+                } catch (err) {
+                    console.warn('[CAD Gen] CAD base skip:', err.message);
+                    if (typeof displayError === 'function') {
+                        displayError('⚠ Nền CAD lỗi (' + err.message + ') — bản vẽ vẫn xuất bình thường không có nền.');
+                    }
+                }
+            }
+
             // Snapshot bounds markers TRƯỚC khi expand bằng title block/polish
             // → dùng để đặt legend + north arrow trong khu vực markers
             const mapBounds = { ...bounds };
@@ -10134,6 +10162,7 @@
             _cgRenderFilterAccordion();
             _cgRenderMetadataForm();
             _cgUpdateLiveCounter();
+            if (typeof _cgUpdateCadBaseInfo === 'function') _cgUpdateCadBaseInfo();
             modal.style.display = 'flex';
             if (typeof closeControlsModal === 'function') closeControlsModal();
         }
@@ -10669,6 +10698,7 @@
                 stamps: stampsMeta,  // null nếu tắt → generator skip stamps
                 drawingType: drawingType,  // P60: 'site-plan' | 'single-line' | 'overview'
                 osmOptions: (typeof _cgCollectOsmOpts === 'function') ? _cgCollectOsmOpts() : null,  // P65+P66: null nếu tắt
+                cadBaseOptions: (typeof _cgCollectCadBaseOpts === 'function') ? _cgCollectCadBaseOpts() : null,  // CAD nền từ upload
                 frameMode: (document.getElementById('cgFrameMode') || {}).value || 'auto-fit'   // 'auto-fit' | 'a3-standard'
             };
 
@@ -14435,6 +14465,153 @@
             return { entityCount, skipped };
         }
         window._drawOsmBasemapInDxf = _drawOsmBasemapInDxf;
+
+        // ─────────────────────────────────────────────────────────────
+        // CAD nền: xuất kèm entities từ file DXF đã upload (T17-T20)
+        // Tái dụng pattern OSM: _cgCollectCadBaseOpts → opts → _drawCadBaseInDxf
+        // Round-trip qua lat/lon để safe cho mọi combination zone/cm/k0
+        // ─────────────────────────────────────────────────────────────
+        function _cgUpdateCadBaseInfo() {
+            const cb = document.getElementById('cgIncludeCadBase');
+            const info = document.getElementById('cgCadBaseInfo');
+            const warn = document.getElementById('cgCadBaseWarn');
+            if (!cb) return;
+            const hasCad = _cadMeta && Array.isArray(_cadEntities) && _cadEntities.length > 0;
+            if (!hasCad) {
+                cb.checked = false;
+                cb.disabled = true;
+                if (info) info.style.display = 'none';
+                if (warn) warn.style.display = 'block';
+                return;
+            }
+            cb.disabled = false;
+            if (warn) warn.style.display = 'none';
+            if (!info) return;
+            if (cb.checked) {
+                const visibleLayers = (_cadMeta.layers || []).filter(ln => _cadLayerVisibility[ln] !== false);
+                const visibleCount = _cadEntities.filter(e => _cadLayerVisibility[e.layer] !== false).length;
+                info.style.display = 'block';
+                info.innerHTML = `📁 ${_cadMeta.filename || 'CAD'} — <b>${visibleCount}</b>/${_cadEntities.length} entities · <b>${visibleLayers.length}</b>/${(_cadMeta.layers || []).length} layers visible. Layer prefix xuất DXF: <code>CAD_*</code>`;
+            } else {
+                info.style.display = 'none';
+            }
+        }
+        window._cgUpdateCadBaseInfo = _cgUpdateCadBaseInfo;
+
+        function _cgCollectCadBaseOpts() {
+            const cb = document.getElementById('cgIncludeCadBase');
+            if (!cb || !cb.checked || cb.disabled) return null;
+            if (!_cadMeta || !Array.isArray(_cadEntities) || _cadEntities.length === 0) return null;
+            const filtered = _cadEntities.filter(e => _cadLayerVisibility[e.layer] !== false);
+            if (filtered.length === 0) return null;
+            return { entities: filtered, meta: _cadMeta };
+        }
+        window._cgCollectCadBaseOpts = _cgCollectCadBaseOpts;
+
+        function _drawCadBaseInDxf(push, cadData, exportCm, outDE, outDN, clipBounds) {
+            if (!cadData || !cadData.entities || cadData.entities.length === 0) {
+                return { entityCount: 0, skipped: 0 };
+            }
+            const { entities, meta } = cadData;
+            const srcZone = meta.zone;
+            const srcK0   = meta.k0 || 0.9999;
+            const srcDE   = meta.dE || 0;
+            const srcDN   = meta.dN || 0;
+            const affine  = meta.affine || null;
+            let entityCount = 0, skipped = 0;
+
+            const hasClip = clipBounds && isFinite(clipBounds.minX);
+            // Liang-Barsky line clip (copy pattern OSM)
+            const clipSeg = (x1, y1, x2, y2) => {
+                if (!hasClip) return { x1, y1, x2, y2 };
+                let t0 = 0, t1 = 1;
+                const dx = x2 - x1, dy = y2 - y1;
+                const p = [-dx, dx, -dy, dy];
+                const q = [x1 - clipBounds.minX, clipBounds.maxX - x1,
+                           y1 - clipBounds.minY, clipBounds.maxY - y1];
+                for (let i = 0; i < 4; i++) {
+                    if (p[i] === 0) { if (q[i] < 0) return null; }
+                    else {
+                        const t = q[i] / p[i];
+                        if (p[i] < 0) { if (t > t1) return null; if (t > t0) t0 = t; }
+                        else          { if (t < t0) return null; if (t < t1) t1 = t; }
+                    }
+                }
+                return { x1: x1 + t0 * dx, y1: y1 + t0 * dy,
+                         x2: x1 + t1 * dx, y2: y1 + t1 * dy };
+            };
+
+            // Convert entity VN2000 (upload) → lat/lon → VN2000 (export target)
+            const convertPt = (px, py) => {
+                const xStd = px - srcDE;
+                const yStd = py - srcDN;
+                let ll = convertVn2000ToLatLon(xStd, yStd, srcZone, srcK0);
+                if (affine && typeof _applyAffineToLatLon === 'function') {
+                    ll = _applyAffineToLatLon(ll.lat, ll.lon, affine);
+                }
+                const vn = convertLatLonToVn2000(ll.lat, ll.lon, exportCm);
+                return { x: vn.x + outDE, y: vn.y + outDN };
+            };
+
+            const inClipPt = (x, y) => !hasClip
+                || (x >= clipBounds.minX && x <= clipBounds.maxX
+                 && y >= clipBounds.minY && y <= clipBounds.maxY);
+
+            for (const e of entities) {
+                // Layer name: prefix CAD_ + sanitize (AutoCAD layer chỉ chấp nhận A-Z 0-9 _ -)
+                const layer = 'CAD_' + String(e.layer || '0').replace(/[^A-Za-z0-9_-]/g, '_');
+
+                if (e.type === 'line' && Array.isArray(e.points) && e.points.length >= 2) {
+                    const p1 = convertPt(e.points[0].x, e.points[0].y);
+                    const p2 = convertPt(e.points[1].x, e.points[1].y);
+                    const s = clipSeg(p1.x, p1.y, p2.x, p2.y);
+                    if (!s) { skipped++; continue; }
+                    push('0', 'LINE', '8', layer,
+                        '10', s.x1.toFixed(4), '20', s.y1.toFixed(4), '30', '0',
+                        '11', s.x2.toFixed(4), '21', s.y2.toFixed(4), '31', '0');
+                    entityCount++;
+                } else if (e.type === 'polyline' && Array.isArray(e.points) && e.points.length >= 2) {
+                    const pts = e.points.map(p => convertPt(p.x, p.y));
+                    for (let i = 1; i < pts.length; i++) {
+                        const s = clipSeg(pts[i-1].x, pts[i-1].y, pts[i].x, pts[i].y);
+                        if (!s) { skipped++; continue; }
+                        push('0', 'LINE', '8', layer,
+                            '10', s.x1.toFixed(4), '20', s.y1.toFixed(4), '30', '0',
+                            '11', s.x2.toFixed(4), '21', s.y2.toFixed(4), '31', '0');
+                        entityCount++;
+                    }
+                    // Đóng nếu closed polyline
+                    if (e.closed && pts.length >= 3) {
+                        const last = pts[pts.length - 1], first = pts[0];
+                        const s = clipSeg(last.x, last.y, first.x, first.y);
+                        if (s) {
+                            push('0', 'LINE', '8', layer,
+                                '10', s.x1.toFixed(4), '20', s.y1.toFixed(4), '30', '0',
+                                '11', s.x2.toFixed(4), '21', s.y2.toFixed(4), '31', '0');
+                            entityCount++;
+                        } else skipped++;
+                    }
+                } else if (e.type === 'circle' && e.center && isFinite(e.radius)) {
+                    const c = convertPt(e.center.x, e.center.y);
+                    if (!inClipPt(c.x, c.y)) { skipped++; continue; }
+                    push('0', 'CIRCLE', '8', layer,
+                        '10', c.x.toFixed(4), '20', c.y.toFixed(4), '30', '0',
+                        '40', Number(e.radius).toFixed(4));
+                    entityCount++;
+                } else if (e.type === 'text' && e.position && e.text) {
+                    const p = convertPt(e.position.x, e.position.y);
+                    if (!inClipPt(p.x, p.y)) { skipped++; continue; }
+                    const height = isFinite(e.height) && e.height > 0 ? Number(e.height) : 2;
+                    push('0', 'TEXT', '8', layer,
+                        '10', p.x.toFixed(4), '20', p.y.toFixed(4), '30', '0',
+                        '40', height.toFixed(4),
+                        '1', _dxfEscape(String(e.text)));
+                    entityCount++;
+                }
+            }
+            return { entityCount, skipped };
+        }
+        window._drawCadBaseInDxf = _drawCadBaseInDxf;
 
         // ─────────────────────────────────────────────────────────────
         // P64: Zip helper — nếu có stamps images → zip DXF + stamps PNGs
