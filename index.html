@@ -9168,17 +9168,15 @@
                 const usedTypes = Object.keys(byType).map(Number).filter(t => byType[t] > 0);
                 const rowH = 5, lgW = 55;
                 const lgH = usedTypes.length > 0 ? (8 + usedTypes.length * rowH + 3) : 0;
-                const lgX = mapBounds.minX - 5;
-                const lgTop = mapBounds.maxY + 5 + lgH;   // top-Y
-                // North arrow pre-compute
+                // Positions cho 3 elements (Chú Thích + Tỉ lệ + Bảng ký hiệu) — recompute SAU A3 enforce
+                // để đặt NGOÀI frame outer (dưới bounds.minY - M). Placeholder tại đây, override sau.
+                let lgX = 0, lgTop = 0;
+                // North arrow pre-compute (vẫn TRONG frame, góc trên phải mapBounds)
                 const naX = mapBounds.maxX + 5;
                 const naY = mapBounds.maxY + 5;
                 const naW = 5, naH = 8;
-                // Expand bounds cho legend + north arrow + stamps (frame sẽ ôm cả các thứ này)
-                if (usedTypes.length > 0) {
-                    bounds.minX = Math.min(bounds.minX, lgX);
-                    bounds.maxY = Math.max(bounds.maxY, lgTop);
-                }
+                // Expand bounds chỉ cho north arrow + stamps (frame ôm cả 2)
+                // Legend + auto-legend + scale bar → KHÔNG expand (chúng nằm ngoài frame)
                 bounds.maxX = Math.max(bounds.maxX, naX + naW);
                 bounds.maxY = Math.max(bounds.maxY, naY + naH + 6);
                 // P58: Expand bounds cho stamps (bounds.maxY phải include stampsTopY + padding)
@@ -9188,19 +9186,6 @@
                     bounds.minX = Math.min(bounds.minX, stampsStartX - 5);
                     bounds.maxX = Math.max(bounds.maxX, stampsStartX + stampsBlockW + 5);
                     bounds.maxY = Math.max(bounds.maxY, stampsTopY + 10);
-                }
-
-                // P59+: Expand bounds cho auto-legend (dưới mapBounds)
-                const _lampRowsCount = opts.__lampSpecs ? opts.__lampSpecs.size : 0;
-                const _legendItemsCount = (opts.__usedStates ? opts.__usedStates.size : 0)
-                                        + (opts.__usedCableStates ? opts.__usedCableStates.size : 0)
-                                        + (_lampRowsCount > 0 ? _lampRowsCount + 1 : 0);  // +1 separator row
-                if (_legendItemsCount > 0) {
-                    const legendH = 8 + _legendItemsCount * 6 + 4;
-                    const legendMinY = mapBounds.minY - 5 - legendH;
-                    bounds.minY = Math.min(bounds.minY, legendMinY - 5);
-                    bounds.minX = Math.min(bounds.minX, mapBounds.minX - 5);
-                    bounds.maxX = Math.max(bounds.maxX, mapBounds.minX + 95);   // legend width 90m + 5m padding
                 }
 
                 // Force aspect ratio A3 landscape (420/297 ≈ 1.414) — auto-pad ngang nếu bounds portrait
@@ -9266,6 +9251,29 @@
                 push('0', 'LINE', '8', '0', '10', fix2, '20', fiy2, '30', '0', '11', fix1, '21', fiy2, '31', '0');
                 push('0', 'LINE', '8', '0', '10', fix1, '20', fiy2, '30', '0', '11', fix1, '21', fiy1, '31', '0');
 
+                // === 1c. STRIP CHÚ THÍCH / TỈ LỆ / BẢNG KÝ HIỆU — ĐẶT NGOÀI FRAME (dưới frame outer) ===
+                // 3 blocks đặt trong 3 cột riêng biệt, cách frame outer 10m gap để dễ đọc
+                const stripTop = bounds.minY - M - 10;     // 10m dưới frame outer bottom
+                const stripLeft = bounds.minX;
+                // Cột 1: scale bar + Tỉ lệ (chiếm ~60m)
+                // Cột 2: BẢNG KÝ HIỆU legend cũ (loại marker + count, chiếm ~60m)
+                // Cột 3: Auto-legend CHÚ THÍCH (states + lamp specs, chiếm ~90m)
+                const _stripSbX = stripLeft + 5;
+                const _stripSbY = stripTop - 12;
+                const _stripLgX = stripLeft + 75;
+                const _stripLgTop = stripTop;
+                // Auto-legend dùng fake mapBounds (nó dựa vào minX + minY để tính vị trí)
+                // byTop = mapBounds.minY - 5 → set mapBounds.minY = stripTop + 5 để byTop = stripTop
+                const _stripAlMapBounds = {
+                    minX: stripLeft + 155,
+                    minY: stripTop + 5,
+                    maxX: bounds.maxX,
+                    maxY: bounds.maxY
+                };
+                // Override lgX/lgTop declared trước A3 enforce (dùng let, đã declare ở pre-compute)
+                lgX = _stripLgX;
+                lgTop = _stripLgTop;
+
                 // === 1b. TITLE BLOCK (P59) — render SAU frame, dispatch theo type ===
                 if (_titleRender) {
                     // Inner frame boundaries (M outer margin, IM inner offset)
@@ -9315,9 +9323,9 @@
                     }
                 }
 
-                // === 2. SCALE BAR — dưới mapBounds, bên trái title block ===
-                const sbX = mapBounds.minX;
-                const sbY = mapBounds.minY - 35;
+                // === 2. SCALE BAR — NGOÀI frame outer (strip dưới) ===
+                const sbX = _stripSbX;
+                const sbY = _stripSbY;
                 const segLen = 10, segH = 2;
                 push('0', 'LINE', '8', '0', '10', sbX.toFixed(4), '20', sbY.toFixed(4), '30', '0',
                      '11', (sbX + 50).toFixed(4), '21', sbY.toFixed(4), '31', '0');
@@ -9385,8 +9393,8 @@
                 push('40', '3.5');
                 push('1', 'B');
 
-                // === 4b. AUTO-LEGEND "CHÚ THÍCH" (P59+) — vẽ chỉ symbols xuất hiện ===
-                _drawAutoLegend(push, _dxfEscape, mapBounds, opts.__usedStates, opts.__usedCableStates, opts.__lampSpecs);
+                // === 4b. AUTO-LEGEND "CHÚ THÍCH" (P59+) — NGOÀI frame outer (strip dưới, cột phải) ===
+                _drawAutoLegend(push, _dxfEscape, _stripAlMapBounds, opts.__usedStates, opts.__usedCableStates, opts.__lampSpecs);
 
                 // === 5. APPROVAL STAMPS (P58) — 4 ô chuẩn hồ sơ Sở XD ===
                 if (activeStamps.length > 0) {
