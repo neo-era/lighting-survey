@@ -1029,10 +1029,60 @@ function doPost(e) {
     // P57: Auto phase assignment (round-robin A/B/C) cho toàn tủ
     if (data.action === 'assign_phases')    return handleAssignPhases(data);
 
+    // Kiểm tra kết nối đọc/ghi Google Sheet
+    if (data.action === 'check_sheet') return handleCheckSheet(data);
+
     return jsonResponse({ status: 'error', message: 'action không hợp lệ: ' + data.action });
   } catch (err) {
     return jsonResponse({ status: 'error', message: err.message });
   }
+}
+
+// ── KIỂM TRA KẾT NỐI SHEET (check_sheet) ─────────────────────────────────
+
+function handleCheckSheet(data) {
+  var result = { status: 'ok', read: null, write: null, sheets: [], errors: [] };
+  var testTs = String(new Date().getTime());
+
+  // ── 1. KIỂM TRA ĐỌC ─────────────────────────────────────────────
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var allSheets = ss.getSheets().map(function(s) {
+      return { name: s.getName(), rows: Math.max(0, s.getLastRow() - 1) };
+    });
+    result.sheets = allSheets;
+
+    var sheetName = data.sheet || 'DanhSachTru';
+    var sh = getSheet(sheetName);
+    var lastRow = sh.getLastRow();
+    var header  = lastRow >= 1 ? sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0] : [];
+    result.read = {
+      ok: true,
+      sheet: sheetName,
+      totalRows: Math.max(0, lastRow - 1),
+      cols: header.length,
+      spreadsheet: ss.getName()
+    };
+  } catch (e) {
+    result.read = { ok: false, error: e.message };
+    result.errors.push('Đọc Sheet: ' + e.message);
+  }
+
+  // ── 2. KIỂM TRA GHI (Script Properties — không đụng dữ liệu) ──
+  try {
+    var props = PropertiesService.getScriptProperties();
+    props.setProperty('_check_write_ts', testTs);
+    var readBack = props.getProperty('_check_write_ts');
+    props.deleteProperty('_check_write_ts');
+    result.write = { ok: readBack === testTs, ts: testTs };
+    if (readBack !== testTs) result.errors.push('Ghi Properties: giá trị đọc lại không khớp.');
+  } catch (e) {
+    result.write = { ok: false, error: e.message };
+    result.errors.push('Ghi Properties: ' + e.message);
+  }
+
+  if (result.errors.length > 0) result.status = 'warn';
+  return jsonResponse(result);
 }
 
 // ── BATCH IMPORT (nhập hàng loạt từ Excel) ────────────────────────────────

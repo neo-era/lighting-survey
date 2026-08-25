@@ -2078,6 +2078,20 @@
 
                     <div class="ctrl-divider"></div>
 
+                    <!-- Kiểm tra kết nối Sheet -->
+                    <div class="ctrl-section" id="sec-check-sheet">
+                        <div class="ctrl-title">🔌 Kết nối dữ liệu</div>
+                        <button onclick="_checkSheetConnection()" class="ctrl-btn" id="btnCheckSheet"
+                                style="width:100%;font-size:12px;padding:8px;text-align:left;">
+                            🔍 Kiểm tra đọc/ghi Google Sheet
+                        </button>
+                        <div id="checkSheetResult" style="display:none;margin-top:6px;font-size:11px;
+                             background:#f1f5f9;border-radius:6px;padding:8px 10px;line-height:1.6;
+                             border-left:3px solid #94a3b8;"></div>
+                    </div>
+
+                    <div class="ctrl-divider"></div>
+
                     <!-- Nội dung GitHub -->
                     <div id="githubContents"></div>
 
@@ -17193,6 +17207,68 @@
             const bytes = new Uint8Array(s.length);
             for (let i=0; i<s.length; i++) bytes[i] = s.charCodeAt(i);
             return bytes;
+        }
+
+        // ── KIỂM TRA KẾT NỐI GOOGLE SHEET ──────────────────────────────────
+        async function _checkSheetConnection() {
+            const btn = document.getElementById('btnCheckSheet');
+            const out = document.getElementById('checkSheetResult');
+            if (!KHAOSAT_GAS_URL) {
+                if (out) { out.style.display = 'block'; out.style.borderLeftColor = '#ef4444'; out.innerHTML = '❌ Chưa cấu hình KHAOSAT_GAS_URL.'; }
+                return;
+            }
+            if (btn) { btn.disabled = true; btn.textContent = '⏳ Đang kiểm tra...'; }
+            if (out) { out.style.display = 'none'; }
+            try {
+                const res = await fetch(KHAOSAT_GAS_URL, {
+                    method: 'POST',
+                    body: JSON.stringify({ action: 'check_sheet', sheet: currentSheet || 'DanhSachTru' })
+                });
+                const d = await res.json();
+                if (!out) return;
+                out.style.display = 'block';
+
+                // Lỗi top-level từ GAS (vd: chưa redeploy, action không tồn tại)
+                if (d.status === 'error' && !d.read && !d.write) {
+                    out.style.borderLeftColor = '#ef4444';
+                    out.innerHTML = `❌ <b>GAS trả về lỗi</b>: <em>${d.message || 'Không rõ lỗi'}</em><br>`
+                        + `<span style="color:#64748b;font-size:10px;">⚠ Có thể GAS chưa được <b>redeploy New Version</b> sau khi cập nhật code.</span>`;
+                    return;
+                }
+
+                const readOk  = d.read  && d.read.ok;
+                const writeOk = d.write && d.write.ok;
+                const allOk   = readOk && writeOk;
+                out.style.borderLeftColor = allOk ? '#10b981' : (d.status === 'warn' ? '#f59e0b' : '#ef4444');
+                let html = '';
+                if (readOk) {
+                    html += `✅ <b>Đọc OK</b> — Sheet <code>${d.read.sheet}</code>: <b>${d.read.totalRows}</b> hàng dữ liệu, ${d.read.cols} cột<br>`;
+                    html += `&nbsp;&nbsp;File: <em>${d.read.spreadsheet}</em><br>`;
+                } else {
+                    html += `❌ <b>Đọc THẤT BẠI</b>: ${(d.read && d.read.error) || 'Không rõ lỗi'}<br>`;
+                }
+                if (writeOk) {
+                    html += `✅ <b>Ghi OK</b> — Script Properties write/read round-trip thành công<br>`;
+                } else {
+                    html += `❌ <b>Ghi THẤT BẠI</b>: ${(d.write && d.write.error) || 'Không rõ lỗi'}<br>`;
+                }
+                if (d.sheets && d.sheets.length) {
+                    html += `<details style="margin-top:4px;"><summary style="cursor:pointer;color:#2563eb;font-size:10px;">📋 ${d.sheets.length} sheet trong Spreadsheet</summary>`;
+                    html += '<div style="margin-top:4px;">' + d.sheets.map(s => `&nbsp;• ${s.name}: ${s.rows} hàng`).join('<br>') + '</div></details>';
+                }
+                if (d.errors && d.errors.length) {
+                    html += `<div style="color:#dc2626;margin-top:4px;">⚠ ${d.errors.join('<br>⚠ ')}</div>`;
+                }
+                out.innerHTML = html;
+            } catch (e) {
+                if (out) {
+                    out.style.display = 'block';
+                    out.style.borderLeftColor = '#ef4444';
+                    out.innerHTML = `❌ Lỗi kết nối GAS: <em>${e.message}</em>`;
+                }
+            } finally {
+                if (btn) { btn.disabled = false; btn.textContent = '🔍 Kiểm tra đọc/ghi Google Sheet'; }
+            }
         }
 
         async function updateGitHubExcel() {
