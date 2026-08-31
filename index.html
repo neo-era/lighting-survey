@@ -1448,14 +1448,8 @@
                 Tự động tính chuỗi cáp tối ưu (Minimum Spanning Tree) từ tủ đến các trụ trong cùng tủ điều khiển.
                 Điền vào cột <code>Marker gốc</code> + <code>Khoảng cách</code> cho từng trụ.
             </div>
-            <label style="display:flex;justify-content:space-between;align-items:center;font-size:12px;font-weight:700;color:#334155;margin-bottom:4px;">
-                <span>Chọn tủ điều khiển <span style="font-weight:400;color:#94a3b8;font-size:11px;">(Ctrl/⌘+click chọn nhiều)</span></span>
-                <span>
-                    <button type="button" onclick="_mstSelectAllTus(true)" style="padding:2px 8px;border:1px solid #cbd5e1;border-radius:4px;background:#fff;font-size:10px;cursor:pointer;">Tất cả</button>
-                    <button type="button" onclick="_mstSelectAllTus(false)" style="padding:2px 8px;border:1px solid #cbd5e1;border-radius:4px;background:#fff;font-size:10px;cursor:pointer;">Bỏ chọn</button>
-                </span>
-            </label>
-            <select id="mstTuSelect" multiple size="6" onchange="_onMstTuChange()" style="width:100%;padding:6px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;margin-bottom:10px;"></select>
+            <label style="display:block;font-size:12px;font-weight:700;color:#334155;margin-bottom:4px;">Chọn tủ điều khiển</label>
+            <select id="mstTuSelect" onchange="_onMstTuChange()" style="width:100%;padding:8px;border:1.5px solid var(--border);border-radius:6px;font-size:13px;margin-bottom:10px;"></select>
 
             <label style="display:block;font-size:12px;font-weight:700;color:#334155;margin-bottom:4px;">Thuật toán</label>
             <select id="mstAlgo" style="width:100%;padding:8px;border:1.5px solid var(--border);border-radius:6px;font-size:13px;margin-bottom:10px;">
@@ -1466,24 +1460,8 @@
             <label style="display:block;font-size:12px;font-weight:700;color:#334155;margin-bottom:4px;">Cảnh báo đoạn cáp dài quá (m)</label>
             <input type="number" id="mstMaxSegment" value="200" min="10" step="10" style="width:100%;padding:6px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:13px;font-family:monospace;margin-bottom:10px;">
 
-            <label style="display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;color:#334155;margin-bottom:6px;cursor:pointer;user-select:none;padding:8px 10px;background:#eff6ff;border:1.5px solid #93c5fd;border-radius:6px;">
-                <input type="checkbox" id="mstRouteRoad" style="width:16px;height:16px;cursor:pointer;">
-                🛣 Route theo đường phố (OSRM public API)
-            </label>
-            <div style="font-size:10px;color:#64748b;margin-bottom:10px;line-height:1.4;">
-                Nếu bật: mỗi đoạn cáp sẽ được route theo đường thực (không bay thẳng qua sông). Rate limit ~1s/edge — 20 cáp ≈ 22s. Kết quả cache 30 ngày trong browser.
-            </div>
-
             <div id="mstPreview" style="background:#f8fafc;padding:10px 12px;border-radius:6px;font-size:12px;color:#475569;margin-bottom:12px;min-height:40px;">
                 Chọn tủ để xem preview...
-            </div>
-
-            <div id="mstRouteProgress" style="display:none;padding:10px 12px;background:#fef3c7;border:1.5px solid #fbbf24;border-radius:6px;margin-bottom:12px;font-size:12px;">
-                <div id="mstRouteProgressText" style="font-weight:600;color:#78350f;margin-bottom:6px;">Đang route cáp...</div>
-                <div style="background:#fde68a;height:8px;border-radius:4px;overflow:hidden;">
-                    <div id="mstRouteProgressBar" style="height:100%;background:#f59e0b;width:0%;transition:width .2s;"></div>
-                </div>
-                <button id="mstRouteCancelBtn" onclick="_mstRouteCancel()" style="margin-top:6px;padding:4px 10px;background:#dc2626;color:#fff;border:none;border-radius:4px;font-size:11px;cursor:pointer;">Hủy</button>
             </div>
 
             <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">
@@ -3519,40 +3497,6 @@
             return null;
         }
 
-        // Memcache cho cable route polyline (OSRM cached IDB) — sync lookup từ _buildCableLines
-        // Key = childName (row[1]) → value = {polyline: [[lat,lon],...], distance: m}
-        // Populate: (a) sau khi Auto MST route mode apply xong, (b) _preloadCableRoutesFromIDB() khi toggle ON
-        let _cableRouteMemCache = new Map();
-        window._cableRouteMemCache = _cableRouteMemCache;
-
-        // Preload cache route từ IDB vào memcache (sync lookup sau đó)
-        // rows = filtered rows với parent trong Marker gốc
-        async function _preloadCableRoutesFromIDB(rows) {
-            if (!Array.isArray(rows)) return;
-            const posIdx = {};
-            ((loadedData || []).slice(1)).forEach(r => {
-                const name = String(r[1] || '').trim();
-                const lat = parseCoord(r[2]), lon = parseCoord(r[3]);
-                if (name && Number.isFinite(lat) && Number.isFinite(lon)) posIdx[name] = [lat, lon];
-            });
-            for (const r of rows) {
-                const parent = String(r[14] || '').trim();
-                const child = String(r[1] || '').trim();
-                if (!parent || !child) continue;
-                if (_cableRouteMemCache.has(child)) continue;   // đã có
-                const pLL = posIdx[parent], cLL = posIdx[child];
-                if (!pLL || !cLL) continue;
-                const key = _routeCacheKey(pLL[0], pLL[1], cLL[0], cLL[1]);
-                try {
-                    const cached = await _idbGetRoute(key);
-                    if (cached && Array.isArray(cached.polyline) && cached.polyline.length >= 2) {
-                        _cableRouteMemCache.set(child, { polyline: cached.polyline, distance: cached.distance });
-                    }
-                } catch (_) { /* ignore */ }
-            }
-        }
-        window._preloadCableRoutesFromIDB = _preloadCableRoutesFromIDB;
-
         function _buildCableLines(rows) {
             const cycle = _detectCableCycle(rows);
             // Build set tên node thuộc vòng lặp (bỏ phần tử cuối trùng đầu)
@@ -3618,29 +3562,17 @@
                     const style = CABLE_STYLE[String(r[22] || 'noi')] || CABLE_STYLE.noi;
                     lineColor = style.color; lineDash = style.dashArray; lineWeight = 2.5;
                 }
-                // Lookup route polyline từ memcache (nếu có route qua OSRM)
-                const routed = _cableRouteMemCache.get(child);
-                const polylinePts = (routed && Array.isArray(routed.polyline) && routed.polyline.length >= 2)
-                    ? routed.polyline
-                    : [from, to];
-                const line = L.polyline(polylinePts, {
+                const line = L.polyline([from, to], {
                     color: lineColor, weight: lineWeight, dashArray: lineDash, opacity: isCycle ? 1 : 0.8
                 });
                 line._cableRow = r;
                 line._isCycle  = isCycle;
-                line._isRouted = !!routed;
                 line.addTo(_cableLayerGroup);
                 if (_cableEditMode) _attachCableEditHandler(line);
                 cableCount++;
                 const distVal = String(r[15] || '').trim();
                 const distLabel = distVal || String(haversineM(from[0], from[1], to[0], to[1]));
-                // Midpoint: nếu routed → vertex giữa polyline; nếu không → midpoint 2 endpoints
-                let mid;
-                if (routed && polylinePts.length >= 3) {
-                    mid = polylinePts[Math.floor(polylinePts.length / 2)];
-                } else {
-                    mid = [(from[0]+to[0])/2, (from[1]+to[1])/2];
-                }
+                const mid = [(from[0]+to[0])/2, (from[1]+to[1])/2];
                 L.marker(mid, {
                     icon: L.divIcon({ className:'cable-label', html:`<span>${distLabel}m</span>`, iconSize:null, iconAnchor:[20,10] }),
                     interactive: false, keyboard: false
@@ -3891,7 +3823,7 @@
             if (!visible && _drawCableMode) toggleDrawCableMode();
         }
 
-        async function toggleCableLayer() {
+        function toggleCableLayer() {
             if (_cableVisible) {
                 _cableVisible = false;
                 _removeCableLines();
@@ -3903,8 +3835,6 @@
             // Cables OFF → vẽ ngay theo bộ lọc hiện tại
             const rows = _getFilteredRows();
             if (!rows.length) { displayError('Bộ lọc hiện tại không có dữ liệu để vẽ sơ đồ cáp.'); return; }
-            // Preload route cache từ IDB (nếu có) → memcache → _buildCableLines sync lookup polyline
-            try { await _preloadCableRoutesFromIDB(rows); } catch (_) {}
             _buildCableLines(rows);
             _cableVisible = true;
             const btn = document.getElementById('btnToggleCable');
@@ -6122,12 +6052,11 @@
         // DB v1 = csv-cache only; DB v2 thêm cad-drawings (P17 — CAD overlay)
         function _idbOpen() {
             return new Promise((res, rej) => {
-                const r = indexedDB.open('lighting-survey-db', 3);
+                const r = indexedDB.open('lighting-survey-db', 2);
                 r.onupgradeneeded = e => {
                     const db = e.target.result;
                     if (!db.objectStoreNames.contains('csv-cache')) db.createObjectStore('csv-cache');
                     if (!db.objectStoreNames.contains('cad-drawings')) db.createObjectStore('cad-drawings');
-                    if (!db.objectStoreNames.contains('cable-routes')) db.createObjectStore('cable-routes');
                 };
                 r.onsuccess = e => res(e.target.result);
                 r.onerror = rej;
@@ -6179,28 +6108,6 @@
                 await new Promise((res, rej) => {
                     const tx = db.transaction('cad-drawings', 'readwrite');
                     tx.objectStore('cad-drawings').delete(key);
-                    tx.oncomplete = res; tx.onerror = rej;
-                });
-            } catch { /* ignore */ }
-        }
-
-        // Cable route cache (OSRM polyline per fromLL|toLL) — TTL 30 ngày
-        async function _idbGetRoute(key) {
-            try {
-                const db = await _idbOpen();
-                return await new Promise((res, rej) => {
-                    const r = db.transaction('cable-routes', 'readonly').objectStore('cable-routes').get(key);
-                    r.onsuccess = () => res(r.result);
-                    r.onerror = rej;
-                });
-            } catch { return null; }
-        }
-        async function _idbSetRoute(key, val) {
-            try {
-                const db = await _idbOpen();
-                await new Promise((res, rej) => {
-                    const tx = db.transaction('cable-routes', 'readwrite');
-                    tx.objectStore('cable-routes').put(val, key);
                     tx.oncomplete = res; tx.onerror = rej;
                 });
             } catch { /* ignore */ }
@@ -9082,50 +8989,25 @@
             opts.__usedCableStates = _usedCableStates;
             opts.__lampSpecs = _buildLampSpecs(rows);
 
-            // Preload cable route memcache từ IDB (nếu có OSRM routed)
-            if (typeof _preloadCableRoutesFromIDB === 'function') {
-                try { await _preloadCableRoutesFromIDB(rows); } catch (_) {}
-            }
-
-            // Draw cables (dispatch pattern theo loaiCap state — P59+, expand waypoints nếu routed OSRM)
+            // Draw cables (dispatch pattern theo loaiCap state — P59+)
             for (const r of rows) {
                 const parentName = String(r[14] || '').trim();
                 if (!parentName || !filteredNames.has(parentName)) continue;
-                const childName = String(r[1] || '').trim();
-                const p1 = posMap.get(childName);
+                const p1 = posMap.get(String(r[1] || '').trim());
                 const p2 = posMap.get(parentName);
                 if (!p1 || !p2) continue;
 
                 const cableState = String(r[22] || 'noi').trim();  // noi/ngam/noi_thu/ngam_thu/noi_moi/ngam_moi
+                _drawCableSymbol(push, p1.x, p1.y, p2.x, p2.y, cableState);
                 _usedCableStates.add(cableState);
-                const routed = _cableRouteMemCache && _cableRouteMemCache.get(childName);
 
-                if (routed && Array.isArray(routed.polyline) && routed.polyline.length >= 3) {
-                    // Route polyline → convert lat/lon → VN2000 → emit N LINE segments (mỗi segment với dash pattern)
-                    const vnPts = routed.polyline.map(([lat, lon]) => {
-                        const vn = convertLatLonToVn2000(lat, lon, cm, k0);
-                        return { x: vn.x + outDE, y: vn.y + outDN };
-                    });
-                    for (let i = 1; i < vnPts.length; i++) {
-                        _drawCableSymbol(push, vnPts[i-1].x, vnPts[i-1].y, vnPts[i].x, vnPts[i].y, cableState);
-                    }
-                    // TEXT khoảng cách ở vertex giữa polyline
-                    const midVn = vnPts[Math.floor(vnPts.length / 2)];
-                    const dist = r[15] || routed.distance || Math.round(Math.hypot(p1.x - p2.x, p1.y - p2.y));
-                    push('0', 'TEXT', '8', '0');
-                    push('10', midVn.x.toFixed(4), '20', midVn.y.toFixed(4), '30', '0');
-                    push('40', '1.5');
-                    push('1', `${dist}m`);
-                } else {
-                    // Straight line 2-vertex (backward compat, no route)
-                    _drawCableSymbol(push, p1.x, p1.y, p2.x, p2.y, cableState);
-                    const mx = (p1.x + p2.x) / 2, my = (p1.y + p2.y) / 2;
-                    const dist = r[15] || Math.round(Math.hypot(p1.x - p2.x, p1.y - p2.y));
-                    push('0', 'TEXT', '8', '0');
-                    push('10', mx.toFixed(4), '20', my.toFixed(4), '30', '0');
-                    push('40', '1.5');
-                    push('1', `${dist}m`);
-                }
+                // TEXT khoảng cách ở midpoint
+                const mx = (p1.x + p2.x) / 2, my = (p1.y + p2.y) / 2;
+                const dist = r[15] || Math.round(Math.hypot(p1.x - p2.x, p1.y - p2.y));
+                push('0', 'TEXT', '8', '0');
+                push('10', mx.toFixed(4), '20', my.toFixed(4), '30', '0');
+                push('40', '1.5');
+                push('1', `${dist}m`);
             }
 
             // P65+P66: Fetch + draw OSM basemap (roads/buildings/water/admin) — nếu user bật
@@ -11617,8 +11499,6 @@
             }
             const sel = document.getElementById('mstTuSelect');
             sel.innerHTML = tus.map(t => `<option value="${_esc(t)}">${_esc(t)}</option>`).join('');
-            // Chọn tủ đầu tiên mặc định (multi-select support Ctrl/Cmd+click add more)
-            if (sel.options.length > 0) sel.options[0].selected = true;
             _mstResult = null;
             document.getElementById('mstBtnApply').disabled = true;
             _onMstTuChange();
@@ -11626,21 +11506,6 @@
             if (typeof closeControlsModal === 'function') closeControlsModal();
         }
         window._openAutoMstModal = _openAutoMstModal;
-
-        function _mstGetSelectedTus() {
-            const sel = document.getElementById('mstTuSelect');
-            if (!sel) return [];
-            return Array.from(sel.selectedOptions).map(o => o.value);
-        }
-        window._mstGetSelectedTus = _mstGetSelectedTus;
-
-        function _mstSelectAllTus(sel) {
-            const el = document.getElementById('mstTuSelect');
-            if (!el) return;
-            Array.from(el.options).forEach(o => { o.selected = !!sel; });
-            _onMstTuChange();
-        }
-        window._mstSelectAllTus = _mstSelectAllTus;
 
         function _closeAutoMstModal() {
             const modal = document.getElementById('autoMstModal');
@@ -11657,35 +11522,26 @@
         }
 
         function _onMstTuChange() {
+            // Bug fix: reset stale MST result so Apply doesn't use edges from previous cabinet
             _mstResult = null;
-            document.getElementById('mstBtnApply').disabled = true;
             _mstRemovePreview();
-            const tus = _mstGetSelectedTus();
+            const tu = document.getElementById('mstTuSelect').value;
+            const nodes = _mstGetNodesForTu(tu);
             const preview = document.getElementById('mstPreview');
-            if (tus.length === 0) {
-                preview.innerHTML = '<span style="color:#94a3b8;">Chưa chọn tủ nào...</span>';
+            if (!nodes.length) {
+                preview.innerHTML = '<span style="color:#dc2626;">Tủ này không có trụ nào có tọa độ hợp lệ.</span>';
                 return;
             }
-            let totalNodes = 0, totalWithParent = 0, totalEmpty = 0;
-            const lines = [];
-            for (const tu of tus) {
-                const nodes = _mstGetNodesForTu(tu);
-                if (!nodes.length) { totalEmpty++; lines.push(`<span style="color:#dc2626;">✗ ${_esc(tu)}: không có node</span>`); continue; }
-                totalNodes += nodes.length;
-                totalWithParent += nodes.filter(n => n.parent).length;
-                if (tus.length <= 5) lines.push(`<span style="color:#059669;">✓ ${_esc(tu)}: ${nodes.length} nodes</span>`);
-            }
+            const withParent = nodes.filter(n => n.parent).length;
             preview.innerHTML = `
-                <b>${tus.length}</b> tủ đã chọn · <b>${totalNodes}</b> trụ+tủ tổng<br>
-                <span style="color:#64748b;font-size:11px;">Trong đó ${totalWithParent} đã có Marker gốc (sẽ bị GHI ĐÈ).${totalEmpty ? ' ' + totalEmpty + ' tủ không có node.' : ''}</span>
-                ${tus.length <= 5 && lines.length ? '<div style="margin-top:6px;font-size:11px;line-height:1.6;">' + lines.join('<br>') + '</div>' : ''}
+                <b>${nodes.length}</b> trụ + tủ trong "${_esc(tu)}"<br>
+                <span style="color:#64748b;font-size:11px;">Trong đó ${withParent} trụ đã có Marker gốc (sẽ bị GHI ĐÈ).</span>
             `;
         }
         window._onMstTuChange = _onMstTuChange;
 
-        // Lấy trụ + tủ root trong cùng cabinet name.
-        // Root = tủ điều khiển (type 5/6 có name = tuName).
-        // KHÔNG include tủ khác (type 5/6 có name != tuName) → tránh edge tủ-tủ.
+        // Lấy tất cả trụ + tủ trong cùng cabinet name
+        // Root = tủ điều khiển (type 5 hoặc 6 có tên = tuName). Fallback: trụ đầu tiên.
         function _mstGetNodesForTu(tuName) {
             const rows = (loadedData || []).slice(1);
             const inTu = rows.filter(r => String(r[7] || '').trim() === tuName);
@@ -11694,15 +11550,11 @@
                 const lat = parseCoord(r[2]);
                 const lon = parseCoord(r[3]);
                 if (!isFinite(lat) || !isFinite(lon)) continue;
-                const type = parseInt(r[6]);
-                const isCabinet = (type === 5 || type === 6);
-                const name = String(r[1] || '').trim();
-                const isRoot = isCabinet && name === tuName;
-                // Skip tủ khác (không phải root) → không nối tủ-tủ trong MST
-                if (isCabinet && !isRoot) continue;
                 nodes.push({
                     row: r,
-                    name, lat, lon, isRoot,
+                    name: String(r[1] || '').trim(),
+                    lat, lon,
+                    isRoot: (parseInt(r[6]) === 5 || parseInt(r[6]) === 6) && String(r[1] || '').trim() === tuName,
                     parent: String(r[14] || '').trim(),
                     dist: parseFloat(r[15]) || 0
                 });
@@ -11713,49 +11565,25 @@
         // _mstPrim, _mstNearestChain → src/core/mst.js
 
         function _mstDoPreview() {
-            const tus = _mstGetSelectedTus();
+            const tu = document.getElementById('mstTuSelect').value;
             const algo = document.getElementById('mstAlgo').value;
             const maxSeg = parseFloat(document.getElementById('mstMaxSegment').value) || 200;
-            if (tus.length === 0) {
-                displayError && displayError('Chưa chọn tủ nào');
+            const nodes = _mstGetNodesForTu(tu);
+            if (nodes.length < 2) {
+                displayError && displayError('Cần ≥2 marker để tính MST');
                 return;
             }
+            const edges = algo === 'nearest' ? _mstNearestChain(nodes) : _mstPrim(nodes);
+            const nodeByName = new Map(nodes.map(n => [n.name, n]));
+            const warnings = edges.filter(e => e.dist > maxSeg);
+            _mstResult = { tu, algo, edges, nodes, warnings, maxSeg };
 
-            // Chạy MST cho từng tủ ĐỘC LẬP (không mix nodes → không nối tủ-tủ)
-            const allEdges = [];
-            const allNodes = [];
-            const perTu = [];   // { tu, edges, nodes, skipped }
-            for (const tu of tus) {
-                const nodes = _mstGetNodesForTu(tu);
-                if (nodes.length < 2) {
-                    perTu.push({ tu, edges: [], nodes, skipped: true, reason: 'Cần ≥2 node' });
-                    continue;
-                }
-                const edges = algo === 'nearest' ? _mstNearestChain(nodes) : _mstPrim(nodes);
-                // Đánh dấu tủ cho từng edge/node để track khi apply
-                edges.forEach(e => { e._tu = tu; });
-                nodes.forEach(n => { n._tu = tu; });
-                perTu.push({ tu, edges, nodes, skipped: false });
-                allEdges.push(...edges);
-                allNodes.push(...nodes);
-            }
-
-            if (allEdges.length === 0) {
-                displayError && displayError('Không tủ nào có đủ ≥2 node để tính MST');
-                return;
-            }
-
-            // Node lookup: unique theo (tu|name) để tránh conflict giữa 2 tủ có node cùng tên
-            const nodeByKey = new Map(allNodes.map(n => [`${n._tu}|${n.name}`, n]));
-            const warnings = allEdges.filter(e => e.dist > maxSeg);
-            _mstResult = { tuList: tus, algo, edges: allEdges, nodes: allNodes, perTu, warnings, maxSeg };
-
-            // Vẽ preview trên map
+            // Vẽ preview trên map (xanh nét đứt)
             _mstRemovePreview();
             _mstPreviewLayer = L.layerGroup().addTo(map);
-            for (const e of allEdges) {
-                const f = nodeByKey.get(`${e._tu}|${e.from}`);
-                const t = nodeByKey.get(`${e._tu}|${e.to}`);
+            for (const e of edges) {
+                const f = nodeByName.get(e.from);
+                const t = nodeByName.get(e.to);
                 if (!f || !t) continue;
                 const color = e.dist > maxSeg ? '#dc2626' : '#059669';
                 L.polyline([[f.lat, f.lon], [t.lat, t.lon]], {
@@ -11770,28 +11598,20 @@
                     interactive: false
                 }).addTo(_mstPreviewLayer);
             }
+            // Fit map
             try { map.fitBounds(_mstPreviewLayer.getBounds().pad(0.15)); } catch (_) {}
 
-            const totalLen = allEdges.reduce((s, e) => s + e.dist, 0);
-            const okTus = perTu.filter(p => !p.skipped).length;
-            const skippedTus = perTu.filter(p => p.skipped).length;
+            const totalLen = edges.reduce((s, e) => s + e.dist, 0);
             const warnMsg = warnings.length
                 ? ` <span style="color:#dc2626;font-weight:700;">⚠ ${warnings.length} đoạn > ${maxSeg}m</span>`
                 : '';
             document.getElementById('mstPreview').innerHTML = `
-                ✅ MST tính xong: <b>${okTus}</b> tủ · <b>${allEdges.length}</b> đoạn cáp · Tổng <b>${Math.round(totalLen)}m</b>${warnMsg}
-                ${skippedTus ? `<br><span style="color:#dc2626;font-size:11px;">⚠ ${skippedTus} tủ bị skip (không đủ node)</span>` : ''}
-                <br><span style="color:#64748b;font-size:11px;">Preview xanh trên map. Bấm "Áp dụng" để ghi vào Marker gốc + Khoảng cách.</span>
+                ✅ MST tính xong: <b>${edges.length}</b> đoạn cáp · Tổng <b>${Math.round(totalLen)}m</b>${warnMsg}<br>
+                <span style="color:#64748b;font-size:11px;">Preview xanh trên map. Bấm "Áp dụng" để ghi vào Marker gốc + Khoảng cách.</span>
             `;
             document.getElementById('mstBtnApply').disabled = false;
         }
         window._mstDoPreview = _mstDoPreview;
-
-        let _mstRouteCancelSignal = null;
-        function _mstRouteCancel() {
-            if (_mstRouteCancelSignal) _mstRouteCancelSignal.cancelled = true;
-        }
-        window._mstRouteCancel = _mstRouteCancel;
 
         async function _mstApplyToData() {
             if (!_mstResult) return;
@@ -11803,76 +11623,19 @@
             const rowByName = new Map();
             (loadedData || []).slice(1).forEach(r => rowByName.set(String(r[1] || '').trim(), r));
 
-            // Route theo đường phố nếu checkbox bật
-            const routeMode = document.getElementById('mstRouteRoad')?.checked;
-            let routeResults = null;   // Map<childName, {polyline, distance, failed}>
-            if (routeMode && _mstResult.edges.length > 0) {
-                // Multi-tủ: key theo (_tu|name) tránh conflict khi 2 tủ có node cùng tên
-                const nodeMap = new Map(_mstResult.nodes.map(n => [`${n._tu || ''}|${n.name}`, n]));
-                const edgesForRoute = _mstResult.edges
-                    .map(e => {
-                        const tu = e._tu || '';
-                        const fromN = nodeMap.get(`${tu}|${e.from}`);
-                        const toN = nodeMap.get(`${tu}|${e.to}`);
-                        if (!fromN || !toN) return null;
-                        return {
-                            from: { lat: fromN.lat, lon: fromN.lon },
-                            to:   { lat: toN.lat,   lon: toN.lon },
-                            childName: e.to,
-                            parentName: e.from
-                        };
-                    })
-                    .filter(Boolean);
-
-                const progDiv = document.getElementById('mstRouteProgress');
-                const progText = document.getElementById('mstRouteProgressText');
-                const progBar = document.getElementById('mstRouteProgressBar');
-                if (progDiv) progDiv.style.display = 'block';
-                btn.textContent = '⏳ Đang route...';
-                _mstRouteCancelSignal = { cancelled: false };
-
-                let cachedCount = 0, fetchedCount = 0, failedCount = 0;
-                const results = await _batchRouteEdges(edgesForRoute, (i, total, status) => {
-                    if (status === 'cached') cachedCount++;
-                    else if (status === 'fetched') fetchedCount++;
-                    else if (status === 'failed') failedCount++;
-                    if (progText) progText.textContent = `Route ${i}/${total} — cache: ${cachedCount}, fetched: ${fetchedCount}${failedCount ? ', failed: ' + failedCount : ''}`;
-                    if (progBar) progBar.style.width = Math.round((i / total) * 100) + '%';
-                }, { cancelSignal: _mstRouteCancelSignal });
-
-                if (progDiv) progDiv.style.display = 'none';
-                _mstRouteCancelSignal = null;
-
-                if (results.length < edgesForRoute.length) {
-                    displayInfo && displayInfo(`⚠ Hủy route giữa chừng (${results.length}/${edgesForRoute.length}). Áp dụng phần đã route.`);
-                }
-                routeResults = new Map(results.map(r => [r.edge.childName, r]));
-                // Populate memcache — _buildCableLines sẽ sync lookup ra polyline
-                for (const r of results) {
-                    if (r.polyline && r.polyline.length >= 2) {
-                        _cableRouteMemCache.set(r.edge.childName, {
-                            polyline: r.polyline, distance: r.distance
-                        });
-                    }
-                }
-                btn.textContent = '⏳ Đang sync...';
-            }
-
             let updated = 0, synced = 0, failed = 0;
             const toSync = [];
 
             for (const e of _mstResult.edges) {
                 const targetRow = rowByName.get(e.to);
                 if (!targetRow) continue;
-                // Lấy distance từ route nếu có, fallback Haversine (e.dist)
-                const routed = routeResults ? routeResults.get(e.to) : null;
-                const newDist = routed ? Math.round(routed.distance) : Math.round(e.dist);
                 // Chỉ update nếu khác giá trị cũ (giảm sync)
                 const oldParent = String(targetRow[14] || '').trim();
                 const oldDist = parseFloat(targetRow[15]) || 0;
+                const newDist = Math.round(e.dist);
                 if (oldParent === e.from && Math.abs(oldDist - newDist) < 1) continue;
                 targetRow[14] = e.from;   // Marker gốc
-                targetRow[15] = newDist;  // Khoảng cách (route length nếu có, Haversine fallback)
+                targetRow[15] = newDist;  // Khoảng cách
                 targetRow[13] = new Date().toISOString();
                 updated++;
                 toSync.push(targetRow);
@@ -11894,14 +11657,7 @@
             // Log action
             try {
                 if (typeof _logAction === 'function') {
-                    const tuLabel = Array.isArray(_mstResult.tuList) && _mstResult.tuList.length
-                        ? _mstResult.tuList.join(', ')
-                        : (_mstResult.tu || '');
-                    _logAction('mst_apply', '', tuLabel, JSON.stringify({
-                        tus: _mstResult.tuList || [_mstResult.tu],
-                        edges: _mstResult.edges.length,
-                        algo: _mstResult.algo
-                    }));
+                    _logAction('mst_apply', '', _mstResult.tu, JSON.stringify({ edges: _mstResult.edges.length, algo: _mstResult.algo }));
                 }
             } catch (_) {}
 
@@ -14557,8 +14313,7 @@
 
         function _osmBoundsKey(bounds) {
             const round = (v, p) => Math.round(v * p) / p;
-            // v2: schema mở rộng POI + tags đầy đủ (v120 topographic enhancement)
-            return `osm_v2_${round(bounds.minLat, 1000)}_${round(bounds.minLon, 1000)}_${round(bounds.maxLat, 1000)}_${round(bounds.maxLon, 1000)}`;
+            return `osm_${round(bounds.minLat, 1000)}_${round(bounds.minLon, 1000)}_${round(bounds.maxLat, 1000)}_${round(bounds.maxLon, 1000)}`;
         }
 
         function _cgUpdateOsmInfo() {
@@ -14581,12 +14336,9 @@
         window._cgCollectOsmOpts = _cgCollectOsmOpts;
 
         async function _fetchOsmBasemap(bounds, options) {
-            const opts = Object.assign({
-                roads: true, buildings: true, water: false, admin: false,
-                pois: false   // POI query (traffic_signals, bus_stop, crossing) — v120 enhancement
-            }, options || {});
+            const opts = Object.assign({ roads: true, buildings: true, water: false, admin: false }, options || {});
             const cacheKey = _osmBoundsKey(bounds);
-            // Try cache first (reuse csv-cache store với prefix osm_v2_)
+            // Try cache first (reuse csv-cache store với prefix osm_)
             try {
                 const cached = await _idbGet(cacheKey);
                 if (cached && cached.fetchedAt && (Date.now() - cached.fetchedAt) < OSM_CACHE_TTL_MS) {
@@ -14601,17 +14353,13 @@
             }
             _osmFetchLastMs = nowMs;
 
-            // Build query — way + node POI
+            // Build query
             const bbox = `${bounds.minLat},${bounds.minLon},${bounds.maxLat},${bounds.maxLon}`;
             const queries = [];
             if (opts.roads) queries.push(`way["highway"](${bbox});`);
             if (opts.buildings) queries.push(`way["building"](${bbox});`);
             if (opts.water) queries.push(`way["waterway"](${bbox});`);
             if (opts.admin) queries.push(`way["boundary"="administrative"]["admin_level"~"^(9|10)$"](${bbox});`);
-            if (opts.pois) {
-                queries.push(`node["highway"~"traffic_signals|bus_stop|crossing"](${bbox});`);
-                queries.push(`node["public_transport"="platform"](${bbox});`);
-            }
             const q = `[out:json][timeout:30];(${queries.join('')});out geom;`;
 
             // Fetch
@@ -14623,22 +14371,16 @@
             if (!res.ok) throw new Error('Overpass HTTP ' + res.status);
             const json = await res.json();
 
-            // Parse elements → GeoJSON-like features (v120: thêm pois array)
-            const data = { roads: [], buildings: [], water: [], admin: [], pois: [] };
+            // Parse elements → GeoJSON-like features
+            const data = { roads: [], buildings: [], water: [], admin: [] };
             (json.elements || []).forEach(el => {
+                if (el.type !== 'way' || !el.geometry) return;
+                const coords = el.geometry.map(g => [g.lon, g.lat]);
                 const tags = el.tags || {};
-                if (el.type === 'way' && el.geometry) {
-                    const coords = el.geometry.map(g => [g.lon, g.lat]);
-                    if (tags.highway) data.roads.push({ coords, tags });
-                    else if (tags.building) data.buildings.push({ coords, tags });
-                    else if (tags.waterway) data.water.push({ coords, tags });
-                    else if (tags.boundary === 'administrative') data.admin.push({ coords, tags });
-                } else if (el.type === 'node' && isFinite(el.lat) && isFinite(el.lon)) {
-                    // POI: traffic_signals / bus_stop / crossing / public_transport=platform
-                    if (tags.highway || tags.public_transport) {
-                        data.pois.push({ lat: el.lat, lon: el.lon, tags });
-                    }
-                }
+                if (tags.highway) data.roads.push({ coords, tags });
+                else if (tags.building) data.buildings.push({ coords, tags });
+                else if (tags.waterway) data.water.push({ coords, tags });
+                else if (tags.boundary === 'administrative') data.admin.push({ coords, tags });
             });
 
             // Cache
@@ -14651,137 +14393,15 @@
         window._fetchOsmBasemap = _fetchOsmBasemap;
 
         // ─────────────────────────────────────────────────────────────
-        // v120 Bình đồ giao thông đầy đủ:
-        // - 6 road layers hierarchy (MOTORWAY/PRIMARY/SECONDARY/TERTIARY/RESIDENTIAL/SERVICE)
-        // - Ranh 2 nét theo width (parse tags.width / lanes / default)
-        // - Label tên đường rotation theo hướng segment
-        // - POI: TRAFFIC_SIGNAL / BUS_STOP / CROSSING
-        // - Bridge (double + tick) / Tunnel (dashed centerline)
-        // - Sidewalk (dashed offset thêm)
+        // P66+P67: Render OSM basemap + ranh giới hành chính trong DXF
+        // Layers: OSM_ROAD_MAJOR (weight 1.5) / OSM_ROAD_MINOR (0.5) /
+        //         OSM_BUILDING / OSM_WATER / ADMIN_BOUNDARY
         // ─────────────────────────────────────────────────────────────
-
-        // Road hierarchy table: highway tag → {layer, defaultWidth, labelHeight}
-        const ROAD_HIERARCHY = {
-            motorway:      { layer: 'OSM_ROAD_MOTORWAY',    width: 15, label: 2.5 },
-            motorway_link: { layer: 'OSM_ROAD_MOTORWAY',    width: 8,  label: 1.8 },
-            trunk:         { layer: 'OSM_ROAD_MOTORWAY',    width: 12, label: 2.5 },
-            trunk_link:    { layer: 'OSM_ROAD_MOTORWAY',    width: 8,  label: 1.8 },
-            primary:       { layer: 'OSM_ROAD_PRIMARY',     width: 10, label: 2.5 },
-            primary_link:  { layer: 'OSM_ROAD_PRIMARY',     width: 6,  label: 1.8 },
-            secondary:     { layer: 'OSM_ROAD_SECONDARY',   width: 8,  label: 2.0 },
-            secondary_link:{ layer: 'OSM_ROAD_SECONDARY',   width: 5,  label: 1.5 },
-            tertiary:      { layer: 'OSM_ROAD_TERTIARY',    width: 6,  label: 2.0 },
-            tertiary_link: { layer: 'OSM_ROAD_TERTIARY',    width: 4,  label: 1.5 },
-            residential:   { layer: 'OSM_ROAD_RESIDENTIAL', width: 5,  label: 1.5 },
-            unclassified:  { layer: 'OSM_ROAD_RESIDENTIAL', width: 5,  label: 1.5 },
-            living_street: { layer: 'OSM_ROAD_RESIDENTIAL', width: 5,  label: 1.5 },
-            service:       { layer: 'OSM_ROAD_SERVICE',     width: 3,  label: 1.2 },
-            track:         { layer: 'OSM_ROAD_SERVICE',     width: 3,  label: 1.2 },
-            footway:       { layer: 'OSM_ROAD_SERVICE',     width: 2,  label: 1.2 },
-            path:          { layer: 'OSM_ROAD_SERVICE',     width: 2,  label: 1.2 }
-        };
-
-        // Parse road width: tags.width (m) > tags.lanes * 3.5 > default table
-        function _osmRoadWidth(tags, defaultW) {
-            if (tags.width) {
-                const w = parseFloat(String(tags.width).replace(/[^\d.]/g, ''));
-                if (isFinite(w) && w > 0.5 && w < 50) return w;
-            }
-            if (tags.lanes) {
-                const l = parseInt(tags.lanes);
-                if (isFinite(l) && l >= 1 && l <= 20) return l * 3.5;
-            }
-            return defaultW;
-        }
-
-        // Offset polyline perpendicular. offset < 0 = trái, > 0 = phải.
-        // Miter joint với clamp ≤ 3× để tránh spike tại corner nhọn.
-        function _offsetPolyline(pts, offset) {
-            const result = [];
-            const n = pts.length;
-            for (let i = 0; i < n; i++) {
-                const prev = i > 0 ? pts[i - 1] : null;
-                const next = i < n - 1 ? pts[i + 1] : null;
-                let nx = 0, ny = 0;
-                if (prev && next) {
-                    const d1x = pts[i].x - prev.x, d1y = pts[i].y - prev.y;
-                    const d2x = next.x - pts[i].x, d2y = next.y - pts[i].y;
-                    const l1 = Math.hypot(d1x, d1y), l2 = Math.hypot(d2x, d2y);
-                    if (l1 < 0.001 || l2 < 0.001) continue;
-                    const u1x = d1x / l1, u1y = d1y / l1;
-                    const u2x = d2x / l2, u2y = d2y / l2;
-                    const bx = u1x + u2x, by = u1y + u2y;
-                    const bl = Math.hypot(bx, by);
-                    if (bl < 0.001) {
-                        // 180° turn — dùng normal của segment đầu
-                        nx = -u1y; ny = u1x;
-                    } else {
-                        // Perpendicular của bisector
-                        const px = -by / bl, py = bx / bl;
-                        // Miter compensation: 1 / sin(θ/2) with clamp ≤ 3
-                        const dot = px * u1x + py * u1y;   // = sin(θ/2)
-                        const miter = Math.min(3, 1 / Math.max(0.33, Math.abs(dot)));
-                        nx = px * miter; ny = py * miter;
-                    }
-                } else {
-                    const d = prev ? { x: pts[i].x - prev.x, y: pts[i].y - prev.y }
-                                   : { x: next.x - pts[i].x, y: next.y - pts[i].y };
-                    const l = Math.hypot(d.x, d.y);
-                    if (l < 0.001) continue;
-                    nx = -d.y / l; ny = d.x / l;
-                }
-                result.push({ x: pts[i].x + nx * offset, y: pts[i].y + ny * offset });
-            }
-            return result;
-        }
-
-        // Emit dashed polyline as N LINE segments (manual dash pattern — không dùng LTYPE)
-        function _emitDashedPolyline(push, pts, layer, dashLen, gapLen, clipSeg) {
-            let cursor = 0;
-            let drawing = true;
-            for (let i = 1; i < pts.length; i++) {
-                const dx = pts[i].x - pts[i-1].x, dy = pts[i].y - pts[i-1].y;
-                const segL = Math.hypot(dx, dy);
-                if (segL < 0.01) continue;
-                const ux = dx / segL, uy = dy / segL;
-                let localCur = 0;
-                while (localCur < segL) {
-                    const step = drawing ? dashLen : gapLen;
-                    const chunk = Math.min(step - cursor, segL - localCur);
-                    if (drawing && chunk > 0.01) {
-                        const x1 = pts[i-1].x + ux * localCur;
-                        const y1 = pts[i-1].y + uy * localCur;
-                        const x2 = x1 + ux * chunk;
-                        const y2 = y1 + uy * chunk;
-                        const s = clipSeg(x1, y1, x2, y2);
-                        if (s) {
-                            push('0', 'LINE', '8', layer,
-                                '10', s.x1.toFixed(4), '20', s.y1.toFixed(4), '30', '0',
-                                '11', s.x2.toFixed(4), '21', s.y2.toFixed(4), '31', '0');
-                        }
-                    }
-                    localCur += chunk;
-                    cursor += chunk;
-                    if (cursor >= step) { cursor = 0; drawing = !drawing; }
-                }
-            }
-        }
-
-        function _drawOsmBasemapInDxf(push, osmData, cm, outDE, outDN, clipBounds, drawOpts) {
+        function _drawOsmBasemapInDxf(push, osmData, cm, outDE, outDN, clipBounds) {
             if (!osmData) return { entityCount: 0 };
-            const opts = Object.assign({
-                roadDoubleLines: false,
-                roadLabels: false,
-                bridges: true,
-                sidewalks: false,
-                buildingLabels: false,
-                poiSignals: false,
-                poiBusStops: false,
-                poiCrossings: false
-            }, drawOpts || {});
             let entityCount = 0, skipped = 0;
             const hasClip = clipBounds && isFinite(clipBounds.minX) && isFinite(clipBounds.maxX);
-            // Liang-Barsky line clip
+            // Liang-Barsky line clip vào AABB clipBounds. Return {x1,y1,x2,y2} đã clip hoặc null.
             const clipSeg = (x1, y1, x2, y2) => {
                 if (!hasClip) return { x1, y1, x2, y2 };
                 let t0 = 0, t1 = 1;
@@ -14800,9 +14420,7 @@
                 return { x1: x1 + t0 * dx, y1: y1 + t0 * dy,
                          x2: x1 + t1 * dx, y2: y1 + t1 * dy };
             };
-            const inClipPt = (x, y) => !hasClip
-                || (x >= clipBounds.minX && x <= clipBounds.maxX
-                 && y >= clipBounds.minY && y <= clipBounds.maxY);
+            // Convert GeoJSON [lon, lat] → VN2000 + apply offset
             const convert = (coords) => coords.map(([lon, lat]) => {
                 const vn = convertLatLonToVn2000(lat, lon, cm);
                 return { x: vn.x + outDE, y: vn.y + outDN };
@@ -14817,198 +14435,41 @@
                     entityCount++;
                 }
             };
-
-            // ─── Roads (6-layer hierarchy) ───
+            // Roads — split major vs minor by highway type
             (osmData.roads || []).forEach(w => {
                 const hw = String(w.tags.highway || '').toLowerCase();
-                const cfg = ROAD_HIERARCHY[hw] || { layer: 'OSM_ROAD_SERVICE', width: 3, label: 1.2 };
-                const width = _osmRoadWidth(w.tags, cfg.width);
-                const isBridge = w.tags.bridge === 'yes' || w.tags.bridge === '1';
-                const isTunnel = w.tags.tunnel === 'yes' || w.tags.tunnel === '1';
-                const centerlinePts = convert(w.coords);
-                if (centerlinePts.length < 2) return;
-
-                // Tunnel: chỉ centerline dashed (không ranh)
-                if (isTunnel && opts.bridges) {
-                    _emitDashedPolyline(push, centerlinePts, 'OSM_TUNNEL', 2, 1.5, clipSeg);
-                    entityCount += Math.ceil(centerlinePts.length * 0.6);
-                    return;
-                }
-
-                // Draw centerline (mọi road)
-                drawPolyline(centerlinePts, cfg.layer);
-
-                // Ranh 2 nét (nếu bật + width ≥ 2m)
-                if (opts.roadDoubleLines && width >= 2) {
-                    const half = width / 2;
-                    const leftPts = _offsetPolyline(centerlinePts, half);
-                    const rightPts = _offsetPolyline(centerlinePts, -half);
-                    if (leftPts.length >= 2) drawPolyline(leftPts, cfg.layer + '_EDGE');
-                    if (rightPts.length >= 2) drawPolyline(rightPts, cfg.layer + '_EDGE');
-
-                    // Bridge tick marks tại 2 đầu (nếu bridge=yes)
-                    if (isBridge && opts.bridges && leftPts.length >= 2 && rightPts.length >= 2) {
-                        // Tick đầu
-                        const tick1 = clipSeg(leftPts[0].x, leftPts[0].y, rightPts[0].x, rightPts[0].y);
-                        if (tick1) {
-                            push('0', 'LINE', '8', 'OSM_BRIDGE',
-                                '10', tick1.x1.toFixed(4), '20', tick1.y1.toFixed(4), '30', '0',
-                                '11', tick1.x2.toFixed(4), '21', tick1.y2.toFixed(4), '31', '0');
-                            entityCount++;
-                        }
-                        // Tick cuối
-                        const li = leftPts.length - 1, ri = rightPts.length - 1;
-                        const tick2 = clipSeg(leftPts[li].x, leftPts[li].y, rightPts[ri].x, rightPts[ri].y);
-                        if (tick2) {
-                            push('0', 'LINE', '8', 'OSM_BRIDGE',
-                                '10', tick2.x1.toFixed(4), '20', tick2.y1.toFixed(4), '30', '0',
-                                '11', tick2.x2.toFixed(4), '21', tick2.y2.toFixed(4), '31', '0');
-                            entityCount++;
-                        }
-                    }
-                }
-
-                // Sidewalk (dashed, offset thêm 1.5m ngoài ranh)
-                if (opts.sidewalks && w.tags.sidewalk) {
-                    const sw = String(w.tags.sidewalk).toLowerCase();
-                    const swOffset = width / 2 + 1.5;
-                    if (sw === 'both' || sw === 'left') {
-                        const swPts = _offsetPolyline(centerlinePts, swOffset);
-                        _emitDashedPolyline(push, swPts, 'OSM_SIDEWALK', 1, 0.6, clipSeg);
-                    }
-                    if (sw === 'both' || sw === 'right') {
-                        const swPts = _offsetPolyline(centerlinePts, -swOffset);
-                        _emitDashedPolyline(push, swPts, 'OSM_SIDEWALK', 1, 0.6, clipSeg);
-                    }
-                }
-
-                // Label tên đường
-                if (opts.roadLabels) {
-                    const nameText = w.tags['name:vi'] || w.tags.name;
-                    if (nameText && centerlinePts.length >= 2) {
-                        // Tìm segment dài nhất
-                        let maxLen = 0, maxIdx = 0;
-                        for (let i = 1; i < centerlinePts.length; i++) {
-                            const l = Math.hypot(
-                                centerlinePts[i].x - centerlinePts[i-1].x,
-                                centerlinePts[i].y - centerlinePts[i-1].y
-                            );
-                            if (l > maxLen) { maxLen = l; maxIdx = i; }
-                        }
-                        if (maxLen >= cfg.label * 3) {   // segment đủ dài để hiển thị label
-                            const p1 = centerlinePts[maxIdx - 1], p2 = centerlinePts[maxIdx];
-                            const mx = (p1.x + p2.x) / 2, my = (p1.y + p2.y) / 2;
-                            if (inClipPt(mx, my)) {
-                                let rot = Math.atan2(p2.y - p1.y, p2.x - p1.x) * 180 / Math.PI;
-                                // Normalize [-90, 90] để không upside-down
-                                while (rot > 90) rot -= 180;
-                                while (rot < -90) rot += 180;
-                                push('0', 'TEXT', '8', 'OSM_ROAD_LABEL');
-                                push('10', mx.toFixed(4), '20', my.toFixed(4), '30', '0');
-                                push('40', cfg.label.toFixed(2));
-                                push('1', _dxfEscape(nameText));
-                                push('50', rot.toFixed(2));
-                                entityCount++;
-                            }
-                        }
-                    }
-                }
+                const isMajor = ['primary', 'secondary', 'trunk', 'motorway', 'primary_link'].includes(hw);
+                const layer = isMajor ? 'OSM_ROAD_MAJOR' : 'OSM_ROAD_MINOR';
+                drawPolyline(convert(w.coords), layer);
             });
-
-            // ─── Buildings ───
+            // Buildings — outline only
             (osmData.buildings || []).forEach(w => {
-                const pts = convert(w.coords);
-                drawPolyline(pts, 'OSM_BUILDING');
-                // Label building (option riêng)
-                if (opts.buildingLabels && w.tags.name && pts.length > 0) {
-                    let cx = 0, cy = 0;
-                    pts.forEach(p => { cx += p.x; cy += p.y; });
-                    cx /= pts.length; cy /= pts.length;
-                    if (inClipPt(cx, cy)) {
-                        push('0', 'TEXT', '8', 'OSM_BUILDING_LABEL');
-                        push('10', cx.toFixed(4), '20', cy.toFixed(4), '30', '0');
-                        push('40', '1.5');
-                        push('1', _dxfEscape(w.tags['name:vi'] || w.tags.name));
-                        entityCount++;
-                    }
-                }
+                drawPolyline(convert(w.coords), 'OSM_BUILDING');
             });
-
-            // ─── Water ───
-            (osmData.water || []).forEach(w => drawPolyline(convert(w.coords), 'OSM_WATER'));
-
-            // ─── Admin boundaries ───
+            // Water
+            (osmData.water || []).forEach(w => {
+                drawPolyline(convert(w.coords), 'OSM_WATER');
+            });
+            // Admin boundaries — P67
             (osmData.admin || []).forEach(w => {
                 const pts = convert(w.coords);
                 drawPolyline(pts, 'ADMIN_BOUNDARY');
+                // Label at centroid — chỉ vẽ nếu centroid trong clipBounds
                 if (pts.length > 0 && w.tags.name) {
                     let cx = 0, cy = 0;
                     pts.forEach(p => { cx += p.x; cy += p.y; });
                     cx /= pts.length; cy /= pts.length;
-                    if (inClipPt(cx, cy)) {
+                    const inClip = !hasClip || (cx >= clipBounds.minX && cx <= clipBounds.maxX
+                                             && cy >= clipBounds.minY && cy <= clipBounds.maxY);
+                    if (inClip) {
                         push('0', 'TEXT', '8', 'ADMIN_BOUNDARY');
                         push('10', cx.toFixed(4), '20', cy.toFixed(4), '30', '0');
                         push('40', '4.0');
-                        push('1', _dxfEscape(w.tags['name:vi'] || w.tags.name));
+                        push('1', _dxfEscape(w.tags.name));
                         entityCount++;
                     }
                 }
             });
-
-            // ─── POI symbols ───
-            (osmData.pois || []).forEach(poi => {
-                const vn = convertLatLonToVn2000(poi.lat, poi.lon, cm);
-                const x = vn.x + outDE, y = vn.y + outDN;
-                if (!inClipPt(x, y)) { skipped++; return; }
-                const hw = String(poi.tags.highway || '').toLowerCase();
-                const pt = String(poi.tags.public_transport || '').toLowerCase();
-
-                if (hw === 'traffic_signals' && opts.poiSignals) {
-                    // Circle radius 1m + 3 dots (tín hiệu 3 màu vertical)
-                    push('0', 'CIRCLE', '8', 'OSM_TRAFFIC_SIGNAL',
-                        '10', x.toFixed(4), '20', y.toFixed(4), '30', '0', '40', '1.0');
-                    // 3 dots nhỏ
-                    [1.5, 0.5, -0.5].forEach(dy => {
-                        push('0', 'CIRCLE', '8', 'OSM_TRAFFIC_SIGNAL',
-                            '10', x.toFixed(4), '20', (y + dy).toFixed(4), '30', '0', '40', '0.25');
-                    });
-                    entityCount += 4;
-                } else if ((hw === 'bus_stop' || pt === 'platform') && opts.poiBusStops) {
-                    // Rectangle 2×3m + chữ B
-                    const w = 1, h = 1.5;
-                    const corners = [
-                        [x - w, y - h], [x + w, y - h], [x + w, y + h], [x - w, y + h]
-                    ];
-                    for (let i = 0; i < 4; i++) {
-                        const c1 = corners[i], c2 = corners[(i + 1) % 4];
-                        push('0', 'LINE', '8', 'OSM_BUS_STOP',
-                            '10', c1[0].toFixed(4), '20', c1[1].toFixed(4), '30', '0',
-                            '11', c2[0].toFixed(4), '21', c2[1].toFixed(4), '31', '0');
-                    }
-                    push('0', 'TEXT', '8', 'OSM_BUS_STOP');
-                    push('10', (x - 0.5).toFixed(4), '20', (y - 0.6).toFixed(4), '30', '0');
-                    push('40', '1.5');
-                    push('1', 'B');
-                    entityCount += 5;
-                } else if (hw === 'crossing' && opts.poiCrossings) {
-                    // Diamond 2×2m (X pattern)
-                    const s = 1;
-                    push('0', 'LINE', '8', 'OSM_CROSSING',
-                        '10', (x - s).toFixed(4), '20', y.toFixed(4), '30', '0',
-                        '11', (x + s).toFixed(4), '21', y.toFixed(4), '31', '0');
-                    push('0', 'LINE', '8', 'OSM_CROSSING',
-                        '10', x.toFixed(4), '20', (y - s).toFixed(4), '30', '0',
-                        '11', x.toFixed(4), '21', (y + s).toFixed(4), '31', '0');
-                    push('0', 'LINE', '8', 'OSM_CROSSING',
-                        '10', (x - s * 0.7).toFixed(4), '20', (y - s * 0.7).toFixed(4), '30', '0',
-                        '11', (x + s * 0.7).toFixed(4), '21', (y + s * 0.7).toFixed(4), '31', '0');
-                    push('0', 'LINE', '8', 'OSM_CROSSING',
-                        '10', (x - s * 0.7).toFixed(4), '20', (y + s * 0.7).toFixed(4), '30', '0',
-                        '11', (x + s * 0.7).toFixed(4), '21', (y - s * 0.7).toFixed(4), '31', '0');
-                    entityCount += 4;
-                }
-            });
-
             return { entityCount, skipped };
         }
         window._drawOsmBasemapInDxf = _drawOsmBasemapInDxf;
@@ -20404,72 +19865,6 @@
                 .then(r=>{ if(!r.ok) throw new Error('Không thể tải lộ trình.'); return r.json(); })
                 .then(data=>{ if(!data.routes||data.routes.length===0||data.code!=='Ok') throw new Error('Không tìm thấy lộ trình.'); return data.routes[0]; });
         }
-
-        // OSRM route cho 1 edge cáp — return {polyline: [[lat,lon],...], distance: m}
-        async function _osrmRouteEdge(fromLL, toLL) {
-            const url = `https://router.project-osrm.org/route/v1/driving/`
-                + `${fromLL[1]},${fromLL[0]};${toLL[1]},${toLL[0]}`
-                + `?overview=full&geometries=geojson`;
-            const res = await fetch(url);
-            if (!res.ok) throw new Error('OSRM HTTP ' + res.status);
-            const data = await res.json();
-            if (!data.routes || !data.routes.length || data.code !== 'Ok') throw new Error('No route');
-            const geom = data.routes[0].geometry;
-            const polyline = geom.coordinates.map(([lon, lat]) => [lat, lon]);
-            const distance = Math.round(data.routes[0].distance);
-            return { polyline, distance };
-        }
-        window._osrmRouteEdge = _osrmRouteEdge;
-
-        // Cache key — round 5 decimal (~1.1m precision), tolerance cho marker move nhẹ
-        function _routeCacheKey(fromLat, fromLon, toLat, toLon) {
-            const r = v => Math.round(Number(v) * 100000) / 100000;
-            return `${r(fromLat)}|${r(fromLon)}|${r(toLat)}|${r(toLon)}`;
-        }
-        window._routeCacheKey = _routeCacheKey;
-
-        // Batch route N edges với rate-limit 1.1s giữa các request, cache IDB TTL 30 ngày
-        // edges = [{from: {lat, lon}, to: {lat, lon}, ...meta}]
-        // onProgress(i, total, status) — status: 'cached' | 'fetched' | 'failed'
-        // opts.cancelSignal = {cancelled: bool} — poll giữa các request
-        async function _batchRouteEdges(edges, onProgress, opts) {
-            const OSRM_INTERVAL_MS = 1100;
-            const TTL_MS = 30 * 24 * 60 * 60 * 1000;
-            const signal = opts && opts.cancelSignal;
-            let lastRequestMs = 0;
-            const results = [];
-            for (let i = 0; i < edges.length; i++) {
-                if (signal && signal.cancelled) break;
-                const e = edges[i];
-                const key = _routeCacheKey(e.from.lat, e.from.lon, e.to.lat, e.to.lon);
-                const cached = await _idbGetRoute(key);
-                if (cached && cached.fetchedAt && (Date.now() - cached.fetchedAt) < TTL_MS) {
-                    results.push({ edge: e, polyline: cached.polyline, distance: cached.distance, fromCache: true });
-                    if (onProgress) onProgress(i + 1, edges.length, 'cached');
-                    continue;
-                }
-                const wait = OSRM_INTERVAL_MS - (Date.now() - lastRequestMs);
-                if (wait > 0) await new Promise(r => setTimeout(r, wait));
-                if (signal && signal.cancelled) break;
-                try {
-                    const routed = await _osrmRouteEdge([e.from.lat, e.from.lon], [e.to.lat, e.to.lon]);
-                    await _idbSetRoute(key, { polyline: routed.polyline, distance: routed.distance, fetchedAt: Date.now() });
-                    lastRequestMs = Date.now();
-                    results.push({ edge: e, polyline: routed.polyline, distance: routed.distance, fromCache: false });
-                    if (onProgress) onProgress(i + 1, edges.length, 'fetched');
-                } catch (err) {
-                    console.warn('[OSRM] Route fail:', err.message);
-                    const straight = [[e.from.lat, e.from.lon], [e.to.lat, e.to.lon]];
-                    const distFallback = (typeof haversineM === 'function')
-                        ? Math.round(haversineM(e.from.lat, e.from.lon, e.to.lat, e.to.lon)) : 0;
-                    results.push({ edge: e, polyline: straight, distance: distFallback, fromCache: false, failed: true });
-                    lastRequestMs = Date.now();
-                    if (onProgress) onProgress(i + 1, edges.length, 'failed');
-                }
-            }
-            return results;
-        }
-        window._batchRouteEdges = _batchRouteEdges;
 
         function drawRoute(route) {
             clearRoute();
