@@ -91,9 +91,33 @@ Tự động cập nhật tại 2 điểm: `saveMarkerPopup()` (thêm/sửa mark
 | 6    | Tủ chiếu sáng ngầm | cabinet | #334155 | makeCabinetIcon()  |
 
 ### Hiển thị marker
-- `L.markerClusterGroup({ disableClusteringAtZoom: 15, maxClusterRadius: 60 })`
+- `L.markerClusterGroup({ disableClusteringAtZoom: 15, maxClusterRadius: isMobile ? 80 : 60 })`
+- Zoom < 12 → chỉ render tủ (`ZOOM_TIER_THRESHOLD`, xem 9.5)
 - Zoom < 15 → cluster; zoom ≥ 15 → icon riêng lẻ
-- Zoom ≥ 17 → hiện nhãn tên (`labelLayerGroup`, iconAnchor `[40, -20]`)
+- Zoom ≥ 15 → `_refreshNearbyMarkers()` chỉ giữ marker trong/gần khung nhìn
+- Zoom ≥ 17 (mobile 18) → hiện nhãn tên (`labelLayerGroup`, iconAnchor `[40, -20]`)
+- Zoom ≥ 19 → đổi từ canvas `circleMarker` sang SVG divIcon chi tiết (`SVG_ZOOM_THRESHOLD`)
+
+**Lọc theo khung nhìn — `_refreshNearbyMarkers()`**
+
+Từ zoom 15 chỉ giữ marker trong `map.getBounds()` mở rộng, có dải trễ chống nhấp nháy:
+
+| Hằng | Giá trị | Ý nghĩa |
+|---|---|---|
+| `NEARBY_MIN_ZOOM` | 15 | Dưới ngưỡng này không lọc (restore hết) |
+| `NEARBY_PAD_SHOW` | 0.15 | Vào khung nhìn + 15% → hiện lại |
+| `NEARBY_PAD_HIDE` | 0.60 | Ra khỏi khung nhìn + 60% → mới ẩn |
+
+⚠ **Không dùng bán kính tròn.** Màn hình là chữ nhật 3:2 — hình tròn nội tiếp chỉ phủ
+**58% diện tích**, khiến 4 góc luôn trống marker dù người dùng đang nhìn thấy vùng đó.
+`markercluster` cũng tự cull ngoài viewport (`removeOutsideVisibleBounds: true` mặc định);
+hàm này là lớp thứ hai để group không phải ôm cả nghìn marker ngoài màn hình.
+
+`_refreshLabelViewport()` lọc nhãn cùng cách nhưng pad chặt hơn (0.1) vì nhãn là DOM divIcon.
+
+⚠ Thứ tự trong `addMarkersToMap` phải giữ: `clearLayers` → `_nearbyHidden.clear()` →
+thêm marker → `fitBounds(markersCluster.getBounds())` → `_refreshNearbyMarkers()`.
+Nếu lọc chạy trước `fitBounds` thì `getBounds()` sẽ thiếu marker đã bị ẩn.
 
 ### Icon SVG (L.divIcon, className: '')
 - `makeLampIcon(color, loaiDen, congSuat, soLuong)` — icon **động** theo số bóng đèn:

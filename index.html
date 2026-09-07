@@ -14178,13 +14178,11 @@
                 return;
             }
             if (!map.hasLayer(labelLayerGroup)) map.addLayer(labelLayerGroup);
-            // Dùng chung bán kính với marker (_nearbyRadius). Nhãn chỉ hiện từ zoom 17/18
-            // nên bán kính thực tế ≤ 500m — đủ rộng mà không rối chữ.
-            const center = map.getCenter();
-            const showR  = _nearbyRadius(zoom);
+            // Lọc theo khung nhìn như marker. Nhãn là DOM divIcon nên pad chặt hơn (10%)
+            // — chỉ hiện từ zoom 17/18 nên số nhãn trong viewport đã tự giới hạn.
+            const view = map.getBounds().pad(0.1);
             _lblMarkers.forEach(function(lbl, rid) {
-                const ll = lbl.getLatLng();
-                const inView = haversineM(center.lat, center.lng, ll.lat, ll.lng) <= showR;
+                const inView = view.contains(lbl.getLatLng());
                 const inGroup = labelLayerGroup.hasLayer(lbl);
                 if (inView && !inGroup) {
                     if (labelEditMode) { if (lbl.dragging) lbl.dragging.enable(); }
@@ -14196,33 +14194,35 @@
             });
         }
 
-        // Nearby filter: từ zoom 15 chỉ hiện marker + label quanh center, bán kính co theo zoom.
-        // Khung nhìn giảm 1/2 mỗi cấp zoom nên bán kính cũng vậy — sàn 200m để zoom sâu vẫn đủ ngữ cảnh.
-        //   z15 = 2000m · z16 = 1000m · z17 = 500m · z18 = 250m · z19+ = 200m
-        function _nearbyRadius(zoom) {
-            return Math.max(200, 2000 / Math.pow(2, zoom - 15));
-        }
-        const _NEARBY_HYST = 1.4;  // ẩn ở 1.4×R, hiện lại ở R — dải trễ tránh nhấp nháy ở mép
+        // Từ zoom 15 chỉ giữ marker trong/gần khung nhìn. Lọc theo bounds chứ KHÔNG theo
+        // bán kính tròn: màn hình là chữ nhật, hình tròn nội tiếp chỉ phủ 58% diện tích
+        // → 4 góc luôn trống marker dù user đang nhìn thấy.
+        // markercluster cũng tự cull ngoài viewport; đây là lớp thứ hai để group không
+        // phải ôm cả nghìn marker ngoài màn hình.
+        // Dải trễ: hiện khi vào pad 15%, chỉ ẩn khi ra khỏi pad 60% → không nhấp nháy ở mép.
+        const NEARBY_MIN_ZOOM = 15;
+        const NEARBY_PAD_SHOW = 0.15;
+        const NEARBY_PAD_HIDE = 0.60;
 
         function _refreshNearbyMarkers() {
             if (!markers.length) return;
             const zoom = map.getZoom();
-            if (zoom < 15) {
+            if (zoom < NEARBY_MIN_ZOOM) {
                 // Zoom thấp — restore toàn bộ marker bị ẩn
                 _nearbyHidden.forEach(m => { try { markersCluster.addLayer(m); } catch(_) {} });
                 _nearbyHidden.clear();
                 return;
             }
-            const center = map.getCenter();
-            const showR = _nearbyRadius(zoom);
-            const hideR = showR * _NEARBY_HYST;
+            const b = map.getBounds();          // pad() không mutate, trả bounds mới
+            const showB = b.pad(NEARBY_PAD_SHOW);
+            const hideB = b.pad(NEARBY_PAD_HIDE);
             markers.forEach(function(md) {
-                const d = haversineM(center.lat, center.lng, md.lat, md.lon);
+                const ll = L.latLng(md.lat, md.lon);
                 const hidden = _nearbyHidden.has(md.marker);
-                if (d > hideR && !hidden) {
+                if (!hideB.contains(ll) && !hidden) {
                     try { markersCluster.removeLayer(md.marker); } catch(_) {}
                     _nearbyHidden.add(md.marker);
-                } else if (d <= showR && hidden) {
+                } else if (showB.contains(ll) && hidden) {
                     try { markersCluster.addLayer(md.marker); } catch(_) {}
                     _nearbyHidden.delete(md.marker);
                 }
@@ -15865,7 +15865,7 @@
                 _refreshLabelViewport();
                 _applyZoomTier();        // 9.5 — re-render khi đổi tier (cabinet ↔ all)
                 _applyRenderTier();      // A2 hybrid — re-render khi cross zoom 19 (canvas ↔ svg)
-                _refreshNearbyMarkers(); // nearby filter: ẩn/hiện marker ngoài bán kính theo zoom (z15=2km → z19+=200m)
+                _refreshNearbyMarkers(); // từ zoom 15: ẩn/hiện marker theo khung nhìn (pad 15% ↔ 60%)
             }, 150);
             map.on('zoomend', function() {
                 _syncZoomFilterClass(); // fast — enable drop-shadow chỉ ở zoom ≥ 18 (fire ngay)
