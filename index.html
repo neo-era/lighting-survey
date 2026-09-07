@@ -2056,6 +2056,22 @@
 
                     <div class="ctrl-divider"></div>
 
+                    <!-- Ranh hành chính (offline) -->
+                    <div class="ctrl-section" id="sec-ranh">
+                        <div class="ctrl-title">🏛 Ranh phường/xã</div>
+                        <select id="ranhProvinceSelect" class="ctrl-input"
+                                onchange="_onRanhProvinceChange(this.value)"
+                                style="margin-bottom:6px;padding:6px 10px;font-size:13px;">
+                            <option value="">Đang tải...</option>
+                        </select>
+                        <div style="font-size:10px;color:#64748b;line-height:1.5;">
+                            Bật/tắt ở nút lớp bản đồ (góc trên phải) → <b>🏛 Ranh phường/xã</b>.
+                            Dữ liệu lưu sẵn trong app, chạy được khi mất mạng.
+                        </div>
+                    </div>
+
+                    <div class="ctrl-divider"></div>
+
                     <!-- Kiểm tra kết nối Sheet -->
                     <div class="ctrl-section" id="sec-check-sheet">
                         <div class="ctrl-title">🔌 Kết nối dữ liệu</div>
@@ -5202,6 +5218,17 @@
         let _polygonLayerGroup = null;
         let _polygonPreviewLine = null;
 
+        // ── RANH HÀNH CHÍNH — dữ liệu offline trong data/ranh/ ───────────
+        // Sinh bằng scripts/build-ranh.py (OSM admin_level=6, đã đơn giản hóa 5m).
+        // KHÔNG gọi Overpass lúc chạy → hoạt động offline hoàn toàn sau lần tải đầu.
+        let _adminBoundaryLayer = null;
+        let _adminBoundaryOn    = false;
+        let _adminProvince      = localStorage.getItem('ranh_province') || 'hcm';
+        let _adminProvinceList  = null;   // index.json đã tải
+        let _adminRenderer      = null;   // L.canvas() — TP.HCM có 4715 đoạn, SVG sẽ nặng
+        const _adminCache       = {};     // slug → dữ liệu tỉnh đã parse
+        const ADMIN_LABEL_MIN_ZOOM = 13;  // dưới zoom này chỉ vẽ ranh, không vẽ nhãn
+
         function _togglePolygonMode() {
             _polygonMode = !_polygonMode;
             const btn = document.getElementById('btnPolygonToggle');
@@ -5267,6 +5294,96 @@
             }
             area = Math.abs(area * R * R / 2);
             return area / 10000; // m² → ha
+        }
+
+        // Tải data/ranh/<slug>.json — SW cache lại nên lần sau chạy offline được
+        async function _loadProvinceRanh(slug) {
+            if (_adminCache[slug]) return _adminCache[slug];
+            const res = await fetch('data/ranh/' + slug + '.json');
+            if (!res.ok) throw new Error('Không tải được ranh tỉnh ' + slug + ' (HTTP ' + res.status + ')');
+            const data = await res.json();
+            _adminCache[slug] = data;
+            return data;
+        }
+
+        async function _loadProvinceIndex() {
+            if (_adminProvinceList) return _adminProvinceList;
+            const res = await fetch('data/ranh/index.json');
+            if (!res.ok) throw new Error('Không tải được danh sách tỉnh');
+            _adminProvinceList = (await res.json()).provinces || [];
+            return _adminProvinceList;
+        }
+
+        // Chỉ vẽ phường/xã giao với khung nhìn → giữ DOM nhẹ khi zoom sâu
+        function _renderAdminOnMap(wards) {
+            if (!_adminBoundaryLayer) return;
+            _adminBoundaryLayer.clearLayers();
+            if (!_adminRenderer) _adminRenderer = L.canvas({ padding: 0.3 });
+            const view = map.getBounds().pad(0.25);
+            const showLabel = map.getZoom() >= ADMIN_LABEL_MIN_ZOOM;
+
+            (wards || []).forEach(function(w) {
+                let drew = false;
+                (w.g || []).forEach(function(seg) {
+                    // Bỏ qua đoạn nằm hoàn toàn ngoài khung nhìn
+                    let hit = false;
+                    for (let i = 0; i < seg.length; i++) {
+                        if (view.contains([seg[i][1], seg[i][0]])) { hit = true; break; }
+                    }
+                    if (!hit) return;
+                    L.polyline(seg.map(function(c) { return [c[1], c[0]]; }), {
+                        renderer: _adminRenderer,
+                        color: '#7c3aed', weight: 1.5, opacity: 0.65,
+                        dashArray: '5 4', interactive: false
+                    }).addTo(_adminBoundaryLayer);
+                    drew = true;
+                });
+                if (drew && showLabel && w.c && view.contains([w.c[1], w.c[0]])) {
+                    L.marker([w.c[1], w.c[0]], {
+                        icon: L.divIcon({
+                            className: '',
+                            html: '<span style="font-size:10px;font-weight:700;color:#7c3aed;' +
+                                  'white-space:nowrap;text-shadow:0 0 3px #fff,0 0 3px #fff,0 0 3px #fff">' +
+                                  w.n + '</span>',
+                            iconAnchor: [0, 8]
+                        }),
+                        interactive: false, zIndexOffset: -100
+                    }).addTo(_adminBoundaryLayer);
+                }
+            });
+        }
+
+        async function _refreshAdminBoundaries() {
+            if (!_adminBoundaryOn || !map) return;
+            try {
+                const data = await _loadProvinceRanh(_adminProvince);
+                _renderAdminOnMap(data.wards || []);
+            } catch(e) {
+                console.warn('[ranh]', e.message);
+                displayError('Không tải được ranh hành chính: ' + e.message);
+            }
+        }
+
+        // Đổi tỉnh từ dropdown trong ☰ panel
+        async function _onRanhProvinceChange(slug) {
+            _adminProvince = slug;
+            localStorage.setItem('ranh_province', slug);
+            if (_adminBoundaryOn) await _refreshAdminBoundaries();
+        }
+
+        // Điền dropdown tỉnh (gọi khi mở ☰ panel)
+        async function _fillRanhProvinceSelect() {
+            const sel = document.getElementById('ranhProvinceSelect');
+            if (!sel || sel.dataset.filled) return;
+            try {
+                const list = await _loadProvinceIndex();
+                sel.innerHTML = list.map(function(p) {
+                    return '<option value="' + p.slug + '">' + p.label +
+                           ' (' + p.wards + ' phường/xã)</option>';
+                }).join('');
+                sel.value = _adminProvince;
+                sel.dataset.filled = '1';
+            } catch(e) { console.warn('[ranh index]', e.message); }
         }
 
         // ── P31: VOICE NOTE — ghi âm ghi chú marker ──────────────────────
@@ -14327,7 +14444,8 @@
 
         function _osmBoundsKey(bounds) {
             const round = (v, p) => Math.round(v * p) / p;
-            return `osm_${round(bounds.minLat, 1000)}_${round(bounds.minLon, 1000)}_${round(bounds.maxLat, 1000)}_${round(bounds.maxLon, 1000)}`;
+            // v2: đổi prefix để invalidate cache cũ (query admin_level 9|10 trả rỗng ở VN)
+            return `osm2_${round(bounds.minLat, 1000)}_${round(bounds.minLon, 1000)}_${round(bounds.maxLat, 1000)}_${round(bounds.maxLon, 1000)}`;
         }
 
         function _cgUpdateOsmInfo() {
@@ -14373,7 +14491,9 @@
             if (opts.roads) queries.push(`way["highway"](${bbox});`);
             if (opts.buildings) queries.push(`way["building"](${bbox});`);
             if (opts.water) queries.push(`way["waterway"](${bbox});`);
-            if (opts.admin) queries.push(`way["boundary"="administrative"]["admin_level"~"^(9|10)$"](${bbox});`);
+            // VN: sau sáp nhập 2025, phường/xã map ở admin_level=6 (168 phường/xã TPHCM).
+            // Tên nằm ở relation, không ở way → phải query relation.
+            if (opts.admin) queries.push(`relation["boundary"="administrative"]["admin_level"~"^(6|8)$"](${bbox});`);
             const q = `[out:json][timeout:30];(${queries.join('')});out geom;`;
 
             // Fetch
@@ -14388,9 +14508,23 @@
             // Parse elements → GeoJSON-like features
             const data = { roads: [], buildings: [], water: [], admin: [] };
             (json.elements || []).forEach(el => {
+                const tags = el.tags || {};
+                // Ranh hành chính = relation; geometry nằm ở members role='outer'
+                if (el.type === 'relation' && tags.boundary === 'administrative') {
+                    const segTags = { boundary: 'administrative', admin_level: tags.admin_level };
+                    let sumLon = 0, sumLat = 0, n = 0;
+                    (el.members || []).forEach(m => {
+                        if (m.type !== 'way' || m.role !== 'outer' || !m.geometry) return;
+                        const coords = m.geometry.map(g => [g.lon, g.lat]);
+                        coords.forEach(c => { sumLon += c[0]; sumLat += c[1]; n++; });
+                        data.admin.push({ coords, tags: segTags }); // đoạn ranh — không nhãn
+                    });
+                    // 1 entry nhãn duy nhất tại centroid (coords 1 điểm → không vẽ line)
+                    if (n > 0 && tags.name) data.admin.push({ coords: [[sumLon / n, sumLat / n]], tags });
+                    return;
+                }
                 if (el.type !== 'way' || !el.geometry) return;
                 const coords = el.geometry.map(g => [g.lon, g.lat]);
-                const tags = el.tags || {};
                 if (tags.highway) data.roads.push({ coords, tags });
                 else if (tags.building) data.buildings.push({ coords, tags });
                 else if (tags.waterway) data.water.push({ coords, tags });
@@ -15653,6 +15787,8 @@
                 }
             });
 
+            _adminBoundaryLayer = L.layerGroup();
+
             L.control.layers(
                 {
                     '🗺 Google Maps': googleMap,
@@ -15667,9 +15803,29 @@
                     '⬜ CartoDB Sáng': cartoLight,
                     '⬛ CartoDB Tối': cartoDark,
                 },
-                { '🏷 Nhãn tên đường': streetLabels },
+                {
+                    '🏷 Nhãn tên đường': streetLabels,
+                    '🏛 Ranh phường/xã (OSM)': _adminBoundaryLayer
+                },
                 { position: 'topright' }
             ).addTo(map);
+
+            // Ranh hành chính: bật/tắt theo layer control + auto-refresh khi pan
+            map.on('overlayadd', function(e) {
+                if (e.layer === _adminBoundaryLayer) {
+                    _adminBoundaryOn = true;
+                    _refreshAdminBoundaries();
+                }
+            });
+            map.on('overlayremove', function(e) {
+                if (e.layer === _adminBoundaryLayer) {
+                    _adminBoundaryOn = false;
+                    _adminBoundaryLayer.clearLayers();
+                }
+            });
+            map.on('moveend', debounce(function() {
+                if (_adminBoundaryOn) _refreshAdminBoundaries();
+            }, 800));
 
             createMapControls();
             map.addLayer(markersCluster);
@@ -20083,6 +20239,8 @@
                     // Sync zoom display ngay khi mở modal (giá trị hiện tại của map)
                     const zEl = document.getElementById('panelZoomDisplay');
                     if (zEl && typeof map !== 'undefined') zEl.innerHTML = 'Z ' + map.getZoom();
+                    // Điền dropdown tỉnh cho ranh hành chính (chỉ chạy 1 lần)
+                    _fillRanhProvinceSelect();
                     // Sync accuracy threshold slider
                     const sl = document.getElementById('gpsAccThresholdSlider');
                     if (sl) { sl.value = _gpsAccThreshold; _onGpsThresholdInput(_gpsAccThreshold); }

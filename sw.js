@@ -1,30 +1,34 @@
-const CACHE = 'lighting-survey-v119';
+const CACHE = 'lighting-survey-v124';
 
 // Assets tĩnh pre-cache khi install (icon + ảnh mẫu + CAD blocks + title templates T21 + core modules)
 const STATIC_ASSETS = [
-  '/images/1.png','/images/2.png','/images/3.png','/images/4.png','/images/5.png',
-  '/images/6.png','/images/7.png','/images/8.png','/images/9.png','/images/10.png',
-  '/images/blank.png','/images/icon-192.png','/images/icon-512.png',
+  'images/1.png','images/2.png','images/3.png','images/4.png','images/5.png',
+  'images/6.png','images/7.png','images/8.png','images/9.png','images/10.png',
+  'images/blank.png','images/icon-192.png','images/icon-512.png',
   // Sprint 2 Modularize — 6 core modules extracted từ index.html
-  '/src/core/text.js',
-  '/src/core/utils.js',
-  '/src/core/vn2000.js',
-  '/src/core/dxf-utils.js',
-  '/src/core/cad-drawing.js',
-  '/src/core/mst.js',
+  'src/core/text.js',
+  'src/core/utils.js',
+  'src/core/vn2000.js',
+  'src/core/dxf-utils.js',
+  'src/core/cad-drawing.js',
+  'src/core/mst.js',
   // T21 CAD Generator — 8 placeholder blocks (kỹ sư CAD sẽ thay file sau)
-  '/assets/dxf-blocks/pole_stk_1l.dxf',
-  '/assets/dxf-blocks/pole_stk_2l.dxf',
-  '/assets/dxf-blocks/pole_tt.dxf',
-  '/assets/dxf-blocks/pole_htlt.dxf',
-  '/assets/dxf-blocks/pole_ttlt.dxf',
-  '/assets/dxf-blocks/cabinet_noi.dxf',
-  '/assets/dxf-blocks/cabinet_ngam.dxf',
-  '/assets/dxf-blocks/north_arrow.dxf',
+  'assets/dxf-blocks/pole_stk_1l.dxf',
+  'assets/dxf-blocks/pole_stk_2l.dxf',
+  'assets/dxf-blocks/pole_tt.dxf',
+  'assets/dxf-blocks/pole_htlt.dxf',
+  'assets/dxf-blocks/pole_ttlt.dxf',
+  'assets/dxf-blocks/cabinet_noi.dxf',
+  'assets/dxf-blocks/cabinet_ngam.dxf',
+  'assets/dxf-blocks/north_arrow.dxf',
   // T21 Phase B — 3 title block templates với ATTDEF
-  '/assets/dxf-templates/title_state.dxf',
-  '/assets/dxf-templates/title_consulting.dxf',
-  '/assets/dxf-templates/title_contractor.dxf',
+  'assets/dxf-templates/title_state.dxf',
+  'assets/dxf-templates/title_consulting.dxf',
+  'assets/dxf-templates/title_contractor.dxf',
+  // Ranh hành chính offline — sinh bằng scripts/build-ranh.py (OSM admin_level=6)
+  'data/ranh/index.json',
+  'data/ranh/hcm.json',
+  'data/ranh/tayninh.json',
 ];
 
 // CDN libraries cache riêng — cache-first, không pre-install (tải lần đầu rồi cache)
@@ -123,8 +127,21 @@ self.addEventListener('fetch', e => {
     }
   } catch (_) {}
 
-  // Ảnh icon và assets tĩnh: cache-first
+  // Ảnh icon và assets tĩnh: cache-first, lưu lại response same-origin.
+  // Không lưu thì file nào pre-cache lỗi sẽ không bao giờ dùng offline được.
   e.respondWith(
-    caches.match(e.request).then(r => r || fetch(e.request))
+    caches.match(e.request).then(r => {
+      if (r) return r;
+      return fetch(e.request).then(res => {
+        try {
+          if (res.ok && e.request.method === 'GET' &&
+              new URL(url).origin === self.location.origin) {
+            const clone = res.clone();
+            caches.open(CACHE).then(c => c.put(e.request, clone));
+          }
+        } catch (_) {}
+        return res;
+      });
+    })
   );
 });

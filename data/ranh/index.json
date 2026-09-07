@@ -1,0 +1,17 @@
+{
+ "generated": "2026-09-07",
+ "provinces": [
+  {
+   "slug": "hcm",
+   "label": "TP. Hồ Chí Minh",
+   "wards": 168,
+   "sizeKB": 1112
+  },
+  {
+   "slug": "tayninh",
+   "label": "Tây Ninh",
+   "wards": 96,
+   "sizeKB": 631
+  }
+ ]
+}
