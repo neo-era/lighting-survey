@@ -5705,7 +5705,7 @@
         const labelZoomThreshold = isMobile ? 18 : 17;
         let map;
         let markersCluster = L.markerClusterGroup({
-            disableClusteringAtZoom: 17,
+            disableClusteringAtZoom: 15,   // zoom >= 15 → icon trụ riêng lẻ (không gom bóng số)
             maxClusterRadius: isMobile ? 80 : 60,
             spiderfyOnMaxZoom: true,
             chunkedLoading: true,
@@ -5715,7 +5715,7 @@
         // Canvas renderer cho markers — hybrid mode giữ icon detail ở zoom cao.
         // Zoom < SVG_ZOOM_THRESHOLD: L.circleMarker trên canvas (fast, ~50ms cho 1K markers)
         // Zoom >= SVG_ZOOM_THRESHOLD: L.marker + divIcon SVG chi tiết (số bóng, cần đèn, cabinet shape)
-        // Ranh giới 17 = user zoom sát để đọc detail, viewport có ít markers → SVG affordable.
+        // Ranh giới 19 = user zoom sát để đọc detail, viewport có ít markers → SVG affordable.
         // Fallback SVG hoàn toàn khi edit position mode ON (circleMarker không native drag).
         // Runtime toggle: window.USE_CANVAS_MARKERS = false → SVG mọi zoom.
         window.USE_CANVAS_MARKERS = (typeof window.USE_CANVAS_MARKERS === 'boolean') ? window.USE_CANVAS_MARKERS : true;
@@ -14178,18 +14178,13 @@
                 return;
             }
             if (!map.hasLayer(labelLayerGroup)) map.addLayer(labelLayerGroup);
-            // zoom ≥ 17: filter theo bán kính 300m quanh center (cùng logic marker nearby)
-            const useRadius = zoom >= 15;
-            const center = useRadius ? map.getCenter() : null;
-            const bounds  = useRadius ? null : map.getBounds().pad(0.3);
+            // Dùng chung bán kính với marker (_nearbyRadius). Nhãn chỉ hiện từ zoom 17/18
+            // nên bán kính thực tế ≤ 500m — đủ rộng mà không rối chữ.
+            const center = map.getCenter();
+            const showR  = _nearbyRadius(zoom);
             _lblMarkers.forEach(function(lbl, rid) {
-                let inView;
-                if (useRadius) {
-                    const ll = lbl.getLatLng();
-                    inView = haversineM(center.lat, center.lng, ll.lat, ll.lng) <= _NEARBY_SHOW;
-                } else {
-                    inView = bounds.contains(lbl.getLatLng());
-                }
+                const ll = lbl.getLatLng();
+                const inView = haversineM(center.lat, center.lng, ll.lat, ll.lng) <= showR;
                 const inGroup = labelLayerGroup.hasLayer(lbl);
                 if (inView && !inGroup) {
                     if (labelEditMode) { if (lbl.dragging) lbl.dragging.enable(); }
@@ -14201,9 +14196,13 @@
             });
         }
 
-        // Nearby filter: zoom ≥ 17 → tự động chỉ hiện marker + label trong 300m quanh center
-        const _NEARBY_SHOW = 200; // m — show/restore threshold
-        const _NEARBY_HIDE = 280; // m — hide threshold (hysteresis ±80m tránh nhấp nháy)
+        // Nearby filter: từ zoom 15 chỉ hiện marker + label quanh center, bán kính co theo zoom.
+        // Khung nhìn giảm 1/2 mỗi cấp zoom nên bán kính cũng vậy — sàn 200m để zoom sâu vẫn đủ ngữ cảnh.
+        //   z15 = 2000m · z16 = 1000m · z17 = 500m · z18 = 250m · z19+ = 200m
+        function _nearbyRadius(zoom) {
+            return Math.max(200, 2000 / Math.pow(2, zoom - 15));
+        }
+        const _NEARBY_HYST = 1.4;  // ẩn ở 1.4×R, hiện lại ở R — dải trễ tránh nhấp nháy ở mép
 
         function _refreshNearbyMarkers() {
             if (!markers.length) return;
@@ -14215,13 +14214,15 @@
                 return;
             }
             const center = map.getCenter();
+            const showR = _nearbyRadius(zoom);
+            const hideR = showR * _NEARBY_HYST;
             markers.forEach(function(md) {
                 const d = haversineM(center.lat, center.lng, md.lat, md.lon);
                 const hidden = _nearbyHidden.has(md.marker);
-                if (d > _NEARBY_HIDE && !hidden) {
+                if (d > hideR && !hidden) {
                     try { markersCluster.removeLayer(md.marker); } catch(_) {}
                     _nearbyHidden.add(md.marker);
-                } else if (d <= _NEARBY_SHOW && hidden) {
+                } else if (d <= showR && hidden) {
                     try { markersCluster.addLayer(md.marker); } catch(_) {}
                     _nearbyHidden.delete(md.marker);
                 }
@@ -15863,8 +15864,8 @@
             const _zoomEndHeavy = debounce(function() {
                 _refreshLabelViewport();
                 _applyZoomTier();        // 9.5 — re-render khi đổi tier (cabinet ↔ all)
-                _applyRenderTier();      // A2 hybrid — re-render khi cross zoom 17 (canvas ↔ svg)
-                _refreshNearbyMarkers(); // nearby filter: ẩn/hiện marker xa >650m
+                _applyRenderTier();      // A2 hybrid — re-render khi cross zoom 19 (canvas ↔ svg)
+                _refreshNearbyMarkers(); // nearby filter: ẩn/hiện marker ngoài bán kính theo zoom (z15=2km → z19+=200m)
             }, 150);
             map.on('zoomend', function() {
                 _syncZoomFilterClass(); // fast — enable drop-shadow chỉ ở zoom ≥ 18 (fire ngay)
@@ -17688,8 +17689,8 @@
         }
 
         // A2 hybrid — re-render khi cross SVG_ZOOM_THRESHOLD (canvas ↔ svg)
-        // - zoom < 17: canvas circleMarker (fast, chấm tròn màu type)
-        // - zoom >= 17: SVG divIcon detail (số bóng, cần đèn, cabinet shape)
+        // - zoom < 19: canvas circleMarker (fast, chấm tròn màu type)
+        // - zoom >= 19: SVG divIcon detail (số bóng, cần đèn, cabinet shape)
         function _applyRenderTier() {
             if (!map || !window.USE_CANVAS_MARKERS) return;
             if (editPositionMode) return;                              // edit mode luôn SVG (rebuild bởi toggle)
