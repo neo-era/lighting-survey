@@ -3188,6 +3188,9 @@ Export (T21 output offset):  output = chuẩn + (dE, dN)                        
 
 **Filter logic**: AND across dimensions, OR trong mỗi dimension. `[]` hoặc `null` = không filter dimension đó (chọn tất cả).
 
+> ⚠ **Các bước 1–4, 6, 8 dưới đây mô tả thiết kế ban đầu, KHÔNG khớp code.**
+> Xem mục "Cơ chế xuất thực tế" ngay bên dưới sơ đồ này.
+
 1. Load dxf-writer + blocks + template (lazy)
 2. Init Drawing + set HEADER (INSUNITS=6, DWGCODEPAGE=ANSI_1258, INSBASE offset)
 3. Add layers: LIGHTING_POLE (red), LIGHTING_CABLE (magenta DASHED), LIGHTING_TEXT (green), TITLE_BLOCK (white)
@@ -3229,6 +3232,47 @@ Export (T21 output offset):  output = chuẩn + (dE, dN)                        
 - `_getUniqueBasenames()` — apply `normalizeMarkerBaseName` lên `row[1]`
 - `_getUniqueSurveyors()` — unique `row[5]`
 - `_getUniquePhuongXa()` — unique `row[18]`
+
+---
+
+### Cơ chế xuất thực tế (khác thiết kế ban đầu ở trên)
+
+`_generateCadDrawing` **không dùng** class `CadDrawing` (`src/core/cad-drawing.js` là dead code)
+và **không đọc** `assets/dxf-blocks/*.dxf` (8 file đó đã lỗi thời — đặt tên theo *loại*
+`POLE_STK_2L`, trong khi code vẽ theo *trạng thái cải tạo* `row[29]`). Nó tự build mảng
+group-code bằng tay rồi `join('\r\n')`.
+
+**Ký hiệu marker = BLOCK sinh từ code, INSERT tại từng vị trí:**
+
+| Thành phần | Cơ chế |
+|---|---|
+| Định nghĩa block | `_ensureSymbolBlock(key, type, state, opts)` gọi `_drawMarkerSymbol(_bp, 0, 0, ...)` vẽ tại gốc toạ độ → đẩy vào `_blocksDefL` |
+| Tên block | `_symBlockName(_stateKey(type,state))` → `SYM_POLE_GIU`, `SYM_CAB_THU`… (18 ký hiệu tối đa) |
+| Đặt vào bản vẽ | `push('0','INSERT','8','0','2',bn, '10',x, '20',y, '30','0')` — không scale, không rotation |
+| BLOCKS section | `L.splice(_entitiesStartIdx, 0, ...)` chèn vào giữa TABLES và ENTITIES |
+| Tên trụ | **TEXT rời** trên layer `'0'` (không dùng ATTRIB) |
+
+Định nghĩa block chỉ sinh cho state **thực sự được dùng** — file 220 marker chỉ có 10 block.
+Giảm ~78% dung lượng phần marker (trung bình 70 dòng DXF/ký hiệu → 14 dòng/INSERT).
+
+**Layer**: chỉ 2 layer trong LAYER table — `0` (marker + tên trụ) và `LIGHTING_CABLE`
+(đường cáp + nhãn khoảng cách, màu magenta). Entity bên trong block nằm trên layer `0`
+nên **thừa kế layer của INSERT** — muốn đẩy marker sang layer riêng chỉ cần sửa 1 chỗ.
+
+⚠ `_drawCableSymbol(push, x1,y1, x2,y2, state, layer)` — tham số `layer` mặc định `'0'`.
+Auto-legend và `_generateOverviewDrawing` **không truyền** tham số này (2 generator đó chưa
+khai báo LAYER table).
+
+**Lịch sử**: v70 từng bỏ BLOCK vì lỗi parse file asset. Vấn đề nằm ở khâu đọc file, không
+phải ở cơ chế BLOCK — khung tên `TITLE_KNOP12` vẫn dùng BLOCK+INSERT chạy tốt suốt thời gian đó.
+
+**Lỗi đã biết, chưa sửa:**
+- `soLuongDen` (row[21]) **không có tác dụng** — `parseInt(x) || 1` không bao giờ < 1 nên
+  `if (soLuong >= 1)` luôn đúng. Khi sửa phải đưa `soLuongDen` vào `_symBlockName`
+- Loại 1/2/3/4 vẽ **giống hệt nhau** — `type` chỉ dùng để tách tủ (5,6) vs trụ
+- `opts.scale` (1:500/1:1000) **không đổi kích thước ký hiệu** — hardcode theo mét.
+  Có BLOCK rồi thì sửa chỉ cần thêm group `41/42/43` vào INSERT
+- `row[10]` (`loaiDen`) truyền vào `_drawPoleSymbol` nhưng không được đọc
 
 ### 21.6 PDF export song song
 

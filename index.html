@@ -5765,7 +5765,20 @@
         let githubToken = '';
         let _currentPopupRow = null;
         let _editingRow = null; // row đang sửa (null = thêm mới)
-        const MAX_EXCEL_TEXT_LENGTH = 32767;
+        // Cạnh dài nhất của ảnh khảo sát sau khi resize (px).
+        // 1600 chọn theo 4 ràng buộc:
+        //  - Đọc nhãn thiết bị: chụp cận cảnh 30cm → chữ 8mm cao ~43px, dư gấp đôi ngưỡng 20px.
+        //    (Chụp cả cột từ 4m thì không độ phân giải nào cứu được — 3px. Do khung hình, không do px.)
+        //  - In báo cáo: đủ 300 DPI cho ảnh rộng 13.5cm.
+        //  - Drive 15GB: 16.500 trụ × 1.5 ảnh ≈ 8.9 GB, còn dư. Lên 2400px là 19.9 GB → tràn.
+        //  - Upload 3G yếu: 3 ảnh/trụ mất ~18s. Lên 2400px thành 40s — quá lâu khi đứng ngoài đường.
+        const IMG_MAX_SIDE = 1600;
+        // Trần dung lượng data URL ảnh — chỉ là chốt chặn chống file khổng lồ.
+        // KHÔNG dùng 32767 (giới hạn ký tự 1 ô Excel): ảnh khảo sát upload thành FILE trên
+        // Google Drive, không nhét vào ô bảng tính. Trần 32767 ≈ 24 KB JPEG từng ép mọi ảnh
+        // xuống ~384px dù đặt 1200px, vì vòng lặp thu nhỏ chạy tới 7 vòng mới lọt.
+        // 8M ký tự ≈ 6 MB JPEG — ảnh 2400px (~0.9 MB) không bao giờ chạm tới.
+        const MAX_IMAGE_DATAURL_LEN = 8000000;
         const KHAOSAT_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRjBdN5epr38kL2jLituPUC4wJO_Ohr_AsFpzaZh6Azxxs_gkzGT5s3JiZ1uFkNQFP5epR2U_wYT6wT/pub?output=csv';
         const KHAOSAT_GAS_URL = 'https://script.google.com/macros/s/AKfycbxPFn7lnJZYdjUg5WlVq1P1JGI5O3rvcry_IVE3bhF5foDmbgT6KwBU4xFxHNwKruHRvQ/exec';
         const MAPILLARY_TOKEN = 'MLY|36684115377868575|f79dc382b6bbd9a0f9bdfe79c4eed78e';
@@ -7616,16 +7629,47 @@
         // ═══════════════════════════════════════════════════════════════════
         // Main generator: _generateCadDrawing(opts)
         // ═══════════════════════════════════════════════════════════════════
-        // Rewrite v70 — Tương thích AutoCAD 2021
-        // Dùng entity primitives (CIRCLE + LINE + TEXT + LWPOLYLINE) thay INSERT block
-        // vì BLOCKS section với placeholder DXF không parse được → AutoCAD fail load.
-        // Pattern giống createDxfForMarkers (đã confirm mở được).
+        // Tương thích AutoCAD 2021.
+        // Các hàm _draw*Symbol dưới đây sinh entity primitives (CIRCLE + LINE + ARC + SOLID).
+        // Chúng KHÔNG ghi thẳng vào ENTITIES nữa: _generateCadDrawing gọi chúng một lần cho
+        // mỗi (type,state) tại gốc (0,0) để tạo định nghĩa BLOCK, rồi INSERT tại từng vị trí.
+        // Lưu ý lịch sử: v70 từng bỏ BLOCK vì đọc file assets/dxf-blocks/*.dxf bị lỗi parse.
+        // Vấn đề nằm ở khâu đọc file asset, không phải ở cơ chế BLOCK — nay block được sinh
+        // trực tiếp từ code (giống TITLE_KNOP12) nên không còn phụ thuộc file ngoài.
 
         // ─────────────────────────────────────────────────────────────
         // P59+: CAD_SYMBOLS library — vẽ marker theo trạng thái cải tạo
         // Reference: kyhieu.pdf — 24 symbols chuẩn bản vẽ cải tạo VN
         // Approach: direct primitives (R12 compat), không dùng DXF BLOCK
         // ─────────────────────────────────────────────────────────────
+
+        // ─────────────────────────────────────────────────────────────
+        // HEADER khung nhìn — để AutoCAD mở ra là thấy nội dung ngay.
+        // $EXTMIN/$EXTMAX chỉ là PHẠM VI bản vẽ (lệnh ZOOM Extents dùng), KHÔNG phải
+        // khung nhìn khi mở. Khung nhìn lấy từ $VIEWCTR (tâm) + $VIEWSIZE (chiều cao).
+        // Thiếu chúng, AutoCAD mở ở gốc (0,0) trong khi bản vẽ nằm ở ~600.000/1.200.000
+        // (VN-2000) → màn hình trống trơn.
+        // Trả về mảng group-code để ghép vào HEADER.
+        // ─────────────────────────────────────────────────────────────
+        function _dxfHeaderView(bounds, margin) {
+            const m = margin || 0;
+            const minX = bounds.minX - m, maxX = bounds.maxX + m;
+            const minY = bounds.minY - m, maxY = bounds.maxY + m;
+            const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
+            const w = Math.max(1, maxX - minX), h = Math.max(1, maxY - minY);
+            // $VIEWSIZE là chiều CAO khung nhìn. Cửa sổ CAD luôn rộng hơn cao; giả định
+            // tỉ lệ tối thiểu 1.4 (≈A3 ngang) để bề ngang bản vẽ không bị cắt trên màn hẹp.
+            const viewH = Math.max(h, w / 1.4) * 1.04;   // +4% cho thoáng mép
+            return [
+                '9', '$EXTMIN',  '10', minX.toFixed(4), '20', minY.toFixed(4), '30', '0',
+                '9', '$EXTMAX',  '10', maxX.toFixed(4), '20', maxY.toFixed(4), '30', '0',
+                '9', '$LIMMIN',  '10', minX.toFixed(4), '20', minY.toFixed(4),
+                '9', '$LIMMAX',  '10', maxX.toFixed(4), '20', maxY.toFixed(4),
+                '9', '$VIEWCTR', '10', cx.toFixed(4),   '20', cy.toFixed(4),
+                '9', '$VIEWSIZE','40', viewH.toFixed(4),
+                '9', '$INSUNITS','70', '6'
+            ];
+        }
 
         // Key duy nhất cho state (dùng cho legend detection)
         function _stateKey(type, state) {
@@ -7877,7 +7921,10 @@
 
         // Vẽ line với pattern rời rạc — R12 compat (không dùng LTYPE dashed)
         // Approach: split thành nhiều LINE nhỏ theo pattern
-        function _drawCableSymbol(push, x1, y1, x2, y2, state) {
+        // layer: mặc định '0' để legend + bản vẽ tổng thể (chưa khai báo LAYER table) không đổi.
+        // Bản vẽ mặt bằng truyền 'LIGHTING_CABLE' để tắt/bật cáp độc lập.
+        function _drawCableSymbol(push, x1, y1, x2, y2, state, layer) {
+            layer = layer || '0';
             const dx = x2 - x1, dy = y2 - y1;
             const len = Math.hypot(dx, dy);
             if (len < 0.1) return;
@@ -7897,7 +7944,7 @@
 
             if (!pattern) {
                 // Solid
-                push('0', 'LINE', '8', '0',
+                push('0', 'LINE', '8', layer,
                     '10', x1.toFixed(4), '20', y1.toFixed(4), '30', '0',
                     '11', x2.toFixed(4), '21', y2.toFixed(4), '31', '0');
                 return;
@@ -7914,7 +7961,7 @@
                     const sy = y1 + uy * cursor;
                     const ex = x1 + ux * (cursor + seg);
                     const ey = y1 + uy * (cursor + seg);
-                    push('0', 'LINE', '8', '0',
+                    push('0', 'LINE', '8', layer,
                         '10', sx.toFixed(4), '20', sy.toFixed(4), '30', '0',
                         '11', ex.toFixed(4), '21', ey.toFixed(4), '31', '0');
                 }
@@ -8369,12 +8416,9 @@
             // Auto-legend (sơ đồ nguyên lý — lấy lampSpecs từ rows)
             _drawAutoLegend(push, _dxfEscape, { minX: bounds.minX + 20, minY: 0, maxX: bounds.maxX, maxY: bounds.maxY }, usedStates, usedCableStates, _buildLampSpecs(rows));
 
-            // Patch HEADER with final EXTMIN/EXTMAX for correct viewport on open
-            { const hM = 20;
-              L.splice(0, 6, '0', 'SECTION', '2', 'HEADER',
-                  '9', '$EXTMIN', '10', (bounds.minX - hM).toFixed(4), '20', (bounds.minY - hM).toFixed(4), '30', '0',
-                  '9', '$EXTMAX', '10', (bounds.maxX + hM).toFixed(4), '20', (bounds.maxY + hM).toFixed(4), '30', '0',
-                  '9', '$INSUNITS', '70', '6', '0', 'ENDSEC'); }
+            // Patch HEADER — extents + khung nhìn để mở ra thấy nội dung ngay
+            L.splice(0, 6, '0', 'SECTION', '2', 'HEADER',
+                ..._dxfHeaderView(bounds, 20), '0', 'ENDSEC');
 
             push('0', 'ENDSEC', '0', 'EOF');
             return L.join('\r\n');
@@ -9040,12 +9084,9 @@
                 });
             }
 
-            // Patch HEADER with final EXTMIN/EXTMAX for correct viewport on open
-            { const hM = 20;
-              L.splice(0, 6, '0', 'SECTION', '2', 'HEADER',
-                  '9', '$EXTMIN', '10', (bounds.minX - hM).toFixed(4), '20', (bounds.minY - hM).toFixed(4), '30', '0',
-                  '9', '$EXTMAX', '10', (bounds.maxX + hM).toFixed(4), '20', (bounds.maxY + hM).toFixed(4), '30', '0',
-                  '9', '$INSUNITS', '70', '6', '0', 'ENDSEC'); }
+            // Patch HEADER — extents + khung nhìn để mở ra thấy nội dung ngay
+            L.splice(0, 6, '0', 'SECTION', '2', 'HEADER',
+                ..._dxfHeaderView(bounds, 20), '0', 'ENDSEC');
 
             push('0', 'ENDSEC', '0', 'EOF');
             return L.join('\r\n');
@@ -9069,6 +9110,13 @@
             // TABLES/STYLE — bắt buộc để tiếng Việt hiển thị đúng (Times New Roman TTF)
             // txt.shx (default) KHÔNG hỗ trợ Unicode extended → thay bằng times.ttf
             push('0', 'SECTION', '2', 'TABLES');
+            // LAYER — tách cáp ra lớp riêng để bật/tắt độc lập trong AutoCAD.
+            // Marker + text tên trụ vẫn ở layer '0'. Nét đứt cáp được vẽ bằng nhiều LINE rời
+            // (hình học) nên linetype là CONTINUOUS, không phải DASHED.
+            push('0', 'TABLE', '2', 'LAYER', '70', '2');
+            push('0', 'LAYER', '2', '0',              '70', '0', '62', '7', '6', 'CONTINUOUS');
+            push('0', 'LAYER', '2', 'LIGHTING_CABLE', '70', '0', '62', '6', '6', 'CONTINUOUS');
+            push('0', 'ENDTAB');
             push('0', 'TABLE', '2', 'STYLE', '70', '1');
             push('0', 'STYLE', '2', 'STANDARD', '70', '0', '40', '0', '41', '1',
                  '50', '0', '71', '0', '42', '2.5', '3', 'times.ttf', '4', '');
@@ -9086,6 +9134,31 @@
             const _usedStates = new Set();
             const _usedCableStates = new Set();
 
+            // ─── Ký hiệu marker xuất ra dưới dạng BLOCK ───
+            // Mỗi (type,state) chỉ định nghĩa 1 lần rồi INSERT nhiều nơi → giảm ~78% dung
+            // lượng DXF ở 1000 marker, và cho phép sửa 1 block đổi toàn bộ (REFEDIT/BCOUNT).
+            // Nội dung block vẽ tại gốc (0,0) trên layer '0' → entity thừa kế layer của INSERT.
+            // Format block sao chép y hệt TITLE_KNOP12 bên dưới (đã xác nhận AutoCAD 2021 mở được).
+            const _symBlocks = new Set();
+            const _symBlockName = k => 'SYM_' + String(k).toUpperCase();
+
+            function _ensureSymbolBlock(key, type, state, symOpts) {
+                const bn = _symBlockName(key);
+                if (_symBlocks.has(bn)) return bn;
+                const _bl = [];
+                const _bp = (...a) => { for (const v of a) _bl.push(String(v)); };
+                _drawMarkerSymbol(_bp, 0, 0, type, state, symOpts);
+                _blocksDefL.push(
+                    '0', 'BLOCK', '8', '0', '2', bn,
+                    '70', '0', '10', '0.0000', '20', '0.0000', '30', '0.0000',
+                    '3', bn,
+                    ..._bl,
+                    '0', 'ENDBLK', '8', '0'
+                );
+                _symBlocks.add(bn);
+                return bn;
+            }
+
             // Iterate markers: dispatch symbol theo (type, trangThai) — P59+
             for (const r of rows) {
                 const lat = parseCoord(r[2]), lon = parseCoord(r[3]);
@@ -9100,9 +9173,12 @@
                 const soLuongDen = parseInt(r[21]) || 1;
                 const loaiDen = String(r[10] || '').toUpperCase();
 
-                // Vẽ symbol theo state
-                _drawMarkerSymbol(push, x, y, type, state, { soLuongDen, loaiDen });
-                _usedStates.add(_stateKey(type, state));
+                // Ký hiệu = INSERT block (định nghĩa sinh 1 lần mỗi state)
+                const _key = _stateKey(type, state);
+                const _bn  = _ensureSymbolBlock(_key, type, state, { soLuongDen, loaiDen });
+                push('0', 'INSERT', '8', '0', '2', _bn,
+                     '10', x.toFixed(4), '20', y.toFixed(4), '30', '0');
+                _usedStates.add(_key);
 
                 // TEXT label tên trụ (cao 2m thực địa @ 1:1000)
                 push('0', 'TEXT', '8', '0');
@@ -9129,13 +9205,13 @@
                 if (!p1 || !p2) continue;
 
                 const cableState = String(r[22] || 'noi').trim();  // noi/ngam/noi_thu/ngam_thu/noi_moi/ngam_moi
-                _drawCableSymbol(push, p1.x, p1.y, p2.x, p2.y, cableState);
+                _drawCableSymbol(push, p1.x, p1.y, p2.x, p2.y, cableState, 'LIGHTING_CABLE');
                 _usedCableStates.add(cableState);
 
-                // TEXT khoảng cách ở midpoint
+                // TEXT khoảng cách ở midpoint — cùng layer với cáp để tắt/bật đi kèm
                 const mx = (p1.x + p2.x) / 2, my = (p1.y + p2.y) / 2;
                 const dist = r[15] || Math.round(Math.hypot(p1.x - p2.x, p1.y - p2.y));
-                push('0', 'TEXT', '8', '0');
+                push('0', 'TEXT', '8', 'LIGHTING_CABLE');
                 push('10', mx.toFixed(4), '20', my.toFixed(4), '30', '0');
                 push('40', '1.5');
                 push('1', `${dist}m`);
@@ -9608,12 +9684,9 @@
                 L.splice(_entitiesStartIdx, 0, ..._blockSec);
             }
 
-            // Patch HEADER with final EXTMIN/EXTMAX — AutoCAD auto-zoom to fit on open
-            { const hM = 20;
-              L.splice(0, 6, '0', 'SECTION', '2', 'HEADER',
-                  '9', '$EXTMIN', '10', (bounds.minX - hM).toFixed(4), '20', (bounds.minY - hM).toFixed(4), '30', '0',
-                  '9', '$EXTMAX', '10', (bounds.maxX + hM).toFixed(4), '20', (bounds.maxY + hM).toFixed(4), '30', '0',
-                  '9', '$INSUNITS', '70', '6', '0', 'ENDSEC'); }
+            // Patch HEADER — extents + khung nhìn để mở ra thấy nội dung ngay
+            L.splice(0, 6, '0', 'SECTION', '2', 'HEADER',
+                ..._dxfHeaderView(bounds, 20), '0', 'ENDSEC');
 
             // CRLF line-ending — AutoCAD strict
             return L.join('\r\n');
@@ -16228,7 +16301,7 @@
             const img = new Image();
             img.onload = function() {
                 let width = img.width, height = img.height;
-                const scale = Math.min(1, 1200 / Math.max(width, height));
+                const scale = Math.min(1, IMG_MAX_SIDE / Math.max(width, height));
                 width = Math.round(width*scale); height = Math.round(height*scale);
                 const canvas = document.createElement('canvas');
                 const ctx = canvas.getContext('2d');
@@ -16243,10 +16316,10 @@
                     return (target==='image/jpeg'||target==='image/webp') ? canvas.toDataURL(target,0.85) : canvas.toDataURL(target);
                 }
                 let result = render();
-                while (result.length > MAX_EXCEL_TEXT_LENGTH && Math.max(width,height) > 120) {
+                while (result.length > MAX_IMAGE_DATAURL_LEN && Math.max(width,height) > 120) {
                     width = Math.round(width*.85); height = Math.round(height*.85); result = render();
                 }
-                if (result.length > MAX_EXCEL_TEXT_LENGTH) { callback('','Ảnh quá lớn. Vui lòng chọn ảnh nhỏ hơn.'); return; }
+                if (result.length > MAX_IMAGE_DATAURL_LEN) { callback('','Ảnh quá lớn. Vui lòng chọn ảnh nhỏ hơn.'); return; }
                 callback(result);
             };
             img.onerror = function() { callback('','Không thể đọc ảnh.'); };
@@ -16307,6 +16380,81 @@
             }
         }
 
+        // ─────────────────────────────────────────────────────────────
+        // Ghi thông tin khảo sát lên ảnh — dải đen mờ dưới đáy.
+        // Gọi ngay trước khi upload (trong syncRowToGAS) vì lúc đó `row` đã có dữ liệu
+        // cuối cùng: tên trụ đã nhập xong, toạ độ đã chốt sau khi kéo marker.
+        // Ảnh tự mang thông tin nên tách khỏi bảng dữ liệu vẫn biết chụp trụ nào, ở đâu, lúc nào.
+        // Luôn xuất JPEG — ảnh chụp không cần PNG, và PNG kèm chữ sẽ rất nặng.
+        // ─────────────────────────────────────────────────────────────
+        function _stampImageDataUrl(dataUrl, row) {
+            return new Promise(function(resolve) {
+                const tenTru = String((row && row[1]) || '').trim();
+                const lat = parseCoord(row && row[2]), lon = parseCoord(row && row[3]);
+                const lines = [];
+                if (tenTru) lines.push({ t: tenTru, big: true });
+                if (isFinite(lat) && isFinite(lon)) {
+                    lines.push({ t: '📍 ' + formatCoord(lat) + ', ' + formatCoord(lon) });
+                }
+                lines.push({ t: '🕐 ' + (String((row && row[13]) || '').trim() || new Date().toLocaleString('vi-VN')) });
+                if (!lines.length) { resolve(dataUrl); return; }
+
+                const img = new Image();
+                img.onload = function() {
+                    try {
+                        const W = img.width, H = img.height;
+                        const cv = document.createElement('canvas');
+                        cv.width = W; cv.height = H;
+                        const ctx = cv.getContext('2d');
+                        ctx.drawImage(img, 0, 0);
+
+                        // Cỡ chữ theo CẠNH DÀI (luôn = IMG_MAX_SIDE sau resize), không theo
+                        // bề rộng — nếu theo bề rộng thì ảnh dọc sẽ bị chữ nhỏ hơn ảnh ngang.
+                        const ref = Math.max(W, H);
+                        const fsBig = Math.max(15, Math.round(ref * 0.026));
+                        const fsSm  = Math.max(12, Math.round(ref * 0.020));
+                        const pad   = Math.round(fsSm * 0.8);
+                        const gap   = Math.round(fsSm * 0.30);
+                        let bandH = pad * 2;
+                        lines.forEach(function(l, i) {
+                            bandH += (l.big ? fsBig : fsSm) * 1.15 + (i ? gap : 0);
+                        });
+                        bandH = Math.round(bandH);
+                        const top = H - bandH;
+
+                        ctx.fillStyle = 'rgba(0,0,0,0.58)';
+                        ctx.fillRect(0, top, W, bandH);
+                        ctx.fillStyle = 'rgba(255,255,255,0.35)';
+                        ctx.fillRect(0, top, W, Math.max(1, Math.round(W * 0.0012)));
+
+                        ctx.textBaseline = 'top';
+                        ctx.fillStyle = '#ffffff';
+                        let y = top + pad;
+                        lines.forEach(function(l, i) {
+                            const fs = l.big ? fsBig : fsSm;
+                            ctx.font = (l.big ? '700 ' : '400 ') + fs + 'px Arial, sans-serif';
+                            if (i) y += gap;
+                            // Cắt bớt nếu quá dài so với bề ngang ảnh
+                            let t = l.t;
+                            const maxW = W - pad * 2;
+                            if (ctx.measureText(t).width > maxW) {
+                                while (t.length > 4 && ctx.measureText(t + '…').width > maxW) t = t.slice(0, -1);
+                                t += '…';
+                            }
+                            ctx.fillText(t, pad, y);
+                            y += fs * 1.15;
+                        });
+                        resolve(cv.toDataURL('image/jpeg', 0.85));
+                    } catch (e) {
+                        console.warn('[stamp] lỗi ghi thông tin lên ảnh:', e.message);
+                        resolve(dataUrl);   // hỏng thì upload ảnh gốc, không chặn luồng lưu
+                    }
+                };
+                img.onerror = function() { resolve(dataUrl); };
+                img.src = dataUrl;
+            });
+        }
+
         async function syncRowToGAS(row, opts) {
             const silent = !!(opts && opts.silent);
             const oldTenTru = (opts && opts.oldTenTru) || '';
@@ -16322,11 +16470,13 @@
                     const _part = imgSlots[_ii];
                     if (_part && _part.startsWith('data:')) {
                         try {
-                            const ext = getImageExtensionFromDataUrl(_part);
+                            // Ghi tên trụ + toạ độ + thời gian lên ảnh trước khi upload
+                            const _stamped = await _stampImageDataUrl(_part, row);
+                            const ext = getImageExtensionFromDataUrl(_stamped);
                             const soTru = _ii === 0 ? (row[1] || '') : ((row[1] || '') + '_' + (_ii + 1));
                             const upRes = await fetch(KHAOSAT_GAS_URL, {
                                 method: 'POST',
-                                body: JSON.stringify({ action: 'upload_image', imageBase64: getBase64FromDataUrl(_part), soTru, ext })
+                                body: JSON.stringify({ action: 'upload_image', imageBase64: getBase64FromDataUrl(_stamped), soTru, ext })
                             });
                             const upData = await upRes.json();
                             if (upData.status === 'ok') {
