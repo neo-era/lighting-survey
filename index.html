@@ -15821,7 +15821,38 @@
                 maxZoom: 17, subdomains: 'abc', attribution: '© OpenTopoMap (CC-BY-SA)'
             });
 
-            map = L.map('map', { center:[10.762622,106.660172], zoom:13, maxZoom:33, layers:[googleMap] });
+            // Mapbox Streets v11 — base layer mặc định.
+            // Tile @2x nên tileSize 512 + zoomOffset -1 (bắt buộc, nếu thiếu sẽ lệch 1 cấp zoom).
+            const MAPBOX_TOKEN = 'pk.eyJ1IjoibWFpbGFtMTk4MiIsImEiOiJjbXVndDhheTIwaDY3Mnpvc3JoNmpyNmZuIn0.xO1iUkkK271kOqZM_wKrBA';
+            const mapboxStreets = L.tileLayer(
+                'https://api.mapbox.com/styles/v1/mapbox/streets-v11/tiles/{z}/{x}/{y}@2x?access_token=' + MAPBOX_TOKEN,
+                {
+                    tileSize: 512,
+                    zoomOffset: -1,
+                    maxZoom: 22,
+                    attribution: '© Mapbox © OpenStreetMap'
+                }
+            );
+
+            // Giữ nguyên center/zoom. Base layer mặc định thêm bằng .addTo(map) bên dưới
+            // thay vì option `layers:` — googleMap vẫn còn biến để dùng trong layer control.
+            map = L.map('map', { center:[10.762622,106.660172], zoom:13, maxZoom:33 });
+            mapboxStreets.addTo(map);
+
+            // Mapbox trả 403 nếu token thiếu scope styles:tiles / hết hạn mức / bị khoá.
+            // Khi đó tile im lặng không vẽ → bản đồ trắng. Tự chuyển sang Google Maps
+            // và báo cho user, thay vì để màn hình trống không rõ lý do.
+            let _mapboxFellBack = false;
+            mapboxStreets.on('tileerror', function() {
+                if (_mapboxFellBack) return;
+                _mapboxFellBack = true;
+                map.removeLayer(mapboxStreets);
+                googleMap.addTo(map);
+                console.warn('[mapbox] Tile lỗi (thường là 403) — đã chuyển sang Google Maps.');
+                if (typeof displayError === 'function') {
+                    displayError('Mapbox không tải được tile (token bị từ chối) — đã tạm dùng Google Maps.');
+                }
+            });
             if (isMobile) {
                 map.options.zoomAnimation = false;
                 map.options.markerZoomAnimation = false;
@@ -15865,6 +15896,7 @@
 
             L.control.layers(
                 {
+                    '🗺 Mapbox Streets': mapboxStreets,
                     '🗺 Google Maps': googleMap,
                     'OpenStreetMap': osm,
                     '🏙 Bản đồ TPHCM (GIS)': hcmcMap,
