@@ -1311,11 +1311,11 @@
                 <button id="cgBtnDxf" onclick="_onCgExport('dxf')" class="ctrl-btn primary" style="flex:1;min-width:70px;margin-bottom:0;padding:10px;font-size:12px;">DXF</button>
                 <button id="cgBtnPdf" onclick="_onCgExport('pdf')" class="ctrl-btn outline" style="flex:1;min-width:70px;margin-bottom:0;padding:10px;font-size:12px;">PDF</button>
                 <button id="cgBtnBoth" onclick="_onCgExport('both')" class="ctrl-btn primary" style="flex:1;min-width:90px;margin-bottom:0;padding:10px;font-size:12px;background:#059669;">Cả 2 (zip)</button>
-                <button id="cgBtnBatch" onclick="_onCgBatchExport()" title="Xuất mỗi tủ 1 file DXF riêng vào zip" class="ctrl-btn primary" style="flex:1;min-width:110px;margin-bottom:0;padding:10px;font-size:12px;background:#7c3aed;">📦 Batch N tủ</button>
+                <button id="cgBtnBatch" onclick="_onCgBatchExport()" title="Xuất mỗi tủ 1 file DXF riêng vào 1 file zip. Rate limit: ~2-5 giây/tủ. Sheet 100 tủ ≈ 5 phút." class="ctrl-btn primary" style="flex:1;min-width:110px;margin-bottom:0;padding:10px;font-size:12px;background:#7c3aed;">📦 Batch N tủ</button>
                 <button id="cgBtnStampMgr" onclick="_openStampManager()" title="Quản lý dấu tròn + chữ ký scan" class="ctrl-btn outline" style="flex:1;min-width:110px;margin-bottom:0;padding:10px;font-size:12px;color:#dc2626;border-color:#dc2626;">🖋 Dấu &amp; chữ ký</button>
                 <button id="cgBtnBom" onclick="_onCgExportBom()" title="Xuất bảng vật tư (BOM) Excel" class="ctrl-btn outline" style="flex:1;min-width:110px;margin-bottom:0;padding:10px;font-size:12px;color:#059669;border-color:#059669;">📊 BOM Excel</button>
                 <button id="cgBtnElectric" onclick="_onCgExportElectrical()" title="Xuất bảng tính toán điện (IEC 60364)" class="ctrl-btn outline" style="flex:1;min-width:110px;margin-bottom:0;padding:10px;font-size:12px;color:#0369a1;border-color:#0369a1;">🔌 Tính điện</button>
-                <button id="cgBtnDossier" onclick="_onCgCompileFullDossier()" title="Compile hồ sơ đầy đủ (3 DXF + BOM + tính điện + dấu/chữ ký) thành 1 zip" class="ctrl-btn primary" style="flex:1;min-width:130px;margin-bottom:0;padding:10px;font-size:12px;background:#dc2626;font-weight:800;">🗎 Compile hồ sơ</button>
+                <button id="cgBtnDossier" onclick="_onCgCompileFullDossier()" title="Compile hồ sơ nộp thẩm định (1 zip gồm: mặt bằng.dxf + sơ đồ nguyên lý.dxf + tổng thể.dxf + BOM Excel + tính điện Excel + folder dấu/chữ ký + README.txt). Mất ~30-60s." class="ctrl-btn primary" style="flex:1;min-width:130px;margin-bottom:0;padding:10px;font-size:12px;background:#dc2626;font-weight:800;">🗎 Compile hồ sơ</button>
             </div>
         </div>
     </div>
@@ -10476,9 +10476,40 @@
             _cgRenderMetadataForm();
             _cgUpdateLiveCounter();
             if (typeof _cgUpdateCadBaseInfo === 'function') _cgUpdateCadBaseInfo();
+            // F3: Auto-detect meridian từ centroid Lat/Lon
+            _cgAutoDetectMeridian();
             modal.style.display = 'flex';
             if (typeof closeControlsModal === 'function') closeControlsModal();
         }
+
+        // F3: Auto-detect meridian từ centroid Lat/Lon của filtered rows
+        // VN có 4 múi TM chuẩn: 105° / 105.5° / 105.75° / 106° → chọn múi gần centroid.lon nhất
+        function _cgAutoDetectMeridian() {
+            const sel = document.getElementById('cgMeridian');
+            if (!sel) return;
+            const rows = (loadedData || []).slice(1);
+            let sumLon = 0, cnt = 0;
+            for (const r of rows) {
+                const lon = parseCoord(r[3]);
+                if (isFinite(lon) && lon > 100 && lon < 115) { sumLon += lon; cnt++; }
+            }
+            if (cnt === 0) return;
+            const avgLon = sumLon / cnt;
+            const candidates = [105, 105.5, 105.75, 106];
+            let best = candidates[0], minDiff = Math.abs(candidates[0] - avgLon);
+            for (const c of candidates) {
+                const d = Math.abs(c - avgLon);
+                if (d < minDiff) { minDiff = d; best = c; }
+            }
+            const bestStr = String(best);
+            if (sel.value !== bestStr) {
+                sel.value = bestStr;
+                if (typeof displayInfo === 'function') {
+                    displayInfo(`🎯 Auto-detect kinh tuyến: ${best}° (centroid Lon=${avgLon.toFixed(3)}°)`);
+                }
+            }
+        }
+        window._cgAutoDetectMeridian = _cgAutoDetectMeridian;
 
         function _closeCadGenerator() {
             const modal = document.getElementById('cadGeneratorModal');
@@ -10578,10 +10609,16 @@
                 const selected = new Set(_cgCurrentFilters[d.key] || []);
                 const isAllSelected = selected.size === 0;
                 const label = isAllSelected ? `Tất cả (${values.length})` : `${selected.size}/${values.length}`;
+                // F5: Auto-expand accordion nếu dimension có filter active
+                // + highlight summary bằng background cam để user thấy ngay
+                const openAttr = isAllSelected ? '' : 'open';
+                const summaryBg = isAllSelected ? '#f8fafc' : '#fef3c7';
+                const summaryColor = isAllSelected ? '#334155' : '#78350f';
+                const activeBadge = isAllSelected ? '' : ' <span style="background:#f59e0b;color:#fff;padding:1px 6px;border-radius:10px;font-size:10px;font-weight:700;margin-left:4px;">ACTIVE</span>';
                 return `
-                <details style="border:1px solid var(--border);border-radius:6px;margin-bottom:4px;padding:0;">
-                    <summary style="padding:6px 10px;font-size:12px;font-weight:600;color:#334155;cursor:pointer;background:#f8fafc;border-radius:6px 6px 0 0;">
-                        ${d.label} — <span id="cgFlbl_${d.key}" style="color:#2563eb;font-weight:700;">${label}</span>
+                <details ${openAttr} style="border:1px solid var(--border);border-radius:6px;margin-bottom:4px;padding:0;">
+                    <summary style="padding:6px 10px;font-size:12px;font-weight:600;color:${summaryColor};cursor:pointer;background:${summaryBg};border-radius:6px 6px 0 0;">
+                        ${d.label} — <span id="cgFlbl_${d.key}" style="color:#2563eb;font-weight:700;">${label}</span>${activeBadge}
                     </summary>
                     <div style="padding:8px 10px;">
                         <div style="display:flex;gap:6px;margin-bottom:6px;">
@@ -10673,14 +10710,30 @@
                 const batchBtn = document.getElementById('cgBtnBatch');
                 if (batchBtn) batchBtn.disabled = true;
             } else {
-                el.style.background = '#f0fdf4';
-                el.style.color = '#166534';
-                el.innerHTML = `Sẽ xuất <b>${rows.length}/${total}</b> marker (${tuCount} tủ · ${cableCount} tuyến cáp)`;
+                // F1: 3 tier warn — filter chặt / bình thường / OK
+                const ratio = rows.length / Math.max(1, total);
+                let bg, color, prefix = 'Sẽ xuất', suffix = '';
+                if (rows.length < 10) {
+                    bg = '#fef2f2'; color = '#dc2626'; prefix = '⚠ CHỈ';
+                    suffix = ` <span style="font-weight:400;font-size:11px;">(${(ratio*100).toFixed(2)}% dữ liệu — filter rất chặt, có chắc không?)</span>`;
+                } else if (ratio < 0.05) {
+                    bg = '#fffbeb'; color = '#78350f'; prefix = '⚠ Sẽ xuất';
+                    suffix = ` <span style="font-weight:400;font-size:11px;">(chỉ ${(ratio*100).toFixed(1)}% dữ liệu)</span>`;
+                } else {
+                    bg = '#f0fdf4'; color = '#166534';
+                }
+                el.style.background = bg;
+                el.style.color = color;
+                el.innerHTML = `${prefix} <b>${rows.length}/${total}</b> marker (${tuCount} tủ · ${cableCount} tuyến cáp)${suffix}`;
                 document.getElementById('cgBtnDxf').disabled = false;
                 document.getElementById('cgBtnPdf').disabled = false;
                 document.getElementById('cgBtnBoth').disabled = false;
                 const batchBtn2 = document.getElementById('cgBtnBatch');
-                if (batchBtn2) batchBtn2.disabled = false;
+                if (batchBtn2) {
+                    batchBtn2.disabled = false;
+                    // F6: Dynamic label — hiển thị số tủ sẽ batch
+                    batchBtn2.textContent = tuCount > 0 ? `📦 Batch ${tuCount} tủ` : '📦 Batch N tủ';
+                }
             }
         }
 
@@ -10831,12 +10884,22 @@
 
         // ── Compute sheet partitions dựa vào filter + scale ─────────
         function _cgComputeSheetsForCurrentOpts() {
-            const rows = _filterRowsForCadExport(_cgCurrentFilters);
+            let rows = _filterRowsForCadExport(_cgCurrentFilters);
             if (rows.length === 0) return { partitions: [], bounds: null };
             const cm = parseFloat(document.getElementById('cgMeridian').value) || 105.75;
             const scale = parseInt(document.getElementById('cgScale').value) || 1000;
             const outDE = parseFloat(document.getElementById('cgOffsetE').value) || 0;
             const outDN = parseFloat(document.getElementById('cgOffsetN').value) || 0;
+            // F2: Nếu checkbox "Bỏ outlier" bật → compute bounds SAU khi loại outlier
+            // Tránh bounds hàng chục km do 1-2 marker lệch → hàng nghìn tờ A3
+            const excludeOutliers = (document.getElementById('cgExcludeOutliers')||{}).checked;
+            if (excludeOutliers && rows.length >= 3) {
+                const outliers = _detectOutliers(rows, cm);
+                if (outliers.outlierNames.size > 0) {
+                    rows = rows.filter(r => !outliers.outlierNames.has(String(r[1]||'').trim()));
+                }
+            }
+            if (rows.length === 0) return { partitions: [], bounds: null };
             // Bounds sau khi apply output offset
             let b = _computeCadBoundsFromRows(rows, cm);
             b = { minX: b.minX + outDE, minY: b.minY + outDN, maxX: b.maxX + outDE, maxY: b.maxY + outDN };
@@ -10876,8 +10939,28 @@
             if (!bounds) { info.textContent = '—'; return; }
             const w = bounds.maxX - bounds.minX;
             const h = bounds.maxY - bounds.minY;
-            info.innerHTML = `<b>${partitions.length}</b> tờ · Bounds ${w.toFixed(0)}m × ${h.toFixed(0)}m`;
-            info.style.color = partitions.length > 4 ? '#dc2626' : '#166534';
+            const n = partitions.length;
+            // F4: Bounds display fallback "1 điểm" khi 0×0
+            const boundsLabel = (w < 1 && h < 1)
+                ? '1 điểm (không có diện tích)'
+                : (w < 10 && h < 10)
+                    ? `${w.toFixed(1)}m × ${h.toFixed(1)}m`
+                    : `${w.toFixed(0)}m × ${h.toFixed(0)}m`;
+            // F1: 3 tier warn số tờ
+            let color, prefix = '', suffix = '';
+            if (n > 100) {
+                color = '#dc2626'; prefix = '🚨 ';
+                suffix = ` <span style="font-weight:400;font-size:11px;">— quá nhiều! Filter tủ trước hoặc bật "Bỏ outlier"</span>`;
+            } else if (n > 20) {
+                color = '#dc2626'; prefix = '⚠ ';
+                suffix = ` <span style="font-weight:400;font-size:11px;">— nhiều tờ, cân nhắc filter</span>`;
+            } else if (n > 4) {
+                color = '#f59e0b';
+            } else {
+                color = '#166534';
+            }
+            info.innerHTML = `${prefix}<b>${n}</b> tờ · Bounds ${boundsLabel}${suffix}`;
+            info.style.color = color;
             _cgUpdateOutlierInfo();
         }
 
