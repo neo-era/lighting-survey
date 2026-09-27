@@ -12174,8 +12174,14 @@
                 toSync.push(targetRow);
             }
 
-            // Sync GAS batch
-            for (const row of toSync) {
+            // Sync GAS batch — hiện progress i/N trên nút
+            const totalSync = toSync.length;
+            for (let i = 0; i < totalSync; i++) {
+                const row = toSync[i];
+                if (activeBtn) {
+                    const failStr = failed > 0 ? ` (⚠${failed})` : '';
+                    activeBtn.textContent = `⏳ Sync ${i + 1}/${totalSync}${failStr}...`;
+                }
                 try {
                     if (typeof syncRowToGAS === 'function') {
                         const ok = await syncRowToGAS(row, { silent: true });
@@ -12278,19 +12284,26 @@
             if (!confirm(`Rollback ${undo.snapshot.length} trụ về trạng thái trước MST?`)) return;
 
             const bar = document.getElementById('mstRollbackBar');
-            if (bar) bar.innerHTML = '<span>⏳ Đang rollback...</span>';
+            if (bar) bar.innerHTML = '<span id="rollbackProgress">⏳ Rollback 0/' + undo.snapshot.length + '...</span>';
 
             const rowByName = new Map();
             (loadedData || []).slice(1).forEach(r => rowByName.set(String(r[1] || '').trim(), r));
 
             let restored = 0, synced = 0, failed = 0;
-            for (const snap of undo.snapshot) {
+            const total = undo.snapshot.length;
+            for (let i = 0; i < total; i++) {
+                const snap = undo.snapshot[i];
                 const row = rowByName.get(snap.tenTru);
                 if (!row) continue;
                 row[14] = snap.oldParent;
                 row[15] = snap.oldDist;
                 row[13] = snap.oldCapNhat || new Date().toISOString();
                 restored++;
+                const p = document.getElementById('rollbackProgress');
+                if (p) {
+                    const failStr = failed > 0 ? ` (⚠${failed})` : '';
+                    p.textContent = `⏳ Rollback ${i + 1}/${total}${failStr}...`;
+                }
                 try {
                     if (typeof syncRowToGAS === 'function') {
                         const ok = await syncRowToGAS(row, { silent: true });
