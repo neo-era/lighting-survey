@@ -1249,6 +1249,17 @@
                     <div id="cgOutlierInfo" style="margin-top:4px;padding:6px;font-size:11px;color:#64748b;background:#f8fafc;border-radius:6px;">—</div>
                 </div>
 
+                <!-- Section 4c1: Xuất đường cáp -->
+                <div style="margin-bottom:14px;">
+                    <label style="display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;color:#334155;cursor:pointer;user-select:none;">
+                        <input type="checkbox" id="cgIncludeCable" checked style="width:16px;height:16px;cursor:pointer;">
+                        🔌 Xuất đường cáp giữa các trụ
+                    </label>
+                    <div style="margin-top:4px;padding:5px 8px;font-size:11px;color:#64748b;background:#f8fafc;border-radius:4px;">
+                        Bỏ chọn nếu chỉ cần xuất trụ/tủ mặt bằng (không có sơ đồ cáp + nhãn khoảng cách).
+                    </div>
+                </div>
+
                 <!-- Section 4c2: OSM Basemap (P65+P66+P67) -->
                 <div style="margin-bottom:14px;">
                     <label style="display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;color:#334155;cursor:pointer;user-select:none;">
@@ -1468,6 +1479,73 @@
                 <button onclick="_closeAutoMstModal()" class="ctrl-btn outline" style="margin-bottom:0;padding:10px;font-size:13px;">Hủy</button>
                 <button id="mstBtnPreview" onclick="_mstDoPreview()" class="ctrl-btn outline" style="margin-bottom:0;padding:10px;font-size:13px;color:#2563eb;border-color:#2563eb;">👁 Preview map</button>
                 <button id="mstBtnApply" onclick="_mstApplyToData()" class="ctrl-btn primary" style="margin-bottom:0;padding:10px;font-size:13px;background:#059669;" disabled>✓ Áp dụng + Sync GAS</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══ KIỂM TRA SƠ ĐỒ CÁP (7 loại vấn đề) ═══ -->
+    <div id="longCableModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9700;align-items:center;justify-content:center;padding:16px;" onclick="if(event.target===this)_closeLongCableCheck()">
+        <div style="background:#fff;border-radius:12px;max-width:900px;width:100%;max-height:92vh;display:flex;flex-direction:column;padding:0;box-shadow:0 10px 40px rgba(0,0,0,.3);">
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 20px;border-bottom:1px solid var(--border);flex-shrink:0;">
+                <h4 style="margin:0;font-size:16px;font-weight:800;color:#dc2626;">🚨 Kiểm tra sơ đồ cáp</h4>
+                <button onclick="_closeLongCableCheck()" style="background:none;border:none;font-size:22px;cursor:pointer;color:#64748b;">×</button>
+            </div>
+            <div style="padding:10px 20px 6px;border-bottom:1px solid var(--border);flex-shrink:0;">
+                <!-- Thresholds row -->
+                <div style="display:grid;grid-template-columns:auto 80px auto auto 60px auto auto 60px auto;gap:6px;align-items:center;font-size:11px;margin-bottom:8px;">
+                    <label style="font-weight:700;color:#334155;">Cáp dài &gt;</label>
+                    <input type="number" id="lcThreshold" value="200" min="20" step="10" style="padding:5px 6px;border:1.5px solid var(--border);border-radius:5px;font-family:monospace;font-size:12px;" onchange="_lcRefreshList()">
+                    <span style="color:#64748b;">m</span>
+                    <label style="font-weight:700;color:#334155;margin-left:8px;">Chênh Haversine ≥</label>
+                    <input type="number" id="lcRatio" value="3" min="1.5" step="0.5" style="padding:5px 6px;border:1.5px solid var(--border);border-radius:5px;font-family:monospace;font-size:12px;" onchange="_lcRefreshList()">
+                    <span style="color:#64748b;">×</span>
+                    <label style="font-weight:700;color:#334155;margin-left:8px;">Fan-out &gt;</label>
+                    <input type="number" id="lcFanout" value="5" min="2" step="1" style="padding:5px 6px;border:1.5px solid var(--border);border-radius:5px;font-family:monospace;font-size:12px;" onchange="_lcRefreshList()">
+                    <span style="color:#64748b;">con</span>
+                </div>
+                <!-- Filter loại vấn đề -->
+                <div style="display:flex;flex-wrap:wrap;gap:8px 12px;font-size:11px;margin-bottom:6px;">
+                    <label style="cursor:pointer;user-select:none;"><input type="checkbox" class="lcTypeFilter" data-type="long" checked onchange="_lcRefreshList()"> 🔴 Dài</label>
+                    <label style="cursor:pointer;user-select:none;"><input type="checkbox" class="lcTypeFilter" data-type="haversine" checked onchange="_lcRefreshList()"> 🟠 Distance sai</label>
+                    <label style="cursor:pointer;user-select:none;"><input type="checkbox" class="lcTypeFilter" data-type="cycle" checked onchange="_lcRefreshList()"> 🟣 Vòng lặp</label>
+                    <label style="cursor:pointer;user-select:none;"><input type="checkbox" class="lcTypeFilter" data-type="self" checked onchange="_lcRefreshList()"> 🔵 Trỏ chính</label>
+                    <label style="cursor:pointer;user-select:none;"><input type="checkbox" class="lcTypeFilter" data-type="orphan" checked onchange="_lcRefreshList()"> ⚫ Cha không tồn tại</label>
+                    <label style="cursor:pointer;user-select:none;"><input type="checkbox" class="lcTypeFilter" data-type="cross" checked onchange="_lcRefreshList()"> 🟢 Khác tủ</label>
+                    <label style="cursor:pointer;user-select:none;"><input type="checkbox" class="lcTypeFilter" data-type="fanout" onchange="_lcRefreshList()"> 🟡 Fan-out cao</label>
+                </div>
+                <div style="display:flex;justify-content:space-between;align-items:center;font-size:11px;">
+                    <div id="lcSummary" style="color:#475569;">—</div>
+                    <div style="display:flex;gap:6px;">
+                        <button onclick="_lcSelectAll()" style="padding:4px 10px;background:#f1f5f9;border:1px solid #cbd5e1;border-radius:5px;font-size:11px;cursor:pointer;">☑ Tất cả</button>
+                        <button onclick="_lcToggleAllChecks(false)" style="padding:4px 10px;background:#f1f5f9;border:1px solid #cbd5e1;border-radius:5px;font-size:11px;cursor:pointer;">☐ Bỏ chọn</button>
+                    </div>
+                </div>
+                <div style="margin-top:6px;padding:6px 8px;font-size:11px;color:#7f1d1d;background:#fef2f2;border-radius:5px;line-height:1.4;">
+                    Xóa cáp = CLEAR cột <code>Marker gốc</code> + <code>Khoảng cách</code> (không xóa trụ). Fan-out không xóa qua modal — user tự vào Auto MST reorganize.
+                </div>
+            </div>
+            <div id="lcListWrap" style="overflow-y:auto;padding:0 20px;flex:1;min-height:200px;">
+                <table id="lcTable" style="width:100%;border-collapse:collapse;font-size:12px;">
+                    <thead style="position:sticky;top:0;background:#fff;z-index:2;">
+                        <tr style="border-bottom:2px solid #e2e8f0;">
+                            <th style="text-align:center;padding:8px 4px;width:32px;"><input type="checkbox" id="lcHeaderCheck" onchange="_lcToggleAllChecks(this.checked)"></th>
+                            <th style="text-align:left;padding:8px 4px;width:100px;">Loại</th>
+                            <th style="text-align:left;padding:8px 4px;">Trụ con</th>
+                            <th style="text-align:left;padding:8px 4px;">Marker gốc</th>
+                            <th style="text-align:right;padding:8px 4px;width:80px;">Khoảng cách</th>
+                            <th style="text-align:left;padding:8px 4px;">Ghi chú</th>
+                            <th style="text-align:center;padding:8px 4px;width:50px;">Map</th>
+                        </tr>
+                    </thead>
+                    <tbody id="lcTbody"></tbody>
+                </table>
+                <div id="lcEmpty" style="display:none;padding:40px;text-align:center;color:#94a3b8;font-size:13px;">
+                    ✅ Sơ đồ cáp OK — không có vấn đề nào phát hiện
+                </div>
+            </div>
+            <div style="display:flex;gap:8px;padding:12px 20px;border-top:1px solid var(--border);flex-shrink:0;background:#f8fafc;">
+                <button onclick="_closeLongCableCheck()" class="ctrl-btn outline" style="flex:1;margin-bottom:0;padding:10px;font-size:13px;">Đóng</button>
+                <button id="lcBtnDelete" onclick="_deleteLongCablesSelected()" class="ctrl-btn primary" style="flex:2;margin-bottom:0;padding:10px;font-size:13px;background:#dc2626;" disabled>🗑 Xóa các cáp đã chọn</button>
             </div>
         </div>
     </div>
@@ -1942,7 +2020,7 @@
                         </div>
                         <input type="file" id="editExcelInput" accept=".xlsx,.xls" style="display:none" onchange="_onEditExcelImport(this)">
 
-                        <div id="cableToolbar" style="display:none;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-top:6px;">
+                        <div id="cableToolbar" style="display:none;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px;">
                             <button id="btnCableEdit" onclick="toggleCableEditMode()" class="ctrl-btn outline" style="margin-bottom:0;font-size:12px;padding:8px;">
                                 <i class="fa fa-pencil"></i> Sửa cáp
                             </button>
@@ -1951,6 +2029,9 @@
                             </button>
                             <button id="btnAutoMst" onclick="_openAutoMstModal()" class="ctrl-btn outline" style="margin-bottom:0;font-size:12px;padding:8px;color:#059669;border-color:#a7f3d0;">
                                 🌳 Auto MST
+                            </button>
+                            <button id="btnLongCableCheck" onclick="_openLongCableCheck()" class="ctrl-btn outline" style="margin-bottom:0;font-size:12px;padding:8px;color:#dc2626;border-color:#fecaca;">
+                                🚨 Kiểm tra cáp
                             </button>
                         </div>
                     </div>
@@ -9197,7 +9278,10 @@
             opts.__lampSpecs = _buildLampSpecs(rows);
 
             // Draw cables (dispatch pattern theo loaiCap state — P59+)
+            // Skip toàn bộ block nếu user tắt cable trong modal (opts.includeCable === false)
+            const _includeCable = opts.includeCable !== false;
             for (const r of rows) {
+                if (!_includeCable) break;
                 const parentName = String(r[14] || '').trim();
                 if (!parentName || !filteredNames.has(parentName)) continue;
                 const p1 = posMap.get(String(r[1] || '').trim());
@@ -10911,6 +10995,7 @@
                 drawingType: drawingType,  // P60: 'site-plan' | 'single-line' | 'overview'
                 osmOptions: (typeof _cgCollectOsmOpts === 'function') ? _cgCollectOsmOpts() : null,  // P65+P66: null nếu tắt
                 cadBaseOptions: (typeof _cgCollectCadBaseOpts === 'function') ? _cgCollectCadBaseOpts() : null,  // CAD nền từ upload
+                includeCable: (document.getElementById('cgIncludeCable') || {}).checked !== false,  // default true — cho phép tắt cáp
                 frameMode: (document.getElementById('cgFrameMode') || {}).value || 'auto-fit'   // 'auto-fit' | 'a3-standard'
             };
 
@@ -11882,6 +11967,385 @@
         // ═══════════════════════════════════════════════════════════════════
         // (End T22 Auto-cable MST)
         // ═══════════════════════════════════════════════════════════════════
+
+        // ═══════════════════════════════════════════════════════════════════
+        // Kiểm tra cáp dài vô lý
+        // Xóa cáp = clear row[14] (Marker gốc) + row[15] (Khoảng cách) → sync GAS
+        // ═══════════════════════════════════════════════════════════════════
+        let _lcHighlightLayer = null;
+
+        function _openLongCableCheck() {
+            const modal = document.getElementById('longCableModal');
+            if (!modal) return;
+            if (!Array.isArray(loadedData) || loadedData.length < 2) {
+                displayError && displayError('Chưa có dữ liệu marker');
+                return;
+            }
+            modal.style.display = 'flex';
+            if (typeof closeControlsModal === 'function') closeControlsModal();
+            _lcRefreshList();
+        }
+        window._openLongCableCheck = _openLongCableCheck;
+
+        function _closeLongCableCheck() {
+            const modal = document.getElementById('longCableModal');
+            if (modal) modal.style.display = 'none';
+            _lcClearHighlight();
+        }
+        window._closeLongCableCheck = _closeLongCableCheck;
+
+        function _lcClearHighlight() {
+            if (_lcHighlightLayer) {
+                try { map.removeLayer(_lcHighlightLayer); } catch (_) {}
+                _lcHighlightLayer = null;
+            }
+        }
+
+        // 7 loại vấn đề cáp
+        const CABLE_ISSUE_TYPES = {
+            long:      { label: '🔴 Dài',        color: '#dc2626', bg: '#fef2f2', priority: 2, actionable: true },
+            haversine: { label: '🟠 Distance',   color: '#ea580c', bg: '#fff7ed', priority: 2, actionable: true },
+            cycle:     { label: '🟣 Vòng lặp',   color: '#9333ea', bg: '#faf5ff', priority: 3, actionable: true },
+            self:      { label: '🔵 Trỏ chính',  color: '#2563eb', bg: '#eff6ff', priority: 3, actionable: true },
+            orphan:    { label: '⚫ Cha không có', color: '#525252', bg: '#f5f5f5', priority: 3, actionable: true },
+            cross:     { label: '🟢 Khác tủ',    color: '#16a34a', bg: '#f0fdf4', priority: 1, actionable: true },
+            fanout:    { label: '🟡 Fan-out',    color: '#d97706', bg: '#fffbeb', priority: 1, actionable: false }
+        };
+
+        function _getCableIssues(opts) {
+            const rows = (loadedData || []).slice(1);
+            const posIdx = {};
+            const nameToTu = {};
+            const rowByName = new Map();
+            rows.forEach(r => {
+                const name = String(r[1] || '').trim();
+                if (!name) return;
+                const lat = parseCoord(r[2]), lon = parseCoord(r[3]);
+                if (Number.isFinite(lat) && Number.isFinite(lon)) posIdx[name] = [lat, lon];
+                nameToTu[name] = String(r[7] || '').trim();
+                rowByName.set(name, r);
+            });
+
+            // Detect cycle (reuse existing helper)
+            const cycle = typeof _detectCableCycle === 'function' ? _detectCableCycle(rows) : null;
+            const cycleSet = new Set(cycle || []);
+
+            // Children per parent (for fanout)
+            const childrenByParent = {};
+            rows.forEach(r => {
+                const p = String(r[14] || '').trim();
+                if (p) {
+                    if (!childrenByParent[p]) childrenByParent[p] = [];
+                    childrenByParent[p].push(String(r[1] || '').trim());
+                }
+            });
+
+            const results = [];
+            rows.forEach(r => {
+                const child = String(r[1] || '').trim();
+                const parent = String(r[14] || '').trim();
+                if (!child || !parent) return;
+
+                // 1. Self-reference
+                if (child === parent) {
+                    results.push({
+                        row: r, type: 'self', childName: child, parentName: parent,
+                        distance: 0, info: 'Trỏ về chính nó',
+                        from: posIdx[child], to: posIdx[child]
+                    });
+                    return;
+                }
+
+                // 2. Orphan (parent không tồn tại)
+                if (!rowByName.has(parent)) {
+                    results.push({
+                        row: r, type: 'orphan', childName: child, parentName: parent,
+                        distance: 0, info: `Trụ cha không tồn tại trong sheet`,
+                        from: posIdx[child], to: posIdx[child]
+                    });
+                    return;
+                }
+
+                const fromLL = posIdx[parent];
+                const toLL = posIdx[child];
+                const haveGeo = fromLL && toLL;
+                const havDist = haveGeo ? Math.round(haversineM(fromLL[0], fromLL[1], toLL[0], toLL[1])) : null;
+                let sheetDist = parseFloat(r[15]);
+                const hasSheetDist = isFinite(sheetDist) && sheetDist > 0;
+                const displayDist = hasSheetDist ? Math.round(sheetDist) : (havDist || 0);
+
+                // 3. Cycle
+                if (cycleSet.has(child) && cycleSet.has(parent)) {
+                    results.push({
+                        row: r, type: 'cycle', childName: child, parentName: parent,
+                        distance: displayDist, info: `Trong vòng: ${(cycle || []).join(' → ')}`.slice(0, 80),
+                        from: fromLL, to: toLL
+                    });
+                    // Cycle nghiêm trọng — skip check khác cho row này
+                    return;
+                }
+
+                // 4. Cáp dài
+                if (displayDist > opts.thresholdLong) {
+                    results.push({
+                        row: r, type: 'long', childName: child, parentName: parent,
+                        distance: displayDist, info: `Vượt ngưỡng ${opts.thresholdLong}m`,
+                        from: fromLL, to: toLL
+                    });
+                }
+
+                // 5. Distance sheet vs Haversine chênh nhiều
+                if (haveGeo && hasSheetDist && havDist > 10 && sheetDist > 10) {
+                    const ratio = Math.max(havDist, sheetDist) / Math.min(havDist, sheetDist);
+                    if (ratio >= opts.ratioHaversine) {
+                        results.push({
+                            row: r, type: 'haversine', childName: child, parentName: parent,
+                            distance: displayDist,
+                            info: `Sheet=${Math.round(sheetDist)}m vs Thực=${havDist}m (chênh ${ratio.toFixed(1)}×)`,
+                            from: fromLL, to: toLL
+                        });
+                    }
+                }
+
+                // 6. Cross-cabinet (parent thuộc tủ khác)
+                const tuChild = nameToTu[child];
+                const tuParent = nameToTu[parent];
+                if (tuChild && tuParent && tuChild !== tuParent) {
+                    results.push({
+                        row: r, type: 'cross', childName: child, parentName: parent,
+                        distance: displayDist,
+                        info: `Con:${tuChild} → Cha:${tuParent}`,
+                        from: fromLL, to: toLL
+                    });
+                }
+            });
+
+            // 7. Fan-out (parent có >N children) — chỉ 1 issue per parent
+            Object.keys(childrenByParent).forEach(parent => {
+                const kids = childrenByParent[parent];
+                if (kids.length > opts.maxFanout) {
+                    const parentRow = rowByName.get(parent);
+                    if (parentRow) {
+                        results.push({
+                            row: parentRow, type: 'fanout',
+                            childName: parent, parentName: `${kids.length} cáp con`,
+                            distance: 0,
+                            info: `Tỏa: ${kids.slice(0, 5).join(', ')}${kids.length > 5 ? '...' : ''}`,
+                            from: posIdx[parent], to: posIdx[parent]
+                        });
+                    }
+                }
+            });
+
+            // Sort: priority desc → distance desc
+            results.sort((a, b) => {
+                const pA = CABLE_ISSUE_TYPES[a.type].priority;
+                const pB = CABLE_ISSUE_TYPES[b.type].priority;
+                if (pA !== pB) return pB - pA;
+                return (b.distance || 0) - (a.distance || 0);
+            });
+            return results;
+        }
+        window._getCableIssues = _getCableIssues;
+
+        function _lcRefreshList() {
+            const opts = {
+                thresholdLong: parseFloat((document.getElementById('lcThreshold') || {}).value) || 200,
+                ratioHaversine: parseFloat((document.getElementById('lcRatio') || {}).value) || 3,
+                maxFanout: parseInt((document.getElementById('lcFanout') || {}).value) || 5
+            };
+            // Filter theo checkboxes loại vấn đề
+            const enabledTypes = new Set();
+            document.querySelectorAll('.lcTypeFilter:checked').forEach(cb => enabledTypes.add(cb.dataset.type));
+            const allIssues = _getCableIssues(opts);
+            const list = allIssues.filter(it => enabledTypes.has(it.type));
+            const tbody = document.getElementById('lcTbody');
+            const empty = document.getElementById('lcEmpty');
+            const summary = document.getElementById('lcSummary');
+            const btnDel = document.getElementById('lcBtnDelete');
+            if (!tbody) return;
+            if (list.length === 0) {
+                tbody.innerHTML = '';
+                if (empty) empty.style.display = 'block';
+                if (summary) summary.textContent = `0 vấn đề · ${allIssues.length} tổng (bao gồm filter tắt)`;
+                if (btnDel) btnDel.disabled = true;
+                return;
+            }
+            if (empty) empty.style.display = 'none';
+            // Summary breakdown per type
+            const byType = {};
+            list.forEach(it => { byType[it.type] = (byType[it.type] || 0) + 1; });
+            const parts = Object.keys(byType).map(t =>
+                `<span style="color:${CABLE_ISSUE_TYPES[t].color};font-weight:700;">${CABLE_ISSUE_TYPES[t].label}: ${byType[t]}</span>`
+            );
+            if (summary) summary.innerHTML = `<b>${list.length}</b> vấn đề · ${parts.join(' · ')}`;
+            tbody.innerHTML = list.map((it, i) => {
+                const cfg = CABLE_ISSUE_TYPES[it.type];
+                const canDelete = cfg.actionable;
+                return `
+                    <tr style="border-bottom:1px solid #f1f5f9;background:${cfg.bg};" data-child="${_esc(it.childName)}">
+                        <td style="text-align:center;padding:6px 4px;">
+                            ${canDelete
+                                ? `<input type="checkbox" class="lcRowCheck" data-idx="${i}" onchange="_lcUpdateSelected()">`
+                                : `<span title="Không xóa được — dùng Auto MST reorganize" style="color:#94a3b8;">⊗</span>`
+                            }
+                        </td>
+                        <td style="padding:6px 4px;color:${cfg.color};font-weight:700;font-size:11px;">${cfg.label}</td>
+                        <td style="padding:6px 4px;font-weight:600;">${_esc(it.childName)}</td>
+                        <td style="padding:6px 4px;color:#475569;">${_esc(it.parentName)}</td>
+                        <td style="padding:6px 4px;text-align:right;font-family:monospace;font-weight:700;color:${cfg.color};">${it.distance ? it.distance + 'm' : '—'}</td>
+                        <td style="padding:6px 4px;color:#64748b;font-size:11px;">${_esc(it.info)}</td>
+                        <td style="text-align:center;padding:6px 4px;">
+                            <button onclick="_focusLongCable(${i})" style="padding:3px 8px;background:#eff6ff;border:1px solid #93c5fd;border-radius:4px;font-size:11px;cursor:pointer;color:#1e40af;">📍</button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+            _lcCurrentList = list;
+            _lcUpdateSelected();
+        }
+        window._lcRefreshList = _lcRefreshList;
+
+        let _lcCurrentList = [];
+
+        function _lcUpdateSelected() {
+            const checks = document.querySelectorAll('.lcRowCheck:checked');
+            const btnDel = document.getElementById('lcBtnDelete');
+            const headerCheck = document.getElementById('lcHeaderCheck');
+            if (btnDel) {
+                btnDel.disabled = checks.length === 0;
+                btnDel.textContent = checks.length > 0
+                    ? `🗑 Xóa ${checks.length} cáp đã chọn`
+                    : '🗑 Xóa các cáp đã chọn';
+            }
+            if (headerCheck) {
+                const total = document.querySelectorAll('.lcRowCheck').length;
+                headerCheck.checked = total > 0 && checks.length === total;
+                headerCheck.indeterminate = checks.length > 0 && checks.length < total;
+            }
+        }
+        window._lcUpdateSelected = _lcUpdateSelected;
+
+        function _lcToggleAllChecks(checked) {
+            document.querySelectorAll('.lcRowCheck').forEach(cb => { cb.checked = checked; });
+            _lcUpdateSelected();
+        }
+        window._lcToggleAllChecks = _lcToggleAllChecks;
+
+        function _lcSelectAll() {
+            const headerCheck = document.getElementById('lcHeaderCheck');
+            if (headerCheck) {
+                headerCheck.checked = true;
+                _lcToggleAllChecks(true);
+            }
+        }
+        window._lcSelectAll = _lcSelectAll;
+
+        function _focusLongCable(idx) {
+            const it = _lcCurrentList[idx];
+            if (!it) return;
+            _lcClearHighlight();
+            const cfg = CABLE_ISSUE_TYPES[it.type];
+            const color = cfg.color;
+            _lcHighlightLayer = L.layerGroup().addTo(map);
+            // Nếu có cả 2 điểm và khác nhau → vẽ polyline
+            const hasBoth = it.from && it.to && !(it.from[0] === it.to[0] && it.from[1] === it.to[1]);
+            if (hasBoth) {
+                L.polyline([it.from, it.to], { color, weight: 5, opacity: 0.9, dashArray: '10 6' }).addTo(_lcHighlightLayer);
+                L.circleMarker(it.from, { color, radius: 8, weight: 3, fillOpacity: 0.3 }).addTo(_lcHighlightLayer);
+                L.circleMarker(it.to,   { color, radius: 8, weight: 3, fillOpacity: 0.3 }).addTo(_lcHighlightLayer);
+                const mid = [(it.from[0] + it.to[0]) / 2, (it.from[1] + it.to[1]) / 2];
+                const labelText = it.type === 'fanout'
+                    ? `${cfg.label}: ${_esc(it.parentName)}`
+                    : `${cfg.label} ${it.distance ? '· ' + it.distance + 'm' : ''} · ${_esc(it.parentName)} → ${_esc(it.childName)}`;
+                L.marker(mid, {
+                    icon: L.divIcon({
+                        className: '', iconAnchor: [80, 12],
+                        html: `<div style="background:${color};color:#fff;padding:3px 8px;border-radius:4px;font-weight:700;font-size:12px;white-space:nowrap;box-shadow:0 2px 6px rgba(0,0,0,.3);">${labelText}</div>`
+                    }),
+                    interactive: false
+                }).addTo(_lcHighlightLayer);
+                try { map.fitBounds([it.from, it.to], { padding: [80, 80], maxZoom: 17 }); } catch (_) {}
+            } else {
+                // Chỉ có 1 điểm (self/orphan/fanout) → highlight point
+                const pt = it.from || it.to;
+                if (!pt) return;
+                L.circleMarker(pt, { color, radius: 15, weight: 4, fillOpacity: 0.3 }).addTo(_lcHighlightLayer);
+                L.marker(pt, {
+                    icon: L.divIcon({
+                        className: '', iconAnchor: [80, 30],
+                        html: `<div style="background:${color};color:#fff;padding:3px 8px;border-radius:4px;font-weight:700;font-size:12px;white-space:nowrap;box-shadow:0 2px 6px rgba(0,0,0,.3);">${cfg.label} · ${_esc(it.childName)} — ${_esc(it.info)}</div>`
+                    }),
+                    interactive: false
+                }).addTo(_lcHighlightLayer);
+                try { map.setView(pt, Math.max(16, map.getZoom())); } catch (_) {}
+            }
+        }
+        window._focusLongCable = _focusLongCable;
+
+        async function _deleteLongCablesSelected() {
+            const checks = Array.from(document.querySelectorAll('.lcRowCheck:checked'));
+            if (checks.length === 0) return;
+            const selected = checks.map(cb => _lcCurrentList[parseInt(cb.dataset.idx)])
+                .filter(it => it && CABLE_ISSUE_TYPES[it.type].actionable);
+            if (selected.length === 0) return;
+            // Breakdown per type để confirm rõ ràng
+            const byType = {};
+            selected.forEach(it => { byType[it.type] = (byType[it.type] || 0) + 1; });
+            const breakdown = Object.keys(byType).map(t =>
+                `  ${CABLE_ISSUE_TYPES[t].label}: ${byType[t]}`
+            ).join('\n');
+            if (!confirm(`Xóa ${selected.length} cáp đã chọn?\n\n${breakdown}\n\nSẽ CLEAR cột "Marker gốc" + "Khoảng cách" của các trụ con — KHÔNG xóa trụ.\n\nSync lên Google Sheet ngay sau khi xóa.`)) return;
+
+            const btn = document.getElementById('lcBtnDelete');
+            const originalText = btn.textContent;
+            btn.disabled = true;
+
+            let cleared = 0, synced = 0, failed = 0;
+            for (let i = 0; i < selected.length; i++) {
+                const it = selected[i];
+                btn.textContent = `⏳ Đang xóa ${i + 1}/${selected.length}...`;
+                // Clear row
+                it.row[14] = '';   // Marker gốc
+                it.row[15] = '';   // Khoảng cách
+                it.row[13] = new Date().toISOString();
+                cleared++;
+                // Sync GAS
+                try {
+                    if (typeof syncRowToGAS === 'function') {
+                        const ok = await syncRowToGAS(it.row, { silent: true });
+                        if (ok) synced++; else failed++;
+                    }
+                } catch (err) {
+                    console.error('[LongCable] Sync fail:', err);
+                    failed++;
+                }
+            }
+
+            // Log action
+            try {
+                if (typeof _logAction === 'function') {
+                    _logAction('delete_long_cables', '', currentSheet || '', JSON.stringify({
+                        count: cleared,
+                        threshold: parseFloat((document.getElementById('lcThreshold') || {}).value) || 200,
+                        cables: selected.map(x => `${x.parentName}→${x.childName}(${x.distance}m)`)
+                    }));
+                }
+            } catch (_) {}
+
+            btn.disabled = false;
+            btn.textContent = originalText;
+
+            // Refresh cable view + danh sách
+            _lcClearHighlight();
+            if (_cableVisible && typeof _rebuildCableLines === 'function') _rebuildCableLines();
+            _lcRefreshList();
+
+            const parts = [`✅ Đã xóa ${cleared} cáp`, `Sync GAS ${synced}/${cleared}`];
+            if (failed) parts.push(`Lỗi ${failed}`);
+            displayInfo && displayInfo(parts.join(' · '));
+        }
+        window._deleteLongCablesSelected = _deleteLongCablesSelected;
 
         // ═══════════════════════════════════════════════════════════════════
         // T24 — Reverse-geocode batch: điền Đường + Phường/Xã tự động
