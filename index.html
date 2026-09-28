@@ -12257,22 +12257,38 @@
                 toSync.push(targetRow);
             }
 
-            // Sync GAS batch — hiện progress i/N trên nút
+            // Sync GAS — dùng BATCH nếu ≥20 rows (nhanh ~100×), single nếu ít
             const totalSync = toSync.length;
-            for (let i = 0; i < totalSync; i++) {
-                const row = toSync[i];
-                if (activeBtn) {
-                    const failStr = failed > 0 ? ` (⚠${failed})` : '';
-                    activeBtn.textContent = `⏳ Sync ${i + 1}/${totalSync}${failStr}...`;
-                }
-                try {
-                    if (typeof syncRowToGAS === 'function') {
-                        const ok = await syncRowToGAS(row, { silent: true });
-                        if (ok) synced++; else failed++;
+            if (totalSync >= 20 && typeof _batchSyncRowsToGAS === 'function') {
+                // BATCH mode: chỉ sync 3 fields cần thiết (markerGoc/khoangCach/capNhat)
+                const result = await _batchSyncRowsToGAS(
+                    toSync,
+                    ['markerGoc', 'khoangCach', 'capNhat'],
+                    (done, total, chunk, chunkTotal) => {
+                        if (activeBtn) {
+                            activeBtn.textContent = `⚡ Batch ${chunk}/${chunkTotal} (${done}/${total} rows)...`;
+                        }
                     }
-                } catch (err) {
-                    console.error('[MST sync]', err);
-                    failed++;
+                );
+                synced = result.updated;
+                failed = result.failed + result.notFound;
+            } else {
+                // SINGLE mode cho batch nhỏ
+                for (let i = 0; i < totalSync; i++) {
+                    const row = toSync[i];
+                    if (activeBtn) {
+                        const failStr = failed > 0 ? ` (⚠${failed})` : '';
+                        activeBtn.textContent = `⏳ Sync ${i + 1}/${totalSync}${failStr}...`;
+                    }
+                    try {
+                        if (typeof syncRowToGAS === 'function') {
+                            const ok = await syncRowToGAS(row, { silent: true });
+                            if (ok) synced++; else failed++;
+                        }
+                    } catch (err) {
+                        console.error('[MST sync]', err);
+                        failed++;
+                    }
                 }
             }
 
@@ -12374,25 +12390,44 @@
 
             let restored = 0, synced = 0, failed = 0;
             const total = undo.snapshot.length;
-            for (let i = 0; i < total; i++) {
-                const snap = undo.snapshot[i];
+            // Trước tiên restore in-memory
+            const toSync = [];
+            for (const snap of undo.snapshot) {
                 const row = rowByName.get(snap.tenTru);
                 if (!row) continue;
                 row[14] = snap.oldParent;
                 row[15] = snap.oldDist;
                 row[13] = snap.oldCapNhat || new Date().toISOString();
                 restored++;
-                const p = document.getElementById('rollbackProgress');
-                if (p) {
-                    const failStr = failed > 0 ? ` (⚠${failed})` : '';
-                    p.textContent = `⏳ Rollback ${i + 1}/${total}${failStr}...`;
-                }
-                try {
-                    if (typeof syncRowToGAS === 'function') {
-                        const ok = await syncRowToGAS(row, { silent: true });
-                        if (ok) synced++; else failed++;
+                toSync.push(row);
+            }
+            // Sync GAS — batch nếu ≥20, single nếu ít
+            if (toSync.length >= 20 && typeof _batchSyncRowsToGAS === 'function') {
+                const result = await _batchSyncRowsToGAS(
+                    toSync,
+                    ['markerGoc', 'khoangCach', 'capNhat'],
+                    (done, tot, chunk, chunkTot) => {
+                        const p = document.getElementById('rollbackProgress');
+                        if (p) p.textContent = `⚡ Batch ${chunk}/${chunkTot} (${done}/${tot} rows)...`;
                     }
-                } catch (_) { failed++; }
+                );
+                synced = result.updated;
+                failed = result.failed + result.notFound;
+            } else {
+                for (let i = 0; i < toSync.length; i++) {
+                    const row = toSync[i];
+                    const p = document.getElementById('rollbackProgress');
+                    if (p) {
+                        const failStr = failed > 0 ? ` (⚠${failed})` : '';
+                        p.textContent = `⏳ Rollback ${i + 1}/${toSync.length}${failStr}...`;
+                    }
+                    try {
+                        if (typeof syncRowToGAS === 'function') {
+                            const ok = await syncRowToGAS(row, { silent: true });
+                            if (ok) synced++; else failed++;
+                        }
+                    } catch (_) { failed++; }
+                }
             }
             // Log
             try {
@@ -17417,6 +17452,87 @@
                 img.src = dataUrl;
             });
         }
+
+        // Bulk sync N rows qua GAS action `batch_match_update` — 1 request/chunk thay N request
+        // Chỉ gửi fields cần thiết (markerGoc + khoangCach + capNhat) để giảm payload
+        // Speedup ~50-100× so với syncRowToGAS tuần tự (5000 rows: 90 phút → 1 phút)
+        // rows: array of loadedData row references
+        // fields: array các key JS cần sync ['markerGoc','khoangCach','capNhat'] etc
+        // onProgress(done, total, chunkIdx, chunkCount)
+        // Return: {updated, notFound, failed, chunks}
+        async function _batchSyncRowsToGAS(rows, fields, onProgress) {
+            if (!KHAOSAT_GAS_URL || !Array.isArray(rows) || rows.length === 0) {
+                return { updated: 0, notFound: 0, failed: 0, chunks: 0 };
+            }
+            // FIELD_MAP: key JS → column index trong loadedData
+            const COL = {
+                id: 0, tenTru: 1, lat: 2, lon: 3, ghiChu: 4, nguoiKS: 5, loai: 6,
+                tuDieuKhien: 7, loaiTru: 8, loaiCan: 9, loaiDen: 10, congSuat: 11,
+                hinhAnh: 12, capNhat: 13, markerGoc: 14, khoangCach: 15, maPE: 16,
+                duong: 17, phuongXa: 18, vn2000x: 19, vn2000y: 20, soLuongDen: 21,
+                loaiCap: 22, accuracy: 23, gpsMode: 24, labelOffset: 25,
+                phase: 26, heightM: 27, cableSpec: 28, trangThai: 29
+            };
+            const CHUNK_SIZE = 200;
+            const RATE_LIMIT_MS = 300;
+            let totalUpdated = 0, totalNotFound = 0, totalFailed = 0;
+            const chunkCount = Math.ceil(rows.length / CHUNK_SIZE);
+            let lastReq = 0;
+
+            for (let ci = 0; ci < chunkCount; ci++) {
+                const chunk = rows.slice(ci * CHUNK_SIZE, (ci + 1) * CHUNK_SIZE);
+                // Build records: chỉ include fields cần sync
+                const records = chunk.map(row => {
+                    const rec = { tenTru: String(row[COL.tenTru] || '').trim() };
+                    for (const f of (fields || ['markerGoc', 'khoangCach', 'capNhat'])) {
+                        if (COL[f] != null) {
+                            const v = row[COL[f]];
+                            rec[f] = (v == null) ? '' : v;
+                        }
+                    }
+                    return rec;
+                }).filter(r => r.tenTru);
+
+                if (records.length === 0) continue;
+
+                // Rate limit throttle
+                const wait = RATE_LIMIT_MS - (Date.now() - lastReq);
+                if (wait > 0) await new Promise(r => setTimeout(r, wait));
+
+                try {
+                    const res = await fetch(KHAOSAT_GAS_URL, {
+                        method: 'POST',
+                        body: JSON.stringify({
+                            action: 'batch_match_update',
+                            sheet: currentSheet,
+                            records
+                        })
+                    });
+                    lastReq = Date.now();
+                    const data = await res.json();
+                    if (data.status === 'ok') {
+                        totalUpdated += (data.updated || 0);
+                        totalNotFound += (data.notFound || 0);
+                    } else {
+                        totalFailed += records.length;
+                        console.error('[batch_match_update]', data.message);
+                    }
+                } catch (err) {
+                    lastReq = Date.now();
+                    totalFailed += records.length;
+                    console.error('[batch_match_update fetch]', err);
+                }
+
+                if (onProgress) onProgress(
+                    Math.min((ci + 1) * CHUNK_SIZE, rows.length),
+                    rows.length,
+                    ci + 1,
+                    chunkCount
+                );
+            }
+            return { updated: totalUpdated, notFound: totalNotFound, failed: totalFailed, chunks: chunkCount };
+        }
+        window._batchSyncRowsToGAS = _batchSyncRowsToGAS;
 
         async function syncRowToGAS(row, opts) {
             const silent = !!(opts && opts.silent);
