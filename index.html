@@ -806,6 +806,8 @@
             .ptc-grid { grid-template-columns: 1fr 1fr; }
             .pc-actions.three { grid-template-columns: 1fr 1fr 1fr; gap: 5px; }
             .pc-actions.four  { grid-template-columns: 1fr 1fr; gap: 5px; }
+            .pc-actions.five  { grid-template-columns: 1fr 1fr 1fr; gap: 5px; }
+            .pc-actions.six   { grid-template-columns: 1fr 1fr 1fr; gap: 5px; }
             .pc-btn { font-size: 11px; padding: 10px 3px; gap: 3px; }
             #addMarkerBtn { min-width: 100px; font-size: 13px; padding: 0 12px; }
             .bab-btn { font-size: 9px; }
@@ -849,11 +851,13 @@
         .pc-actions.one   { grid-template-columns: 1fr; }
         .pc-actions.two   { grid-template-columns: 1fr 1fr; }
         .pc-actions.three { grid-template-columns: 1fr 1fr 1fr; }
-        .pc-actions.four  { grid-template-columns: 1fr 1fr 1fr 1fr; }
-        .pc-actions.five  { grid-template-columns: 1fr 1fr 1fr 1fr 1fr; }
+        .pc-actions.four  { grid-template-columns: 1fr 1fr; }
+        .pc-actions.five  { grid-template-columns: 1fr 1fr 1fr; }
+        .pc-actions.six   { grid-template-columns: 1fr 1fr 1fr; }
         .pc-btn { padding: 11px 6px; border-radius: 11px; border: none; font-size: 12px; font-weight: 700; cursor: pointer; font-family: 'Inter', system-ui, sans-serif; transition: opacity .15s, transform .1s; display: flex; align-items: center; justify-content: center; gap: 5px; touch-action: manipulation; min-height: 44px; white-space: nowrap; }
         .pc-btn:active { opacity: .82; transform: scale(.97); }
         .pc-btn.route  { background: #0ea5e9; color: #fff; }
+        .pc-btn.sv     { background: #10b981; color: #fff; }
         .pc-btn.edit   { background: #f1f5f9; color: #1e293b; }
         .pc-btn.delete { background: #fee2e2; color: #dc2626; }
         .pc-btn.delete.confirm { background: #dc2626; color: #fff; }
@@ -1800,13 +1804,17 @@
 
                     <div class="ctrl-divider"></div>
 
-                    <!-- Hành động nhanh — 2 cột (Thêm marker chính + Lọc) -->
+                    <!-- Hành động nhanh — 3 cột: Thêm marker + Từ SV + Lọc -->
                     <div class="ctrl-section">
-                        <div style="display:grid;grid-template-columns:2fr 1fr;gap:6px;">
-                            <button id="addMarkerBtn" class="ctrl-btn warning" onclick="closeControlsModal();startAddMarker()" title="Thêm trụ mới"
+                        <div style="display:grid;grid-template-columns:2fr 1.4fr 1fr;gap:6px;">
+                            <button id="addMarkerBtn" class="ctrl-btn warning" onclick="closeControlsModal();startAddMarker()" title="Thêm trụ mới bằng GPS thực địa"
                                     style="padding:11px;font-size:14px;margin-bottom:0;">
                                 <i class="fa fa-plus" style="font-size:15px;"></i>
                                 <span>Thêm marker</span>
+                            </button>
+                            <button id="addFromSvBtn" class="ctrl-btn outline" onclick="closeControlsModal();_addMarkerFromSvUrl()" title="Paste URL Google Street View → auto tạo marker tại tọa độ đó"
+                                    style="padding:11px;font-size:13px;margin-bottom:0;color:#059669;border-color:#a7f3d0;">
+                                🚶 Từ SV
                             </button>
                             <button id="filterBtn" class="ctrl-btn outline" onclick="closeControlsModal();openFilterPanel()" title="Bộ lọc"
                                     style="padding:11px;font-size:14px;margin-bottom:0;position:relative;">
@@ -2213,6 +2221,51 @@
                 <div class="modal-footer" style="padding:8px 16px;justify-content:space-between;align-items:center;">
                     <small style="color:#94a3b8;">Ảnh đường phố: <a href="https://www.mapillary.com" target="_blank" style="color:#2563eb;">Mapillary</a> — cộng đồng đóng góp</small>
                     <button type="button" class="btn btn-secondary btn-sm" data-dismiss="modal" onclick="_cleanupMapillary()">Đóng</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- v144 — Google Street View embed modal (Option B) -->
+    <div class="modal fade" id="streetViewModal" tabindex="-1" role="dialog">
+        <div class="modal-dialog modal-xl" role="document" style="max-width:960px;">
+            <div class="modal-content">
+                <div class="modal-header" style="padding:10px 16px;">
+                    <h5 class="modal-title" id="streetViewTitle" style="font-size:14px;font-weight:700;">
+                        🚶 Google Street View
+                    </h5>
+                    <button type="button" class="close" data-dismiss="modal" onclick="_closeStreetView()">&times;</button>
+                </div>
+                <div class="modal-body p-0" style="position:relative;background:#0f172a;">
+                    <iframe id="svIframe" style="width:100%;height:520px;border:0;display:block;" allowfullscreen loading="lazy"
+                            referrerpolicy="no-referrer-when-downgrade"></iframe>
+                    <div id="svEmptyState" style="display:none;position:absolute;inset:0;align-items:center;justify-content:center;flex-direction:column;gap:12px;color:#e2e8f0;text-align:center;padding:24px;font-size:14px;">
+                        <div style="font-size:44px;">🔑</div>
+                        <div style="font-weight:600;font-size:16px;">Chưa có Google Maps API key</div>
+                        <div style="max-width:460px;line-height:1.55;color:#94a3b8;">
+                            Cấu hình key để xem Street View ngay trong app.<br>
+                            <b>Miễn phí</b> — không cần thẻ tín dụng cho Embed API.
+                        </div>
+                        <div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap;justify-content:center;">
+                            <button type="button" class="btn btn-primary btn-sm" style="padding:8px 16px;font-size:13px;font-weight:600;"
+                                    onclick="_promptGoogleMapsApiKey()">🔑 Nhập API key</button>
+                            <a href="https://developers.google.com/maps/documentation/embed/get-api-key" target="_blank" rel="noopener"
+                               class="btn btn-outline-info btn-sm" style="padding:8px 16px;font-size:13px;">📖 Cách lấy key</a>
+                            <button type="button" class="btn btn-outline-secondary btn-sm" style="padding:8px 16px;font-size:13px;"
+                                    onclick="_svOpenExternal()">🌐 Mở tab Google Maps</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer" style="padding:8px 16px;justify-content:space-between;align-items:center;font-size:12px;">
+                    <small id="svCoordLabel" style="color:#94a3b8;font-family:monospace;"></small>
+                    <div style="display:flex;gap:6px;">
+                        <button type="button" id="svOpenExternalBtn" class="btn btn-outline-primary btn-sm"
+                                style="font-size:12px;padding:4px 10px;" onclick="_svOpenExternal()">
+                            🌐 Mở tab mới
+                        </button>
+                        <button type="button" class="btn btn-secondary btn-sm"
+                                style="font-size:12px;padding:4px 10px;" data-dismiss="modal" onclick="_closeStreetView()">Đóng</button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -5742,7 +5795,7 @@
             if (textEl) textEl.textContent = text;
         }
 
-        async function openStreetView(lat, lon, tenTru) {
+        async function _openMapillaryViewer(lat, lon, tenTru) {
             if (!MAPILLARY_TOKEN) {
                 displayError('Chưa cấu hình MAPILLARY_TOKEN. Đăng ký tài khoản tại mapillary.com và điền token vào index.html.');
                 return;
@@ -14845,18 +14898,21 @@
             let actionBtns, actionClass;
             if (canDelete()) {
                 actionBtns = `<button class="pc-btn route" onclick="routeToMarkerLatLon(${lat},${lon})">🧭 Đi đến</button>
+                <button class="pc-btn sv" onclick="openStreetView(${lat},${lon})" title="Mở Google Street View tại vị trí này">🚶 Street View</button>
                 <button class="pc-btn edit" onclick="openEditMarker()">✏️ Sửa</button>
                 <button class="pc-btn delete" onclick="confirmDeleteMarker(this)">🗑 Xóa</button>
                 ${reportBtn}${baoTriBtn}`;
-                actionClass = baoTriBtn ? 'five' : 'four';
+                actionClass = baoTriBtn ? 'six' : 'five';
             } else if (canEdit()) {
                 actionBtns = `<button class="pc-btn route" onclick="routeToMarkerLatLon(${lat},${lon})">🧭 Đi đến</button>
+                <button class="pc-btn sv" onclick="openStreetView(${lat},${lon})" title="Mở Google Street View tại vị trí này">🚶 Street View</button>
                 <button class="pc-btn edit" onclick="openEditMarker()">✏️ Sửa</button>
                 ${reportBtn}${baoTriBtn}`;
-                actionClass = baoTriBtn ? 'four' : 'three';
+                actionClass = baoTriBtn ? 'five' : 'four';
             } else {
-                actionBtns = `<button class="pc-btn route" onclick="routeToMarkerLatLon(${lat},${lon})">🧭 Đi đến</button>`;
-                actionClass = 'one';
+                actionBtns = `<button class="pc-btn route" onclick="routeToMarkerLatLon(${lat},${lon})">🧭 Đi đến</button>
+                <button class="pc-btn sv" onclick="openStreetView(${lat},${lon})" title="Mở Google Street View tại vị trí này">🚶 Street View</button>`;
+                actionClass = 'two';
             }
 
             return `<div class="pc">
@@ -18599,6 +18655,179 @@
                 doRoute();
             }).catch(err => displayError('Không thể lấy vị trí: ' + err.message));
         }
+
+        // v144 — Google Street View (Option B: Embed iframe modal)
+        // Có API key → mở modal in-app; không có → fallback tab mới
+        const GOOGLE_MAPS_API_KEY_LS = 'google_maps_api_key';
+        let _svCurrentLat = null, _svCurrentLon = null;
+
+        function _getGoogleMapsApiKey() {
+            try { return (localStorage.getItem(GOOGLE_MAPS_API_KEY_LS) || '').trim(); }
+            catch (_) { return ''; }
+        }
+
+        function _promptGoogleMapsApiKey() {
+            const cur = _getGoogleMapsApiKey();
+            const msg = '🔑 Nhập Google Maps API key\n\n' +
+                'Hướng dẫn lấy key MIỄN PHÍ:\n' +
+                '1. Vào Google Cloud Console → Credentials\n' +
+                '2. Create Credentials → API key\n' +
+                '3. Bật "Maps Embed API" trong Library\n' +
+                '4. Copy key, dán vào đây\n\n' +
+                (cur ? '(Đang có key: ' + cur.substring(0, 12) + '...)\nĐể trống để XÓA key.' : '');
+            const key = prompt(msg, cur);
+            if (key === null) return; // cancel
+            const trimmed = key.trim();
+            try {
+                if (trimmed) {
+                    localStorage.setItem(GOOGLE_MAPS_API_KEY_LS, trimmed);
+                    if (typeof displayInfo === 'function') displayInfo('✅ Đã lưu API key. Bấm nút Street View trên marker để test.');
+                    else alert('✅ Đã lưu API key.');
+                    // Nếu modal đang mở với empty state → thử load lại iframe
+                    if (_svCurrentLat != null && _svCurrentLon != null) {
+                        _svShowIframe(_svCurrentLat, _svCurrentLon);
+                    }
+                } else {
+                    localStorage.removeItem(GOOGLE_MAPS_API_KEY_LS);
+                    if (typeof displayInfo === 'function') displayInfo('🗑 Đã xóa API key.');
+                }
+            } catch (e) {
+                displayError('Không lưu được key: ' + e.message);
+            }
+        }
+        window._promptGoogleMapsApiKey = _promptGoogleMapsApiKey;
+
+        function _svShowIframe(lat, lon) {
+            const key = _getGoogleMapsApiKey();
+            const iframe = document.getElementById('svIframe');
+            const empty = document.getElementById('svEmptyState');
+            if (!iframe || !empty) return;
+            if (key) {
+                const url = `https://www.google.com/maps/embed/v1/streetview?key=${encodeURIComponent(key)}` +
+                            `&location=${lat},${lon}&heading=0&pitch=0&fov=90`;
+                iframe.src = url;
+                iframe.style.display = 'block';
+                empty.style.display = 'none';
+            } else {
+                iframe.src = 'about:blank';
+                iframe.style.display = 'none';
+                empty.style.display = 'flex';
+            }
+        }
+
+        function _svOpenExternal() {
+            const lat = _svCurrentLat, lon = _svCurrentLon;
+            if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
+            const url = `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${lat},${lon}`;
+            window.open(url, '_blank', 'noopener');
+        }
+        window._svOpenExternal = _svOpenExternal;
+
+        function _closeStreetView() {
+            const iframe = document.getElementById('svIframe');
+            if (iframe) iframe.src = 'about:blank';
+            _svCurrentLat = _svCurrentLon = null;
+        }
+        window._closeStreetView = _closeStreetView;
+
+        // Mở Street View — in-app modal nếu có API key, fallback tab mới nếu chưa
+        function openStreetView(lat, lon) {
+            if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+                displayError('Tọa độ không hợp lệ.');
+                return;
+            }
+            _svCurrentLat = lat; _svCurrentLon = lon;
+            const label = document.getElementById('svCoordLabel');
+            if (label) label.textContent = `📍 ${lat.toFixed(6)}, ${lon.toFixed(6)}`;
+            _svShowIframe(lat, lon);
+            if (typeof $ === 'function' && $('#streetViewModal').modal) {
+                $('#streetViewModal').modal('show');
+            } else {
+                // Fallback tab mới nếu Bootstrap chưa load
+                const url = `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${lat},${lon}`;
+                window.open(url, '_blank', 'noopener');
+            }
+        }
+        window.openStreetView = openStreetView;
+
+        // Parse URL Google Maps / Street View để extract lat/lon
+        // Format hỗ trợ:
+        //   https://www.google.com/maps/@10.7,106.6,3a,75y,45h,90t/...          (SV mode)
+        //   https://www.google.com/maps/@10.7,106.6,17z                          (map view)
+        //   https://www.google.com/maps/place/.../@10.7,106.6,17z                (place)
+        //   https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=10.7,106.6
+        //   https://maps.google.com/?q=10.7,106.6
+        //   https://www.google.com/maps?q=loc:10.7,106.6
+        // Return {lat, lon, heading?, source} hoặc null
+        function _parseGoogleMapsUrl(url) {
+            if (!url || typeof url !== 'string') return null;
+            const str = url.trim();
+
+            // Pattern 1: /@lat,lon,zoom+optional 3a,Xy,Xh,Xt (SV)
+            let m = str.match(/@(-?\d+\.\d+),(-?\d+\.\d+)(?:,\d+(?:\.\d+)?[az],(\d+(?:\.\d+)?)y,(\d+(?:\.\d+)?)h)?/);
+            if (m) {
+                return {
+                    lat: parseFloat(m[1]),
+                    lon: parseFloat(m[2]),
+                    heading: m[4] ? parseFloat(m[4]) : null,
+                    source: m[3] ? 'street-view' : 'map'
+                };
+            }
+
+            // Pattern 2: viewpoint=lat,lon (Maps URL API)
+            m = str.match(/[?&]viewpoint=(-?\d+\.\d+),(-?\d+\.\d+)/);
+            if (m) return { lat: parseFloat(m[1]), lon: parseFloat(m[2]), source: 'viewpoint' };
+
+            // Pattern 3: q=lat,lon or q=loc:lat,lon
+            m = str.match(/[?&]q=(?:loc:)?(-?\d+\.\d+),(-?\d+\.\d+)/);
+            if (m) return { lat: parseFloat(m[1]), lon: parseFloat(m[2]), source: 'q-param' };
+
+            // Pattern 4: !3d<lat>!4d<lon> (place format)
+            m = str.match(/!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/);
+            if (m) return { lat: parseFloat(m[1]), lon: parseFloat(m[2]), source: 'place-3d4d' };
+
+            return null;
+        }
+        window._parseGoogleMapsUrl = _parseGoogleMapsUrl;
+
+        // Nút "🚶 Từ SV" — user paste URL Google Street View → parse → thêm marker tại tọa độ đó
+        async function _addMarkerFromSvUrl() {
+            if (typeof canEdit === 'function' && !canEdit()) {
+                displayError('Không có quyền thêm marker.');
+                return;
+            }
+            const url = prompt(
+                '📌 Paste URL Google Street View / Google Maps:\n\n' +
+                'Ví dụ:\n' +
+                'https://www.google.com/maps/@10.7523,106.6602,3a,75y,45h,90t/data=...\n' +
+                'https://www.google.com/maps/@10.7523,106.6602,17z\n\n' +
+                '(Mở tab Google Maps → Street View → copy URL từ address bar)'
+            );
+            if (!url) return;
+            const parsed = _parseGoogleMapsUrl(url.trim());
+            if (!parsed) {
+                displayError('❌ Không parse được URL. Cần đúng format Google Maps có tọa độ /@lat,lon,...');
+                return;
+            }
+            const { lat, lon, source, heading } = parsed;
+            // Validate bounds Việt Nam (rộng để cover)
+            if (lat < 7 || lat > 24 || lon < 101 || lon > 111) {
+                if (!confirm(`⚠ Tọa độ (${lat.toFixed(4)}, ${lon.toFixed(4)}) NGOÀI Việt Nam. Vẫn tiếp tục?`)) return;
+            }
+            // Zoom map + open popup add marker tại vị trí đó
+            try { map.setView([lat, lon], Math.max(map.getZoom(), 18)); } catch (_) {}
+            // Reuse showMarkerPopupAt (đã có sẵn)
+            if (typeof showMarkerPopupAt === 'function') {
+                showMarkerPopupAt(lat, lon);
+                const hInfo = heading != null ? ` · Heading ${Math.round(heading)}°` : '';
+                if (typeof displayInfo === 'function') {
+                    displayInfo(`✅ Extracted từ URL Google Maps (${source}): ${lat.toFixed(6)}, ${lon.toFixed(6)}${hInfo}`);
+                }
+            } else {
+                displayError('showMarkerPopupAt not available');
+            }
+        }
+        window._addMarkerFromSvUrl = _addMarkerFromSvUrl;
 
         function routeToMarkerLatLon(lat, lon) {
             if (!Number.isFinite(lat) || !Number.isFinite(lon)) { displayError('Tọa độ không hợp lệ.'); return; }
