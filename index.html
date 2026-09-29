@@ -1513,16 +1513,27 @@
             </div>
             <div style="padding:10px 20px 6px;border-bottom:1px solid var(--border);flex-shrink:0;">
                 <!-- Thresholds row -->
-                <div style="display:grid;grid-template-columns:auto 80px auto auto 60px auto auto 60px auto;gap:6px;align-items:center;font-size:11px;margin-bottom:8px;">
-                    <label style="font-weight:700;color:#334155;">Cáp dài &gt;</label>
-                    <input type="number" id="lcThreshold" value="200" min="20" step="10" style="padding:5px 6px;border:1.5px solid var(--border);border-radius:5px;font-family:monospace;font-size:12px;" onchange="_lcRefreshList()">
-                    <span style="color:#64748b;">m</span>
-                    <label style="font-weight:700;color:#334155;margin-left:8px;">Chênh Haversine ≥</label>
-                    <input type="number" id="lcRatio" value="3" min="1.5" step="0.5" style="padding:5px 6px;border:1.5px solid var(--border);border-radius:5px;font-family:monospace;font-size:12px;" onchange="_lcRefreshList()">
-                    <span style="color:#64748b;">×</span>
-                    <label style="font-weight:700;color:#334155;margin-left:8px;">Fan-out &gt;</label>
-                    <input type="number" id="lcFanout" value="5" min="2" step="1" style="padding:5px 6px;border:1.5px solid var(--border);border-radius:5px;font-family:monospace;font-size:12px;" onchange="_lcRefreshList()">
-                    <span style="color:#64748b;">con</span>
+                <div style="display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center;font-size:11px;margin-bottom:8px;">
+                    <div style="display:flex;align-items:center;gap:4px;">
+                        <label style="font-weight:700;color:#334155;margin:0;">Cáp dài &gt;</label>
+                        <input type="number" id="lcThreshold" value="200" min="20" step="10" style="width:70px;padding:5px 6px;border:1.5px solid var(--border);border-radius:5px;font-family:monospace;font-size:12px;" onchange="_lcRefreshList()">
+                        <span style="color:#64748b;">m</span>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:4px;">
+                        <label style="font-weight:700;color:#334155;margin:0;">Chênh Haversine ≥</label>
+                        <input type="number" id="lcRatio" value="3" min="1.5" step="0.5" style="width:55px;padding:5px 6px;border:1.5px solid var(--border);border-radius:5px;font-family:monospace;font-size:12px;" onchange="_lcRefreshList()">
+                        <span style="color:#64748b;">×</span>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:4px;">
+                        <label style="font-weight:700;color:#334155;margin:0;">Fan-out &gt;</label>
+                        <input type="number" id="lcFanout" value="5" min="2" step="1" style="width:55px;padding:5px 6px;border:1.5px solid var(--border);border-radius:5px;font-family:monospace;font-size:12px;" onchange="_lcRefreshList()">
+                        <span style="color:#64748b;">con</span>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:4px;" title="Parent hiện tại xa hơn candidate gần nhất N× → cảnh báo">
+                        <label style="font-weight:700;color:#334155;margin:0;">Parent xa ≥</label>
+                        <input type="number" id="lcSuboptRatio" value="1.5" min="1.1" step="0.1" style="width:55px;padding:5px 6px;border:1.5px solid var(--border);border-radius:5px;font-family:monospace;font-size:12px;" onchange="_lcRefreshList()">
+                        <span style="color:#64748b;">×</span>
+                    </div>
                 </div>
                 <!-- Filter loại vấn đề -->
                 <div style="display:flex;flex-wrap:wrap;gap:8px 12px;font-size:11px;margin-bottom:6px;">
@@ -1533,6 +1544,8 @@
                     <label style="cursor:pointer;user-select:none;"><input type="checkbox" class="lcTypeFilter" data-type="orphan" checked onchange="_lcRefreshList()"> ⚫ Cha không tồn tại</label>
                     <label style="cursor:pointer;user-select:none;"><input type="checkbox" class="lcTypeFilter" data-type="cross" checked onchange="_lcRefreshList()"> 🟢 Khác tủ</label>
                     <label style="cursor:pointer;user-select:none;"><input type="checkbox" class="lcTypeFilter" data-type="fanout" onchange="_lcRefreshList()"> 🟡 Fan-out cao</label>
+                    <label style="cursor:pointer;user-select:none;" title="Trụ có nhiều rows với cùng tên nhưng khác parent — data corruption, có thể do nhập trùng"><input type="checkbox" class="lcTypeFilter" data-type="dup" checked onchange="_lcRefreshList()"> 🟤 Trùng tên</label>
+                    <label style="cursor:pointer;user-select:none;" title="Có trụ khác gần hơn (cùng tủ) mà chưa được dùng làm parent — nên re-run Auto MST"><input type="checkbox" class="lcTypeFilter" data-type="suboptimal" onchange="_lcRefreshList()"> 🟪 Parent xa (≥1.5×)</label>
                 </div>
                 <div style="display:flex;justify-content:space-between;align-items:center;font-size:11px;">
                     <div id="lcSummary" style="color:#475569;">—</div>
@@ -1542,7 +1555,7 @@
                     </div>
                 </div>
                 <div style="margin-top:6px;padding:6px 8px;font-size:11px;color:#7f1d1d;background:#fef2f2;border-radius:5px;line-height:1.4;">
-                    Xóa cáp = CLEAR cột <code>Marker gốc</code> + <code>Khoảng cách</code> (không xóa trụ). Fan-out không xóa qua modal — user tự vào Auto MST reorganize.
+                    Xóa cáp = CLEAR cột <code>Marker gốc</code> + <code>Khoảng cách</code> (không xóa trụ). Fan-out / 🟤 Trùng tên / 🟪 Parent xa không xóa qua modal — dùng Auto MST hoặc sửa marker thủ công.
                 </div>
             </div>
             <div id="lcListWrap" style="overflow-y:auto;padding:0 20px;flex:1;min-height:200px;">
@@ -12535,22 +12548,61 @@
             }
         }
 
-        // 7 loại vấn đề cáp
+        // 9 loại vấn đề cáp
         const CABLE_ISSUE_TYPES = {
-            long:      { label: '🔴 Dài',        color: '#dc2626', bg: '#fef2f2', priority: 2, actionable: true },
-            haversine: { label: '🟠 Distance',   color: '#ea580c', bg: '#fff7ed', priority: 2, actionable: true },
-            cycle:     { label: '🟣 Vòng lặp',   color: '#9333ea', bg: '#faf5ff', priority: 3, actionable: true },
-            self:      { label: '🔵 Trỏ chính',  color: '#2563eb', bg: '#eff6ff', priority: 3, actionable: true },
-            orphan:    { label: '⚫ Cha không có', color: '#525252', bg: '#f5f5f5', priority: 3, actionable: true },
-            cross:     { label: '🟢 Khác tủ',    color: '#16a34a', bg: '#f0fdf4', priority: 1, actionable: true },
-            fanout:    { label: '🟡 Fan-out',    color: '#d97706', bg: '#fffbeb', priority: 1, actionable: false }
+            long:       { label: '🔴 Dài',            color: '#dc2626', bg: '#fef2f2', priority: 2, actionable: true },
+            haversine:  { label: '🟠 Distance',       color: '#ea580c', bg: '#fff7ed', priority: 2, actionable: true },
+            cycle:      { label: '🟣 Vòng lặp',       color: '#9333ea', bg: '#faf5ff', priority: 3, actionable: true },
+            self:       { label: '🔵 Trỏ chính',      color: '#2563eb', bg: '#eff6ff', priority: 3, actionable: true },
+            orphan:     { label: '⚫ Cha không có',    color: '#525252', bg: '#f5f5f5', priority: 3, actionable: true },
+            cross:      { label: '🟢 Khác tủ',        color: '#16a34a', bg: '#f0fdf4', priority: 1, actionable: true },
+            fanout:     { label: '🟡 Fan-out',        color: '#d97706', bg: '#fffbeb', priority: 1, actionable: false },
+            dup:        { label: '🟤 Trùng tên',      color: '#78350f', bg: '#fef3c7', priority: 3, actionable: false },
+            suboptimal: { label: '🟪 Parent xa',      color: '#7c3aed', bg: '#f5f3ff', priority: 2, actionable: false }
         };
+
+        // Build reverse tree: node → Set of all downstream descendants (dùng cho suboptimal check tránh cycle)
+        function _buildDescendantsMap(rows) {
+            const children = new Map(); // parent → [children names]
+            rows.forEach(r => {
+                const c = String(r[1] || '').trim();
+                const p = String(r[14] || '').trim();
+                if (!c || !p) return;
+                if (!children.has(p)) children.set(p, []);
+                children.get(p).push(c);
+            });
+            const cache = new Map();
+            function walk(node, seen) {
+                if (cache.has(node)) return cache.get(node);
+                if (seen.has(node)) return new Set(); // cycle protect
+                seen.add(node);
+                const out = new Set();
+                const kids = children.get(node) || [];
+                for (const k of kids) {
+                    out.add(k);
+                    const sub = walk(k, seen);
+                    sub.forEach(s => out.add(s));
+                }
+                seen.delete(node);
+                cache.set(node, out);
+                return out;
+            }
+            const result = new Map();
+            children.forEach((_, node) => result.set(node, walk(node, new Set())));
+            // Nodes có parent nhưng không có child → chưa được touch
+            rows.forEach(r => {
+                const c = String(r[1] || '').trim();
+                if (c && !result.has(c)) result.set(c, new Set());
+            });
+            return result;
+        }
 
         function _getCableIssues(opts) {
             const rows = (loadedData || []).slice(1);
             const posIdx = {};
             const nameToTu = {};
             const rowByName = new Map();
+            const rowsByName = new Map(); // 🟤 track duplicates
             rows.forEach(r => {
                 const name = String(r[1] || '').trim();
                 if (!name) return;
@@ -12558,6 +12610,8 @@
                 if (Number.isFinite(lat) && Number.isFinite(lon)) posIdx[name] = [lat, lon];
                 nameToTu[name] = String(r[7] || '').trim();
                 rowByName.set(name, r);
+                if (!rowsByName.has(name)) rowsByName.set(name, []);
+                rowsByName.get(name).push(r);
             });
 
             // Detect cycle (reuse existing helper)
@@ -12671,6 +12725,82 @@
                 }
             });
 
+            // 8. Trùng tên — nhiều rows cùng name (data corruption / multi-parent)
+            rowsByName.forEach((dupRows, name) => {
+                if (dupRows.length < 2) return;
+                const parents = dupRows.map(r => String(r[14] || '').trim()).filter(Boolean);
+                const uniqParents = [...new Set(parents)];
+                // Chỉ báo issue nếu có ≥2 parents KHÁC NHAU (=multi-parent thực sự)
+                // hoặc số dupRows > 2 (duplicate rõ ràng)
+                if (uniqParents.length >= 2 || dupRows.length >= 3) {
+                    dupRows.forEach((r, idx) => {
+                        const p = String(r[14] || '').trim();
+                        results.push({
+                            row: r, type: 'dup',
+                            childName: name + ' (#' + (idx + 1) + ')',
+                            parentName: p || '(không)',
+                            distance: parseFloat(r[15]) || 0,
+                            info: `${dupRows.length} rows cùng tên "${name}" — parents: ${uniqParents.slice(0,3).join(', ')}${uniqParents.length>3?'...':''}`,
+                            from: posIdx[p], to: posIdx[name]
+                        });
+                    });
+                }
+            });
+
+            // 9. Parent xa (suboptimal) — có candidate parent GẦN HƠN nhiều lần
+            // Chỉ check khi user bật filter (perf — O(N × Kcandidates_in_tủ))
+            const wantSubopt = (opts.enabledTypes && opts.enabledTypes.suboptimal);
+            if (wantSubopt) {
+                // Build set of DESCENDANTS per node để tránh suggest 1 node xuống child của nó (tạo cycle)
+                const descendantsOf = _buildDescendantsMap(rows);
+                // Group poles by tủ
+                const polesByTu = {};
+                rows.forEach(r => {
+                    const nm = String(r[1] || '').trim();
+                    const tu = String(r[7] || '').trim();
+                    if (!nm || !tu) return;
+                    if (!posIdx[nm]) return;
+                    if (!polesByTu[tu]) polesByTu[tu] = [];
+                    polesByTu[tu].push(nm);
+                });
+                const suboptRatio = opts.suboptRatio || 1.5;
+                rows.forEach(r => {
+                    const child = String(r[1] || '').trim();
+                    const parent = String(r[14] || '').trim();
+                    const tu = String(r[7] || '').trim();
+                    if (!child || !parent || !tu) return;
+                    if (child === parent) return; // self đã báo type=self
+                    const fromLL = posIdx[parent], toLL = posIdx[child];
+                    if (!fromLL || !toLL) return;
+                    const curDist = haversineM(fromLL[0], fromLL[1], toLL[0], toLL[1]);
+                    if (curDist < 5) return; // parent gần sát, skip
+                    // Tìm candidate parent gần nhất trong cùng tủ
+                    const candidates = polesByTu[tu] || [];
+                    const descs = descendantsOf.get(child) || new Set();
+                    let bestCand = null, bestDist = Infinity;
+                    for (const cand of candidates) {
+                        if (cand === child) continue;
+                        if (cand === parent) continue;
+                        if (descs.has(cand)) continue; // sẽ tạo cycle
+                        const candLL = posIdx[cand];
+                        if (!candLL) continue;
+                        const d = haversineM(candLL[0], candLL[1], toLL[0], toLL[1]);
+                        if (d < bestDist) { bestDist = d; bestCand = cand; }
+                    }
+                    if (bestCand && bestDist > 0 && (curDist / bestDist) >= suboptRatio) {
+                        results.push({
+                            row: r, type: 'suboptimal',
+                            childName: child, parentName: parent,
+                            distance: Math.round(curDist),
+                            info: `Parent xa ${Math.round(curDist)}m, đề xuất "${bestCand}" ${Math.round(bestDist)}m (giảm ${Math.round((1-bestDist/curDist)*100)}%)`,
+                            from: fromLL, to: toLL,
+                            _suggestParent: bestCand,
+                            _suggestDist: Math.round(bestDist)
+                        });
+                    }
+                });
+            }
+
             // Sort: priority desc → distance desc
             results.sort((a, b) => {
                 const pA = CABLE_ISSUE_TYPES[a.type].priority;
@@ -12683,14 +12813,16 @@
         window._getCableIssues = _getCableIssues;
 
         function _lcRefreshList() {
+            const enabledTypesObj = {};
+            document.querySelectorAll('.lcTypeFilter:checked').forEach(cb => { enabledTypesObj[cb.dataset.type] = true; });
             const opts = {
                 thresholdLong: parseFloat((document.getElementById('lcThreshold') || {}).value) || 200,
                 ratioHaversine: parseFloat((document.getElementById('lcRatio') || {}).value) || 3,
-                maxFanout: parseInt((document.getElementById('lcFanout') || {}).value) || 5
+                maxFanout: parseInt((document.getElementById('lcFanout') || {}).value) || 5,
+                suboptRatio: parseFloat((document.getElementById('lcSuboptRatio') || {}).value) || 1.5,
+                enabledTypes: enabledTypesObj
             };
-            // Filter theo checkboxes loại vấn đề
-            const enabledTypes = new Set();
-            document.querySelectorAll('.lcTypeFilter:checked').forEach(cb => enabledTypes.add(cb.dataset.type));
+            const enabledTypes = new Set(Object.keys(enabledTypesObj));
             const allIssues = _getCableIssues(opts);
             const list = allIssues.filter(it => enabledTypes.has(it.type));
             const tbody = document.getElementById('lcTbody');
