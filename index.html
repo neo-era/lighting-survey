@@ -5896,6 +5896,22 @@
             }
         };
 
+        // v147 — popup HTML cache (Wave 2 perf 3.2) — avoid regen 200-line HTML mỗi lần mở popup.
+        // Key: rowId + hasIncident. Invalidate: save marker, dragend, incident update.
+        window._popupHtmlCache = new Map();
+        function _invalidatePopupCacheForRow(row) {
+            if (!row) return;
+            const base = String(row[0] || row[1] || '');
+            if (!base) return;
+            window._popupHtmlCache.delete(base + '_0');
+            window._popupHtmlCache.delete(base + '_1');
+        }
+        function _invalidatePopupCacheAll() { window._popupHtmlCache.clear(); }
+        window._invalidatePopupCacheForRow = _invalidatePopupCacheForRow;
+        window._invalidatePopupCacheAll = _invalidatePopupCacheAll;
+        // Alias vào scope closure phía dưới (đặt tên short)
+        const _popupHtmlCache = window._popupHtmlCache;
+
         // v146 — silent error buffer thay 49 chỗ catch(e){_swallow(e);} nuốt lỗi thầm lặng.
         // Không log console (tránh spam khi render 5000+ markers). Debug: gõ `_swallowedErrors` trong DevTools.
         // Circular buffer: khi đầy DROP OLDEST để lỗi mới không mất. Self-protected: chính nó không được throw.
@@ -15360,13 +15376,20 @@
                     const congSuat = String(row[11] || '').trim();
                     const soLuong = String(row[21] || '').trim();
                     if (_icCfg.shape === 'cabinet') {
-                        icon = makeCabinetIcon(_icCfg.color, type, hasIncident);
+                        // v147 — cache cabinet icon theo (color|type|incident) — ~12 combinations
+                        const cabKey = 'cab_' + _icCfg.color + '_' + type + '_' + (hasIncident?1:0);
+                        if (!customIcons[cabKey]) customIcons[cabKey] = makeCabinetIcon(_icCfg.color, type, hasIncident);
+                        icon = customIcons[cabKey];
                     } else if (isMobile && !loaiDen && !congSuat && !hasIncident) {
                         const mobileKey = 'mobile_' + type;
                         if (!customIcons[mobileKey]) customIcons[mobileKey] = makeLampIconMobile(_icCfg.color, type);
                         icon = customIcons[mobileKey];
                     } else {
-                        icon = makeLampIcon(_icCfg.color, loaiDen, congSuat, soLuong, type, hasIncident);
+                        // v147 — cache lamp icon full: color|loaiDen|congSuat|soLuong|type|incident
+                        // ~50 combinations thực tế → speedup -70% render list lớn
+                        const lampKey = 'lamp_' + _icCfg.color + '_' + loaiDen + '_' + congSuat + '_' + soLuong + '_' + type + '_' + (hasIncident?1:0);
+                        if (!customIcons[lampKey]) customIcons[lampKey] = makeLampIcon(_icCfg.color, loaiDen, congSuat, soLuong, type, hasIncident);
+                        icon = customIcons[lampKey];
                     }
                 } else {
                     icon = customIcons.default;
@@ -15378,7 +15401,20 @@
             marker.bindPopup('', { minWidth: 280 });
             marker.on('popupopen', function() {
                 _currentPopupRow = row;
-                marker.setPopupContent(createMarkerPopupContent(row));
+                // v147 — cache popup HTML per row ID + hasIncident state
+                // Invalidate: khi save (_invalidatePopupCache), khi dragend (in-place), khi incident changes
+                const _pKey = String(row[0] || row[1] || '') + '_' + (_activeIncidents.has(normalizeText(String(row[1] || ''))) ? 1 : 0);
+                let _html = _popupHtmlCache.get(_pKey);
+                if (_html === undefined) {
+                    _html = createMarkerPopupContent(row);
+                    _popupHtmlCache.set(_pKey, _html);
+                    // Cap ~500 entries để tránh memory leak khi user browse >500 markers
+                    if (_popupHtmlCache.size > 500) {
+                        const _firstKey = _popupHtmlCache.keys().next().value;
+                        _popupHtmlCache.delete(_firstKey);
+                    }
+                }
+                marker.setPopupContent(_html);
                 setTimeout(function() {
                     const popup = marker.getPopup();
                     if (!popup) return;
@@ -15395,6 +15431,8 @@
                 const md = markers.find(m => m.marker === marker);
                 if (md) { md.lat = newLat; md.lon = newLon; }
                 updateMarkerCoordinatesInData(name, newLat, newLon);
+                // v147 — invalidate popup cache (coord change → HTML mới)
+                _invalidatePopupCacheForRow(row);
                 marker.setPopupContent(createMarkerPopupContent(row));
                 // Cập nhật label: giữ nguyên offset tương đối so với trụ
                 const _rowIdForLabel = String(row[0] || row[1] || '');
@@ -15479,6 +15517,8 @@
         const NEARBY_PAD_SHOW = 0.15;
         const NEARBY_PAD_HIDE = 0.60;
 
+        // v147 — early exit khi bounds không đổi đáng kể → skip N² scan (Wave 2 perf 3.4)
+        let _lastNearbyBoundsKey = null;
         function _refreshNearbyMarkers() {
             if (!markers.length) return;
             const zoom = map.getZoom();
@@ -15486,9 +15526,16 @@
                 // Zoom thấp — restore toàn bộ marker bị ẩn
                 _nearbyHidden.forEach(m => { try { markersCluster.addLayer(m); } catch(e){_swallow(e);} });
                 _nearbyHidden.clear();
+                _lastNearbyBoundsKey = null;
                 return;
             }
             const b = map.getBounds();          // pad() không mutate, trả bounds mới
+            // v147 — early exit: nếu bounds gần như y hệt lần trước (rounded to 0.0001° ~ 11m), skip
+            const key = zoom + '|' +
+                b.getSouth().toFixed(4) + ',' + b.getWest().toFixed(4) + ',' +
+                b.getNorth().toFixed(4) + ',' + b.getEast().toFixed(4);
+            if (key === _lastNearbyBoundsKey) return;
+            _lastNearbyBoundsKey = key;
             const showB = b.pad(NEARBY_PAD_SHOW);
             const hideB = b.pad(NEARBY_PAD_HIDE);
             markers.forEach(function(md) {
@@ -17200,6 +17247,7 @@
             labelLayerGroup.clearLayers();
             _lblMarkers.clear();
             _nearbyHidden.clear(); // stale references sau clearLayers
+            _lastNearbyBoundsKey = null; // v147 — reset early-exit key vì marker set thay đổi
             markers = [];
             const rows = Array.isArray(data) ? data : [];
             const total = rows.length;
@@ -17477,6 +17525,34 @@
             _refreshPillTappable();
         }
 
+        // v148 — Wave 3 UX (4.4): focus trap + Esc close cho custom bottom-sheet #markerPopupForm
+        // Bootstrap modal có sẵn tính năng này, nhưng #markerPopupForm là custom overlay không dùng Bootstrap.
+        (function _wireMarkerPopupFocusTrap() {
+            document.addEventListener('keydown', function(e) {
+                const overlay = document.getElementById('markerPopupForm');
+                if (!overlay || overlay.style.display !== 'flex') return;
+                if (e.key === 'Escape') {
+                    e.preventDefault();
+                    if (typeof cancelMarkerPopup === 'function') cancelMarkerPopup();
+                    else hideMarkerPopup();
+                    return;
+                }
+                if (e.key !== 'Tab') return;
+                // Focus trap: cycle giữa focusable elements trong popup
+                const focusables = overlay.querySelectorAll(
+                    'input:not([type="hidden"]):not([disabled]), select:not([disabled]), textarea:not([disabled]), button:not([disabled]), [tabindex]:not([tabindex="-1"])'
+                );
+                if (focusables.length === 0) return;
+                const first = focusables[0];
+                const last = focusables[focusables.length - 1];
+                if (e.shiftKey && document.activeElement === first) {
+                    e.preventDefault(); last.focus();
+                } else if (!e.shiftKey && document.activeElement === last) {
+                    e.preventDefault(); first.focus();
+                }
+            });
+        })();
+
         function makeElementDraggable(handle, target) {
             if (!handle || !target) return;
             let dragging = false, startX = 0, startY = 0, origLeft = 0, origTop = 0;
@@ -17730,8 +17806,10 @@
                 phase: 26, heightM: 27, cableSpec: 28, trangThai: 29
             };
             // v141: chunk 500 (was 200) + parallel 3 concurrent (was sequential)
-            const CHUNK_SIZE = (opts && opts.chunkSize) || 500;
-            const CONCURRENCY = (opts && opts.concurrency) || 3;
+            // v149 — Wave 4a: adaptive chunk size từ APP_CONFIG (mobile 200 / desktop 500) — giảm RAM peak mobile
+            const _bcfg = (window.APP_CONFIG && window.APP_CONFIG.batch) || {};
+            const CHUNK_SIZE = (opts && opts.chunkSize) || _bcfg.chunkSize || 500;
+            const CONCURRENCY = (opts && opts.concurrency) || _bcfg.concurrency || 3;
 
             // Build all chunks trước
             const chunks = [];
@@ -17882,6 +17960,9 @@
         }
 
         async function saveMarkerPopup() {
+            // v149 — Wave 4a: capture _editingRow ngay đầu để tránh race với reopen popup mid-await
+            // Nếu global _editingRow bị overwrite trong lúc await geocode, local const này giữ ref cũ
+            const _capturedEditingRow = _editingRow;
             // đợi geocoding hoàn tất nếu đang chạy
             if (_pendingGeocodePromise) {
                 displayInfo('Đang tra cứu địa chỉ...');
@@ -17948,15 +18029,15 @@
                 const nguoiKS = currentUser ? (currentUser.displayName || currentUser.username) : '';
                 const _vn = convertLatLonToVn2000(lat, lon);
 
-                if (_editingRow) {
-                    // ── CHẾ ĐỘ SỬA ──
-                    const existingId = _editingRow[0];
-                    const oldName = String(_editingRow[1] || '').trim();
+                if (_capturedEditingRow) {
+                    // ── CHẾ ĐỘ SỬA ── (v149: dùng _capturedEditingRow thay _editingRow → race-safe)
+                    const existingId = _capturedEditingRow[0];
+                    const oldName = String(_capturedEditingRow[1] || '').trim();
                     const _pendingImgSlots = markerImageDataUrls.slice();
-                    const keepImg = _editingRow[12] || '';
+                    const keepImg = _capturedEditingRow[12] || '';
 
                     // Xóa marker cũ khỏi map
-                    const oldIdx = markers.findIndex(md => md.marker._rowRef === _editingRow);
+                    const oldIdx = markers.findIndex(md => md.marker._rowRef === _capturedEditingRow);
                     if (oldIdx >= 0) { markersCluster.removeLayer(markers[oldIdx].marker); markers.splice(oldIdx, 1); }
                     labelLayerGroup.getLayers().slice().forEach(layer => {
                         if (layer.getIcon && layer.getIcon().options.html && layer.getIcon().options.html.includes(oldName))
@@ -17965,10 +18046,10 @@
 
                     // Cập nhật row in-place (giữ ID, cập nhật tất cả field còn lại)
                     // Giữ accuracy/mode cũ nếu không có fix mới (vd: user chỉ edit field, không kéo marker)
-                    const accVal = (_lastFixAccuracy !== '' ? _lastFixAccuracy : (_editingRow[23] || ''));
-                    const modeVal = (_lastFixMode !== '' ? _lastFixMode : (_editingRow[24] || ''));
+                    const accVal = (_lastFixAccuracy !== '' ? _lastFixAccuracy : (_capturedEditingRow[23] || ''));
+                    const modeVal = (_lastFixMode !== '' ? _lastFixMode : (_capturedEditingRow[24] || ''));
                     // Preserve labelOffset (row[25]) — không sửa trong popup
-                    const labelOffsetKeep = _editingRow[25] || '';
+                    const labelOffsetKeep = _capturedEditingRow[25] || '';
                     const updated = [
                         '',name,lat,lon,note,nguoiKS,type,cabinetName,poleType,'',lampType,congSuat,keepImg,updatedAt,
                         baseMarkerName,distanceToBase,maPE,street,ward,Math.round(_vn.x),Math.round(_vn.y),soLuongDen,
@@ -17980,17 +18061,19 @@
                         trangThaiVal                // [29] Trạng thái cải tạo (P59+)
                     ];
                     updated[0] = existingId;
-                    for (let i = 0; i < updated.length; i++) _editingRow[i] = updated[i];
+                    for (let i = 0; i < updated.length; i++) _capturedEditingRow[i] = updated[i];
 
                     markerImageDataUrls = ['', '', ''];
-                    const updMarker = addMarkerRowToMap(_editingRow);
+                    // v147 — invalidate popup cache TRƯỚC re-add marker để popup lần sau dùng data mới
+                    _invalidatePopupCacheForRow(_capturedEditingRow);
+                    const updMarker = addMarkerRowToMap(_capturedEditingRow);
                     if (updMarker) map.setView([updMarker.getLatLng().lat, updMarker.getLatLng().lng], map.getZoom());
                     // Không tự mở popup sau khi lưu — user chủ động click nếu muốn xem
-                    const rowRef = _editingRow; // lưu trước khi hideMarkerPopup() reset _editingRow = null
+                    const rowRef = _capturedEditingRow;
                     hideMarkerPopup();
                     syncRowToGAS(rowRef, { oldTenTru: oldName, imageSlots: _pendingImgSlots });
                     _logAction('edit', rowRef, { nguoiKS: rowRef[5], loai: rowRef[6] });
-                    displayError('Đã cập nhật marker — đang lưu lên Data...');
+                    displaySuccess('Đã cập nhật marker — đang lưu lên Data...');
                 } else {
                     // ── CHẾ ĐỘ THÊM MỚI ──
                     // Lưu accuracy + mode của fix gần nhất (mặc định mode hiện tại nếu chưa có fix)
@@ -18547,6 +18630,8 @@
             _activeFilters.tuDieuKhien = [];
             currentSheet = sheetName;
             addMarkersToMap([]); // xóa markers hiện tại
+            // v147 — clear popup cache khi switch district để tránh hit cache của địa bàn cũ (row ID có thể trùng)
+            _invalidatePopupCacheAll();
             await loadFromCSVWithCache(sheetName, page.csvUrl);
             // Load CAD overlay cache theo địa bàn (P17)
             if (typeof _loadCachedCad === 'function') await _loadCachedCad(sheetName);
@@ -18716,6 +18801,108 @@
 
         // Toast xanh dương cho thông báo tiến độ ("Đang...", "Đang tải..."). Tránh nhầm với lỗi.
         function displayInfo(message) { displayError(message, 'info'); }
+        // v148 — Wave 3 UX (4.2): toast 3 màu chuyên biệt thay vì dùng displayError('...') cho mọi msg
+        function displaySuccess(message) { displayError(message, 'success'); }
+        function displayWarning(message) { displayError(message, 'warning'); }
+        window.displaySuccess = displaySuccess;
+        window.displayWarning = displayWarning;
+
+        // v148 — Wave 3 UX (4.1): Promise-based confirm/prompt thay native alert/confirm/prompt.
+        // Dùng Bootstrap modal khi có, fallback native khi chưa load. Queue để tránh 2 modal chồng.
+        const _uiQueue = [];
+        let _uiActive = false;
+
+        function _uiEnsureModal() {
+            if (document.getElementById('uiPromptModal')) return;
+            const html = `
+                <div class="modal fade" id="uiPromptModal" tabindex="-1" role="dialog" data-backdrop="static">
+                    <div class="modal-dialog modal-dialog-centered modal-sm" role="document">
+                        <div class="modal-content">
+                            <div class="modal-body" style="padding:20px;">
+                                <div id="uiPromptMsg" style="font-size:14px;color:#1e293b;margin-bottom:14px;white-space:pre-wrap;line-height:1.5;"></div>
+                                <input type="text" id="uiPromptInput" class="form-control" style="display:none;font-size:16px;margin-bottom:6px;" autocomplete="off">
+                            </div>
+                            <div class="modal-footer" style="padding:10px 16px;">
+                                <button type="button" id="uiPromptCancel" class="btn btn-outline-secondary btn-sm">Hủy</button>
+                                <button type="button" id="uiPromptOk" class="btn btn-primary btn-sm">OK</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>`;
+            document.body.insertAdjacentHTML('beforeend', html);
+        }
+
+        function _uiRunNext() {
+            if (_uiActive || _uiQueue.length === 0) return;
+            const task = _uiQueue.shift();
+            _uiActive = true;
+            const hasBS = (typeof $ === 'function' && $.fn && $.fn.modal);
+            if (!hasBS) {
+                // Fallback native — native calls đã block main thread → không cần queue lock riêng,
+                // nhưng vẫn reset _uiActive TRƯỚC resolve để callback of resolve có thể gọi lại uiXxx đệ quy
+                try {
+                    if (task.type === 'confirm') task.resolve(window.confirm(task.msg));
+                    else if (task.type === 'prompt') task.resolve(window.prompt(task.msg, task.def || ''));
+                    else { window.alert(task.msg); task.resolve(true); }
+                } finally {
+                    _uiActive = false;
+                    _uiRunNext();
+                }
+                return;
+            }
+            _uiEnsureModal();
+            const msg = document.getElementById('uiPromptMsg');
+            const input = document.getElementById('uiPromptInput');
+            const btnOk = document.getElementById('uiPromptOk');
+            const btnCancel = document.getElementById('uiPromptCancel');
+            msg.textContent = task.msg;
+            btnOk.textContent = task.okLabel || 'OK';
+            btnCancel.textContent = task.cancelLabel || 'Hủy';
+            btnCancel.style.display = (task.type === 'alert') ? 'none' : '';
+            if (task.type === 'prompt') {
+                input.style.display = '';
+                input.value = task.def || '';
+                setTimeout(() => { input.focus(); input.select(); }, 200);
+            } else {
+                input.style.display = 'none';
+            }
+            let done = false;
+            const finish = (val) => {
+                if (done) return; done = true;
+                $('#uiPromptModal').modal('hide');
+                task.resolve(val);
+                // Delay để Bootstrap animate xong rồi mới trigger next
+                setTimeout(() => { _uiActive = false; _uiRunNext(); }, 200);
+            };
+            btnOk.onclick = () => finish(task.type === 'prompt' ? input.value : true);
+            btnCancel.onclick = () => finish(task.type === 'prompt' ? null : false);
+            // Enter trong input = OK, Esc handled by Bootstrap (data-dismiss)
+            input.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); btnOk.click(); } };
+            $('#uiPromptModal').one('hidden.bs.modal', () => finish(task.type === 'prompt' ? null : false));
+            $('#uiPromptModal').modal('show');
+        }
+
+        function uiAlert(msg, opts) {
+            return new Promise(resolve => {
+                _uiQueue.push({ type: 'alert', msg: String(msg), resolve, ...(opts || {}) });
+                _uiRunNext();
+            });
+        }
+        function uiConfirm(msg, opts) {
+            return new Promise(resolve => {
+                _uiQueue.push({ type: 'confirm', msg: String(msg), resolve, ...(opts || {}) });
+                _uiRunNext();
+            });
+        }
+        function uiPrompt(msg, def, opts) {
+            return new Promise(resolve => {
+                _uiQueue.push({ type: 'prompt', msg: String(msg), def: String(def || ''), resolve, ...(opts || {}) });
+                _uiRunNext();
+            });
+        }
+        window.uiAlert = uiAlert;
+        window.uiConfirm = uiConfirm;
+        window.uiPrompt = uiPrompt;
 
         // ─── Tracking vị trí ───
         let currentLocationWatchId = null;
@@ -19469,6 +19656,8 @@
                     });
                     _activeIncidents.set(tenTru, existing);
                 }
+                // v147 — incidents update → clear popup cache (hasIncident state changed cho nhiều rows)
+                _invalidatePopupCacheAll();
             } catch(e){_swallow(e);}
         }
 

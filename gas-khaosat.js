@@ -95,6 +95,22 @@ const EXTERNAL_SPREADSHEET_IDS = {
   CanGiuoc: '1u1KIDPX5INt-9bI6EDK-K6VKSCJAoey7drElKW3rLS0',  // ← TODO: dán Spreadsheet ID của file CanGiuoc vào đây
 };
 
+// v149 — Wave 4a: ScriptLock helper chống race giữa concurrent writes.
+// Bọc mọi handler MUTATE sheet: full_update, delete_row, batch_import, batch_match_update, assign_phases.
+// Timeout 30s. Nếu không lấy được lock trả busy để client retry.
+function _withScriptLock(fn) {
+  const lock = LockService.getScriptLock();
+  const gotLock = lock.tryLock(30000);
+  if (!gotLock) {
+    return jsonResponse({ status: 'busy', message: 'Server đang bận xử lý request khác — vui lòng thử lại sau vài giây.' });
+  }
+  try {
+    return fn();
+  } finally {
+    try { lock.releaseLock(); } catch (e) { /* silent — lock auto-releases khi execution kết thúc */ }
+  }
+}
+
 function getSheet(name) {
   const target = name || SHEET_NAME;
   let ss;
@@ -944,42 +960,52 @@ function doPost(e) {
     }
 
     if (data.action === 'full_update') {
-      const sheet = getSheet(data.sheet);
-      ensureHeader(sheet);
-      const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
-      const hIdx    = buildHeaderIndex(headers);
+      return _withScriptLock(function() {
+        const sheet = getSheet(data.sheet);
+        ensureHeader(sheet);
+        const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+        const hIdx    = buildHeaderIndex(headers);
 
-      const rowNum = findRowNum(sheet, headers, hIdx, data);
-      if (rowNum > 0) {
-        updateRow(sheet, hIdx, rowNum, data);
-      } else {
-        appendRow(sheet, headers, hIdx, data);
-      }
-      return jsonResponse({ status: 'ok' });
+        const rowNum = findRowNum(sheet, headers, hIdx, data);
+        if (rowNum > 0) {
+          updateRow(sheet, hIdx, rowNum, data);
+        } else {
+          appendRow(sheet, headers, hIdx, data);
+        }
+        return jsonResponse({ status: 'ok' });
+      });
     }
 
     if (data.action === 'delete_row') {
-      const sheet = getSheet(data.sheet);
-      const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
-      const hIdx    = buildHeaderIndex(headers);
-      const rowNum  = findRowNum(sheet, headers, hIdx, data);
-      if (rowNum > 0) {
-        sheet.deleteRow(rowNum);
-        return jsonResponse({ status: 'ok' });
-      }
-      return jsonResponse({ status: 'error', message: 'Không tìm thấy hàng để xóa.' });
+      return _withScriptLock(function() {
+        const sheet = getSheet(data.sheet);
+        const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+        const hIdx    = buildHeaderIndex(headers);
+        const rowNum  = findRowNum(sheet, headers, hIdx, data);
+        if (rowNum > 0) {
+          sheet.deleteRow(rowNum);
+          return jsonResponse({ status: 'ok' });
+        }
+        return jsonResponse({ status: 'error', message: 'Không tìm thấy hàng để xóa.' });
+      });
     }
 
     if (data.action === 'batch_import') {
-      return handleBatchImport(data.sheet, data.rows || [], data.clearFirst === true);
+      return _withScriptLock(function() {
+        return handleBatchImport(data.sheet, data.rows || [], data.clearFirst === true);
+      });
     }
 
     if (data.action === 'purge_no_gps') {
-      return handlePurgeNoGps(data.sheet || 'DanhSachTru');
+      return _withScriptLock(function() {
+        return handlePurgeNoGps(data.sheet || 'DanhSachTru');
+      });
     }
 
     if (data.action === 'batch_match_update') {
-      return handleBatchMatchUpdate(data.sheet, data.records || []);
+      return _withScriptLock(function() {
+        return handleBatchMatchUpdate(data.sheet, data.records || []);
+      });
     }
 
     if (data.action === 'normalize_coords') {
@@ -1027,7 +1053,7 @@ function doPost(e) {
     if (data.action === 'delete_preset')    return handleDeletePreset(data);
 
     // P57: Auto phase assignment (round-robin A/B/C) cho toàn tủ
-    if (data.action === 'assign_phases')    return handleAssignPhases(data);
+    if (data.action === 'assign_phases')    return _withScriptLock(function() { return handleAssignPhases(data); });
 
     // Kiểm tra kết nối đọc/ghi Google Sheet
     if (data.action === 'check_sheet') return handleCheckSheet(data);
