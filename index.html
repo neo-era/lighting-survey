@@ -4668,7 +4668,7 @@
             return {
                 rows,
                 cleanup: () => {
-                    const _safe = fn => { try { fn(); } catch(_) {} };
+                    const _safe = fn => { try { fn(); } catch(e){_swallow(e);} };
                     _safe(_hidePrintOverlay);
                     _safe(_removePrintCableSvg);
                     _safe(_removeCableLines);
@@ -5759,7 +5759,7 @@
                 Promise.all(tasks),
                 new Promise((_, reject) => setTimeout(() => {
                     // Timeout 15s — gỡ những script CHƯA load xong (`pending` đã loại bỏ những script onload thành công)
-                    pending.slice().forEach(s => { try { s._remove(); } catch(_) {} });
+                    pending.slice().forEach(s => { try { s._remove(); } catch(e){_swallow(e);} });
                     reject(new Error('Timeout 15s khi tải thư viện in'));
                 }, 15000))
             ]).catch(err => {
@@ -5867,6 +5867,47 @@
         // ─── Biến toàn cục ───
         const isMobile = window.innerWidth <= 768 || /Mobi|Android/i.test(navigator.userAgent);
         const labelZoomThreshold = isMobile ? 18 : 17;
+
+        // ═══ APP_CONFIG v146 — gom magic numbers ═══
+        // Tune ở đây thay vì search-replace toàn file. Các const local cũ vẫn giữ để backwards-compat.
+        window.APP_CONFIG = {
+            zoom: {
+                svgThreshold: 19,        // ≥ zoom này → SVG detail; < → canvas circleMarker
+                tierThreshold: 12,       // < zoom này → chỉ render tủ (5,6), ẩn trụ
+                labelThreshold: isMobile ? 18 : 17,  // hiện nhãn tên trụ
+                nearbyMinZoom: 15        // < zoom này → không viewport-cull marker
+            },
+            viewport: {
+                padShow: 0.15,           // vào bounds+15% → show marker lại
+                padHide: 0.60            // ra khỏi bounds+60% → mới hide
+            },
+            batch: {
+                chunkSize: isMobile ? 200 : 500,   // rows/chunk khi batch sync GAS
+                concurrency: 3,          // parallel chunks
+                maxRetries: 3            // retry mỗi chunk khi fail
+            },
+            marker: {
+                clusterMaxRadius: isMobile ? 80 : 60,
+                clusterDisableAtZoom: 15
+            },
+            gps: {
+                maxWaitMs: 30000,        // getBestFix timeout
+                targetAccuracyM: 5.0     // ngưỡng chấp nhận fix
+            }
+        };
+
+        // v146 — silent error buffer thay 49 chỗ catch(e){_swallow(e);} nuốt lỗi thầm lặng.
+        // Không log console (tránh spam khi render 5000+ markers). Debug: gõ `_swallowedErrors` trong DevTools.
+        // Circular buffer: khi đầy DROP OLDEST để lỗi mới không mất. Self-protected: chính nó không được throw.
+        window._swallowedErrors = [];
+        function _swallow(e) {
+            try {
+                const buf = window._swallowedErrors || (window._swallowedErrors = []);
+                if (buf.length >= 500) buf.shift();
+                buf.push({ t: Date.now(), m: String(e && e.message || e).slice(0, 200) });
+            } catch(_) { /* nowhere to go */ }
+        }
+        window._swallow = _swallow;
         let map;
         let markersCluster = L.markerClusterGroup({
             disableClusteringAtZoom: 15,   // zoom >= 15 → icon trụ riêng lẻ (không gom bóng số)
@@ -7113,7 +7154,7 @@
             try {
                 localStorage.setItem('cad_offset_e', String(o.dE));
                 localStorage.setItem('cad_offset_n', String(o.dN));
-            } catch(_) {}
+            } catch(e){_swallow(e);}
         }
 
         function _restoreCadOffset() {
@@ -7124,7 +7165,7 @@
                 const inN = document.getElementById('cadOffsetN');
                 if (inE && isFinite(dE)) inE.value = dE;
                 if (inN && isFinite(dN)) inN.value = dN;
-            } catch(_) {}
+            } catch(e){_swallow(e);}
         }
 
         function _applyThamLuongOffsetCad() {
@@ -7596,7 +7637,7 @@
             try {
                 const raw = localStorage.getItem('cad_offset_presets_local');
                 if (raw) return JSON.parse(raw);
-            } catch (_) {}
+            } catch(e){_swallow(e);}
             return [];
         }
 
@@ -7614,7 +7655,7 @@
                     fetchedAt: Date.now(),
                     presets: presets
                 }));
-            } catch (_) {}
+            } catch(e){_swallow(e);}
         }
 
         // Default seed cho shared khi chưa fetch bao giờ (dùng cho offline / GAS chưa deploy)
@@ -7641,12 +7682,12 @@
                     const seededIds = new Set(_SEEDED_SHARED.map(p => p.id));
                     const userOnly = arr.filter(p => !seededIds.has(p.id));
                     if (userOnly.length > 0 && local.length === 0) {
-                        try { localStorage.setItem('cad_offset_presets_local', JSON.stringify(userOnly)); } catch (_) {}
+                        try { localStorage.setItem('cad_offset_presets_local', JSON.stringify(userOnly)); } catch(e){_swallow(e);}
                         userOnly.forEach(p => tagged.push({ ...p, source: 'local' }));
                     }
                     localStorage.removeItem('cad_offset_presets');
                 }
-            } catch (_) {}
+            } catch(e){_swallow(e);}
             return tagged;
         }
 
@@ -7718,7 +7759,7 @@
                 preset.id = 'usr_' + Date.now();
                 local.push(preset);
             }
-            try { localStorage.setItem('cad_offset_presets_local', JSON.stringify(local)); } catch (_) {}
+            try { localStorage.setItem('cad_offset_presets_local', JSON.stringify(local)); } catch(e){_swallow(e);}
             return { ...preset, source: 'local' };
         }
 
@@ -7751,7 +7792,7 @@
             }
             // Local delete
             const local = _getLocalPresets().filter(p => p.id !== id);
-            try { localStorage.setItem('cad_offset_presets_local', JSON.stringify(local)); } catch (_) {}
+            try { localStorage.setItem('cad_offset_presets_local', JSON.stringify(local)); } catch(e){_swallow(e);}
             return true;
         }
         window._deleteCadOffsetPreset = _deleteCadOffsetPreset;
@@ -7771,13 +7812,13 @@
 
         // ── Filter persistence localStorage ───────────────────────────────
         function _saveCadExportFilters(filters) {
-            try { localStorage.setItem('cad_export_filters', JSON.stringify(filters)); } catch (_) {}
+            try { localStorage.setItem('cad_export_filters', JSON.stringify(filters)); } catch(e){_swallow(e);}
         }
         function _restoreCadExportFilters() {
             try {
                 const raw = localStorage.getItem('cad_export_filters');
                 if (raw) return JSON.parse(raw);
-            } catch (_) {}
+            } catch(e){_swallow(e);}
             return { tus: [], basenames: [], nguoiKS: [], phuongXa: [] };
         }
 
@@ -10479,7 +10520,7 @@
                 // Icon: insert block scaled nhỏ (1×1m thực → 2mm trên giấy @ 1:1000)
                 try {
                     d.insertBlock(TYPE_BLOCK[type], iconX, yCursor, 0, 1.5 * scaleM, 'LEGEND');
-                } catch (_) {}
+                } catch(e){_swallow(e);}
                 d.drawText(labelX, yCursor + rowH / 2 - scaleM, 2.5 * scaleM, TYPE_LABEL[type], 'LEGEND');
                 d.drawText(countX, yCursor + rowH / 2 - scaleM, 2.5 * scaleM, count + ' cái', 'LEGEND');
                 yCursor -= rowH;
@@ -11537,7 +11578,7 @@
 
         function _showPdfPreviewModal(blob) {
             // Revoke old URL nếu có
-            if (_pdfPreviewCurrentUrl) { try { URL.revokeObjectURL(_pdfPreviewCurrentUrl); } catch (_) {} }
+            if (_pdfPreviewCurrentUrl) { try { URL.revokeObjectURL(_pdfPreviewCurrentUrl); } catch(e){_swallow(e);} }
             _pdfPreviewCurrentUrl = URL.createObjectURL(blob);
             const iframe = document.getElementById('pdfPreviewFrame');
             if (iframe) iframe.src = _pdfPreviewCurrentUrl;
@@ -11549,7 +11590,7 @@
             const iframe = document.getElementById('pdfPreviewFrame');
             if (iframe) iframe.src = 'about:blank';
             if (_pdfPreviewCurrentUrl) {
-                try { URL.revokeObjectURL(_pdfPreviewCurrentUrl); } catch (_) {}
+                try { URL.revokeObjectURL(_pdfPreviewCurrentUrl); } catch(e){_swallow(e);}
                 _pdfPreviewCurrentUrl = null;
             }
         }
@@ -11640,7 +11681,7 @@
             try {
                 const raw = localStorage.getItem('cad_title_templates');
                 if (raw) return JSON.parse(raw);
-            } catch (_) {}
+            } catch(e){_swallow(e);}
             return [];
         }
 
@@ -11653,14 +11694,14 @@
                 tpl.id = 'tpl_' + Date.now();
                 list.push(tpl);
             }
-            try { localStorage.setItem('cad_title_templates', JSON.stringify(list)); } catch (_) {}
+            try { localStorage.setItem('cad_title_templates', JSON.stringify(list)); } catch(e){_swallow(e);}
             _mergeCustomTemplates();
             return tpl;
         }
 
         function _deleteCustomTitleTemplate(id) {
             const list = _getCustomTitleTemplates().filter(t => t.id !== id);
-            try { localStorage.setItem('cad_title_templates', JSON.stringify(list)); } catch (_) {}
+            try { localStorage.setItem('cad_title_templates', JSON.stringify(list)); } catch(e){_swallow(e);}
             // Remove from runtime map
             delete TITLE_TEMPLATES[id];
         }
@@ -11989,7 +12030,7 @@
 
         function _mstRemovePreview() {
             if (_mstPreviewLayer) {
-                try { map.removeLayer(_mstPreviewLayer); } catch (_) {}
+                try { map.removeLayer(_mstPreviewLayer); } catch(e){_swallow(e);}
                 _mstPreviewLayer = null;
             }
         }
@@ -12229,7 +12270,7 @@
                 }
             }
 
-            try { map.fitBounds(_mstPreviewLayer.getBounds().pad(0.15)); } catch (_) {}
+            try { map.fitBounds(_mstPreviewLayer.getBounds().pad(0.15)); } catch(e){_swallow(e);}
 
             const totalLen = allEdges.reduce((s, e) => s + e.dist, 0);
             const warnMsg = totalWarnings
@@ -12370,7 +12411,7 @@
                     }));
                     // Show rollback button trong 5 phút
                     _showMstRollbackBtn(undoSnapshot.length, diffOnly ? 'Diff' : 'Toàn bộ');
-                } catch (_) {}
+                } catch(e){_swallow(e);}
             }
 
             // Log
@@ -12384,7 +12425,7 @@
                         updated, synced, failed
                     }));
                 }
-            } catch (_) {}
+            } catch(e){_swallow(e);}
 
             [btnDiff, btnAll].forEach(b => b && (b.disabled = false));
             if (activeBtn) activeBtn.textContent = originalText;
@@ -12436,7 +12477,7 @@
         async function _mstRollback() {
             const undoKey = 'mst_undo_' + (typeof currentSheet !== 'undefined' ? currentSheet : 'default');
             let undo;
-            try { undo = JSON.parse(localStorage.getItem(undoKey) || 'null'); } catch (_) {}
+            try { undo = JSON.parse(localStorage.getItem(undoKey) || 'null'); } catch(e){_swallow(e);}
             if (!undo || !undo.snapshot || !undo.snapshot.length) {
                 displayError && displayError('Không có snapshot rollback');
                 return;
@@ -12502,7 +12543,7 @@
                         restored, synced, failed, mode: undo.mode
                     }));
                 }
-            } catch (_) {}
+            } catch(e){_swallow(e);}
             // Clear snapshot
             localStorage.removeItem(undoKey);
             if (bar) bar.remove();
@@ -12543,7 +12584,7 @@
 
         function _lcClearHighlight() {
             if (_lcHighlightLayer) {
-                try { map.removeLayer(_lcHighlightLayer); } catch (_) {}
+                try { map.removeLayer(_lcHighlightLayer); } catch(e){_swallow(e);}
                 _lcHighlightLayer = null;
             }
         }
@@ -12931,7 +12972,7 @@
                     }),
                     interactive: false
                 }).addTo(_lcHighlightLayer);
-                try { map.fitBounds([it.from, it.to], { padding: [80, 80], maxZoom: 17 }); } catch (_) {}
+                try { map.fitBounds([it.from, it.to], { padding: [80, 80], maxZoom: 17 }); } catch(e){_swallow(e);}
             } else {
                 // Chỉ có 1 điểm (self/orphan/fanout) → highlight point
                 const pt = it.from || it.to;
@@ -12944,7 +12985,7 @@
                     }),
                     interactive: false
                 }).addTo(_lcHighlightLayer);
-                try { map.setView(pt, Math.max(16, map.getZoom())); } catch (_) {}
+                try { map.setView(pt, Math.max(16, map.getZoom())); } catch(e){_swallow(e);}
             }
         }
         window._focusLongCable = _focusLongCable;
@@ -13008,7 +13049,7 @@
                         cables: selected.map(x => `${x.parentName}→${x.childName}(${x.distance}m)`)
                     }));
                 }
-            } catch (_) {}
+            } catch(e){_swallow(e);}
 
             btn.disabled = false;
             btn.textContent = originalText;
@@ -13092,7 +13133,7 @@
                 // Batch sync mỗi 10 marker
                 if (syncBatch.length >= 10) {
                     for (const row of syncBatch) {
-                        try { if (typeof syncRowToGAS === 'function') await syncRowToGAS(row, { silent: true }); } catch (_) {}
+                        try { if (typeof syncRowToGAS === 'function') await syncRowToGAS(row, { silent: true }); } catch(e){_swallow(e);}
                     }
                     syncBatch = [];
                 }
@@ -13101,7 +13142,7 @@
             }
             // Flush remaining
             for (const row of syncBatch) {
-                try { if (typeof syncRowToGAS === 'function') await syncRowToGAS(row, { silent: true }); } catch (_) {}
+                try { if (typeof syncRowToGAS === 'function') await syncRowToGAS(row, { silent: true }); } catch(e){_swallow(e);}
             }
             document.removeEventListener('keydown', onKey);
             setBar(null);
@@ -13113,7 +13154,7 @@
                 if (typeof _logAction === 'function') {
                     _logAction('batch_geocode', '', '', JSON.stringify({ total: missing.length, ok, fail, cancelled }));
                 }
-            } catch (_) {}
+            } catch(e){_swallow(e);}
         }
         window._batchReverseGeocode = _batchReverseGeocode;
 
@@ -13190,7 +13231,7 @@
                 if (typeof _logAction === 'function') {
                     _logAction('batch_recalc_dist', '', '', JSON.stringify({ total: toCalc.length, ok, fail, notFound: notFound.length }));
                 }
-            } catch (_) {}
+            } catch(e){_swallow(e);}
         }
         window._recalcAllCableDistances = _recalcAllCableDistances;
 
@@ -13415,7 +13456,7 @@
                         try {
                             markersCluster.removeLayer(md.marker);
                             if (labelLayerGroup.hasLayer(md.marker._lbl)) labelLayerGroup.removeLayer(md.marker._lbl);
-                        } catch(_) {}
+                        } catch(e){_swallow(e);}
                         addMarkerRowToMap(origRow);
                     }
                 }
@@ -13632,7 +13673,7 @@
                     curV = _validateDxf(curEntities, curBounds, curLayers);
                     displayInfo && displayInfo(`🔧 Đã áp dụng ${uniqKeys.length} fix: ${uniqKeys.join(', ')}`);
                     // Log
-                    try { if (typeof _logAction === 'function') _logAction('dxf_fix', '', '', JSON.stringify({ fixes: uniqKeys })); } catch (_) {}
+                    try { if (typeof _logAction === 'function') _logAction('dxf_fix', '', '', JSON.stringify({ fixes: uniqKeys })); } catch(e){_swallow(e);}
                     // Nếu no more warnings → auto continue
                     if (curV.blockers.length === 0 && curV.warnings.length === 0) {
                         window._dxfPreflightDone(true, { entities: curEntities, bounds: curBounds, layers: curLayers });
@@ -15443,7 +15484,7 @@
             const zoom = map.getZoom();
             if (zoom < NEARBY_MIN_ZOOM) {
                 // Zoom thấp — restore toàn bộ marker bị ẩn
-                _nearbyHidden.forEach(m => { try { markersCluster.addLayer(m); } catch(_) {} });
+                _nearbyHidden.forEach(m => { try { markersCluster.addLayer(m); } catch(e){_swallow(e);} });
                 _nearbyHidden.clear();
                 return;
             }
@@ -15454,10 +15495,10 @@
                 const ll = L.latLng(md.lat, md.lon);
                 const hidden = _nearbyHidden.has(md.marker);
                 if (!hideB.contains(ll) && !hidden) {
-                    try { markersCluster.removeLayer(md.marker); } catch(_) {}
+                    try { markersCluster.removeLayer(md.marker); } catch(e){_swallow(e);}
                     _nearbyHidden.add(md.marker);
                 } else if (showB.contains(ll) && hidden) {
-                    try { markersCluster.addLayer(md.marker); } catch(_) {}
+                    try { markersCluster.addLayer(md.marker); } catch(e){_swallow(e);}
                     _nearbyHidden.delete(md.marker);
                 }
             });
@@ -18407,6 +18448,8 @@
             } catch(e) { console.error('updateGitHubExcel error:', e); displayError('Lỗi GitHub: ' + (e.message || e)); }
         }
 
+        // RFC 4180 CSV parser — handle escaped "" inside quoted fields
+        // Bug fix v146: "a""b" → a"b (was: ab, corrupting cells with quotes)
         function parseCSVText(text) {
             const rows = [];
             for (const line of text.split(/\r?\n/)) {
@@ -18415,9 +18458,15 @@
                 let inQuote = false, cell = '';
                 for (let i = 0; i < line.length; i++) {
                     const ch = line[i];
-                    if (ch === '"') { inQuote = !inQuote; }
-                    else if (ch === ',' && !inQuote) { row.push(cell); cell = ''; }
-                    else { cell += ch; }
+                    if (ch === '"') {
+                        // Escaped "" inside quoted field → append literal "
+                        if (inQuote && line[i + 1] === '"') { cell += '"'; i++; }
+                        else { inQuote = !inQuote; }
+                    } else if (ch === ',' && !inQuote) {
+                        row.push(cell); cell = '';
+                    } else {
+                        cell += ch;
+                    }
                 }
                 row.push(cell);
                 rows.push(row);
@@ -18947,7 +18996,7 @@
                 if (!confirm(`⚠ Tọa độ (${lat.toFixed(4)}, ${lon.toFixed(4)}) NGOÀI Việt Nam. Vẫn tiếp tục?`)) return;
             }
             // Zoom map + open popup add marker tại vị trí đó
-            try { map.setView([lat, lon], Math.max(map.getZoom(), 18)); } catch (_) {}
+            try { map.setView([lat, lon], Math.max(map.getZoom(), 18)); } catch(e){_swallow(e);}
             // Reuse showMarkerPopupAt (đã có sẵn)
             if (typeof showMarkerPopupAt === 'function') {
                 showMarkerPopupAt(lat, lon);
@@ -19420,7 +19469,7 @@
                     });
                     _activeIncidents.set(tenTru, existing);
                 }
-            } catch (_) {}
+            } catch(e){_swallow(e);}
         }
 
         function _scSelectChip(el) {
@@ -19457,7 +19506,7 @@
                     });
                     _baoTriByMarker.set(tenTru, existing);
                 }
-            } catch (_) {}
+            } catch(e){_swallow(e);}
         }
 
         // Popup marker → mở modal tạo/xem lịch bảo trì
@@ -19755,7 +19804,7 @@
                     if (nguoiNhan === uname) _nhiemVuMyActive.push(nvObj);
                 }
                 _renderMyNhiemVuBadge();
-            } catch (_) {}
+            } catch(e){_swallow(e);}
         }
 
         // Cập nhật badge "Nhiệm vụ của tôi" trong ☰ panel
@@ -21636,7 +21685,7 @@
                     // Có phiên bản mới hơn baseline lúc load app
                     _maybeShowUpdateBanner(remote);
                 }
-            } catch (_) {}
+            } catch(e){_swallow(e);}
         }
 
         function _maybeShowUpdateBanner(remote) {
@@ -21645,7 +21694,7 @@
             try {
                 const raw = localStorage.getItem('dismissed_update_version');
                 if (raw) dismissed = JSON.parse(raw);
-            } catch (_) {}
+            } catch(e){_swallow(e);}
             if (dismissed && _compareVersion(remote, dismissed) <= 0) return;
             _showUpdateBanner(remote);
         }
@@ -21672,14 +21721,14 @@
             const m = title.match(/v(\d+)\.(\d+)\.(\d+)/);
             if (m) {
                 const v = { major: +m[1], minor: +m[2], patch: +m[3] };
-                try { localStorage.setItem('dismissed_update_version', JSON.stringify(v)); } catch(_) {}
+                try { localStorage.setItem('dismissed_update_version', JSON.stringify(v)); } catch(e){_swallow(e);}
             }
             _hideUpdateBanner();
         }
 
         async function _applyUpdate() {
             _hideUpdateBanner();
-            try { if (typeof displayInfo === 'function') displayInfo('Đang tải phiên bản mới...'); } catch(_) {}
+            try { if (typeof displayInfo === 'function') displayInfo('Đang tải phiên bản mới...'); } catch(e){_swallow(e);}
             // Unregister tất cả Service Worker để buộc fetch code mới từ network
             try {
                 if ('serviceWorker' in navigator) {
@@ -22788,7 +22837,7 @@
         try {
             localStorage.setItem('csv_offset_e', String(o.dE));
             localStorage.setItem('csv_offset_n', String(o.dN));
-        } catch(_) {}
+        } catch(e){_swallow(e);}
         _updateCsvPreview();
     }
 
@@ -22800,7 +22849,7 @@
             const inN = document.getElementById('csvOffsetN');
             if (inE && isFinite(dE)) inE.value = dE;
             if (inN && isFinite(dN)) inN.value = dN;
-        } catch(_) {}
+        } catch(e){_swallow(e);}
     }
 
     function _applyThamLuongOffset() {
@@ -23249,7 +23298,7 @@
                         await loadFromCSV(page.csvUrl);
                         displayInfo(`🔄 Đã reload dữ liệu từ Google Sheet để kiểm tra`);
                     }
-                } catch (_) {}
+                } catch(e){_swallow(e);}
             }, 2000);
         } else {
             displayInfo(`✅ ${msg.join(' · ')} — Đồng bộ thành công 100%`);
@@ -23258,7 +23307,7 @@
                 try {
                     const page = DISTRICT_PAGES.find(p => p.sheet === currentSheet);
                     if (page && page.csvUrl) await loadFromCSV(page.csvUrl);
-                } catch (_) {}
+                } catch(e){_swallow(e);}
             }, 2000);
         }
     }
