@@ -7,9 +7,11 @@ function load() {
     const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
     const lamp = html.match(/\/\/ @@ROADLAMP_START([\s\S]*?)\/\/ @@ROADLAMP_END/);
     const ra = html.match(/\/\/ @@ROADALIGN_START([\s\S]*?)\/\/ @@ROADALIGN_END/);
-    if (!lamp) throw new Error('Thiếu block @@ROADLAMP');
+    const osm = html.match(/\/\/ @@OSMROAD_START([\s\S]*?)\/\/ @@OSMROAD_END/);
+    if (!lamp || !osm) throw new Error('Thiếu block @@ROADLAMP / @@OSMROAD');
     if (!ra) throw new Error('Chưa có block @@ROADALIGN_START/END trong index.html');
-    return new Function(lamp[1] + ra[1] + '\nreturn { _raLocalFrame, _raRoadLines, _raPlanAlign, _raNearestOnLines };')();
+    const names = ['_raLocalFrame', '_raRoadLines', '_raPlanAlign', '_raNearestOnLines', '_raRoadWidth', '_raTargetOffset', '_raFitCfg'];
+    return new Function(lamp[1] + osm[1] + ra[1] + '\nreturn {' + names.map(n => `${n}: typeof ${n} === 'function' ? ${n} : null`).join(',') + '};')();
 }
 
 let pass = 0, fail = 0;
@@ -111,6 +113,124 @@ function distAlong(px, py, pts) {
     const plan = H._raPlanAlign(poles, lines(R), { offsets: [6] });
     ok('đường đôi: trụ x=80 bị cờ junction, không tick', plan.items[2].flag === 'junction' && !plan.items[2].checked);
     ok('đường đôi: trụ khác vẫn ok, y=6', [0, 1, 3].every(i => plan.items[i].flag === 'ok' && near(plan.items[i].y, 6)));
+}
+
+// === Review v158: trụ ngoài đầu mút đường cụt → cờ 'end', không dời dọc, không tính trung vị ===
+{
+    const R1 = [road([[0, 0], [100, 0]], { highway: 'residential', name: 'A' })];
+    const poles = [[10, 5], [50, 5.4], [90, 4.8], [106, 5]].map(([x, y]) => ({ x, y }));   // trụ cuối vượt đầu mút 6m
+    const plan = H._raPlanAlign(poles, lines(R1));
+    ok('đầu mút: trụ x=106 cờ end, không tick, giữ nguyên', plan.items[3].flag === 'end' && !plan.items[3].checked && plan.items[3].x === 106);
+    ok('đầu mút: trung vị chỉ tính 3 trụ (5.0)', plan.items.slice(0, 3).every(it => near(it.y, 5)));
+}
+
+// === Hẻm không tên cắt nhiều way nối tiếp → coi là 1 tuyến ===
+{
+    const R = [road([[0, 0], [60, 0]], { highway: 'service' }), road([[60, 0], [130, 0]], { highway: 'service' }),
+               road([[130, 0], [200, 0]], { highway: 'service' })];
+    const poles = [[10, 3], [50, 3.4], [90, 2.6], [120, 3.2], [170, 2.8]].map(([x, y]) => ({ x, y }));
+    const plan = H._raPlanAlign(poles, lines(R));
+    ok('hẻm không tên 3 way: mọi trụ căn, không trụ nào cờ end/far', plan.items.every(it => it.flag === 'ok'));
+    ok('hẻm không tên: x giữ nguyên, y = 3.0', plan.items.every((it, i) => near(it.x, poles[i].x) && near(it.y, 3)));
+}
+// Hẻm không tên có nhánh rẽ (nút bậc 3) → không gộp qua ngã ba, nhánh vuông góc vẫn tách riêng
+{
+    const L3 = lines([road([[0, 0], [60, 0]], { highway: 'service' }), road([[60, 0], [120, 0]], { highway: 'service' }),
+                      road([[60, 0], [60, 80]], { highway: 'service' })]);
+    ok('hẻm có ngã ba: không gộp 3 way thành 1', new Set(L3.map(l => l.key)).size === 3);
+}
+
+// === Đường chữ U ghép 3 way nối tiếp cùng chiều → bên đường nhất quán theo liên thông ===
+{
+    const a = [[0, 0], [200, 0]], b = [[200, 0], [220, 20], [200, 40]], c = [[200, 40], [0, 40]];   // c ngược chiều way dài nhất
+    const R = [road(a, { highway: 'residential', name: 'U' }), road(b, { highway: 'residential', name: 'U' }), road(c, { highway: 'residential', name: 'U' })];
+    // trụ ở phía NGOÀI chữ U: dưới nhánh a (y<0) và trên nhánh c (y>40) — cùng 1 phía so với chiều đi
+    const poles = [[50, -5], [120, -5.5], [60, 45], [140, 44.6]].map(([x, y]) => ({ x, y }));
+    const plan = H._raPlanAlign(poles, lines(R));
+    ok('chữ U: 1 hàng (không tách nhầm 2 phía)', plan.groups.length === 1);
+    ok('chữ U: nhánh dưới về y=-5, nhánh trên về y=45 (cùng phía ngoài, trung vị 5)',
+        near(plan.items[0].y, -5) && near(plan.items[1].y, -5) && near(plan.items[2].y, 45) && near(plan.items[3].y, 45));
+}
+
+// === 5 trụ 1 bên + 1 trụ lẻ bên kia (không đủ 2 để tách hàng) → cờ cross, không tự kéo qua tim ===
+{
+    const R1 = [road([[-50, 0], [300, 0]], { highway: 'residential', name: 'A' })];
+    const poles = [[0, 4], [40, 4.2], [80, 3.8], [120, 4.1], [160, -4], [200, 3.9]].map(([x, y]) => ({ x, y }));
+    const plan = H._raPlanAlign(poles, lines(R1));
+    ok('trụ lẻ bên kia: cờ cross, bỏ tick', plan.items[4].flag === 'cross' && !plan.items[4].checked);
+    ok('trụ lẻ bên kia: các trụ khác vẫn ok', [0, 1, 2, 3, 5].every(i => plan.items[i].flag === 'ok'));
+}
+
+// === offsets không hợp lệ ===
+{
+    const R1 = [road([[-50, 0], [300, 0]], { highway: 'residential', name: 'A' })];
+    const poles = [[0, 2], [40, 3], [80, 2.4]].map(([x, y]) => ({ x, y }));
+    let e1 = null; try { H._raPlanAlign(poles, lines(R1), { offsets: null }); } catch (e) { e1 = e; }
+    ok('offsets: null không crash', !e1);
+    ok('offsets: [NaN] → dùng trung vị', near(H._raPlanAlign(poles, lines(R1), { offsets: [NaN] }).items[0].y, 2.4));
+    ok('offsets: [0] → về đúng tim', near(H._raPlanAlign(poles, lines(R1), { offsets: [0] }).items[0].y, 0));
+}
+
+// === v159: Mốc căn — mép đường / tim đường, phía, bề rộng ===
+{
+    const has = H._raRoadWidth && H._raTargetOffset;
+    ok('có _raRoadWidth + _raTargetOffset', !!has);
+    if (has) {
+        // Bề rộng: tag width → lanes → cấp đường (tertiary = 10m); trung vị theo chiều dài
+        const Lw = lines([road([[0, 0], [100, 0]], { highway: 'tertiary', name: 'A' }),
+                          road([[100, 0], [120, 0]], { highway: 'tertiary', name: 'A', width: '6 m' })]);
+        ok('bề rộng line lấy từ OSM (tertiary 10, width "6 m")', Lw[0].width === 10 && Lw[1].width === 6);
+        ok('bề rộng tuyến = trung vị theo chiều dài (10)', H._raRoadWidth(Lw, 'A') === 10);
+        ok('bề rộng: lanes=3 → 10.5', lines([road([[0, 0], [50, 0]], { highway: 'residential', name: 'B', lanes: '3' })])[0].width === 10.5);
+
+        const T = H._raTargetOffset;
+        ok('mép +0.5, phía -1, rộng 10 → -5.5', near(T({ ref: 'mep', side: -1, value: 0.5, width: 10 }).offset, -5.5));
+        ok('mép -1 (vào lòng đường), phía +1, rộng 10 → 4', near(T({ ref: 'mep', side: 1, value: -1, width: 10 }).offset, 4));
+        ok('tim 3, phía +1 → 3', near(T({ ref: 'tim', side: 1, value: 3, width: 10 }).offset, 3));
+        ok('tim 0 → 0 (đúng tim)', near(T({ ref: 'tim', side: -1, value: 0, width: 10 }).offset, 0));
+        ok('lỗi: bề rộng 0', T({ ref: 'mep', side: 1, value: 0.5, width: 0 }).error === 'width');
+        ok('lỗi: bề rộng 70', T({ ref: 'mep', side: 1, value: 0.5, width: 70 }).error === 'width');
+        ok('lỗi: mép -6 với đường 10 (vượt qua tim)', T({ ref: 'mep', side: 1, value: -6, width: 10 }).error === 'inside');
+        ok('lỗi: tim âm', T({ ref: 'tim', side: 1, value: -1, width: 10 }).error === 'value');
+        ok('lỗi: khoảng cách không phải số', T({ ref: 'mep', side: 1, value: NaN, width: 10 }).error === 'value');
+
+        // Tuyến vắt qua tim (dữ liệu thật BTX_BTX1) → mép +0.5 phía -1 → mọi trụ cách tim 5.5 cùng phía
+        const R1 = [road([[-50, 0], [400, 0]], { highway: 'tertiary', name: 'A' })];
+        const ys = [-5, -6, 0.5, -4, 0.8, -5.5, -2.4, 5.84];
+        const poles = ys.map((y, i) => ({ x: i * 30, y }));
+        const base = H._raPlanAlign(poles, lines(R1));
+        ok('phía mặc định = phía nhiều trụ hơn (-1)', base.groups[0].sidePref === -1);
+        const S = T({ ref: 'mep', side: -1, value: 0.5, width: 10 }).offset;
+        const plan = H._raPlanAlign(poles, lines(R1), { offsets: [S], crossMin: 5 });
+        const okItems = plan.items.filter(it => it.flag === 'ok');
+        ok('mép: các trụ ok đều ở y=-5.5', okItems.length >= 6 && okItems.every(it => near(it.y, -5.5)));
+        ok('mép: trụ +0.8 sát tim vẫn được kéo về vỉa hè (không cross)', plan.items[4].flag === 'ok' && near(plan.items[4].y, -5.5));
+        ok('mép: trụ +5.84 (hẳn bên kia, > ½ rộng) cờ cross', plan.items[7].flag === 'cross' && !plan.items[7].checked);
+    }
+}
+
+// === Review v159: kẹp cấu hình về hợp lệ + cờ straddle + crossMin theo từng hàng ===
+{
+    const Fit = H._raFitCfg;
+    ok('có _raFitCfg', !!Fit);
+    if (Fit) {
+        ok('mép -4 nhớ từ đường 10m, mở trên đường 6m → kẹp -3', Fit({ ref: 'mep', side: 1, value: -4 }, 6).value === -3);
+        ok('mép 28 trên đường 10m (5+28 > 30) → kẹp 25', Fit({ ref: 'mep', side: 1, value: 28 }, 10).value === 25);
+        ok('value null/không phải số → mặc định 0.5 (mép)', Fit({ ref: 'mep', side: 1, value: null }, 10).value === 0.5);
+        ok('tim -2 → 0; tim 40 → 30', Fit({ ref: 'tim', side: 1, value: -2 }, 10).value === 0 && Fit({ ref: 'tim', side: 1, value: 40 }, 10).value === 30);
+        ok('cfg hợp lệ giữ nguyên', Fit({ ref: 'mep', side: -1, value: 0.5 }, 10).value === 0.5);
+        ok('kết quả kẹp luôn hợp lệ với _raTargetOffset', !H._raTargetOffset(Object.assign(Fit({ ref: 'mep', side: 1, value: -9 }, 6), { width: 6 })).error);
+    }
+    // Trụ khác phía cách tim 2..crossMin: không tự kéo qua — cờ straddle (bỏ tick, vẫn tick tay được)
+    const R1 = [road([[-50, 0], [400, 0]], { highway: 'residential', name: 'A' })];
+    const poles = [[0, -4], [30, -4.5], [60, 3.6], [90, -4.2], [120, 0.8]].map(([x, y]) => ({ x, y }));
+    const plan = H._raPlanAlign(poles, lines(R1), { offsets: [-4.5], crossMin: 4 });
+    ok('straddle: trụ +3.6 (2 < 3.6 ≤ 4) cờ straddle, bỏ tick', plan.items[2].flag === 'straddle' && !plan.items[2].checked);
+    ok('straddle: trụ +0.8 sát tim vẫn ok', plan.items[4].flag === 'ok');
+    // crossMin theo từng hàng
+    const two = [[0, 6], [40, 6.5], [20, -6], [60, -6.4], [80, -6.2], [100, 3]].map(([x, y]) => ({ x, y }));
+    const p2 = H._raPlanAlign(two, lines(R1), { crossMin: [2, 2] });
+    ok('crossMin dạng mảng không crash, 2 hàng', p2.groups.length === 2);
 }
 
 // === Đường cong (cung tròn R=200) ===

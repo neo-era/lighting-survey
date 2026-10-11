@@ -5377,6 +5377,8 @@
             if (!confirm('Đăng xuất?')) return;
             currentUser = null;
             if (typeof _adminAuthCached !== 'undefined') _adminAuthCached = null;
+            // v158: đóng panel căn tuyến + bỏ hoàn tác; popup cache có nút theo quyền user cũ
+            try { _raClose(); _raUndo = null; _invalidatePopupCacheAll(); } catch (_) {}
             localStorage.removeItem('ks_user');
             // Đóng tất cả Bootstrap modal + xóa backdrop để input login không bị block
             $('.modal').modal('hide');
@@ -8633,49 +8635,144 @@
         }
         // Đường xe chạy → polyline mét, nhóm theo tên. Way cùng tên vẽ ngược chiều way dài nhất thì đảo lại,
         // để "bên trái/phải đường" nhất quán trên cả tuyến.
+        const RA_NODE_EPS = 0.5;  // 2 đầu way cách < 0.5m coi là cùng 1 nút OSM
+        // Nhóm theo tên. Way KHÔNG tên chỉ gộp khi nối tiếp đầu–cuối tại nút đúng 2 way (hẻm OSM hay cắt nhiều way;
+        // không gộp qua ngã ba để nhánh rẽ không thành cùng tuyến).
+        // Hướng: đi theo liên thông đầu/cuối (đúng cả với tuyến chữ U, đường đôi tách nhập); thành phần rời mới
+        // dùng vector so với way dài nhất. freeStart/freeEnd = đầu mút không nối way cùng nhóm (đường cụt, đổi tên).
         function _raRoadLines(roads, frame) {
-            const lines = [];
+            const same = (p, q) => Math.hypot(p.x - q.x, p.y - q.y) <= RA_NODE_EPS;
+            const first = l => l.pts[0], last = l => l.pts[l.pts.length - 1];
+            const raw = [];
             (roads || []).forEach((r, i) => {
                 if (!r || !Array.isArray(r.coords) || r.coords.length < 2 || !_rlIsDrivable(r.tags)) return;
-                const pts = r.coords.map(c => frame.toXY(c[1], c[0]));
-                lines.push({ key: (r.tags && r.tags.name) || ('way#' + i), pts });
+                const pts = [];
+                r.coords.forEach(c => { const p = frame.toXY(c[1], c[0]); if (!pts.length || Math.hypot(p.x - pts[pts.length - 1].x, p.y - pts[pts.length - 1].y) > 1e-6) pts.push(p); });
+                if (pts.length < 2) return;
+                // Bề rộng mặt đường cùng quy tắc lớp mép đường DXF (tag width → lanes×3.5 → theo cấp đường)
+                const width = typeof _osmRoadWidth === 'function' ? _osmRoadWidth(r.tags) : 6;
+                raw.push({ i, name: (r.tags && r.tags.name) || null, pts, width });
             });
+            const degree = p => raw.reduce((n, l) => n + (same(first(l), p) ? 1 : 0) + (same(last(l), p) ? 1 : 0), 0);
+            // Union-find cho way không tên
+            const parent = raw.map((_, k) => k);
+            const find = k => (parent[k] === k ? k : (parent[k] = find(parent[k])));
+            raw.forEach((a, ka) => {
+                if (a.name) return;
+                raw.forEach((b, kb) => {
+                    if (kb <= ka || b.name) return;
+                    const shared = [first(a), last(a)].find(p => same(p, first(b)) || same(p, last(b)));
+                    if (shared && degree(shared) === 2) parent[find(kb)] = find(ka);
+                });
+            });
+            const lines = raw.map((l, k) => ({ key: l.name || ('way#' + raw[find(k)].i), pts: l.pts, width: l.width }));
             const byKey = new Map();
             lines.forEach(l => { if (!byKey.has(l.key)) byKey.set(l.key, []); byKey.get(l.key).push(l); });
             byKey.forEach(group => {
-                const vec = l => ({ x: l.pts[l.pts.length - 1].x - l.pts[0].x, y: l.pts[l.pts.length - 1].y - l.pts[0].y });
-                const ref = vec(group.reduce((a, b) => (Math.hypot(vec(b).x, vec(b).y) > Math.hypot(vec(a).x, vec(a).y) ? b : a)));
-                group.forEach(l => { const v = vec(l); if (v.x * ref.x + v.y * ref.y < 0) l.pts.reverse(); });
+                const vec = l => ({ x: last(l).x - first(l).x, y: last(l).y - first(l).y });
+                const lenOf = l => l.pts.reduce((s, p, k) => (k ? s + Math.hypot(p.x - l.pts[k - 1].x, p.y - l.pts[k - 1].y) : 0), 0);
+                const done = new Set();
+                let ref = null;
+                while (done.size < group.length) {
+                    const seed = group.filter(l => !done.has(l)).reduce((a, b) => (lenOf(b) > lenOf(a) ? b : a));
+                    const v = vec(seed);
+                    if (ref && v.x * ref.x + v.y * ref.y < 0) seed.pts.reverse();
+                    if (!ref && Math.hypot(v.x, v.y) > 1e-6) ref = vec(seed);
+                    done.add(seed);
+                    const queue = [seed];
+                    while (queue.length) {
+                        const w = queue.shift();
+                        for (const n of group) {
+                            if (done.has(n)) continue;
+                            let rev = null;
+                            if (same(first(n), last(w)) || same(last(n), first(w))) rev = false;
+                            else if (same(first(n), first(w)) || same(last(n), last(w))) rev = true;
+                            if (rev === null) continue;
+                            if (rev) n.pts.reverse();
+                            done.add(n);
+                            queue.push(n);
+                        }
+                    }
+                }
+                group.forEach(l => {
+                    const others = group.filter(o => o !== l);
+                    const linked = p => same(first(l), last(l)) || others.some(o => same(p, first(o)) || same(p, last(o)));
+                    l.freeStart = !linked(first(l));
+                    l.freeEnd = !linked(last(l));
+                });
             });
             return lines;
         }
         // Chân đường vuông góc gần nhất. key = null → mọi đường. side = +1 nếu trụ ở bên trái hướng đường.
+        // endOver = trụ vượt qua đầu mút TỰ DO bao nhiêu mét (chân đường bị kẹp ở đầu mút → dời sẽ trượt dọc đường).
         function _raNearestOnLines(px, py, lines, key) {
             let best = null;
             for (const l of lines) {
                 if (key != null && l.key !== key) continue;
-                for (let i = 0; i < l.pts.length - 1; i++) {
+                const nSeg = l.pts.length - 1;
+                for (let i = 0; i < nSeg; i++) {
                     const a = l.pts[i], b = l.pts[i + 1];
                     const dx = b.x - a.x, dy = b.y - a.y, len2 = dx * dx + dy * dy;
                     if (len2 < 1e-9) continue;
-                    const t = Math.max(0, Math.min(1, ((px - a.x) * dx + (py - a.y) * dy) / len2));
+                    const len = Math.sqrt(len2);
+                    const tRaw = ((px - a.x) * dx + (py - a.y) * dy) / len2;
+                    const t = Math.max(0, Math.min(1, tRaw));
                     const qx = a.x + t * dx, qy = a.y + t * dy;
                     const d = Math.hypot(px - qx, py - qy);
-                    if (!best || d < best.dist) {
-                        const len = Math.sqrt(len2);
+                    const endOver = (i === 0 && tRaw < 0 && l.freeStart) ? -tRaw * len
+                                  : (i === nSeg - 1 && tRaw > 1 && l.freeEnd) ? (tRaw - 1) * len : 0;
+                    // Hoà khoảng cách tại nút nối 2 way → ưu tiên đoạn mà chân đường nằm trong (không vượt đầu mút)
+                    if (!best || d < best.dist - 1e-6 || (Math.abs(d - best.dist) <= 1e-6 && endOver < best.endOver)) {
                         const cross = dx * (py - a.y) - dy * (px - a.x);
-                        best = { key: l.key, qx, qy, dist: d, side: cross < 0 ? -1 : 1, nx: -dy / len, ny: dx / len };
+                        best = { key: l.key, qx, qy, dist: d, side: cross < 0 ? -1 : 1, nx: -dy / len, ny: dx / len, endOver };
                     }
                 }
             }
             return best;
+        }
+        // Bề rộng 1 tuyến = trung vị bề rộng các way theo chiều dài (tuyến có thể đổi bề rộng giữa chừng)
+        function _raRoadWidth(lines, key) {
+            const parts = lines.filter(l => l.key === key && isFinite(l.width)).map(l => ({
+                w: l.width, len: l.pts.reduce((s, p, k) => (k ? s + Math.hypot(p.x - l.pts[k - 1].x, p.y - l.pts[k - 1].y) : 0), 0)
+            })).sort((a, b) => a.w - b.w);
+            const total = parts.reduce((s, p) => s + p.len, 0);
+            let acc = 0;
+            for (const p of parts) { acc += p.len; if (acc >= total / 2) return p.w; }
+            return parts.length ? parts[parts.length - 1].w : 6;
+        }
+        const RA_MAX_WIDTH = 60;
+        // Mốc căn → khoảng cách CÓ DẤU tới tim. ref 'mep': value tính từ mép ra ngoài (âm = vào lòng đường);
+        // ref 'tim': value tính từ tim (≥ 0). side ±1 = phía so với hướng đường.
+        function _raTargetOffset(cfg) {
+            const c = cfg || {};
+            const side = c.side < 0 ? -1 : 1, v = Number(c.value), w = Number(c.width);
+            if (!isFinite(v)) return { error: 'value' };
+            if (c.ref === 'tim') {
+                if (v < 0 || v > RA_MAX_DIST) return { error: 'value' };
+                return { offset: side * v };
+            }
+            if (!isFinite(w) || w <= 0 || w > RA_MAX_WIDTH) return { error: 'width' };
+            if (v < -w / 2) return { error: 'inside' };
+            if (w / 2 + v > RA_MAX_DIST) return { error: 'value' };
+            return { offset: side * (w / 2 + v) };
+        }
+        // Kẹp cấu hình về khoảng hợp lệ (cấu hình nhớ từ đường khác có thể không hợp lệ với đường này)
+        function _raFitCfg(cfg, width) {
+            const c = Object.assign({}, cfg);
+            const w = Math.min(RA_MAX_WIDTH, Math.max(0.5, Number(width) || 6));
+            let v = Number.isFinite(c.value) ? c.value : (c.ref === 'tim' ? 0 : 0.5);
+            if (c.ref === 'tim') v = Math.min(RA_MAX_DIST, Math.max(0, v));
+            else v = Math.min(RA_MAX_DIST - w / 2, Math.max(-w / 2, v));
+            c.value = v;
+            return c;
         }
         const RA_SPLIT_GAP = 6;   // tách 2 hàng (2 bên đường) chỉ khi khoảng cách có dấu chia 2 cụm cách nhau ≥ 6m
         // Kế hoạch căn. Khoảng cách CÓ DẤU tới tim (+ = bên trái hướng đường) → mặc định 1 hàng = trung vị;
         // GPS nhiễu làm trụ vắt qua tim nên KHÔNG chia bên theo dấu từng trụ.
         // opts.offsets[g] (có dấu, mét) ghi đè khoảng cách của hàng g; null = giữ trung vị.
         function _raPlanAlign(poles, lines, opts) {
-            const o = Object.assign({ maxDist: RA_MAX_DIST, maxMove: RA_MAX_MOVE, splitGap: RA_SPLIT_GAP, offsets: [] }, opts || {});
+            // crossMin: trụ khác phía với hàng và cách tim > crossMin mới coi là "bên kia đường" (mốc mép: ½ bề rộng)
+            const o = Object.assign({ maxDist: RA_MAX_DIST, maxMove: RA_MAX_MOVE, splitGap: RA_SPLIT_GAP, offsets: [], crossMin: 2 }, opts || {});
             const votes = new Map();
             poles.forEach(p => {
                 const n = _raNearestOnLines(p.x, p.y, lines, null);
@@ -8691,8 +8788,11 @@
             });
             const proj = poles.map(p => _raNearestOnLines(p.x, p.y, lines, roadKey));
             const median = arr => { const s = arr.slice().sort((a, b) => a - b), m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
+            const offs = Array.isArray(o.offsets) ? o.offsets : [];
             const signed = proj.map(n => n.side * n.dist);
-            const use = proj.map(n => n.dist <= o.maxDist);
+            // Vượt đầu mút tự do > 1m: chân đường kẹp ở đầu mút, dời sẽ trượt dọc tuyến → không căn, không tính trung vị
+            const isEnd = proj.map(n => n.dist <= o.maxDist && n.endOver > 1);
+            const use = proj.map((n, i) => n.dist <= o.maxDist && !isEnd[i]);
             const vals = signed.filter((_, i) => use[i]).sort((a, b) => a - b);
             if (vals.length < 2) return { error: 'too_few', roadKey };
             // 1 hàng, trừ khi các khoảng cách chia rõ 2 cụm (khe lớn nhất ≥ splitGap, mỗi cụm ≥ 2 trụ)
@@ -8704,18 +8804,27 @@
             const groupOf = s => (cut != null && s > cut ? 1 : 0);
             const groups = (cut == null ? [0] : [0, 1]).map(g => {
                 const members = signed.filter((s, i) => use[i] && groupOf(s) === g);
-                const ov = o.offsets[g];
-                return { offset: (ov != null && isFinite(ov)) ? ov : median(members), median: median(members), count: members.length };
+                const ov = offs[g];
+                const pos = members.filter(s => s > 0).length, neg = members.filter(s => s < 0).length;
+                const sidePref = pos > neg ? 1 : neg > pos ? -1 : (Math.sign(median(members)) || 1);   // phía nhiều trụ hơn
+                return { offset: (ov != null && isFinite(ov)) ? ov : median(members), median: median(members), count: members.length, sidePref };
             });
             const items = poles.map((p, i) => {
                 const n = proj[i];
-                if (!use[i]) return { x: p.x, y: p.y, dist: n.dist, signed: signed[i], group: -1, move: 0, flag: 'far', checked: false };
+                if (!use[i]) return { x: p.x, y: p.y, dist: n.dist, signed: signed[i], group: -1, move: 0, flag: isEnd[i] ? 'end' : 'far', checked: false };
                 const g = groupOf(signed[i]), S = groups[g].offset;
                 const x = n.qx + S * n.nx, y = n.qy + S * n.ny;
                 const move = Math.hypot(x - p.x, y - p.y);
                 // Vị trí mới gần nhánh khác của đường hơn (đường đôi, nút giao, góc gấp) → không cách tim đúng |S|
                 const after = _raNearestOnLines(x, y, lines, roadKey);
-                const flag = move > o.maxMove ? 'big' : (Math.abs(after.dist - Math.abs(S)) > 0.5 ? 'junction' : 'ok');
+                // Trụ lẻ ở hẳn bên kia tim (không đủ 2 trụ để thành hàng riêng) → đừng tự kéo qua đường
+                const crossMin = Array.isArray(o.crossMin) ? (Number.isFinite(o.crossMin[g]) ? o.crossMin[g] : 2) : o.crossMin;
+                const otherSide = S !== 0 && Math.sign(signed[i]) !== Math.sign(S);
+                const cross = otherSide && Math.abs(signed[i]) > crossMin;
+                // Khác phía, cách tim 2m..crossMin: có thể là GPS lệch HOẶC trụ thật bên kia đường hẹp → đề xuất nhưng bỏ tick
+                const straddle = otherSide && !cross && Math.abs(signed[i]) > 2;
+                const flag = cross ? 'cross' : straddle ? 'straddle' : move > o.maxMove ? 'big'
+                           : (Math.abs(after.dist - Math.abs(S)) > 0.5 ? 'junction' : 'ok');
                 return { x, y, dist: n.dist, signed: signed[i], group: g, move, flag, checked: flag === 'ok',
                          nx: n.nx, ny: n.ny };
             });
@@ -16087,7 +16196,7 @@
               ${canDrag() && type >= 1 && type <= 4 ? `
               <div style="padding:0 16px 12px;">
                 <button onclick="openAlignRoute()" title="Căn thẳng các trụ cùng tuyến theo tim đường OSM"
-                  style="width:100%;min-height:40px;border-radius:10px;border:1.5px solid #0ea5e9;background:#f0f9ff;color:#0369a1;font-size:12px;font-weight:700;cursor:pointer;">
+                  style="width:100%;min-height:44px;border-radius:10px;border:1.5px solid #0ea5e9;background:#f0f9ff;color:#0369a1;font-size:13px;font-weight:700;cursor:pointer;">
                   📏 Căn thẳng tuyến ${_esc(normalizeMarkerBaseName(String(name).trim()))}
                 </button>
               </div>` : ''}
@@ -16259,7 +16368,7 @@
             const rows = [...dirtyMovedRows];
             if (rows.length === 0) {
                 displayError('Không có marker nào cần cập nhật.');
-                return;
+                return { ok: 0, failed: 0, total: 0 };
             }
             const btn = document.getElementById('updateMovedBtn');
             const btnLabel = document.getElementById('updateMovedBtnLabel');
@@ -16296,28 +16405,46 @@
             if (btnLabel) btnLabel.textContent = origLabel || 'Cập nhật';
             updateDirtyMovedBadge();
             displayError(`Đã cập nhật ${ok}/${rows.length} marker lên Data${failed ? ` (${failed} lỗi)` : ''}.`);
+            return { ok, failed, total: rows.length };
         }
 
         // ─── v158: Căn thẳng tuyến đèn theo tim đường OSM — docs/design-align-poles-road.md ───
-        let _raState = null;   // { entries: [{row, plan item, ll}], layer, roadKey }
-        let _raUndo = null;    // [{ row, lat, lon }] — 1 mức hoàn tác
+        let _raState = null;   // { rows, poles, lines, frame, order, base, offsets, manual, layer, groups, entries }
+        let _raUndo = null;    // { snaps: [{row, vals}], applied: Map(row → [lat, lon]) } — 1 mức hoàn tác
+        let _raToken = 0;      // lần mở mới nhất — chống 2 lần mở chồng nhau khi tải OSM chậm
+        const _RA_SNAP_COLS = [2, 3, 13, 15, 19, 20];   // lat, lon, cập nhật, khoảng cách cáp, VN2000 X/Y
+
+        const _raKeyOf = r => [String(r[0] || '').trim(), String(r[1] || '').trim()].filter(Boolean);
+        function _raAllRows() {
+            const seen = new Set();
+            return [...(loadedData || []).slice(1), ...(newMarkerRows || [])]
+                .filter(r => Array.isArray(r) && !seen.has(r) && seen.add(r));
+        }
+
+        // Overpass chặn 2 request cách nhau < 5s (dùng chung với xuất CAD) → tự chờ rồi thử lại 1 lần
+        async function _raFetchRoads(bounds) {
+            try {
+                return await _fetchOsmBasemap(bounds, { roads: true, buildings: false });
+            } catch (e) {
+                if (!/5s/.test(String(e && e.message))) throw e;
+                displayInfo('Chờ vài giây để tải bản đồ đường...');
+                await new Promise(r => setTimeout(r, 5200));
+                return await _fetchOsmBasemap(bounds, { roads: true, buildings: false });
+            }
+        }
 
         async function openAlignRoute() {
             const row = _currentPopupRow;
             if (!row) return;
             if (!canDrag()) { displayError('Tài khoản hiện tại không có quyền dời marker.'); return; }
             const base = normalizeMarkerBaseName(String(row[1] || '').trim());
-            const seen = new Set();
-            const rows = [...(loadedData || []).slice(1), ...(newMarkerRows || [])].filter(r => {
-                if (!Array.isArray(r) || seen.has(r)) return false;
-                seen.add(r);
-                return [1, 2, 3, 4].includes(parseInt(r[6]))
-                    && normalizeMarkerBaseName(String(r[1] || '').trim()) === base
-                    && isFinite(parseCoord(r[2])) && isFinite(parseCoord(r[3]));
-            });
+            const rows = _raAllRows().filter(r => [1, 2, 3, 4].includes(parseInt(r[6]))
+                && normalizeMarkerBaseName(String(r[1] || '').trim()) === base
+                && isFinite(parseCoord(r[2])) && isFinite(parseCoord(r[3])));
             if (rows.length < 2) { displayError(`Tuyến "${base}" cần ít nhất 2 trụ đèn để căn thẳng.`); return; }
             map.closePopup();
             _raClose();
+            const token = ++_raToken;
 
             const lats = rows.map(r => parseCoord(r[2])), lons = rows.map(r => parseCoord(r[3]));
             const PAD = 0.0006;   // ~65m — đủ lấy đường dù trụ cách tim tới 30m
@@ -16326,67 +16453,156 @@
             displayInfo('Đang tải đường OSM quanh tuyến ' + base + '...');
             let osm;
             try {
-                osm = await _fetchOsmBasemap(bounds, { roads: true, buildings: false });
+                osm = await _raFetchRoads(bounds);
             } catch (e) {
-                displayError('Không tải được đường OSM: ' + e.message);
+                if (token === _raToken) displayError('Không tải được bản đồ đường OSM (' + e.message + '). Kiểm tra mạng rồi thử lại.');
                 return;
             }
+            if (token !== _raToken) return;   // người dùng đã mở tuyến khác trong lúc chờ
             const frame = _raLocalFrame((bounds.minLat + bounds.maxLat) / 2, (bounds.minLon + bounds.maxLon) / 2);
             const poles = rows.map(r => frame.toXY(parseCoord(r[2]), parseCoord(r[3])));
             const lines = _raRoadLines(osm.roads, frame);
-            const plan = _raPlanAlign(poles, lines);
-            if (plan.error === 'no_road') { displayError('Không tìm thấy đường xe chạy OSM trong vòng 30m quanh tuyến.'); return; }
-            if (plan.error === 'too_few') { displayError('Chỉ có 1 trụ nằm gần đường — cần ít nhất 2 trụ để căn.'); return; }
-
             const collator = new Intl.Collator('vi', { numeric: true, sensitivity: 'base' });
             const order = rows.map((_, i) => i).sort((a, b) => collator.compare(String(rows[a][1] || ''), String(rows[b][1] || '')));
-            _raState = { rows, poles, lines, frame, order, base, offsets: [], manual: new Map(),
+            _raState = { rows, poles, lines, frame, order, base, cfg: null, width: null, manual: new Map(),
                          layer: L.layerGroup().addTo(map) };
             _raRecompute();
-            try { map.fitBounds(L.latLngBounds(rows.map(r => [parseCoord(r[2]), parseCoord(r[3])])).pad(0.2)); } catch (_) {}
+            if (!_raState) return;
+            // Chừa chỗ cho panel: bên phải trên màn rộng, phía dưới trên điện thoại
+            const pad = window.innerWidth > 900 ? [480, 40] : [20, Math.round(window.innerHeight * 0.62)];
+            try { map.fitBounds(L.latLngBounds(rows.map(r => [parseCoord(r[2]), parseCoord(r[3])])).pad(0.1), { paddingTopLeft: [20, 20], paddingBottomRight: pad }); } catch (_) {}
         }
         window.openAlignRoute = openAlignRoute;
 
-        // Tính lại kế hoạch theo khoảng cách người dùng nhập; giữ tick người dùng đã đổi tay
+        // v159: mốc căn (mép/tim) + phía + khoảng cách mỗi hàng; bề rộng đường chung cả tuyến. Nhớ lần dùng gần nhất.
+        const _RA_CFG_KEY = 'ra_align_cfg';
+        const _raIsObj = x => !!x && typeof x === 'object' && !Array.isArray(x);
+        function _raLoadCfg() {
+            let c = {};
+            try { c = JSON.parse(localStorage.getItem(_RA_CFG_KEY) || '{}'); } catch (_) { /* hỏng → bỏ */ }
+            if (!_raIsObj(c)) c = {};
+            if (!_raIsObj(c.widths)) c.widths = {};
+            return c;
+        }
+        function _raSaveCfg(st) {
+            try {
+                const saved = _raLoadCfg(), c = st.cfg && st.cfg[0];
+                if (c) { saved.ref = c.ref; if (c.ref === 'mep') saved.mepValue = c.value; }
+                // Chỉ nhớ bề rộng người dùng ĐÃ SỬA, và chỉ cho đường có tên (khoá 'way#' đổi theo mỗi lần tải OSM)
+                if (!String(st.roadKey).startsWith('way#')) {
+                    if (st.width !== st.osmWidth) saved.widths[st.roadKey] = st.width;
+                    else delete saved.widths[st.roadKey];
+                }
+                localStorage.setItem(_RA_CFG_KEY, JSON.stringify(saved));
+            } catch (_) { /* localStorage có thể bị chặn — không ảnh hưởng căn */ }
+        }
+        function _raDefaultCfg(ref, g, saved, width) {
+            const c = ref === 'tim'
+                ? { ref, side: Math.sign(g.median) || g.sidePref, value: +Math.abs(g.median).toFixed(1) }
+                : { ref: 'mep', side: g.sidePref, value: Number.isFinite(saved.mepValue) ? saved.mepValue : 0.5 };
+            return _raFitCfg(c, width);   // giá trị nhớ từ đường khác có thể không hợp lệ ở đường này
+        }
+        const _RA_COMPASS = ['Bắc', 'Đông Bắc', 'Đông', 'Đông Nam', 'Nam', 'Tây Nam', 'Tây', 'Tây Bắc'];
+        function _raCompass(vx, vy) {
+            if (Math.hypot(vx, vy) < 1e-6) return '';   // tuyến chữ U: các hướng triệt tiêu
+            const deg = (Math.atan2(vx, vy) * 180 / Math.PI + 360) % 360;   // 0 = Bắc, theo chiều kim đồng hồ
+            return _RA_COMPASS[Math.round(deg / 45) % 8];
+        }
+
+        // Tính lại kế hoạch theo mốc/phía/khoảng cách người dùng chọn; giữ tick người dùng đã đổi tay
         function _raRecompute() {
             const st = _raState;
             if (!st) return;
-            const plan = _raPlanAlign(st.poles, st.lines, { offsets: st.offsets });
-            if (plan.error) return;
-            st.roadKey = plan.roadKey;
+            const base = _raPlanAlign(st.poles, st.lines);   // hàng + trung vị + phía nhiều trụ (không phụ thuộc mốc)
+            if (base.error) {
+                _raClose();
+                displayError(base.error === 'no_road'
+                    ? 'Không tìm thấy đường xe chạy OSM trong vòng 30m quanh tuyến.'
+                    : 'Chỉ có 1 trụ nằm dọc đường — cần ít nhất 2 trụ để căn.');
+                return;
+            }
+            st.roadKey = base.roadKey;
+            if (st.width == null) {
+                const sw = _raLoadCfg().widths[st.roadKey];
+                // OSM có thể cho tới 99m (tag width) → kẹp về khoảng hợp lệ
+                st.osmWidth = +Math.min(RA_MAX_WIDTH, Math.max(0.5, _raRoadWidth(st.lines, st.roadKey))).toFixed(1);
+                st.width = (Number.isFinite(sw) && sw > 0 && sw <= RA_MAX_WIDTH) ? sw : st.osmWidth;
+            }
+            if (!st.cfg || st.cfg.length !== base.groups.length) {
+                const saved = _raLoadCfg();
+                st.cfg = base.groups.map(g => _raDefaultCfg(saved.ref === 'tim' ? 'tim' : 'mep', g, saved, st.width));
+                st.lastMep = st.cfg.map(c => (c.ref === 'mep' ? c.value : null));
+            }
+            const offsets = st.cfg.map(c => { const t = _raTargetOffset(Object.assign({}, c, { width: st.width })); return t.error ? null : t.offset; });
+            // Mốc mép: trụ khác phía cách tim > ½ bề rộng mới là "bên kia đường"; 2m..½ bề rộng → 'straddle' (bỏ tick).
+            // Tính theo từng hàng vì mỗi hàng chọn mốc riêng.
+            const crossMin = st.cfg.map(c => (c.ref === 'mep' ? Math.max(2, st.width / 2) : 2));
+            const plan = _raPlanAlign(st.poles, st.lines, { offsets, crossMin });
             st.groups = plan.groups;
             st.entries = st.order.map(i => {
-                const item = plan.items[i];
-                if (item.flag !== 'far' && st.manual.has(i)) item.checked = st.manual.get(i);
-                return { idx: i, row: st.rows[i], item, ll: st.frame.toLL(item.x, item.y) };
+                const item = plan.items[i], row = st.rows[i];
+                item.rtk = String(row[24] || '').trim() === 'rtk';
+                const movable = item.flag !== 'far' && item.flag !== 'end';
+                // Trụ đo RTK (cm) chính xác hơn tim đường OSM (m) → mặc định không dời
+                if (movable && item.rtk) item.checked = false;
+                if (movable && st.manual.has(i)) item.checked = st.manual.get(i);
+                return { idx: i, row, item, ll: st.frame.toLL(item.x, item.y) };
             });
-            // Hướng la bàn của mỗi hàng so với tim đường (pháp tuyến trái × dấu khoảng cách) — dễ hiểu hơn "trái/phải"
+            // Nhãn la bàn 2 phía của mỗi hàng (tổng pháp tuyến trái) — dễ hiểu hơn "trái/phải hướng way OSM"
             st.groups.forEach((g, gi) => {
-                const mem = st.entries.filter(e => e.item.group === gi);
-                const vx = mem.reduce((s, e) => s + e.item.nx, 0) * Math.sign(g.offset || 1);
-                const vy = mem.reduce((s, e) => s + e.item.ny, 0) * Math.sign(g.offset || 1);
-                const deg = (Math.atan2(vx, vy) * 180 / Math.PI + 360) % 360;   // 0 = Bắc, theo chiều kim đồng hồ
-                g.compass = ['Bắc', 'Đông Bắc', 'Đông', 'Đông Nam', 'Nam', 'Tây Nam', 'Tây', 'Tây Bắc'][Math.round(deg / 45) % 8];
+                const mem = st.entries.filter(e => e.item.group === gi && e.item.nx != null);
+                const vx = mem.reduce((s, e) => s + e.item.nx, 0), vy = mem.reduce((s, e) => s + e.item.ny, 0);
+                g.compassPos = _raCompass(vx, vy) || 'trái hướng đường';
+                g.compassNeg = _raCompass(-vx, -vy) || 'phải hướng đường';
             });
             _raRenderPanel();
             _raRenderPreview();
         }
 
-        function _raSetOffset(g, v) {
-            if (!_raState || !_raState.groups || !_raState.groups[g]) return;
-            const d = parseFloat(String(v).replace(',', '.'));
-            if (!isFinite(d) || d < 0 || d > RA_MAX_DIST) return;   // giữ giá trị cũ khi đang gõ dở / ngoài khoảng
-            const sign = Math.sign(_raState.groups[g].median) || 1;  // giữ phía của hàng, người dùng chỉ nhập độ lớn
-            _raState.offsets[g] = sign * d;
+        function _raCfgError(err, cfg, width) {
+            if (err === 'width') return `Bề rộng đường phải lớn hơn 0 và không quá ${RA_MAX_WIDTH} m.`;
+            if (err === 'inside') return `Vào lòng đường tối đa ½ bề rộng (${(width / 2).toFixed(1)} m) — quá nữa là sang bên kia tim.`;
+            return cfg.ref === 'tim' ? `Khoảng cách tới tim phải từ 0 đến ${RA_MAX_DIST} m.`
+                                     : `Khoảng cách không hợp lệ (vị trí mới phải cách tim không quá ${RA_MAX_DIST} m).`;
+        }
+        // Đổi cấu hình 1 hàng — kiểm hợp lệ trước khi nhận; sai thì báo và trả ô nhập về giá trị đang dùng
+        function _raUpdateCfg(g, patch) {
+            const st = _raState;
+            if (!st || !st.cfg || !st.cfg[g]) return;
+            const next = Object.assign({}, st.cfg[g], patch);
+            const t = _raTargetOffset(Object.assign({}, next, { width: st.width }));
+            if (t.error) { displayError(_raCfgError(t.error, next, st.width)); _raRenderPanel(); return; }
+            st.cfg[g] = next;
             _raRecompute();
         }
-        window._raSetOffset = _raSetOffset;
+        function _raSetRef(g, ref) {
+            const st = _raState;
+            if (!st || !st.groups || !st.groups[g] || !st.cfg[g] || st.cfg[g].ref === ref) return;
+            if (st.cfg[g].ref === 'mep') st.lastMep[g] = st.cfg[g].value;   // quay lại mép → lấy giá trị vừa sửa trong phiên
+            const d = _raDefaultCfg(ref, st.groups[g], _raLoadCfg(), st.width);
+            const value = (ref === 'mep' && Number.isFinite(st.lastMep[g])) ? _raFitCfg({ ref, value: st.lastMep[g] }, st.width).value : d.value;
+            _raUpdateCfg(g, { ref: d.ref, value });   // giữ phía đang chọn
+        }
+        function _raSetSide(g, s) { _raUpdateCfg(g, { side: s < 0 ? -1 : 1 }); }
+        function _raSetValue(g, v) { _raUpdateCfg(g, { value: parseFloat(String(v).replace(',', '.')) }); }
+        function _raSetWidth(v) {
+            const st = _raState;
+            if (!st) return;
+            const w = parseFloat(String(v).replace(',', '.'));
+            for (const c of st.cfg) {
+                const t = _raTargetOffset(Object.assign({}, c, { ref: 'mep', width: w }));
+                if (t.error === 'width' || (c.ref === 'mep' && t.error)) { displayError(_raCfgError(t.error, c, w)); _raRenderPanel(); return; }
+            }
+            st.width = w;
+            _raRecompute();
+        }
+        Object.assign(window, { _raSetRef, _raSetSide, _raSetValue, _raSetWidth });
 
         function _raRenderPreview() {
             if (!_raState) return;
             _raState.layer.clearLayers();
             _raState.entries.forEach(e => {
-                if (e.item.flag === 'far') return;
+                if (e.item.flag === 'far' || e.item.flag === 'end') return;
                 const from = [parseCoord(e.row[2]), parseCoord(e.row[3])], to = [e.ll.lat, e.ll.lon];
                 const on = e.item.checked;
                 L.polyline([from, to], { color: on ? '#f59e0b' : '#94a3b8', weight: 2, dashArray: '4 3', interactive: false }).addTo(_raState.layer);
@@ -16394,44 +16610,88 @@
             });
         }
 
-        function _raRenderPanel() {
+        const _RA_FLAG_NOTE = {
+            far:      ['#64748b', 'xa đường', 'Cách tim đường được chọn hơn 30 m'],
+            end:      ['#64748b', 'quá đầu đường', 'Trụ nằm ngoài đầu mút đường trên OSM — dời sẽ trượt dọc tuyến'],
+            big:      ['#dc2626', 'dời lớn', 'Cần dời hơn 10 m'],
+            cross:    ['#dc2626', 'bên kia đường', 'Trụ nằm ở phía bên kia tim, khác phần còn lại của hàng'],
+            straddle: ['#b45309', 'vắt qua tim', 'Trụ ở phía kia tim 2m trở lên — có thể GPS lệch hoặc trụ thật bên kia đường; kiểm tra rồi tick nếu đúng'],
+            junction: ['#b45309', 'gần nút giao', 'Vị trí mới gần nhánh khác của đường (đường đôi / nút giao)']
+        };
+
+        function _panelEl() {
             let el = document.getElementById('alignRoutePanel');
             if (!el) {
                 el = document.createElement('div');
                 el.id = 'alignRoutePanel';
                 el.setAttribute('role', 'dialog');
                 el.setAttribute('aria-label', 'Căn thẳng tuyến đèn');
-                el.style.cssText = 'position:fixed;right:16px;bottom:16px;z-index:1200;width:min(440px,calc(100vw - 32px));max-height:60vh;display:flex;flex-direction:column;background:#fff;border-radius:12px;box-shadow:0 10px 30px rgba(15,23,42,.25);font-size:13px;color:#1e293b;';
+                // Màn hẹp (điện thoại): panel cao hơn để bảng trụ còn chỗ dưới phần cấu hình
+                el.style.cssText = 'position:fixed;right:16px;bottom:16px;z-index:1040;width:min(440px,calc(100vw - 32px));max-height:' + (window.innerWidth < 600 ? '75vh' : '60vh') + ';display:flex;flex-direction:column;background:#fff;border-radius:12px;box-shadow:0 10px 30px rgba(15,23,42,.25);font-size:13px;color:#1e293b;';
                 document.body.appendChild(el);
             }
+            return el;
+        }
+
+        function _raRenderPanel() {
             const st = _raState;
+            if (!st) return;
+            const el = _panelEl();
+            const box = el.querySelector ? el.querySelector('[data-ra-scroll]') : null;
+            const scrollTop = box ? box.scrollTop : 0;   // tick/đổi số không làm bảng nhảy về đầu
             const nSel = st.entries.filter(e => e.item.checked).length;
-            const note = it => it.flag === 'far' ? '<span style="color:#64748b">xa đường</span>'
-                : it.flag === 'big' ? '<span style="color:#dc2626;font-weight:700">dời lớn</span>'
-                : it.flag === 'junction' ? '<span style="color:#b45309;font-weight:700" title="Vị trí mới gần nhánh khác của đường (đường đôi / nút giao)">gần nút giao</span>' : '';
-            const rowsHtml = st.entries.map((e, i) => `<tr style="border-top:1px solid #e2e8f0;${e.item.flag === 'big' ? 'background:#fef2f2;' : ''}">
-                <td style="padding:6px 4px;text-align:center;"><input type="checkbox" ${e.item.checked ? 'checked' : ''} ${e.item.flag === 'far' ? 'disabled' : ''}
-                    onchange="_raToggle(${i}, this.checked)" style="width:18px;height:18px;" aria-label="Chọn ${_esc(e.row[1] || '')}"></td>
-                <td style="padding:6px 4px;font-weight:600;">${_esc(e.row[1] || '')}</td>
-                <td style="padding:6px 4px;text-align:right;">${e.item.dist.toFixed(1)} m</td>
-                <td style="padding:6px 4px;text-align:right;font-weight:700;">${e.item.flag === 'far' ? '—' : e.item.move.toFixed(2) + ' m'}</td>
-                <td style="padding:6px 4px;">${note(e.item)}</td></tr>`).join('');
+            const note = it => {
+                const f = _RA_FLAG_NOTE[it.flag];
+                const parts = f ? [`<span style="color:${f[0]};font-weight:700" title="${f[2]}">${f[1]}</span>`] : [];
+                if (it.rtk) parts.push('<span style="color:#0369a1" title="Toạ độ đo RTK (cm) — mặc định không dời">đo RTK</span>');
+                return parts.join(' · ');
+            };
+            const rowsHtml = st.entries.map((e, i) => {
+                const fixed = e.item.flag === 'far' || e.item.flag === 'end';
+                const warn = e.item.flag === 'big' || e.item.flag === 'cross';
+                return `<tr style="border-top:1px solid #e2e8f0;${warn ? 'background:#fef2f2;' : ''}">
+                <td style="padding:0 4px;"><label style="display:flex;align-items:center;gap:8px;min-height:44px;cursor:${fixed ? 'default' : 'pointer'};">
+                    <input type="checkbox" ${e.item.checked ? 'checked' : ''} ${fixed ? 'disabled' : ''}
+                        onchange="_raToggle(${i}, this.checked)" style="width:20px;height:20px;flex:none;">
+                    <span style="font-weight:600;">${_esc(e.row[1] || '')}</span></label></td>
+                <td style="padding:0 4px;text-align:right;white-space:nowrap;">${e.item.dist.toFixed(1)} m</td>
+                <td style="padding:0 4px;text-align:right;font-weight:700;white-space:nowrap;">${fixed ? '—' : e.item.move.toFixed(2) + ' m'}</td>
+                <td style="padding:0 4px;font-size:12px;">${note(e.item)}</td></tr>`;
+            }).join('');
+            const roadName = String(st.roadKey).startsWith('way#') ? 'không tên' : st.roadKey;
+            const seg = (on, onclick, label, aria) => `<button type="button" onclick="${onclick}" aria-pressed="${on}" ${aria ? `aria-label="${aria}"` : ''}
+                style="flex:1;min-height:44px;padding:0 8px;border:1.5px solid ${on ? '#2563eb' : '#cbd5e1'};background:${on ? '#eff6ff' : '#fff'};color:${on ? '#1d4ed8' : '#334155'};border-radius:8px;font-weight:${on ? 800 : 600};font-size:13px;cursor:pointer;">${label}</button>`;
+            const numInput = (val, onchange, aria, min, max) => `<input type="number" inputmode="decimal" ${min != null ? `min="${min}"` : ''} max="${max}" step="0.1" value="${val}"
+                onchange="${onchange}" aria-label="${aria}" style="width:80px;min-height:44px;padding:4px 8px;border:1.5px solid #cbd5e1;border-radius:8px;font-size:16px;text-align:right;">`;
+            const anyMep = st.cfg.some(c => c.ref === 'mep');
+            const groupsHtml = st.groups.map((g, gi) => {
+                const c = st.cfg[gi];
+                const dist = Math.abs(g.offset);
+                return `<div style="margin-top:10px;${st.groups.length > 1 ? 'padding-top:8px;border-top:1px dashed #e2e8f0;' : ''}">
+                    ${st.groups.length > 1 ? `<div style="font-weight:700;margin-bottom:4px;">Hàng ${gi + 1} <span style="color:#94a3b8;font-weight:400;">(${g.count} trụ)</span></div>` : ''}
+                    <div style="display:flex;gap:6px;align-items:center;"><span style="width:56px;color:#64748b;">Mốc</span>
+                        ${seg(c.ref === 'mep', `_raSetRef(${gi},'mep')`, 'Mép đường')}${seg(c.ref === 'tim', `_raSetRef(${gi},'tim')`, 'Tim đường')}</div>
+                    <div style="display:flex;gap:6px;align-items:center;margin-top:6px;"><span style="width:56px;color:#64748b;">Phía</span>
+                        ${seg(c.side > 0, `_raSetSide(${gi},1)`, _esc(g.compassPos), 'Phía ' + _esc(g.compassPos))}${seg(c.side < 0, `_raSetSide(${gi},-1)`, _esc(g.compassNeg), 'Phía ' + _esc(g.compassNeg))}</div>
+                    <label style="display:flex;gap:6px;align-items:center;margin-top:6px;"><span style="width:56px;color:#64748b;">Cách</span>
+                        ${numInput(+c.value.toFixed(2), `_raSetValue(${gi}, this.value)`, c.ref === 'mep' ? 'Khoảng cách từ mép đường (m)' : 'Khoảng cách từ tim đường (m)',
+                            c.ref === 'mep' ? -st.width / 2 : 0, c.ref === 'mep' ? RA_MAX_DIST - st.width / 2 : RA_MAX_DIST)}
+                        <span style="flex:1;color:#64748b;font-size:12px;">m ${c.ref === 'mep' ? 'từ mép (+ ra vỉa hè, − vào lòng đường)' : 'từ tim'}
+                            → <b style="color:#1e293b;">cách tim ${dist.toFixed(1)} m</b></span></label>
+                </div>`;
+            }).join('');
             el.innerHTML = `
-                <div style="padding:12px 14px 8px;border-bottom:1px solid #e2e8f0;">
+                <div style="padding:12px 14px 10px;border-bottom:1px solid #e2e8f0;overflow:auto;max-height:${window.innerWidth < 600 ? '28vh' : '45vh'};flex:none;">
                     <div style="font-weight:800;font-size:14px;">📏 Căn thẳng tuyến ${_esc(st.base)}</div>
-                    <div style="color:#64748b;margin-top:2px;">Theo tim đường <b>${_esc(String(st.roadKey).startsWith('way#') ? 'không tên' : st.roadKey)}</b> — mỗi trụ chỉ dời vuông góc với đường.</div>
-                    ${st.groups.map((g, gi) => `
-                    <label style="display:flex;align-items:center;gap:8px;margin-top:8px;">
-                        <span style="flex:1;">${st.groups.length > 1 ? `Hàng ${gi + 1} — ` : ''}cách tim về phía <b>${g.compass}</b>
-                            <span style="color:#94a3b8;">(${g.count} trụ, trung vị ${Math.abs(g.median).toFixed(1)} m)</span></span>
-                        <input type="number" min="0" max="${RA_MAX_DIST}" step="0.1" value="${Math.abs(g.offset).toFixed(1)}"
-                            onchange="_raSetOffset(${gi}, this.value)" aria-label="Khoảng cách tới tim đường (m)"
-                            style="width:76px;min-height:40px;padding:4px 8px;border:1.5px solid #cbd5e1;border-radius:8px;font-size:16px;text-align:right;"> m
-                    </label>`).join('')}
+                    <div style="color:#64748b;margin-top:2px;">Theo đường <b>${_esc(roadName)}</b> — mỗi trụ chỉ dời vuông góc với đường.</div>
+                    ${anyMep ? `<label style="display:flex;gap:6px;align-items:center;margin-top:8px;"><span style="flex:1;color:#64748b;">Bề rộng mặt đường
+                        <span style="font-size:12px;">(OSM: ${st.osmWidth.toFixed(1)} m)</span></span>
+                        ${numInput(st.width, '_raSetWidth(this.value)', 'Bề rộng mặt đường (m)', 0.5, RA_MAX_WIDTH)} m</label>` : ''}
+                    ${groupsHtml}
                 </div>
-                <div style="overflow:auto;flex:1;">
+                <div data-ra-scroll style="overflow:auto;flex:1;">
                     <table style="width:100%;border-collapse:collapse;">
-                        <thead><tr style="color:#64748b;font-size:11px;text-align:left;"><th></th><th style="padding:6px 4px;">Trụ</th>
+                        <thead><tr style="color:#64748b;font-size:11px;text-align:left;"><th style="padding:6px 4px;">Trụ</th>
                             <th style="padding:6px 4px;text-align:right;">Cách tim</th><th style="padding:6px 4px;text-align:right;">Dời</th><th></th></tr></thead>
                         <tbody>${rowsHtml}</tbody>
                     </table>
@@ -16440,11 +16700,13 @@
                     <button onclick="_raClose()" style="flex:1;min-height:44px;border:1.5px solid #cbd5e1;background:#fff;border-radius:8px;font-weight:700;cursor:pointer;">Hủy</button>
                     <button onclick="_raApply()" ${nSel ? '' : 'disabled'} style="flex:2;min-height:44px;border:none;background:${nSel ? '#2563eb' : '#94a3b8'};color:#fff;border-radius:8px;font-weight:800;cursor:${nSel ? 'pointer' : 'default'};">Áp dụng (${nSel} trụ)</button>
                 </div>`;
+            const box2 = el.querySelector ? el.querySelector('[data-ra-scroll]') : null;
+            if (box2) box2.scrollTop = scrollTop;
         }
 
         function _raToggle(i, on) {
             const e = _raState && _raState.entries[i];
-            if (!e || e.item.flag === 'far') return;
+            if (!e || e.item.flag === 'far' || e.item.flag === 'end') return;
             e.item.checked = !!on;
             _raState.manual.set(e.idx, !!on);
             _raRenderPanel();
@@ -16460,12 +16722,16 @@
         }
         window._raClose = _raClose;
 
-        // Dời 1 trụ trên app: dữ liệu (VN2000 + khoảng cách cáp, đánh dấu dirty) + marker + nhãn
-        function _raMoveRow(row, lat, lon) {
-            updateMarkerCoordinatesInData(String(row[0] || '').trim() || String(row[1] || '').trim(), lat, lon);
-            _invalidatePopupCacheForRow(row);
+        // Dời marker + nhãn trên bản đồ. Marker trong cluster phải gỡ ra/thêm lại để lưới cluster cập nhật.
+        function _raMoveMarker(row, lat, lon) {
             const m = markers.find(x => x.marker && x.marker._rowRef === row);
-            if (m) { m.lat = lat; m.lon = lon; m.marker.setLatLng([lat, lon]); }
+            if (m) {
+                m.lat = lat; m.lon = lon;
+                const inCluster = markersCluster.hasLayer(m.marker);
+                if (inCluster) markersCluster.removeLayer(m.marker);
+                m.marker.setLatLng([lat, lon]);
+                if (inCluster) markersCluster.addLayer(m.marker);
+            }
             const rid = String(row[0] || row[1] || '');
             const lbl = _lblMarkers.get(rid);
             if (lbl) {
@@ -16475,39 +16741,92 @@
             }
         }
 
+        // Như updateMarkerCoordinatesInData nhưng thao tác ĐÚNG dòng được truyền vào (không tìm theo tên/ID —
+        // sheet có thể có dòng trùng tên): toạ độ, VN2000, khoảng cách cáp tới trụ cha + của các trụ con.
+        function _raSetRowCoords(row, lat, lon) {
+            const tsNow = new Date().toLocaleString('vi-VN');
+            row[2] = lat; row[3] = lon; row[13] = tsNow;
+            const vn = convertLatLonToVn2000(lat, lon);
+            row[19] = Math.round(vn.x); row[20] = Math.round(vn.y);
+            dirtyMovedRows.add(row);
+            const all = _raAllRows();
+            const pName = String(row[14] || '').trim();
+            if (pName) {
+                const p = all.find(r => r !== row && _raKeyOf(r).includes(pName));
+                if (p && isFinite(parseCoord(p[2])) && isFinite(parseCoord(p[3]))) {
+                    row[15] = Math.round(getDistanceMeters(lat, lon, parseCoord(p[2]), parseCoord(p[3])));
+                }
+            }
+            const keys = _raKeyOf(row);
+            all.forEach(c => {
+                if (c === row || !keys.includes(String(c[14] || '').trim())) return;
+                const cl = parseCoord(c[2]), co = parseCoord(c[3]);
+                if (!isFinite(cl) || !isFinite(co)) return;
+                c[15] = Math.round(getDistanceMeters(cl, co, lat, lon));
+                c[13] = tsNow;
+                dirtyMovedRows.add(c);
+                _invalidatePopupCacheForRow(c);
+            });
+            _invalidatePopupCacheForRow(row);
+            _raMoveMarker(row, lat, lon);
+        }
+
         async function _raApply() {
             if (!_raState) return;
-            const sel = _raState.entries.filter(e => e.item.checked && e.item.flag !== 'far');
+            if (!canDrag()) { _raClose(); displayError('Tài khoản hiện tại không có quyền dời marker.'); return; }
+            const sel = _raState.entries.filter(e => e.item.checked && e.item.flag !== 'far' && e.item.flag !== 'end');
             if (!sel.length) return;
-            _raUndo = sel.map(e => ({ row: e.row, lat: parseCoord(e.row[2]), lon: parseCoord(e.row[3]) }));
-            sel.forEach(e => _raMoveRow(e.row, e.ll.lat, e.ll.lon));
+            // Snapshot nguyên văn trụ được dời + trụ con (khoảng cách cáp đổi theo) để hoàn tác chính xác
+            const selKeys = new Set(sel.flatMap(e => _raKeyOf(e.row)));
+            const affected = new Set(sel.map(e => e.row));
+            _raAllRows().forEach(r => { if (selKeys.has(String(r[14] || '').trim())) affected.add(r); });
+            const snaps = [...affected].map(r => ({ row: r, vals: _RA_SNAP_COLS.map(c => r[c]) }));
+            sel.forEach(e => _raSetRowCoords(e.row, e.ll.lat, e.ll.lon));
+            updateDirtyMovedBadge();
+            _raUndo = { snaps, applied: new Map(sel.map(e => [e.row, [e.row[2], e.row[3]]])) };
             const base = _raState.base;
+            _raSaveCfg(_raState);   // nhớ mốc / khoảng cách mép / bề rộng đường cho lần căn sau
             _raClose();
             if (_cableVisible) _rebuildCableLines();
-            await pushMovedMarkersToSheet();
-            _raShowUndoBar(`Đã căn ${sel.length} trụ tuyến ${base}.`);
+            const res = await pushMovedMarkersToSheet();
+            const failed = res && res.failed;
+            _raShowUndoBar(failed
+                ? `Đã căn ${sel.length} trụ tuyến ${base} trên app, nhưng ${failed} dòng chưa lên được sheet — bấm "Cập nhật" để thử lại.`
+                : `Đã căn ${sel.length} trụ tuyến ${base}.`, !!failed);
         }
         window._raApply = _raApply;
 
-        function _raShowUndoBar(msg) {
-            let el = document.getElementById('alignRoutePanel');
-            if (!el) {
-                el = document.createElement('div');
-                el.id = 'alignRoutePanel';
-                el.style.cssText = 'position:fixed;right:16px;bottom:16px;z-index:1200;width:min(440px,calc(100vw - 32px));background:#fff;border-radius:12px;box-shadow:0 10px 30px rgba(15,23,42,.25);font-size:13px;color:#1e293b;';
-                document.body.appendChild(el);
-            }
+        function _raShowUndoBar(msg, isWarn) {
+            const el = _panelEl();
             el.innerHTML = `<div style="display:flex;align-items:center;gap:8px;padding:10px 14px;">
-                <div style="flex:1;">✅ ${_esc(msg)}</div>
+                <div style="flex:1;${isWarn ? 'color:#b45309;' : ''}">${isWarn ? '⚠' : '✅'} ${_esc(msg)}</div>
                 <button onclick="_raUndoAlign()" style="min-height:44px;padding:0 14px;border:1.5px solid #f59e0b;background:#fffbeb;color:#b45309;border-radius:8px;font-weight:700;cursor:pointer;">↩ Hoàn tác</button>
                 <button onclick="_raClose()" aria-label="Đóng" style="min-height:44px;min-width:44px;border:none;background:none;font-size:18px;cursor:pointer;">✕</button></div>`;
         }
 
         async function _raUndoAlign() {
             if (!_raUndo) return;
-            const list = _raUndo;
+            if (!canDrag()) { _raClose(); _raUndo = null; displayError('Tài khoản hiện tại không có quyền dời marker.'); return; }
+            const u = _raUndo;
             _raUndo = null;
-            list.forEach(u => _raMoveRow(u.row, u.lat, u.lon));
+            const live = new Set(_raAllRows());
+            if (![...u.applied.keys()].every(r => live.has(r))) {
+                _raClose();
+                displayError('Dữ liệu đã được tải lại sau khi căn — không hoàn tác được nữa.');
+                return;
+            }
+            const movedAgain = [...u.applied].filter(([r, ll]) => r[2] !== ll[0] || r[3] !== ll[1]).map(([r]) => String(r[1] || r[0]));
+            if (movedAgain.length && !confirm(`${movedAgain.length} trụ đã bị dời tiếp sau khi căn (${movedAgain.slice(0, 5).join(', ')}${movedAgain.length > 5 ? '…' : ''}).\nHoàn tác sẽ đưa cả các trụ này về vị trí trước khi căn. Tiếp tục?`)) {
+                _raUndo = u;
+                return;
+            }
+            u.snaps.forEach(s => {
+                _RA_SNAP_COLS.forEach((c, k) => { s.row[c] = s.vals[k]; });
+                dirtyMovedRows.add(s.row);
+                _invalidatePopupCacheForRow(s.row);
+                _raMoveMarker(s.row, parseCoord(s.row[2]), parseCoord(s.row[3]));
+            });
+            updateDirtyMovedBadge();
             _raClose();
             if (_cableVisible) _rebuildCableLines();
             await pushMovedMarkersToSheet();
