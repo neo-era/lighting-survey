@@ -1,4 +1,4 @@
-const CACHE = 'lighting-survey-v174';
+const CACHE = 'lighting-survey-v175';
 
 // Assets tĩnh pre-cache khi install (icon + ảnh mẫu + CAD blocks + title templates T21 + core modules)
 const STATIC_ASSETS = [
@@ -16,6 +16,12 @@ const STATIC_ASSETS = [
   'src/features/align-route.js',
   'src/features/cad-export.js',
   'src/features/osm.js',
+  'src/features/mst-ui.js',
+  'src/features/data-tools.js',
+  'src/features/cad-overlay.js',
+  'src/features/report.js',
+  'src/features/daily-report.js',
+  'src/features/csv-import.js',
   // T21 CAD Generator — 8 placeholder blocks (kỹ sư CAD sẽ thay file sau)
   'assets/dxf-blocks/pole_stk_1l.dxf',
   'assets/dxf-blocks/pole_stk_2l.dxf',

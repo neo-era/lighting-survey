@@ -20,6 +20,12 @@ const MODULES = {
     'src/features/align-route.js': { place: 'before', fns: ['openAlignRoute', '_raRecompute', '_raRenderPanel', '_raApply', '_raUndoAlign', '_raClose', '_raBulk', '_raBulkSelect', '_raToggle'] },
     'src/features/cad-export.js': { place: 'inline', fns: ['_generateCadDrawing', '_generateSingleLineDrawing', '_generateOverviewDrawing', '_drawAutoLegend', '_drawCabinetSymbol', '_drawTitleBlockStateFull', '_openCadGenerator', '_onCgExport', '_onCgExportRun', '_onCgBatchExport', '_onCgCompileFullDossier', '_raPlanAlign', '_rlDrawLampBlock', '_dxfEscape', '_saveBlob'] },
     'src/features/osm.js': { place: 'inline', fns: ['_fetchOsmBasemap', '_overpassFetch', '_osmBoundsKey', '_drawOsmBasemapInDxf', '_filletCorners', '_osmRoadWidth', '_mergeRoadChains'] },
+    'src/features/mst-ui.js': { place: 'inline', fns: ['_openAutoMstModal', '_onMstTuChange', '_mstDoPreview', '_mstApplyToData', '_mstRollback', '_mstGetNodesForTu'] },
+    'src/features/data-tools.js': { place: 'inline', fns: ['_batchReverseGeocode', '_confirmEditExcelUpdate'] },
+    'src/features/cad-overlay.js': { place: 'inline', fns: ['_handleCadUpload', '_openCadUpload', '_validateDxf', '_applyDxfFix', '_loadCachedCad', '_openCadAdjust', '_startStakeout', '_onCadTextDragEnd'] },
+    'src/features/report.js': { place: 'tail', fns: ['showReportModal', 'exportReport', 'getReportFilteredRows', 'renderReportPreview'] },
+    'src/features/daily-report.js': { place: 'tail', fns: ['openDailyReportModal', '_loadDailyReport', '_renderDailyReport'] },
+    'src/features/csv-import.js': { place: 'tail', fns: ['_onCsvImportChange', '_parseCsvSmart', '_detectCsvFormat', '_confirmCsvImport', '_extractLatLon'] },
 };
 const firstInline = html.search(/<script>\s/);
 for (const [file, { place, fns }] of Object.entries(MODULES)) {
@@ -28,6 +34,7 @@ for (const [file, { place, fns }] of Object.entries(MODULES)) {
     const at = html.indexOf(tag);
     ok(`${file}: được nạp bằng <script src>`, at > 0);
     if (place === 'before') ok(`${file}: nạp sau src/core/mst.js và TRƯỚC khối <script> chính`, at > html.indexOf('src/core/mst.js') && at < firstInline);
+    else if (place === 'tail') ok(`${file}: nạp sau khối <script> chính (thay khối script cuối)`, at > html.lastIndexOf('src/features/osm.js'));
     else ok(`${file}: ngắt khối script tại chỗ (</script> ↵ <script src> ↵ <script>)`,
         html.replace(/\r\n/g, '\n').includes(`</script>\n    <script src="${file}"></script>\n    <script>`));
     ok(`${file}: có trong precache sw.js`, sw.includes(`'${file}'`));

@@ -4027,4 +4027,4 @@ P68,P69 (BOM/điện) ─→ P70 (compile — attachment)
 - Top-level `let/const` của các classic script dùng chung 1 phạm vi toàn cục → không được khai báo trùng tên giữa các file.
 - Mỗi lần tách: **chỉ cắt/dán nguyên văn** (giữ cả thụt lề — đổi khoảng trắng trong template string nhiều dòng), thêm vào precache `sw.js` + bump cache, thêm vào `MODULES` trong `tests/module-split.test.mjs`.
 - `tests/module-split.test.mjs` kiểm: thứ tự nạp, precache, không còn bản trùng trong index.html, mọi handler `on*="..."` trỏ tới hàm có thật.
-- Lộ trình: ~~đợt 1~~ ✅ v173 · ~~đợt 2~~ ✅ v174 · đợt 3 import (CSV/CAD)/print PDF/mst-ui/report · đợt 4 lõi (`src/app/`) · đợt 5 CSS.
+- Lộ trình: ~~đợt 1~~ ✅ v173 · ~~đợt 2~~ ✅ v174 · ~~đợt 3~~ ✅ v175 (mst-ui, data-tools, cad-overlay, report, daily-report, csv-import) · đợt 4 in PDF (đang xen kẽ xoay map/panel — cần gom trước) + lõi (`src/app/`) · đợt 5 CSS.
