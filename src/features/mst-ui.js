@@ -24,6 +24,7 @@
             // Chọn tủ đầu tiên mặc định (multi-select vẫn support Ctrl/⌘+click add more)
             if (sel.options.length > 0) sel.options[0].selected = true;
             _mstResult = null;
+            _mstRestoreRoadOpts();
             document.getElementById('mstBtnApply').disabled = true;
             _onMstTuChange();
             modal.style.display = 'flex';
@@ -180,7 +181,56 @@
         }
         window._mstDiff = _mstDiff;
 
-        function _mstDoPreview() {
+        // v176 — tuỳ chọn tránh băng qua đường (nhớ trong localStorage)
+        function _mstSaveRoadOpts() {
+            try {
+                localStorage.setItem('mst_avoid_road', document.getElementById('mstAvoidRoad').checked ? '1' : '0');
+                localStorage.setItem('mst_cross_penalty', String(document.getElementById('mstCrossPenalty').value || ''));
+            } catch (e) { _swallow(e); }
+        }
+        function _mstRestoreRoadOpts() {
+            try {
+                const a = localStorage.getItem('mst_avoid_road'), p = localStorage.getItem('mst_cross_penalty');
+                const cb = document.getElementById('mstAvoidRoad'), inp = document.getElementById('mstCrossPenalty');
+                if (cb && a != null) cb.checked = a === '1';
+                if (inp && p) inp.value = p;
+            } catch (e) { _swallow(e); }
+        }
+        window._mstSaveRoadOpts = _mstSaveRoadOpts;
+        // Tải đường OSM quanh các trụ của các tủ đã chọn → bộ đếm băng đường; lỗi → null (tính như cũ)
+        async function _mstLoadCrossCounter(tus) {
+            const pts = [];
+            for (const tu of tus) for (const n of _mstGetNodesForTu(tu)) pts.push(n);
+            if (pts.length < 2) return null;
+            const lats = pts.map(n => n.lat), lons = pts.map(n => n.lon);
+            const PAD = 0.0006;   // ~65 m
+            const bounds = { minLat: Math.min(...lats) - PAD, maxLat: Math.max(...lats) + PAD,
+                             minLon: Math.min(...lons) - PAD, maxLon: Math.max(...lons) + PAD };
+            const osm = typeof _raFetchRoads === 'function' ? await _raFetchRoads(bounds)
+                : await _fetchOsmBasemap(bounds, { roads: true, buildings: false });
+            return _mstRoadCrossCounter(osm && osm.roads, typeof _rlIsDrivable === 'function' ? _rlIsDrivable : null);
+        }
+
+        async function _mstDoPreview() {
+            if (_mstDoPreview._busy) return;
+            const tus0 = _mstGetSelectedTus();
+            const avoidEl = document.getElementById('mstAvoidRoad');
+            const avoid = !!(avoidEl && avoidEl.checked);
+            const penalty = Math.max(0, parseFloat((document.getElementById('mstCrossPenalty') || {}).value) || 0);
+            let crossFn = null;
+            if (avoid && penalty > 0 && tus0.length) {
+                const btn = document.getElementById('mstBtnPreview');
+                const orig = btn ? btn.textContent : '';
+                _mstDoPreview._busy = true;
+                if (btn) { btn.disabled = true; btn.textContent = '⏳ Đang tải đường OSM…'; }
+                try { crossFn = await _mstLoadCrossCounter(tus0); }
+                catch (e) { displayError && displayError('Không tải được đường OSM (' + e.message + ') — tính tuyến theo khoảng cách như cũ.'); }
+                finally { _mstDoPreview._busy = false; if (btn) { btn.disabled = false; btn.textContent = orig; } }
+            }
+            _mstDoPreviewRun(crossFn ? { cross: crossFn, penalty } : null);
+        }
+
+        function _mstDoPreviewRun(mstOpts) {
             const tus = _mstGetSelectedTus();
             const algo = document.getElementById('mstAlgo').value;
             const maxSeg = parseFloat(document.getElementById('mstMaxSegment').value) || 200;
@@ -201,7 +251,7 @@
                     perTu.push({ tu, skipped: true, nodes: nodes.length });
                     continue;
                 }
-                const edges = algo === 'nearest' ? _mstNearestChain(nodes) : _mstPrim(nodes);
+                const edges = algo === 'nearest' ? _mstNearestChain(nodes, mstOpts) : _mstPrim(nodes, mstOpts);
                 edges.forEach(e => { e._tu = tu; });
                 nodes.forEach(n => { n._tu = tu; });
                 const diff = _mstDiff(edges, tu);
@@ -221,6 +271,19 @@
                 return;
             }
 
+            // Số đoạn băng đường: MST mới vs cáp đang có trong sheet (cùng các tủ)
+            let crossNew = 0, crossOld = 0;
+            if (mstOpts) {
+                crossNew = allEdges.reduce((n, e) => n + (e.cross > 0 ? 1 : 0), 0);
+                for (const pt of perTu) {
+                    if (pt.skipped) continue;
+                    const pos = new Map(pt.nodes.map(n => [n.name, n]));
+                    for (const n of pt.nodes) {
+                        const p = n.parent && pos.get(n.parent);
+                        if (p && mstOpts.cross(n, p) > 0) crossOld++;
+                    }
+                }
+            }
             const okTus = perTu.filter(p => !p.skipped).length;
             const skipTus = perTu.filter(p => p.skipped).length;
             _mstResult = { tuList: tus, algo, edges: allEdges, nodes: allNodes, perTu, maxSeg };
@@ -273,6 +336,7 @@
                         color = e.dist > maxSeg ? '#dc2626' : '#059669';
                     }
                     if (e.dist > maxSeg) { color = '#dc2626'; weight = 5; }
+                    if (e.cross > 0) { color = '#be123c'; weight = 5; dashArray = '2 5'; label = '🛣' + label; }   // v176 — băng qua đường
                     L.polyline([[f.lat, f.lon], [t.lat, t.lon]], {
                         color, weight, dashArray, opacity
                     }).addTo(_mstPreviewLayer);
@@ -304,6 +368,7 @@
                 : '';
             document.getElementById('mstPreview').innerHTML = `
                 ✅ MST xong: <b>${okTus}</b> tủ · <b>${allEdges.length}</b> đoạn cáp · Tổng <b>${Math.round(totalLen)}m</b>${warnMsg}
+                ${mstOpts ? `<br>🛣 <b style="color:${crossNew ? '#be123c' : '#15803d'};">${crossNew} đoạn băng qua đường</b> <span style="color:#64748b;">(cáp hiện tại: ${crossOld})</span>` : ''}
                 ${skipTus ? `<br><span style="color:#dc2626;font-size:11px;">⚠ ${skipTus} tủ bị skip (không đủ node)</span>` : ''}
                 <br><span style="color:#64748b;font-size:11px;">P5: cáp sheet cũ mờ xám → MST overlay 4 màu. Chọn chế độ Áp dụng.</span>
             `;
@@ -331,6 +396,7 @@
             if (diffBtn) diffBtn.disabled = (totalChanged + totalAdded) === 0;
         }
         window._mstDoPreview = _mstDoPreview;
+        window._mstDoPreviewRun = _mstDoPreviewRun;
 
         async function _mstApplyToData(diffOnly) {
             if (!_mstResult) return;
