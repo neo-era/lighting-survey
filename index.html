@@ -17321,7 +17321,11 @@
                 const from = [parseCoord(e.row[2]), parseCoord(e.row[3])], to = [e.ll.lat, e.ll.lon];
                 const on = e.item.checked;
                 L.polyline([from, to], { color: on ? '#f59e0b' : '#94a3b8', weight: 2, dashArray: '4 3', interactive: false }).addTo(_raState.layer);
-                L.circleMarker(to, { radius: 6, color: '#fff', weight: 2, fillColor: on ? '#16a34a' : '#94a3b8', fillOpacity: 1, interactive: false }).addTo(_raState.layer);
+                const pos = _raState.entries.indexOf(e);
+                L.circleMarker(to, { radius: 7, color: '#fff', weight: 2, fillColor: on ? '#16a34a' : '#94a3b8', fillOpacity: 1, interactive: true, bubblingMouseEvents: false })
+                    .bindTooltip(_esc(e.row[1] || '') + (on ? ' — bấm để bỏ' : ' — bấm để chọn'), { direction: 'top' })
+                    .on('click', () => _raToggle(pos, !e.item.checked))
+                    .addTo(_raState.layer);
             });
         }
 
@@ -17348,6 +17352,54 @@
             return el;
         }
 
+        // v171 — chọn hàng loạt trong bảng trụ. Chỉ đụng trụ dời được (không far/end).
+        // mode: 'all' (trừ RTK) | 'none' | 'invert' | 'group' (arg = chỉ số hàng; cả hàng đã chọn → bỏ, ngược lại chọn)
+        //       'maxMove' (arg = m: chỉ chọn trụ dời ≤ m, trừ RTK) | 'noWarn' (bỏ trụ có cảnh báo)
+        //       'range' (arg = { from, to, on }: vị trí trong bảng, gồm 2 đầu)
+        // Trả danh sách vị trí đã đổi trạng thái.
+        const _RA_WARN_FLAGS = new Set(['big', 'cross', 'straddle', 'junction']);
+        function _raBulkSelect(entries, mode, arg) {
+            const movable = e => e.item.flag !== 'far' && e.item.flag !== 'end';
+            let target;   // i → true/false
+            if (mode === 'group') {
+                const mem = entries.map((e, i) => i).filter(i => movable(entries[i]) && entries[i].item.group === arg);
+                const allOn = mem.length > 0 && mem.every(i => entries[i].item.checked);
+                target = new Map(mem.map(i => [i, !allOn]));
+            } else if (mode === 'range') {
+                const lo = Math.max(0, Math.min(arg.from, arg.to)), hi = Math.min(entries.length - 1, Math.max(arg.from, arg.to));
+                target = new Map();
+                for (let i = lo; i <= hi; i++) if (movable(entries[i])) target.set(i, !!arg.on);
+            } else {
+                target = new Map();
+                entries.forEach((e, i) => {
+                    if (!movable(e)) return;
+                    if (mode === 'all') { if (!e.item.rtk) target.set(i, true); }
+                    else if (mode === 'none') target.set(i, false);
+                    else if (mode === 'invert') target.set(i, !e.item.checked);
+                    else if (mode === 'maxMove') target.set(i, !e.item.rtk && e.item.move <= arg + 1e-9);
+                    else if (mode === 'noWarn') { if (_RA_WARN_FLAGS.has(e.item.flag)) target.set(i, false); }
+                });
+            }
+            const changed = [];
+            for (const [i, on] of target) if (entries[i].item.checked !== on) { entries[i].item.checked = on; changed.push(i); }
+            return changed;
+        }
+        function _raBulk(mode, arg) {
+            const st = _raState;
+            if (!st) return;
+            if (mode === 'maxMove') {
+                const v = parseFloat(String(arg).replace(',', '.'));
+                if (!(v >= 0)) { displayError('Nhập số mét dời tối đa ≥ 0.'); return; }
+                st.maxMove = v; arg = v;
+            }
+            const changed = _raBulkSelect(st.entries, mode, arg);
+            changed.forEach(i => st.manual.set(st.entries[i].idx, st.entries[i].item.checked));
+            _raRenderPanel();
+            _raRenderPreview();
+        }
+        function _raSetTab(t) { if (_raState) { _raState.tab = t; _raRenderPanel(); } }
+        Object.assign(window, { _raBulk, _raSetTab });
+
         function _raRenderPanel() {
             const st = _raState;
             if (!st) return;
@@ -17355,6 +17407,9 @@
             const box = el.querySelector ? el.querySelector('[data-ra-scroll]') : null;
             const scrollTop = box ? box.scrollTop : 0;   // tick/đổi số không làm bảng nhảy về đầu
             const nSel = st.entries.filter(e => e.item.checked).length;
+            const multi = st.groups.length > 1;
+            const movableN = st.entries.filter(e => e.item.flag !== 'far' && e.item.flag !== 'end').length;
+            const tab = st.tab || 'pick';
             const note = it => {
                 const f = _RA_FLAG_NOTE[it.flag];
                 const parts = f ? [`<span style="color:${f[0]};font-weight:700" title="${f[2]}">${f[1]}</span>`] : [];
@@ -17367,8 +17422,9 @@
                 return `<tr style="border-top:1px solid #e2e8f0;${warn ? 'background:#fef2f2;' : ''}">
                 <td style="padding:0 4px;"><label style="display:flex;align-items:center;gap:8px;min-height:44px;cursor:${fixed ? 'default' : 'pointer'};">
                     <input type="checkbox" ${e.item.checked ? 'checked' : ''} ${fixed ? 'disabled' : ''}
-                        onchange="_raToggle(${i}, this.checked)" style="width:20px;height:20px;flex:none;">
+                        onclick="_raToggle(${i}, this.checked, event.shiftKey)" style="width:20px;height:20px;flex:none;">
                     <span style="font-weight:600;">${_esc(e.row[1] || '')}</span></label></td>
+                <td style="padding:0 4px;text-align:center;color:#64748b;">${multi && !fixed && e.item.group != null ? e.item.group + 1 : ''}</td>
                 <td style="padding:0 4px;text-align:right;white-space:nowrap;">${e.item.dist.toFixed(1)} m</td>
                 <td style="padding:0 4px;text-align:right;font-weight:700;white-space:nowrap;">${fixed ? '—' : e.item.move.toFixed(2) + ' m'}</td>
                 <td style="padding:0 4px;font-size:12px;">${note(e.item)}</td></tr>`;
@@ -17395,37 +17451,94 @@
                             → <b style="color:#1e293b;">cách ${st.dual ? 'trục giữa' : 'tim'} ${dist.toFixed(1)} m</b></span></label>
                 </div>`;
             }).join('');
+            const tabBtn = (id, label) => `<button type="button" role="tab" aria-selected="${tab === id}" onclick="_raSetTab('${id}')"
+                style="flex:1;min-height:40px;border:none;border-bottom:3px solid ${tab === id ? '#2563eb' : 'transparent'};background:none;color:${tab === id ? '#1d4ed8' : '#64748b'};font-weight:${tab === id ? 800 : 600};font-size:13px;cursor:pointer;">${label}</button>`;
+            const chip = (onclick, label, title) => `<button type="button" onclick="${onclick}" ${title ? `title="${title}"` : ''}
+                style="min-height:36px;padding:0 10px;border:1.5px solid #cbd5e1;background:#fff;color:#334155;border-radius:999px;font-weight:600;font-size:12px;cursor:pointer;white-space:nowrap;">${label}</button>`;
+            const hasRtk = st.entries.some(e => e.item.rtk && e.item.flag !== 'far' && e.item.flag !== 'end');
+            const nWarn = st.entries.filter(e => e.item.checked && _RA_WARN_FLAGS.has(e.item.flag)).length;
+            const maxMove = st.maxMove != null ? st.maxMove : 2;
+            const groupChips = multi ? st.groups.map((g, gi) => {
+                const mem = st.entries.filter(e => e.item.group === gi && e.item.flag !== 'far' && e.item.flag !== 'end');
+                const on = mem.filter(e => e.item.checked).length;
+                return chip(`_raBulk('group',${gi})`, `Hàng ${gi + 1} <span style="color:#64748b;font-weight:400;">${on}/${mem.length}</span>`,
+                    on === mem.length ? 'Bỏ chọn cả hàng' : 'Chọn cả hàng');
+            }).join('') : '';
+            const pickBar = `
+                <div style="padding:8px 14px;border-bottom:1px solid #e2e8f0;flex:none;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+                        <span aria-live="polite"><b>Đã chọn ${nSel}/${movableN}</b>${st.entries.length > movableN ? ` <span style="color:#94a3b8;font-size:12px;">(${st.entries.length - movableN} không dời được)</span>` : ''}</span>
+                        ${nWarn ? `<span style="color:#dc2626;font-size:12px;font-weight:700;">⚠ ${nWarn} trụ có cảnh báo</span>` : ''}
+                    </div>
+                    <div style="display:flex;flex-wrap:wrap;gap:6px;">
+                        ${chip(`_raBulk('all')`, hasRtk ? '☑ Tất cả (trừ RTK)' : '☑ Tất cả', hasRtk ? 'Trụ đo RTK chính xác hơn tim OSM — tick tay nếu muốn dời' : '')}
+                        ${chip(`_raBulk('none')`, '☐ Bỏ hết')}
+                        ${chip(`_raBulk('invert')`, '⇄ Đảo')}
+                        ${groupChips}
+                        <span style="display:inline-flex;align-items:center;gap:4px;border:1.5px solid #cbd5e1;border-radius:999px;padding:0 4px 0 10px;min-height:36px;">
+                            <button type="button" onclick="_raBulk('maxMove', document.getElementById('raMaxMove').value)" style="border:none;background:none;font-weight:600;font-size:12px;color:#334155;cursor:pointer;padding:0;">Chỉ dời ≤</button>
+                            <input id="raMaxMove" type="number" inputmode="decimal" min="0" step="0.5" value="${maxMove}" aria-label="Số mét dời tối đa"
+                                onkeydown="if(event.key==='Enter')_raBulk('maxMove', this.value)" style="width:56px;min-height:30px;border:1px solid #e2e8f0;border-radius:6px;font-size:16px;text-align:right;padding:0 4px;"> m</span>
+                        ${chip(`_raBulk('noWarn')`, '⚠ Bỏ trụ cảnh báo', 'Bỏ chọn trụ dời lớn / bên kia đường / vắt tim / gần nút giao')}
+                    </div>
+                    <div style="color:#94a3b8;font-size:11px;margin-top:4px;">Giữ Shift khi tick để chọn cả dải · bấm chấm trên bản đồ để chọn/bỏ</div>
+                </div>`;
+            const cfgSummary = st.groups.map((g, gi) => {
+                const c = st.cfg[gi];
+                return `${multi ? `Hàng ${gi + 1}: ` : ''}${c.ref === 'mep' ? 'Mép' : 'Tim'} · ${_esc(c.side > 0 ? g.compassPos : g.compassNeg)} · ${(+c.value).toFixed(1)} m`;
+            }).join(' &nbsp;|&nbsp; ');
             el.innerHTML = `
-                <div style="padding:12px 14px 10px;border-bottom:1px solid #e2e8f0;overflow:auto;max-height:${window.innerWidth < 600 ? '28vh' : '45vh'};flex:none;">
+                <div style="padding:12px 14px 0;flex:none;">
                     <div style="font-weight:800;font-size:14px;">📏 Căn thẳng tuyến ${_esc(st.base)}</div>
                     <div style="color:#64748b;margin-top:2px;">Theo đường <b>${_esc(roadName)}</b> — mỗi trụ chỉ dời vuông góc với đường.</div>
+                    <div role="tablist" style="display:flex;margin-top:6px;border-bottom:1px solid #e2e8f0;">
+                        ${tabBtn('cfg', '⚙ Cấu hình')}${tabBtn('pick', `☑ Chọn trụ (${nSel}/${movableN})`)}
+                    </div>
+                </div>
+                ${tab === 'cfg' ? `
+                <div data-ra-cfg style="padding:4px 14px 10px;overflow:auto;flex:1;">
                     ${st.dual ? `<div style="margin-top:6px;padding:6px 8px;background:#eff6ff;border-radius:8px;color:#1e40af;font-size:12px;">
                         🛣 <b>Đường đôi</b> — 2 tim 2 chiều xe cách nhau ~${st.dual.gap.toFixed(1)} m. Căn theo <b>trục giữa</b>; mép = mép ngoài cả con đường.</div>` : ''}
                     ${anyMep ? `<label style="display:flex;gap:6px;align-items:center;margin-top:8px;"><span style="flex:1;color:#64748b;">${st.dual ? 'Bề rộng 1 chiều xe' : 'Bề rộng mặt đường'}
                         <span style="font-size:12px;">(OSM: ${st.osmWidth.toFixed(1)} m)</span></span>
                         ${numInput(st.width, '_raSetWidth(this.value)', 'Bề rộng mặt đường (m)', 0.5, RA_MAX_WIDTH)} m</label>` : ''}
                     ${groupsHtml}
-                </div>
+                </div>` : `
+                <div style="padding:6px 14px 0;color:#64748b;font-size:12px;flex:none;">⚙ ${cfgSummary}</div>
+                ${pickBar}
                 <div data-ra-scroll style="overflow:auto;flex:1;">
                     <table style="width:100%;border-collapse:collapse;">
-                        <thead><tr style="color:#64748b;font-size:11px;text-align:left;"><th style="padding:6px 4px;">Trụ</th>
+                        <thead style="position:sticky;top:0;background:#fff;z-index:1;"><tr style="color:#64748b;font-size:11px;text-align:left;">
+                            <th style="padding:6px 4px;"><label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+                                <input type="checkbox" data-ra-all aria-label="Chọn / bỏ tất cả" ${nSel && nSel === movableN ? 'checked' : ''}
+                                    onclick="_raBulk(this.checked ? 'all' : 'none')" style="width:20px;height:20px;">Trụ</label></th>
+                            <th style="padding:6px 4px;text-align:center;">${multi ? 'Hàng' : ''}</th>
                             <th style="padding:6px 4px;text-align:right;">Cách tim</th><th style="padding:6px 4px;text-align:right;">Dời</th><th></th></tr></thead>
                         <tbody>${rowsHtml}</tbody>
                     </table>
-                </div>
-                <div style="display:flex;gap:8px;padding:10px 14px;border-top:1px solid #e2e8f0;">
+                </div>`}
+                <div style="display:flex;gap:8px;padding:10px 14px;border-top:1px solid #e2e8f0;flex:none;">
                     <button onclick="_raClose()" style="flex:1;min-height:44px;border:1.5px solid #cbd5e1;background:#fff;border-radius:8px;font-weight:700;cursor:pointer;">Hủy</button>
                     <button onclick="_raApply()" ${nSel ? '' : 'disabled'} style="flex:2;min-height:44px;border:none;background:${nSel ? '#2563eb' : '#94a3b8'};color:#fff;border-radius:8px;font-weight:800;cursor:${nSel ? 'pointer' : 'default'};">Áp dụng (${nSel} trụ)</button>
                 </div>`;
+            const allBox = el.querySelector ? el.querySelector('[data-ra-all]') : null;
+            if (allBox) allBox.indeterminate = nSel > 0 && nSel < movableN;
             const box2 = el.querySelector ? el.querySelector('[data-ra-scroll]') : null;
             if (box2) box2.scrollTop = scrollTop;
         }
 
-        function _raToggle(i, on) {
-            const e = _raState && _raState.entries[i];
+        function _raToggle(i, on, shift) {
+            const st = _raState;
+            const e = st && st.entries[i];
             if (!e || e.item.flag === 'far' || e.item.flag === 'end') return;
+            if (shift && Number.isInteger(st.lastClick) && st.lastClick !== i) {
+                // Shift+click: cả dải từ ô bấm trước tới ô này nhận cùng trạng thái
+                _raBulkSelect(st.entries, 'range', { from: st.lastClick, to: i, on: !!on })
+                    .forEach(k => st.manual.set(st.entries[k].idx, st.entries[k].item.checked));
+            }
             e.item.checked = !!on;
-            _raState.manual.set(e.idx, !!on);
+            st.manual.set(e.idx, !!on);
+            st.lastClick = i;
             _raRenderPanel();
             _raRenderPreview();
         }
