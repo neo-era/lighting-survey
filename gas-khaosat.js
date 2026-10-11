@@ -1055,6 +1055,10 @@ function doPost(e) {
     // P57: Auto phase assignment (round-robin A/B/C) cho toàn tủ
     if (data.action === 'assign_phases')    return _withScriptLock(function() { return handleAssignPhases(data); });
 
+    // v150: Dynamic district management (tự tạo tab địa bàn mới)
+    if (data.action === 'list_dia_ban')     return handleListDiaBan(data);
+    if (data.action === 'create_dia_ban')   return _withScriptLock(function() { return handleCreateDiaBan(data); });
+
     // Kiểm tra kết nối đọc/ghi Google Sheet
     if (data.action === 'check_sheet') return handleCheckSheet(data);
 
@@ -3440,5 +3444,172 @@ function handleGetDailyReport(data) {
     return jsonResponse({ status: 'ok', date: dateStr, report: report });
   } catch (err) {
     return jsonResponse({ status: 'error', message: 'get_daily_report lỗi: ' + err.message });
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// v150 — DIA BAN MANAGEMENT (tự tạo tab địa bàn mới)
+// Design doc: docs/design-auto-create-sheet.md
+// ═══════════════════════════════════════════════════════════════════════════
+
+var DIA_BAN_SHEET = 'DiaBan';
+var DIA_BAN_HEADERS = ['sheet', 'label', 'csvUrl', 'prefix', 'region', 'centerLat', 'centerLon', 'createdAt', 'createdBy', 'status'];
+
+function _getOrCreateDiaBanSheet() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sh = ss.getSheetByName(DIA_BAN_SHEET);
+  if (sh) return sh;
+  sh = ss.insertSheet(DIA_BAN_SHEET);
+  sh.getRange(1, 1, 1, DIA_BAN_HEADERS.length).setValues([DIA_BAN_HEADERS])
+    .setFontWeight('bold').setBackground('#f1f5f9');
+  sh.setFrozenRows(1);
+  return sh;
+}
+
+function _buildGvizUrl(spreadsheetId, sheetName) {
+  return 'https://docs.google.com/spreadsheets/d/' + spreadsheetId +
+         '/gviz/tq?tqx=out:csv&sheet=' + encodeURIComponent(sheetName);
+}
+
+// Test GViz URL fetch được không — nếu 200 và content có CSV format thì OK
+function _testGvizUrl(url) {
+  try {
+    var res = UrlFetchApp.fetch(url, { muteHttpExceptions: true, followRedirects: true });
+    var code = res.getResponseCode();
+    if (code !== 200) return { ok: false, code: code };
+    var body = res.getContentText().slice(0, 200);
+    if (body.indexOf(',') === -1 && body.indexOf('"') === -1) {
+      return { ok: false, code: code, body: body };
+    }
+    return { ok: true, code: code };
+  } catch (e) {
+    return { ok: false, err: e.message };
+  }
+}
+
+function _validateSheetName(name, existingSheets) {
+  if (!name || typeof name !== 'string') return { ok: false, err: 'Tên tab bắt buộc' };
+  var trimmed = String(name).trim();
+  if (!/^[A-Za-z0-9_]{1,50}$/.test(trimmed)) {
+    return { ok: false, err: 'Tên tab chỉ A-Z, 0-9, _ (max 50 ký tự)' };
+  }
+  if (existingSheets.indexOf(trimmed) >= 0) {
+    return { ok: false, err: 'Tab "' + trimmed + '" đã tồn tại trong Google Sheet' };
+  }
+  return { ok: true, name: trimmed };
+}
+
+function _validateLabel(label) {
+  if (!label || typeof label !== 'string') return { ok: false, err: 'Label bắt buộc' };
+  var trimmed = String(label).trim();
+  if (trimmed.length < 1 || trimmed.length > 80) return { ok: false, err: 'Label 1-80 ký tự' };
+  return { ok: true, label: trimmed };
+}
+
+function _validatePrefix(prefix, existingPrefixes) {
+  if (!prefix) return { ok: false, err: 'Prefix bắt buộc' };
+  var trimmed = String(prefix).trim().toUpperCase();
+  if (!/^[A-Z0-9]{1,10}$/.test(trimmed)) return { ok: false, err: 'Prefix chỉ A-Z, 0-9 (max 10)' };
+  var warn = existingPrefixes.indexOf(trimmed) >= 0 ? 'Prefix "' + trimmed + '" đã dùng cho địa bàn khác (ID có thể trùng)' : null;
+  return { ok: true, prefix: trimmed, warn: warn };
+}
+
+function handleListDiaBan(data) {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var sh = ss.getSheetByName(DIA_BAN_SHEET);
+    if (!sh) return jsonResponse({ status: 'ok', items: [] });
+    var lastRow = sh.getLastRow();
+    if (lastRow < 2) return jsonResponse({ status: 'ok', items: [] });
+    var values = sh.getRange(2, 1, lastRow - 1, DIA_BAN_HEADERS.length).getValues();
+    var items = [];
+    for (var i = 0; i < values.length; i++) {
+      var r = values[i];
+      if (String(r[9] || 'active') === 'archived') continue;
+      items.push({
+        sheet: String(r[0] || ''),
+        label: String(r[1] || ''),
+        csvUrl: String(r[2] || ''),
+        prefix: String(r[3] || ''),
+        region: String(r[4] || ''),
+        centerLat: r[5] !== '' ? Number(r[5]) : null,
+        centerLon: r[6] !== '' ? Number(r[6]) : null
+      });
+    }
+    return jsonResponse({ status: 'ok', items: items });
+  } catch (err) {
+    return jsonResponse({ status: 'error', message: 'list_dia_ban: ' + err.message });
+  }
+}
+
+function handleCreateDiaBan(data) {
+  // v150 fix F2: _requireAdmin returns {ok, error} — pattern khớp các handler khác
+  var auth = _requireAdmin(data);
+  if (!auth.ok) return jsonResponse({ status: 'error', message: auth.error });
+
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var existingSheets = ss.getSheets().map(function(s) { return s.getName(); });
+
+  var vSheet = _validateSheetName(data.sheet, existingSheets);
+  if (!vSheet.ok) return jsonResponse({ status: 'error', field: 'sheet', message: vSheet.err });
+
+  var vLabel = _validateLabel(data.label);
+  if (!vLabel.ok) return jsonResponse({ status: 'error', field: 'label', message: vLabel.err });
+
+  var diaBanSh = _getOrCreateDiaBanSheet();
+  var existingPrefixes = [];
+  var dbLastRow = diaBanSh.getLastRow();
+  if (dbLastRow >= 2) {
+    var pfxCol = diaBanSh.getRange(2, 4, dbLastRow - 1, 1).getValues();
+    for (var i = 0; i < pfxCol.length; i++) {
+      if (pfxCol[i][0]) existingPrefixes.push(String(pfxCol[i][0]).trim().toUpperCase());
+    }
+  }
+  var vPrefix = _validatePrefix(data.prefix, existingPrefixes);
+  if (!vPrefix.ok) return jsonResponse({ status: 'error', field: 'prefix', message: vPrefix.err });
+
+  var newSheet = null;
+  try {
+    newSheet = ss.insertSheet(vSheet.name);
+
+    var sourceSheet = ss.getSheetByName('DanhSachTru');
+    var headers;
+    if (sourceSheet && sourceSheet.getLastColumn() > 0) {
+      headers = sourceSheet.getRange(1, 1, 1, sourceSheet.getLastColumn()).getValues()[0];
+    } else {
+      headers = HEADER;
+    }
+    newSheet.getRange(1, 1, 1, headers.length).setValues([headers])
+      .setFontWeight('bold').setBackground('#f1f5f9');
+    newSheet.setFrozenRows(1);
+
+    var ssId = ss.getId();
+    var csvUrl = _buildGvizUrl(ssId, vSheet.name);
+    var testRes = _testGvizUrl(csvUrl);
+    var csvMethod = testRes.ok ? 'gviz' : 'gviz-untested';
+
+    var now = new Date();
+    var username = (data.adminAuth && data.adminAuth.username) || 'admin';
+    diaBanSh.appendRow([
+      vSheet.name, vLabel.label, csvUrl, vPrefix.prefix,
+      String(data.region || ''), '', '',
+      now.toISOString(), username, 'active'
+    ]);
+
+    return jsonResponse({
+      status: 'ok',
+      sheet: vSheet.name,
+      label: vLabel.label,
+      csvUrl: csvUrl,
+      prefix: vPrefix.prefix,
+      csvMethod: csvMethod,
+      warn: vPrefix.warn,
+      hint: !testRes.ok ? 'GViz test fail (code=' + testRes.code + '). Nếu dropdown không load được dữ liệu, kiểm tra Google Sheet share settings: File → Share → Anyone with the link → Viewer.' : null
+    });
+  } catch (err) {
+    if (newSheet) {
+      try { ss.deleteSheet(newSheet); } catch (e) { /* silent */ }
+    }
+    return jsonResponse({ status: 'error', message: 'create_dia_ban lỗi: ' + err.message });
   }
 }

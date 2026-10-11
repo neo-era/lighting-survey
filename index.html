@@ -1858,6 +1858,11 @@
                                     color:#2563eb;background:#eff6ff;border:1px solid #bfdbfe;
                                     border-radius:6px;padding:4px 10px;text-align:center;">
                         </div>
+                        <!-- v150 — nút tạo địa bàn mới (admin only) -->
+                        <button id="btnCreateDiaBan" onclick="_openCreateDiaBan()" class="ctrl-btn outline"
+                                style="display:none;margin-top:6px;padding:7px;font-size:12px;color:#059669;border-color:#a7f3d0;background:#f0fdf4;width:100%;">
+                            ➕ Thêm địa bàn mới
+                        </button>
                     </div>
 
                     <div class="ctrl-divider"></div>
@@ -2234,6 +2239,76 @@
                 <div class="modal-footer" style="padding:8px 16px;justify-content:space-between;align-items:center;">
                     <small style="color:#94a3b8;">Ảnh đường phố: <a href="https://www.mapillary.com" target="_blank" style="color:#2563eb;">Mapillary</a> — cộng đồng đóng góp</small>
                     <button type="button" class="btn btn-secondary btn-sm" data-dismiss="modal" onclick="_cleanupMapillary()">Đóng</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- v150 — Create new Dia Ban modal (admin only) -->
+    <div class="modal fade" id="createDiaBanModal" tabindex="-1" role="dialog">
+        <div class="modal-dialog modal-dialog-centered" role="document">
+            <div class="modal-content">
+                <div class="modal-header" style="padding:12px 18px;background:linear-gradient(135deg,#059669,#10b981);color:#fff;">
+                    <h5 class="modal-title" style="font-size:15px;font-weight:700;">
+                        ➕ Thêm địa bàn mới
+                    </h5>
+                    <button type="button" class="close" data-dismiss="modal" style="color:#fff;opacity:.9;" onclick="_closeCreateDiaBan()">&times;</button>
+                </div>
+                <div class="modal-body" style="padding:16px 18px;">
+                    <div style="font-size:12px;color:#64748b;margin-bottom:12px;line-height:1.5;">
+                        Tạo tab Google Sheet mới + tự động register vào dropdown địa bàn.
+                        Admin only. Cần Google Sheet đã bật share "Anyone with the link → Viewer".
+                    </div>
+                    <div id="cdbError" style="display:none;background:#fef2f2;color:#dc2626;padding:8px 12px;border-radius:6px;font-size:13px;margin-bottom:12px;border:1px solid #fecaca;"></div>
+                    <div id="cdbWarn" style="display:none;background:#fffbeb;color:#92400e;padding:8px 12px;border-radius:6px;font-size:13px;margin-bottom:12px;border:1px solid #fde68a;"></div>
+
+                    <div class="form-group" style="margin-bottom:10px;">
+                        <label style="font-size:12px;font-weight:700;color:#334155;text-transform:uppercase;margin-bottom:4px;">
+                            Tên tab (sheet name) <span style="color:#dc2626;">*</span>
+                        </label>
+                        <input type="text" id="cdbSheet" class="form-control" placeholder="VD: Quan12 (A-Z, 0-9, _)"
+                               style="font-size:15px;" maxlength="50" autocomplete="off"
+                               oninput="_cdbOnSheetInput(this)">
+                        <small style="color:#64748b;font-size:11px;">Chỉ chữ A-Z, số 0-9, underscore. Không dấu, không khoảng trắng.</small>
+                    </div>
+
+                    <div class="form-group" style="margin-bottom:10px;">
+                        <label style="font-size:12px;font-weight:700;color:#334155;text-transform:uppercase;margin-bottom:4px;">
+                            Tên hiển thị (label) <span style="color:#dc2626;">*</span>
+                        </label>
+                        <input type="text" id="cdbLabel" class="form-control" placeholder="VD: Quận 12"
+                               style="font-size:15px;" maxlength="80" autocomplete="off">
+                        <small style="color:#64748b;font-size:11px;">Hiển thị trong dropdown chọn địa bàn. Tiếng Việt có dấu OK.</small>
+                    </div>
+
+                    <div class="form-row" style="display:flex;gap:10px;">
+                        <div class="form-group" style="flex:1;margin-bottom:10px;">
+                            <label style="font-size:12px;font-weight:700;color:#334155;text-transform:uppercase;margin-bottom:4px;">
+                                Prefix ID <span style="color:#dc2626;">*</span>
+                            </label>
+                            <input type="text" id="cdbPrefix" class="form-control" placeholder="VD: Q12"
+                                   style="font-size:15px;font-family:monospace;text-transform:uppercase;" maxlength="10" autocomplete="off"
+                                   oninput="this.value=this.value.toUpperCase().replace(/[^A-Z0-9]/g,'')">
+                            <small style="color:#64748b;font-size:11px;">Dùng cho auto ID (VD: Q12_001).</small>
+                        </div>
+                        <div class="form-group" style="flex:1;margin-bottom:10px;">
+                            <label style="font-size:12px;font-weight:700;color:#334155;text-transform:uppercase;margin-bottom:4px;">
+                                Khu vực
+                            </label>
+                            <select id="cdbRegion" class="form-control" style="font-size:15px;">
+                                <option value="TPHCM">TP.HCM</option>
+                                <option value="BinhDuong">Bình Dương</option>
+                                <option value="LongAn">Long An</option>
+                                <option value="Khac">Khác</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer" style="padding:10px 18px;border-top:1px solid #e2e8f0;">
+                    <button type="button" class="btn btn-outline-secondary btn-sm" data-dismiss="modal" onclick="_closeCreateDiaBan()">Hủy</button>
+                    <button type="button" id="cdbSubmitBtn" class="btn btn-success btn-sm" onclick="_submitCreateDiaBan()" style="background:#059669;border-color:#059669;">
+                        ➕ Tạo sheet mới
+                    </button>
                 </div>
             </div>
         </div>
@@ -5312,8 +5387,159 @@
             if (optCamera) optCamera.style.display = isAdmin ? '' : 'none';
             const optDenTat = document.getElementById('pageOptDenTat');
             if (optDenTat) optDenTat.style.display = isAdmin ? '' : 'none';
+            // v150 — nút tạo địa bàn chỉ hiện cho admin
+            const btnCDB = document.getElementById('btnCreateDiaBan');
+            if (btnCDB) btnCDB.style.display = isAdmin ? '' : 'none';
             _buildDistrictOptions();
+            // v150 — fetch dynamic districts từ GAS (background, không block UI)
+            _loadDynamicDistricts();
         }
+
+        // v150 — lazy load danh sách địa bàn từ sheet DiaBan (merge với hardcode DISTRICT_PAGES)
+        async function _loadDynamicDistricts() {
+            try {
+                const res = await fetch(KHAOSAT_GAS_URL, {
+                    method: 'POST',
+                    body: JSON.stringify({ action: 'list_dia_ban' }),
+                    headers: { 'Content-Type': 'text/plain' }
+                });
+                if (!res.ok) return;
+                const data = await res.json();
+                if (data.status !== 'ok' || !Array.isArray(data.items) || data.items.length === 0) return;
+                // Merge: dynamic WINS cho duplicate sheet key
+                const map = new Map(DISTRICT_PAGES.map(p => [p.sheet, p]));
+                data.items.forEach(it => {
+                    if (!it.sheet || !it.label || !it.csvUrl) return;
+                    map.set(it.sheet, { sheet: it.sheet, label: it.label, csvUrl: it.csvUrl });
+                    // Register prefix nếu chưa có
+                    if (it.prefix && !SHEET_ID_PREFIX[it.sheet]) {
+                        SHEET_ID_PREFIX[it.sheet] = it.prefix;
+                    }
+                });
+                DISTRICT_PAGES.length = 0;
+                map.forEach(v => DISTRICT_PAGES.push(v));
+                _buildDistrictOptions();
+            } catch (e) { _swallow(e); }
+        }
+        window._loadDynamicDistricts = _loadDynamicDistricts;
+
+        // v150 — Create Dia Ban modal: open + submit + validation
+        function _suggestPrefix(sheet) {
+            const letters = sheet.replace(/[^A-Z]/g, '');
+            const digits = sheet.match(/\d+/g);
+            return (letters.slice(0, 3) + (digits ? digits.join('') : '')).toUpperCase().slice(0, 10);
+        }
+
+        function _openCreateDiaBan() {
+            if (!currentUser || currentUser.role !== 'admin') {
+                displayError('Chỉ admin được tạo địa bàn mới.');
+                return;
+            }
+            if (typeof closeControlsModal === 'function') closeControlsModal();
+            // Clear previous state
+            document.getElementById('cdbSheet').value = '';
+            document.getElementById('cdbLabel').value = '';
+            document.getElementById('cdbPrefix').value = '';
+            document.getElementById('cdbRegion').value = 'TPHCM';
+            document.getElementById('cdbError').style.display = 'none';
+            document.getElementById('cdbWarn').style.display = 'none';
+            const btn = document.getElementById('cdbSubmitBtn');
+            btn.disabled = false;
+            btn.innerHTML = '➕ Tạo sheet mới';
+            if (typeof $ === 'function' && $.fn.modal) {
+                $('#createDiaBanModal').modal('show');
+            }
+        }
+        window._openCreateDiaBan = _openCreateDiaBan;
+
+        function _closeCreateDiaBan() {
+            if (typeof $ === 'function' && $.fn.modal) $('#createDiaBanModal').modal('hide');
+        }
+        window._closeCreateDiaBan = _closeCreateDiaBan;
+
+        // Auto-suggest prefix khi user gõ sheet name
+        function _cdbOnSheetInput(input) {
+            const prefixInput = document.getElementById('cdbPrefix');
+            if (prefixInput && !prefixInput.value) {
+                prefixInput.value = _suggestPrefix(input.value);
+            }
+        }
+        window._cdbOnSheetInput = _cdbOnSheetInput;
+
+        async function _submitCreateDiaBan() {
+            const errEl = document.getElementById('cdbError');
+            const warnEl = document.getElementById('cdbWarn');
+            const btn = document.getElementById('cdbSubmitBtn');
+            errEl.style.display = 'none'; warnEl.style.display = 'none';
+
+            const sheet = document.getElementById('cdbSheet').value.trim();
+            const label = document.getElementById('cdbLabel').value.trim();
+            const prefix = document.getElementById('cdbPrefix').value.trim().toUpperCase();
+            const region = document.getElementById('cdbRegion').value;
+
+            // Client-side quick validation (server validate lại chính thức)
+            if (!/^[A-Za-z0-9_]{1,50}$/.test(sheet)) {
+                errEl.textContent = 'Tên tab chỉ A-Z, 0-9, _ (max 50 ký tự)';
+                errEl.style.display = 'block'; return;
+            }
+            if (!label || label.length > 80) {
+                errEl.textContent = 'Label 1-80 ký tự'; errEl.style.display = 'block'; return;
+            }
+            if (!/^[A-Z0-9]{1,10}$/.test(prefix)) {
+                errEl.textContent = 'Prefix chỉ A-Z, 0-9 (max 10 ký tự)';
+                errEl.style.display = 'block'; return;
+            }
+
+            // v150 fix F1: _getAdminAuth là async → phải await
+            const auth = (typeof _getAdminAuth === 'function') ? await _getAdminAuth() : null;
+            if (!auth || !auth.username || !auth.password) {
+                errEl.textContent = 'Cần xác nhận mật khẩu admin để tiếp tục.';
+                errEl.style.display = 'block';
+                btn.disabled = false; btn.innerHTML = '➕ Tạo sheet mới';
+                return;
+            }
+
+            btn.disabled = true;
+            btn.innerHTML = '⏳ Đang tạo...';
+            try {
+                const res = await fetch(KHAOSAT_GAS_URL, {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        action: 'create_dia_ban',
+                        sheet, label, prefix, region,
+                        adminAuth: auth
+                    }),
+                    headers: { 'Content-Type': 'text/plain' }
+                });
+                const data = await res.json();
+                if (data.status === 'ok') {
+                    _closeCreateDiaBan();
+                    if (typeof displaySuccess === 'function') displaySuccess('✅ Đã tạo "' + data.label + '" — đang refresh dropdown...');
+                    else displayError('Đã tạo "' + data.label + '"');
+                    if (data.hint) {
+                        setTimeout(() => { if (typeof displayWarning === 'function') displayWarning(data.hint); }, 500);
+                    }
+                    if (data.warn) {
+                        setTimeout(() => { if (typeof displayWarning === 'function') displayWarning(data.warn); }, 1000);
+                    }
+                    // Reload dropdown + optional switch to new district
+                    await _loadDynamicDistricts();
+                } else if (data.status === 'busy') {
+                    errEl.textContent = 'Server đang bận. Thử lại sau 5s.';
+                    errEl.style.display = 'block';
+                } else {
+                    errEl.textContent = (data.field ? '[' + data.field + '] ' : '') + (data.message || 'Lỗi không rõ');
+                    errEl.style.display = 'block';
+                }
+            } catch (e) {
+                errEl.textContent = 'Lỗi mạng: ' + (e.message || e);
+                errEl.style.display = 'block';
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '➕ Tạo sheet mới';
+            }
+        }
+        window._submitCreateDiaBan = _submitCreateDiaBan;
 
         function _allowedPages() {
             // Admin luôn thấy tất cả địa bàn, bất kể cột vung trong sheet TaiKhoan
