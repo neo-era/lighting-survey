@@ -1595,14 +1595,22 @@
                     </div>
                 </div>
                 <div id="lcTuBar" style="margin-top:8px;padding:8px;border:1.5px solid #c7d2fe;background:#eef2ff;border-radius:8px;display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-size:12px;">
-                    <label for="lcTuInput" style="font-weight:700;color:#3730a3;margin:0;">Theo tủ:</label>
-                    <input id="lcTuInput" list="lcTuList" placeholder="🔍 Gõ tên tủ…" autocomplete="off" oninput="_lcTuOnInput()" style="flex:1;min-width:180px;padding:6px 8px;border:1.5px solid #a5b4fc;border-radius:6px;font-size:13px;">
-                    <datalist id="lcTuList"></datalist>
+                    <span style="font-weight:700;color:#3730a3;">Theo tủ:</span>
+                    <button id="lcTuToggle" type="button" onclick="_lcTuTogglePanel()" aria-haspopup="listbox" aria-expanded="false" aria-controls="lcTuPanel" style="flex:1;min-width:180px;text-align:left;padding:6px 10px;border:1.5px solid #a5b4fc;border-radius:6px;font-size:13px;background:#fff;cursor:pointer;min-height:34px;">Chọn tủ ▾</button>
                     <span id="lcTuInfo" style="color:#475569;font-size:11px;min-width:90px;">—</span>
                     <button id="lcTuBtnClear" onclick="_lcTuClear(false)" disabled style="padding:6px 10px;background:#fff;border:1.5px solid #dc2626;color:#dc2626;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;min-height:34px;">🗑 Xoá toàn bộ cáp của tủ</button>
                     <button id="lcTuBtnRerun" onclick="_lcTuRerun()" disabled style="padding:6px 10px;background:#fff;border:1.5px solid #059669;color:#059669;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;min-height:34px;">🌳 Chạy lại tối ưu</button>
                     <button id="lcTuBtnBoth" onclick="_lcTuClear(true)" disabled style="padding:6px 10px;background:#059669;border:1.5px solid #059669;color:#fff;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;min-height:34px;">🗑+🌳 Xoá + chạy lại</button>
                     <button id="lcTuBtnUndo" onclick="_lcTuUndo()" style="display:none;padding:6px 10px;background:#fff7ed;border:1.5px solid #ea580c;color:#c2410c;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;min-height:34px;">↩ Hoàn tác</button>
+                    <div id="lcTuPanel" style="display:none;flex-basis:100%;margin-top:4px;padding:8px;background:#fff;border:1.5px solid #a5b4fc;border-radius:8px;box-shadow:0 6px 18px rgba(30,41,59,.12);">
+                        <input id="lcTuFilter" type="search" placeholder="🔍 Gõ lọc tên tủ…" autocomplete="off" oninput="_lcTuRenderList()" aria-label="Lọc tên tủ" style="width:100%;padding:6px 8px;border:1.5px solid #cbd5e1;border-radius:6px;font-size:16px;margin-bottom:6px;">
+                        <div style="display:flex;gap:6px;margin-bottom:6px;flex-wrap:wrap;">
+                            <button type="button" onclick="_lcTuSelectAll(true)" style="padding:5px 10px;background:#eef2ff;border:1px solid #a5b4fc;border-radius:5px;font-size:12px;cursor:pointer;min-height:32px;">☑ Chọn tất cả (đang lọc)</button>
+                            <button type="button" onclick="_lcTuSelectAll(false)" style="padding:5px 10px;background:#f1f5f9;border:1px solid #cbd5e1;border-radius:5px;font-size:12px;cursor:pointer;min-height:32px;">☐ Bỏ hết</button>
+                            <span id="lcTuFilterInfo" style="align-self:center;color:#64748b;font-size:11px;"></span>
+                        </div>
+                        <div id="lcTuListBox" role="listbox" aria-multiselectable="true" style="max-height:240px;overflow-y:auto;border-top:1px solid #e2e8f0;"></div>
+                    </div>
                 </div>
                 <div style="margin-top:6px;padding:6px 8px;font-size:11px;color:#7f1d1d;background:#fef2f2;border-radius:5px;line-height:1.4;">
                     Xóa cáp = CLEAR cột <code>Marker gốc</code> + <code>Khoảng cách</code> (không xóa trụ). Fan-out / 🟤 Trùng tên / 🟪 Parent xa không xóa qua modal — dùng Auto MST hoặc sửa marker thủ công.
@@ -14114,14 +14122,17 @@
             return m;
         }
         // Các dòng thuộc tủ (cột Tủ điều khiển) đang có cáp (Marker gốc hoặc Khoảng cách) — gồm cả dòng trùng tên
-        function _tuCablePlan(rows, tuName) {
-            const tu = String(tuName || '').trim();
-            const inTu = tu ? rows.filter(r => String(r[7] || '').trim() === tu) : [];
+        // tuNames: 1 tên (string) hoặc nhiều tên (Array/Set)
+        function _tuCablePlan(rows, tuNames) {
+            const list = (typeof tuNames === 'string' ? [tuNames] : [...(tuNames || [])]).map(t => String(t || '').trim()).filter(Boolean);
+            const set = new Set(list);
+            const tu = list.length === 1 ? list[0] : list.join(', ');
+            const inTu = set.size ? rows.filter(r => set.has(String(r[7] || '').trim())) : [];
             const targets = inTu.filter(r => String(r[14] || '').trim() !== '' || String(r[15] || '').trim() !== '');
             const withCoord = targets.filter(_rowHasCoord).length;
             const poles = new Set(inTu.filter(r => { const t = parseInt(r[6]); return t >= 1 && t <= 4; })
                 .map(r => String(r[1] || '').trim()));
-            return { tu, targets, withCoord, noCoord: targets.length - withCoord, rowCount: inTu.length, poleCount: poles.size };
+            return { tu, tus: list, targets, withCoord, noCoord: targets.length - withCoord, rowCount: inTu.length, poleCount: poles.size };
         }
         // Xoá cáp tại chỗ; trả snapshot để hoàn tác (giữ tham chiếu dòng + ID)
         function _tuCableClearApply(plan, nowIso) {
@@ -14135,48 +14146,122 @@
         }
         // @@TUCABLE_END
 
-        let _lcTuUndoState = null;   // { tu, snap }
+        const LC_TU_BIG = 10;          // ≥ 10 tủ (hoặc tất cả) → chỉ admin + gõ "XOA"
+        const LC_TU_MST_WARN = 50;     // > 50 tủ → báo xem trước Auto MST có thể chậm
+        let _lcTuUndoState = null;     // { tus, snap }
         let _lcTuBusy = false;
+        const _lcTuSel = new Set();    // tủ đang chọn
+        let _lcTuStatsCache = null;    // Map tủ → { poles, rows, cables }
+        function _lcTuStats() {
+            if (_lcTuStatsCache) return _lcTuStatsCache;
+            const m = new Map();
+            for (const r of (loadedData || []).slice(1)) {
+                const t = String(r[7] || '').trim();
+                if (!t) continue;
+                if (!m.has(t)) m.set(t, { poles: new Set(), rows: 0, cables: 0 });
+                const st = m.get(t);
+                st.rows++;
+                const ty = parseInt(r[6]);
+                if (ty >= 1 && ty <= 4) st.poles.add(String(r[1] || '').trim());
+                if (String(r[14] || '').trim() !== '' || String(r[15] || '').trim() !== '') st.cables++;
+            }
+            return (_lcTuStatsCache = m);
+        }
         function _lcTuCabinets() {
-            const set = new Set();
-            for (const r of (loadedData || []).slice(1)) { const t = String(r[7] || '').trim(); if (t) set.add(t); }
-            return [...set].sort((a, b) => a.localeCompare(b, 'vi', { numeric: true }));
+            return [..._lcTuStats().keys()].sort((a, b) => a.localeCompare(b, 'vi', { numeric: true }));
         }
+        const _lcTuIsAdmin = () => !!(typeof currentUser !== 'undefined' && currentUser && currentUser.role === 'admin');
+        const _lcTuIsBig = () => { const n = _lcTuCabinets().length; return _lcTuSel.size >= LC_TU_BIG || (n > 1 && _lcTuSel.size === n); };
         function _lcTuInit() {
-            const dl = document.getElementById('lcTuList');
-            if (dl) dl.innerHTML = _lcTuCabinets().map(t => `<option value="${_esc(t)}"></option>`).join('');
-            _lcTuOnInput();
+            _lcTuStatsCache = null;
+            const all = new Set(_lcTuCabinets());
+            for (const t of [..._lcTuSel]) if (!all.has(t)) _lcTuSel.delete(t);   // đổi địa bàn → bỏ tủ không còn
+            _lcTuRenderList();
+            _lcTuUpdate();
         }
-        // Khớp tên tủ không phân biệt dấu/hoa thường
-        function _lcTuResolve(text) {
-            const q = normalizeTextSearchable(text || '');
-            if (!q) return '';
+        function _lcTuFiltered() {
+            const inp = document.getElementById('lcTuFilter');
+            const q = normalizeTextSearchable(inp ? inp.value : '');
             const all = _lcTuCabinets();
-            return all.find(t => t === String(text).trim()) || all.find(t => normalizeTextSearchable(t) === q) || '';
+            return q ? all.filter(t => normalizeTextSearchable(t).includes(q)) : all;
         }
-        function _lcTuOnInput() {
-            const inp = document.getElementById('lcTuInput');
+        function _lcTuRenderList() {
+            const box = document.getElementById('lcTuListBox');
+            if (!box) return;
+            const stats = _lcTuStats(), list = _lcTuFiltered();
+            const fi = document.getElementById('lcTuFilterInfo');
+            if (fi) fi.textContent = `${list.length}/${stats.size} tủ`;
+            box.innerHTML = list.length ? list.map(t => {
+                const st = stats.get(t);
+                const on = _lcTuSel.has(t);
+                return `<label role="option" aria-selected="${on}" style="display:flex;align-items:center;gap:8px;padding:6px 4px;border-bottom:1px solid #f1f5f9;cursor:pointer;min-height:36px;">
+                    <input type="checkbox" data-tu="${_esc(t)}" ${on ? 'checked' : ''} onchange="_lcTuToggle(this.dataset.tu, this.checked)" style="width:18px;height:18px;">
+                    <span style="flex:1;font-weight:600;">${_esc(t)}</span>
+                    <span style="font-size:11px;color:${st.cables ? '#475569' : '#94a3b8'};">${st.poles.size} trụ · ${st.cables} cáp</span></label>`;
+            }).join('') : '<div style="padding:10px;color:#94a3b8;">Không có tủ khớp.</div>';
+        }
+        function _lcTuToggle(tu, on) {
+            if (on) _lcTuSel.add(tu); else _lcTuSel.delete(tu);
+            _lcTuUpdate();
+        }
+        function _lcTuSelectAll(on) {
+            for (const t of _lcTuFiltered()) { if (on) _lcTuSel.add(t); else _lcTuSel.delete(t); }
+            _lcTuRenderList();
+            _lcTuUpdate();
+        }
+        function _lcTuTogglePanel(force) {
+            const pn = document.getElementById('lcTuPanel'), tg = document.getElementById('lcTuToggle');
+            if (!pn) return;
+            const open = force != null ? !!force : pn.style.display === 'none';
+            pn.style.display = open ? 'block' : 'none';
+            if (tg && tg.setAttribute) tg.setAttribute('aria-expanded', String(open));
+            if (open) { _lcTuRenderList(); const f = document.getElementById('lcTuFilter'); if (f && f.focus) f.focus(); }
+        }
+        // Đóng danh sách khi bấm ra ngoài / Esc
+        if (typeof document !== 'undefined' && document.addEventListener) {
+            document.addEventListener('click', e => {
+                const pn = document.getElementById('lcTuPanel'), bar = document.getElementById('lcTuBar');
+                if (!e.target || e.target.isConnected === false) return;   // phần tử vừa bấm bị vẽ lại (Chọn tất cả) → không coi là bấm ra ngoài
+                if (pn && pn.style.display !== 'none' && bar && e.target && !bar.contains(e.target)) _lcTuTogglePanel(false);
+            });
+            document.addEventListener('keydown', e => {
+                const pn = document.getElementById('lcTuPanel');
+                if (e.key === 'Escape' && pn && pn.style.display !== 'none') { _lcTuTogglePanel(false); e.stopPropagation(); }
+            }, true);
+        }
+        // Cập nhật nhãn nút chọn, dòng tổng, trạng thái nút. Trả danh sách tủ đang chọn.
+        function _lcTuUpdate() {
+            const tus = [..._lcTuSel].sort((a, b) => a.localeCompare(b, 'vi', { numeric: true }));
+            const n = _lcTuCabinets().length;
+            const tg = document.getElementById('lcTuToggle');
+            if (tg) tg.textContent = (tus.length === 0 ? 'Chọn tủ' : tus.length === 1 ? tus[0]
+                : (n > 1 && tus.length === n ? `Tất cả (${n} tủ)` : `${tus.length} tủ đã chọn`)) + ' ▾';
             const info = document.getElementById('lcTuInfo');
-            const tu = _lcTuResolve(inp ? inp.value : '');
-            const plan = tu ? _tuCablePlan((loadedData || []).slice(1), tu) : null;
-            if (info) info.textContent = plan ? `${plan.poleCount} trụ · ${plan.rowCount} dòng · ${plan.targets.length} cáp` : (inp && inp.value ? 'Không có tủ này' : '—');
+            const plan = tus.length ? _tuCablePlan((loadedData || []).slice(1), tus) : null;
+            if (info) info.textContent = plan ? `${tus.length} tủ · ${plan.poleCount} trụ · ${plan.targets.length} cáp` : '—';
             const canEdit_ = typeof canEdit !== 'function' || canEdit();
+            const big = _lcTuIsBig(), adminOk = !big || _lcTuIsAdmin();
             const on = !!plan && !_lcTuBusy && canEdit_;
-            const set = (id, v) => { const b = document.getElementById(id); if (b) b.disabled = !v; };
-            set('lcTuBtnClear', on && plan.targets.length > 0);
-            set('lcTuBtnBoth', on && plan.targets.length > 0);
+            const set = (id, v, tip) => { const b = document.getElementById(id); if (b) { b.disabled = !v; b.title = tip || ''; } };
+            const tipBig = adminOk ? '' : `Chọn từ ${LC_TU_BIG} tủ trở lên / tất cả — chỉ admin được xoá`;
+            set('lcTuBtnClear', on && plan.targets.length > 0 && adminOk, tipBig);
+            set('lcTuBtnBoth', on && plan.targets.length > 0 && adminOk, tipBig);
             set('lcTuBtnRerun', on);
-            return tu;
+            return tus;
         }
-        function _lcTuSet(tu) {
-            const inp = document.getElementById('lcTuInput');
-            if (inp && tu) { inp.value = tu; _lcTuOnInput(); }
+        function _lcTuSet(tu) {   // bấm 📍 dòng lỗi → THÊM tủ vào lựa chọn
+            if (!tu || !_lcTuStats().has(tu)) return;
+            _lcTuSel.add(tu);
+            _lcTuRenderList();
+            _lcTuUpdate();
         }
         async function _lcTuAfterChange() {
+            _lcTuStatsCache = null;
             _lcClearHighlight();
             if (_cableVisible && typeof _rebuildCableLines === 'function') _rebuildCableLines();
             _lcRefreshList();
-            _lcTuOnInput();
+            _lcTuRenderList();
+            _lcTuUpdate();
         }
         async function _lcTuSync(rows, label) {
             if (!rows.length) return { updated: 0, failed: 0, notFound: 0 };
@@ -14185,17 +14270,27 @@
                 if (btn) btn.textContent = `⏳ ${label} ${done}/${tot}...`;
             });
         }
-        // rerunAfter = true → xoá xong mở Auto MST cho tủ này
+        // rerunAfter = true → xoá xong mở Auto MST cho các tủ này
         async function _lcTuClear(rerunAfter) {
             if (_lcTuBusy) return;
-            const tu = _lcTuOnInput();
-            if (!tu) { displayError && displayError('Chọn tủ trước.'); return; }
-            const plan = _tuCablePlan((loadedData || []).slice(1), tu);
-            if (!plan.targets.length) { displayInfo && displayInfo(`Tủ "${tu}" không còn cáp nào.`); if (rerunAfter) _lcTuRerun(); return; }
-            const msg = `Xoá toàn bộ cáp của tủ "${tu}"?\n\n• ${plan.targets.length} đoạn cáp (${plan.withCoord} dòng có toạ độ + ${plan.noCoord} dòng không toạ độ / trùng tên)\n• CLEAR "Marker gốc" + "Khoảng cách" — KHÔNG xoá trụ\n• Ghi Google Sheet ngay, có nút Hoàn tác` + (rerunAfter ? '\n\nXoá xong sẽ mở Auto MST để chạy lại tuyến tối ưu.' : '');
-            const okGo = typeof uiConfirm === 'function' ? await uiConfirm(msg) : confirm(msg);
+            const tus = _lcTuUpdate();
+            if (!tus.length) { displayError && displayError('Chọn ít nhất 1 tủ.'); return; }
+            const big = _lcTuIsBig();
+            if (big && !_lcTuIsAdmin()) { displayError && displayError(`Xoá cáp từ ${LC_TU_BIG} tủ trở lên / tất cả tủ — chỉ admin.`); return; }
+            const plan = _tuCablePlan((loadedData || []).slice(1), tus);
+            if (!plan.targets.length) { displayInfo && displayInfo('Các tủ đã chọn không còn cáp nào.'); if (rerunAfter) _lcTuRerun(); return; }
+            const names = tus.slice(0, 10).map(t => '• ' + t).join('\n') + (tus.length > 10 ? `\n• … và ${tus.length - 10} tủ khác` : '');
+            const msg = `Xoá toàn bộ cáp của ${tus.length} tủ?\n${names}\n\n• ${plan.targets.length} đoạn cáp (${plan.withCoord} dòng có toạ độ + ${plan.noCoord} dòng không toạ độ / trùng tên)\n• CLEAR "Marker gốc" + "Khoảng cách" — KHÔNG xoá trụ\n• Ghi Google Sheet ngay, có nút Hoàn tác` + (rerunAfter ? '\n\nXoá xong sẽ mở Auto MST để chạy lại tuyến tối ưu.' : '');
+            let okGo;
+            if (big) {
+                const typed = typeof uiPrompt === 'function' ? await uiPrompt(msg + '\n\nGõ XOA để xác nhận:', '') : prompt(msg + '\n\nGõ XOA để xác nhận:');
+                okGo = String(typed || '').trim().toUpperCase() === 'XOA';
+                if (!okGo && typed != null) displayError && displayError('Chưa gõ đúng "XOA" — không xoá.');
+            } else {
+                okGo = typeof uiConfirm === 'function' ? await uiConfirm(msg) : confirm(msg);
+            }
             if (!okGo) return;
-            _lcTuBusy = true; _lcTuOnInput();
+            _lcTuBusy = true; _lcTuUpdate();
             const btn = document.getElementById('lcTuBtnClear');
             const orig = btn ? btn.textContent : '';
             let res = null;
@@ -14203,11 +14298,11 @@
                 const snap = _tuCableClearApply(plan, new Date().toISOString());
                 plan.targets.forEach(r => { if (typeof _invalidatePopupCacheForRow === 'function') _invalidatePopupCacheForRow(r); });
                 // Bật Hoàn tác TRƯỚC khi ghi sheet — ghi lỗi giữa chừng vẫn khôi phục được
-                _lcTuUndoState = { tu, snap };
+                _lcTuUndoState = { tus, snap };
                 const ub = document.getElementById('lcTuBtnUndo');
-                if (ub) { ub.style.display = ''; ub.textContent = `↩ Hoàn tác (${tu})`; }
+                if (ub) { ub.style.display = ''; ub.textContent = `↩ Hoàn tác (${tus.length === 1 ? tus[0] : tus.length + ' tủ'})`; }
                 res = await _lcTuSync(plan.targets, 'Đang xoá');
-                try { _logAction && _logAction('delete_tu_cables', '', currentSheet || '', JSON.stringify({ tu, count: plan.targets.length, ids: snap.map(s => s.id) })); } catch (e) { _swallow(e); }
+                try { _logAction && _logAction('delete_tu_cables', '', currentSheet || '', JSON.stringify({ tus, count: plan.targets.length, ids: snap.map(s => s.id) })); } catch (e) { _swallow(e); }
             } finally {
                 _lcTuBusy = false;
                 if (btn) btn.textContent = orig;
@@ -14215,7 +14310,7 @@
             }
             if (!res) return;   // lỗi ghi sheet đã ném ra ngoài — không báo "đã xoá"
             const bad = (res.failed || 0) + (res.notFound || 0);
-            (bad ? displayError : displayInfo)(`🗑 Tủ "${tu}": đã xoá ${plan.targets.length} cáp · ghi sheet ${res.updated || 0}/${plan.targets.length}` + (bad ? ` · lỗi ${bad}` : ''));
+            (bad ? displayError : displayInfo)(`🗑 ${tus.length} tủ: đã xoá ${plan.targets.length} cáp · ghi sheet ${res.updated || 0}/${plan.targets.length}` + (bad ? ` · lỗi ${bad}` : ''));
             if (rerunAfter) _lcTuRerun();
         }
         async function _lcTuUndo() {
@@ -14230,27 +14325,30 @@
                 _lcTuUndoState = null;
                 const ub = document.getElementById('lcTuBtnUndo');
                 if (ub) ub.style.display = 'none';
-                try { _logAction && _logAction('undo_delete_tu_cables', '', currentSheet || '', JSON.stringify({ tu: st.tu, count: rows.length })); } catch (e) { _swallow(e); }
+                try { _logAction && _logAction('undo_delete_tu_cables', '', currentSheet || '', JSON.stringify({ tus: st.tus, count: rows.length })); } catch (e) { _swallow(e); }
             } finally {
                 _lcTuBusy = false;
                 await _lcTuAfterChange();
             }
-            if (res) displayInfo && displayInfo(`↩ Đã khôi phục ${st.snap.length} cáp của tủ "${st.tu}" · ghi sheet ${res.updated || 0}`);
+            if (res) displayInfo && displayInfo(`↩ Đã khôi phục ${st.snap.length} cáp của ${st.tus.length} tủ · ghi sheet ${res.updated || 0}`);
         }
         function _lcTuRerun() {
-            const tu = _lcTuOnInput();
-            if (!tu) return;
+            const tus = _lcTuUpdate();
+            if (!tus.length) return;
+            if (tus.length > LC_TU_MST_WARN) displayInfo && displayInfo(`Đang tính tuyến tối ưu cho ${tus.length} tủ — xem trước có thể mất vài giây...`);
             _closeLongCableCheck();
             _openAutoMstModal();
             const sel = document.getElementById('mstTuSelect');
             if (sel) {
-                Array.from(sel.options).forEach(o => { o.selected = o.value === tu; });
+                const want = new Set(tus);
+                Array.from(sel.options).forEach(o => { o.selected = want.has(o.value); });
                 _onMstTuChange();
                 if (typeof _mstDoPreview === 'function') _mstDoPreview();
             }
         }
-        window._lcTuOnInput = _lcTuOnInput; window._lcTuClear = _lcTuClear;
-        window._lcTuUndo = _lcTuUndo; window._lcTuRerun = _lcTuRerun;
+        window._lcTuClear = _lcTuClear; window._lcTuUndo = _lcTuUndo; window._lcTuRerun = _lcTuRerun;
+        window._lcTuToggle = _lcTuToggle; window._lcTuSelectAll = _lcTuSelectAll;
+        window._lcTuTogglePanel = _lcTuTogglePanel; window._lcTuRenderList = _lcTuRenderList;
 
         function _openLongCableCheck() {
             const modal = document.getElementById('longCableModal');
