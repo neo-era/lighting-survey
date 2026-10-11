@@ -77,6 +77,17 @@ Bản v158 lấy trung vị khoảng cách có dấu. Với BTX_BTX1, nhiễu GP
 Kiểm chứng `Quan1/BTX_BTX1`: mặc định mép +0,5 m phía Tây Bắc; mép +1 m → mọi trụ được tick cách tim đúng 6,000 m,
 cùng một phía. Cờ: `BTX_BTX1_3` cross; `_11`/`_12` junction (đoạn tách cặp way một chiều gần Cống Quỳnh).
 
+## v162 — Đường đôi (2 tim 1 chiều song song cùng tên)
+Nguyễn Thị Minh Khai (`Quan1/NTMK_NTMK 10`): OSM vẽ 2 way `oneway=yes` 2 làn (7 m) cách nhau ~7,4 m; trụ đặt trên
+dải phân cách → mỗi trụ bám tim gần nhất (lúc chiều đi, lúc chiều về) → căn gãy khúc.
+- `_raAxis(px, py, n, lines, key)`: từ chân đường q bắn tia theo pháp tuyến; gặp đoạn **cùng tên, song song (≤ 20°)**
+  cách 2..40 m → chiều còn lại → **trục giữa** = trung điểm 2 chân đường. Khoảng cách có dấu và vị trí mới tính theo trục.
+- Mốc mép (`opts.edge[g] = {side, value}`): mỗi trụ dùng ½ bề rộng CỦA CHÍNH NÓ = ½ khoảng 2 tim + ½ bề rộng 1 chiều
+  (OSM, hoặc `opts.width` nếu người dùng sửa). Đoạn 1 tim nối đoạn đường đôi → mép mỗi đoạn theo hình dạng của nó.
+- `crossMin` mốc mép = ½ bề rộng cả con đường tại trụ đó. Kết quả `plan.dual = {count, gap}`; panel ghi "🛣 Đường đôi".
+- Kiểm chứng NTMK: 18/18 trụ nhận đường đôi; trụ ok lệch khỏi đường thẳng khớp nhất ≤ 0,17 m (mốc tim) / 0,38 m (mốc mép
+  — do khoảng 2 tim thay đổi dọc tuyến); 10_10/11/12/18 ở hẳn phía kia trục → cờ, không kéo qua.
+
 ## Giới hạn
 - Đường đôi có dải phân cách: trụ gần đoạn tách làn được cờ `junction`, phải căn tay.
 - Hoàn tác chỉ giữ 1 mức (lần căn gần nhất), mất khi tải lại dữ liệu hoặc đăng xuất.

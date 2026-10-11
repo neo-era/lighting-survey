@@ -111,7 +111,8 @@ function distAlong(px, py, pts) {
                road([[60, 8], [100, 8]], { highway: 'tertiary', name: 'A', oneway: 'yes' })];   // nhánh tách song song
     const poles = [[0, 3], [40, 3], [80, 3], [140, 3]].map(([x, y]) => ({ x, y }));
     const plan = H._raPlanAlign(poles, lines(R), { offsets: [6] });
-    ok('đường đôi: trụ x=80 bị cờ junction, không tick', plan.items[2].flag === 'junction' && !plan.items[2].checked);
+    // v162: nhánh cùng tên song song cách 8m = đoạn đường đôi → trụ ở đó căn theo TRỤC GIỮA (y=4) + 6 = 10
+    ok('đoạn có nhánh song song cùng tên (đường đôi): trụ x=80 căn theo trục giữa → y = 10', near(plan.items[2].y, 10) && plan.items[2].dual);
     ok('đường đôi: trụ khác vẫn ok, y=6', [0, 1, 3].every(i => plan.items[i].flag === 'ok' && near(plan.items[i].y, 6)));
 }
 
@@ -231,6 +232,44 @@ function distAlong(px, py, pts) {
     const two = [[0, 6], [40, 6.5], [20, -6], [60, -6.4], [80, -6.2], [100, 3]].map(([x, y]) => ({ x, y }));
     const p2 = H._raPlanAlign(two, lines(R1), { crossMin: [2, 2] });
     ok('crossMin dạng mảng không crash, 2 hàng', p2.groups.length === 2);
+}
+
+// === v162: ĐƯỜNG ĐÔI (2 tim 1 chiều song song, cùng tên) → căn theo TRỤC GIỮA ===
+{
+    // Chiều đi y=+6 hướng +x, chiều về y=-6 hướng -x (oneway), mỗi chiều 7m (lanes 2)
+    const dual = () => [road([[-100, 6], [300, 6]], { highway: 'primary', name: 'NTMK', oneway: 'yes', lanes: '2' }),
+                        road([[300, -6], [-100, -6]], { highway: 'primary', name: 'NTMK', oneway: 'yes', lanes: '2' })];
+    // Trụ trên dải phân cách, lệch zigzag quanh trục y=0
+    const ys = [1, -2, 0.5, -1.5, 2, -0.8];
+    const poles = ys.map((y, i) => ({ x: i * 40, y }));
+    const plan = H._raPlanAlign(poles, lines(dual()));
+    ok('đường đôi: 1 hàng, các trụ dải phân cách thẳng hàng (cùng y ±5cm)', plan.groups.length === 1 && plan.items.every(it => near(it.y, plan.items[0].y)));
+    ok('đường đôi: trục giữa y=0 → trung vị có dấu ≈ 0.25', near(plan.items[0].y, (0.5 + -0.8) / 2 + 0.4, 0.5) && Math.abs(plan.items[0].y) < 1);
+    ok('đường đôi: x (dọc tuyến) giữ nguyên', plan.items.every((it, i) => near(it.x, i * 40)));
+    ok('đường đôi: plan báo dual + khoảng cách 2 tim 12m', plan.dual && near(plan.dual.gap, 12, 0.1));
+    // Mốc mép phía +y: ½ khoảng cách 2 tim (6) + ½ bề rộng 1 chiều (3.5) + 0.5 = 10
+    const pe = H._raPlanAlign(poles, lines(dual()), { edge: [{ side: 1, value: 0.5 }] });
+    ok('đường đôi + mép +0.5 phía +y → mọi trụ y = 10 (mép NGOÀI cả con đường)', pe.items.filter(it => it.flag !== 'far').every(it => near(it.y, 10)));
+    const pw = H._raPlanAlign(poles, lines(dual()), { edge: [{ side: -1, value: 0.5 }], width: 8 });
+    ok('đường đôi + mép phía -y, bề rộng 1 chiều sửa = 8 → y = -(6+4+0.5) = -10.5', pw.items.every(it => near(it.y, -10.5)));
+}
+{
+    // Trụ trên vỉa hè ngoài phía +y (gần chiều đi) → vẫn căn theo trục, không cờ cross
+    const dual = [road([[-100, 6], [300, 6]], { highway: 'primary', name: 'NTMK', oneway: 'yes', lanes: '2' }),
+                  road([[300, -6], [-100, -6]], { highway: 'primary', name: 'NTMK', oneway: 'yes', lanes: '2' })];
+    const poles = [10.5, 9.6, 11, 10.2].map((y, i) => ({ x: i * 40, y }));
+    const pe = H._raPlanAlign(poles, lines(dual), { edge: [{ side: 1, value: 0.5 }] });
+    ok('vỉa hè ngoài đường đôi: mọi trụ ok, y = 10', pe.items.every(it => it.flag === 'ok' && near(it.y, 10)));
+}
+{
+    // Đoạn 1 tim (x<0, rộng 14) nối đoạn đường đôi (x>0) → mỗi đoạn mép theo hình dạng của chính nó
+    const R = [road([[-200, 0], [0, 0]], { highway: 'primary', name: 'NTMK', lanes: '4' }),
+               road([[0, 0], [20, 6], [300, 6]], { highway: 'primary', name: 'NTMK', oneway: 'yes', lanes: '2' }),
+               road([[300, -6], [20, -6], [0, 0]], { highway: 'primary', name: 'NTMK', oneway: 'yes', lanes: '2' })];
+    const poles = [[-150, 8], [-80, 7], [80, 10.5], [160, 9.5]].map(([x, y]) => ({ x, y }));
+    const pe = H._raPlanAlign(poles, lines(R), { edge: [{ side: 1, value: 0.5 }] });
+    ok('đoạn 1 tim: mép = 14/2 + 0.5 = 7.5', near(pe.items[0].y, 7.5) && near(pe.items[1].y, 7.5));
+    ok('đoạn đường đôi: mép = 6 + 3.5 + 0.5 = 10', near(pe.items[2].y, 10) && near(pe.items[3].y, 10));
 }
 
 // === Đường cong (cung tròn R=200) ===

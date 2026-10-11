@@ -781,6 +781,8 @@
         #printDrawingModal .pd-ctrl:focus { border-color:#2563eb; }
         #printDrawingModal .pd-hint { font-size:12px; color:#6b7280; margin-top:6px; line-height:1.5; }
         .cable-label { background:none; border:none; }
+        .cable-label-edit span { cursor:pointer; outline:2px solid #f59e0b; outline-offset:1px; }
+        .cable-label-edit span:hover { background:#fef3c7 !important; }
         .cable-label span {
             background:rgba(255,255,255,.88); border:1px solid #1e40af;
             border-radius:4px; padding:1px 5px;
@@ -1301,6 +1303,13 @@
                                 <label>Cấp 2<input type="number" id="cgOsmWSecondary" min="2" max="80" step="0.5" value="10" onchange="_cgSaveRoadWidths()" style="width:100%;padding:3px 5px;border:1px solid #93c5fd;border-radius:4px;font-size:13px;"></label>
                                 <label>Dân cư<input type="number" id="cgOsmWResidential" min="2" max="80" step="0.5" value="6" onchange="_cgSaveRoadWidths()" style="width:100%;padding:3px 5px;border:1px solid #93c5fd;border-radius:4px;font-size:13px;"></label>
                                 <label>Hẻm<input type="number" id="cgOsmWService" min="2" max="80" step="0.5" value="4" onchange="_cgSaveRoadWidths()" style="width:100%;padding:3px 5px;border:1px solid #93c5fd;border-radius:4px;font-size:13px;"></label>
+                            </div>
+                            <div style="font-weight:700;margin:8px 0 4px;" title="Theo cấp đường lớn hơn trong 2 đường gặp nhau. 0 = không bo góc">Bán kính bo góc giao lộ (m) <span style="font-weight:400;color:#64748b;">— 0 = không bo</span></div>
+                            <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;">
+                                <label>Chính<input type="number" id="cgOsmRMajor" min="0" max="50" step="0.5" value="12" onchange="_cgSaveRoadWidths()" style="width:100%;padding:3px 5px;border:1px solid #93c5fd;border-radius:4px;font-size:13px;"></label>
+                                <label>Cấp 2<input type="number" id="cgOsmRSecondary" min="0" max="50" step="0.5" value="10" onchange="_cgSaveRoadWidths()" style="width:100%;padding:3px 5px;border:1px solid #93c5fd;border-radius:4px;font-size:13px;"></label>
+                                <label>Dân cư<input type="number" id="cgOsmRResidential" min="0" max="50" step="0.5" value="6" onchange="_cgSaveRoadWidths()" style="width:100%;padding:3px 5px;border:1px solid #93c5fd;border-radius:4px;font-size:13px;"></label>
+                                <label>Hẻm<input type="number" id="cgOsmRService" min="0" max="50" step="0.5" value="3" onchange="_cgSaveRoadWidths()" style="width:100%;padding:3px 5px;border:1px solid #93c5fd;border-radius:4px;font-size:13px;"></label>
                             </div>
                         </div>
                         <div id="cgOsmInfo" style="margin-top:6px;padding:5px;font-size:10px;color:#1e40af;background:#dbeafe;border-radius:4px;">Tải lần đầu ~10-30s (fetch từ Overpass API, cache 30 ngày)</div>
@@ -2107,6 +2116,10 @@
                             </button>
                             <button id="btnLongCableCheck" onclick="_openLongCableCheck()" class="ctrl-btn outline" style="margin-bottom:0;font-size:12px;padding:8px;color:#dc2626;border-color:#fecaca;">
                                 🚨 Kiểm tra cáp
+                            </button>
+                            <button id="btnCableAnchor" onclick="_toggleCableAnchor()" class="ctrl-btn outline" style="margin-bottom:0;font-size:12px;padding:8px;color:#7c3aed;border-color:#ddd6fe;"
+                                title="Trụ đứng yên khi sửa số mét cáp (mặc định: gốc cây cáp — thường là tủ)">
+                                📌 Trụ gốc: <span id="cableAnchorLabel">tủ</span>
                             </button>
                         </div>
                     </div>
@@ -3870,6 +3883,110 @@
             return null;
         }
 
+        // ─── v161: Sửa số mét cáp → dời trụ — docs/design-cable-length-edit.md ───
+        // Marker @@CABLELEN_* để tests/cable-length-edit.test.js trích các hàm thuần này ra chạy bằng Node.
+        // @@CABLELEN_START
+        const CL_MAX_LEN = 500;
+        const _clNum = v => parseFloat(typeof v === 'string' ? v.replace(',', '.') : v);
+        // Cùng công thức haversine (cầu R=6371000) với getDistanceMeters / nhãn cáp → số nhập = số hiển thị
+        function _clDist(lat1, lon1, lat2, lon2) {
+            const r = Math.PI / 180, R = 6371000;
+            const a = Math.sin((lat2 - lat1) * r / 2) ** 2 + Math.cos(lat1 * r) * Math.cos(lat2 * r) * Math.sin((lon2 - lon1) * r / 2) ** 2;
+            return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        }
+        // Điểm cách (lat1,lon1) đúng d mét theo hướng tới (lat2,lon2) — bài toán thuận trên cầu
+        function _clToward(lat1, lon1, lat2, lon2, d) {
+            const r = Math.PI / 180, R = 6371000;
+            const p1 = lat1 * r, p2 = lat2 * r, dl = (lon2 - lon1) * r;
+            const brg = Math.atan2(Math.sin(dl) * Math.cos(p2), Math.cos(p1) * Math.sin(p2) - Math.sin(p1) * Math.cos(p2) * Math.cos(dl));
+            const dr = d / R;
+            const p3 = Math.asin(Math.sin(p1) * Math.cos(dr) + Math.cos(p1) * Math.sin(dr) * Math.cos(brg));
+            const l3 = lon1 * r + Math.atan2(Math.sin(brg) * Math.sin(dr) * Math.cos(p1), Math.cos(dr) - Math.sin(p1) * Math.sin(p3));
+            return { lat: p3 / r, lon: l3 / r };
+        }
+        // Gốc cây cáp: đi theo Marker gốc (row[14]) tới trụ không có cha
+        function _clRootOf(name, rows) {
+            const parentOf = new Map();
+            rows.forEach(r => { const n = String(r[1] || '').trim(); if (n && !parentOf.has(n)) parentOf.set(n, String(r[14] || '').trim()); });
+            const seen = new Set();
+            let cur = name;
+            // Dừng ở trụ cuối CÓ THẬT — Marker gốc gõ sai / là ID thì không trả về tên không tồn tại
+            while (!seen.has(cur)) {
+                seen.add(cur);
+                const p = parentOf.get(cur);
+                if (!p || !parentOf.has(p)) break;
+                cur = p;
+            }
+            return cur;
+        }
+        // Kế hoạch sửa đoạn cáp childName ← Marker gốc của nó thành newLen mét.
+        // Phía nối được về trụ gốc (anchor; mặc định gốc cây) đứng yên; phía kia tịnh tiến cả nhánh
+        // để trụ đầu nhánh cách trụ đứng yên đúng newLen, các đoạn trong nhánh giữ nguyên.
+        function _clPlanLength(rows, childName, newLen, anchorName) {
+            // Làm tròn 0.1m TRƯỚC khi dời để vị trí khớp đúng số ghi vào sheet
+            const L = Math.round(Number(newLen) * 10) / 10;
+            if (!isFinite(L) || L <= 0 || L > CL_MAX_LEN) return { error: 'len' };
+            const byName = new Map();
+            rows.forEach(r => { const n = String(r[1] || '').trim(); if (!n) return; if (!byName.has(n)) byName.set(n, []); byName.get(n).push(r); });
+            if (!byName.has(childName)) return { error: 'no_row' };
+            const parentName = String(byName.get(childName)[0][14] || '').trim();
+            if (!parentName || !byName.has(parentName) || parentName === childName) return { error: 'no_parent' };
+            // A ← B và B ← A: 2 cạnh gộp thành 1 trong đồ thị vô hướng → kiểm riêng
+            if (byName.get(parentName).some(r => String(r[14] || '').trim() === childName)) return { error: 'cycle' };
+            // Đồ thị vô hướng theo tên (cáp = cạnh child–parent)
+            const adj = new Map();
+            const link = (a, b) => { if (!adj.has(a)) adj.set(a, new Set()); adj.get(a).add(b); };
+            byName.forEach((list, n) => list.forEach(r => {
+                const p = String(r[14] || '').trim();
+                if (p && p !== n && byName.has(p)) { link(n, p); link(p, n); }
+            }));
+            const component = (start, cutA, cutB) => {
+                const seen = new Set([start]), q = [start];
+                while (q.length) {
+                    const cur = q.shift();
+                    (adj.get(cur) || []).forEach(nb => {
+                        if ((cur === cutA && nb === cutB) || (cur === cutB && nb === cutA) || seen.has(nb)) return;
+                        seen.add(nb); q.push(nb);
+                    });
+                }
+                return seen;
+            };
+            const childSide = component(childName, childName, parentName);
+            if (childSide.has(parentName)) return { error: 'cycle' };
+            const anchor = (anchorName && byName.has(anchorName)) ? anchorName : _clRootOf(childName, rows);
+            const anchorOnChildSide = childSide.has(anchor) && anchor !== parentName;
+            const fixed = anchorOnChildSide ? childName : parentName;
+            const head = anchorOnChildSide ? parentName : childName;
+            const moving = anchorOnChildSide ? component(parentName, childName, parentName) : childSide;
+            // Đồ thị theo TÊN: dòng trùng tên chỉ an toàn khi là bản sao cùng 1 trụ (cách nhau ≤ 5m).
+            // Trùng tên nhưng ở xa → là 2 trụ khác nhau, dời theo tên sẽ kéo nhầm trụ kia.
+            const dup = [...moving, fixed].filter(n => {
+                const list = byName.get(n);
+                if (list.length < 2) return false;
+                const la0 = _clNum(list[0][2]), lo0 = _clNum(list[0][3]);
+                return list.some(r => !(_clDist(la0, lo0, _clNum(r[2]), _clNum(r[3])) <= 5));
+            });
+            if (dup.length) return { error: 'dup', names: dup };
+            const A = byName.get(fixed)[0], B = byName.get(head)[0];
+            const la = _clNum(A[2]), loa = _clNum(A[3]), lb = _clNum(B[2]), lob = _clNum(B[3]);
+            if (![la, loa, lb, lob].every(isFinite)) return { error: 'bad_coord' };
+            if (_clDist(la, loa, lb, lob) < 0.01) return { error: 'same' };
+            const nb = _clToward(la, loa, lb, lob, L);
+            const dLat = nb.lat - lb, dLon = nb.lon - lob;
+            const moves = [];
+            for (const n of moving) {
+                for (const r of byName.get(n)) {
+                    const rl = _clNum(r[2]), ro = _clNum(r[3]);
+                    if (!isFinite(rl) || !isFinite(ro)) return { error: 'bad_coord' };
+                    moves.push({ row: r, lat: rl + dLat, lon: ro + dLon });
+                }
+            }
+            // Dòng của đoạn cáp vừa sửa (cột Khoảng cách ghi L) — chỉ dòng child có ĐÚNG Marker gốc này
+            const edgeRows = byName.get(childName).filter(r => String(r[14] || '').trim() === parentName);
+            return { fixed, head, moving: [...moving], moves, length: L, edgeRows };
+        }
+        // @@CABLELEN_END
+
         function _buildCableLines(rows) {
             const cycle = _detectCableCycle(rows);
             // Build set tên node thuộc vòng lặp (bỏ phần tử cuối trùng đầu)
@@ -3946,11 +4063,21 @@
                 const distVal = String(r[15] || '').trim();
                 const distLabel = distVal || String(haversineM(from[0], from[1], to[0], to[1]));
                 const mid = [(from[0]+to[0])/2, (from[1]+to[1])/2];
-                L.marker(mid, {
-                    icon: L.divIcon({ className:'cable-label', html:`<span>${distLabel}m</span>`, iconSize:null, iconAnchor:[20,10] }),
+                // v161: chế độ Sửa cáp → bấm nhãn số mét để sửa, trụ dời theo
+                const editable = _cableEditMode && canDrag() && !isCycle;
+                const lbl = L.marker(mid, {
+                    icon: L.divIcon({ className: 'cable-label' + (editable ? ' cable-label-edit' : ''), html:`<span>${_esc(distLabel)}m</span>`, iconSize:null, iconAnchor:[20,10] }),
+                    interactive: editable, keyboard: false, title: editable ? 'Bấm để sửa số mét — trụ sẽ dời theo' : ''
+                }).addTo(_cableLayerGroup);
+                if (editable) lbl.on('click', e => { L.DomEvent.stopPropagation(e); _openCableLengthEditor(child, mid); });
+            });
+            // Ghim trụ gốc đang chọn (đứng yên khi sửa số mét)
+            if (_cableAnchor && posIdx[_cableAnchor]) {
+                L.marker(posIdx[_cableAnchor], {
+                    icon: L.divIcon({ className: '', html: '<div style="font-size:22px;line-height:1;transform:translate(-4px,-30px);">📌</div>', iconSize: [0, 0] }),
                     interactive: false, keyboard: false
                 }).addTo(_cableLayerGroup);
-            });
+            }
             if (cableCount === 0) {
                 displayError('Không có đường cáp — hãy nhập cột "Marker gốc" cho các trụ để vẽ sơ đồ.');
             }
@@ -4036,11 +4163,11 @@
             line.getElement && (line.getElement().style.cursor = 'pointer');
             line.on('click', function(e) {
                 L.DomEvent.stopPropagation(e);
-                _showCableContextMenu(e.latlng, line._cableRow);
+                _showCableContextMenu(e.latlng, line._cableRow, line._isCycle);
             });
         }
 
-        function _showCableContextMenu(latlng, row) {
+        function _showCableContextMenu(latlng, row, isCycle) {
             const childName  = String(row[1]  || '').trim();
             const parentName = String(row[14] || '').trim();
             const dist       = String(row[15] || '').trim();
@@ -4048,8 +4175,8 @@
                 .setLatLng(latlng)
                 .setContent(`
                     <div style="font-size:12px;font-weight:700;color:#0f172a;margin-bottom:8px;">
-                        Cáp: <span style="color:#1e40af;">${childName}</span>
-                        ← ${parentName}${dist ? ' <span style="color:#64748b;">('+dist+'m)</span>' : ''}
+                        Cáp: <span style="color:#1e40af;">${_esc(childName)}</span>
+                        ← ${_esc(parentName)}${dist ? ' <span style="color:#64748b;">('+_esc(dist)+'m)</span>' : ''}
                     </div>
                     <div style="display:flex;flex-direction:column;gap:6px;">
                         <button id="_cableCtxXoa"
@@ -4062,6 +4189,11 @@
                                    padding:6px 10px;font-size:11px;font-weight:700;cursor:pointer;">
                             ↩ Đổi điểm gốc (trụ cha)
                         </button>
+                        ${canDrag() && !isCycle ? `<button id="_cableCtxLen"
+                            style="background:#f59e0b;color:white;border:none;border-radius:5px;
+                                   padding:6px 10px;font-size:11px;font-weight:700;cursor:pointer;">
+                            📏 Sửa số mét (dời trụ)
+                        </button>` : ''}
                     </div>
                 `)
                 .openOn(map);
@@ -4077,8 +4209,152 @@
                     map.closePopup();
                     _pickParentMode(childName);
                 });
+                const btnLen = document.getElementById('_cableCtxLen');
+                if (btnLen) btnLen.addEventListener('click', () => {
+                    map.closePopup();
+                    _openCableLengthEditor(childName, latlng);
+                });
             }, 0);
         }
+
+        // ─── v161: Sửa số mét cáp → dời trụ (hàm thuần ở khối @@CABLELEN) ───
+        let _cableAnchor = null;   // tên trụ đứng yên khi sửa số mét; null = gốc cây cáp (thường là tủ)
+
+        function _cableAnchorLabelUpdate() {
+            const el = document.getElementById('cableAnchorLabel');
+            if (el) el.textContent = _cableAnchor || 'tủ';
+        }
+        // Tải lại dữ liệu / đổi địa bàn: trụ gốc cũ có thể không còn (hoặc trùng tên trụ khác), hoàn tác trỏ dòng cũ
+        function _onCableDataReload() {
+            _cableAnchor = null;
+            _cableAnchorLabelUpdate();
+            try { _raUndo = null; } catch (_) { /* _raUndo khai báo phía sau — chưa khởi tạo thì không cần xoá */ }
+        }
+
+        // Bật: bấm 1 trụ trên bản đồ làm trụ gốc. Đang có trụ gốc → bỏ, về mặc định.
+        function _toggleCableAnchor() {
+            if (_cableAnchor) {
+                _cableAnchor = null;
+                _cableAnchorLabelUpdate();
+                if (_cableVisible) _rebuildCableLines();
+                displayInfo('Trụ gốc trở về mặc định: gốc của cây cáp (tủ).');
+                return;
+            }
+            if (_pickParentActive) return;
+            _pickParentActive = true;
+            if (typeof closeControlsModal === 'function') closeControlsModal();
+            displayInfo('Bấm vào 1 trụ/tủ để làm trụ gốc (đứng yên khi sửa số mét cáp). ESC để hủy.');
+            map.getContainer().style.cursor = 'crosshair';
+            const done = () => {
+                map.off('click', onMapClick);
+                document.removeEventListener('keydown', onEsc);
+                _pickParentActive = false;
+                map.getContainer().style.cursor = '';
+            };
+            const onMapClick = function(e) {
+                const q = map.latLngToContainerPoint(e.latlng);
+                let nearest = null, best = 40;
+                markers.forEach(m => {
+                    if (!m.marker || !m.marker._rowRef) return;
+                    const p = map.latLngToContainerPoint(m.marker.getLatLng());
+                    const d = Math.hypot(p.x - q.x, p.y - q.y);
+                    if (d < best) { best = d; nearest = m.marker._rowRef; }
+                });
+                done();
+                const name = nearest && String(nearest[1] || '').trim();
+                if (!name) { displayError('Không tìm thấy trụ/tủ tại vị trí đó.'); return; }
+                _cableAnchor = name;
+                _cableAnchorLabelUpdate();
+                if (_cableVisible) _rebuildCableLines();
+                displaySuccess('Trụ gốc: ' + name + ' — đứng yên khi sửa số mét cáp.');
+            };
+            const onEsc = e => { if (e.key === 'Escape') done(); };
+            map.on('click', onMapClick);
+            document.addEventListener('keydown', onEsc);
+        }
+        window._toggleCableAnchor = _toggleCableAnchor;
+
+        function _openCableLengthEditor(childName, latlng) {
+            if (!canDrag()) { displayError('Tài khoản hiện tại không có quyền dời marker.'); return; }
+            const rows = _raAllRows();
+            const row = rows.find(r => String(r[1] || '').trim() === childName);
+            if (!row) return;
+            const parentName = String(row[14] || '').trim();
+            const p = rows.find(r => String(r[1] || '').trim() === parentName);
+            const geo = p ? _clDist(parseCoord(row[2]), parseCoord(row[3]), parseCoord(p[2]), parseCoord(p[3])) : NaN;
+            // Sheet locale VN có thể lưu "21,5" — input type=number chỉ nhận dấu chấm
+            const cur = String(row[15] || '').trim().replace(',', '.') || (isFinite(geo) ? geo.toFixed(1) : '');
+            // Trụ đứng yên tính đúng như lúc áp dụng (trụ gốc đã chọn không thuộc cây này → về gốc mặc định)
+            const preview = _clPlanLength(rows, childName, isFinite(geo) && geo > 0 ? Math.min(geo, CL_MAX_LEN) : 1, _cableAnchor);
+            const anchor = preview.fixed || _clRootOf(childName, rows);
+            L.popup({ closeButton: true, className: 'cable-ctx-popup', minWidth: 220 })
+                .setLatLng(latlng)
+                .setContent(`
+                    <div style="font-size:12px;font-weight:700;color:#0f172a;margin-bottom:6px;">📏 Cáp ${_esc(parentName)} — ${_esc(childName)}</div>
+                    <label style="display:flex;align-items:center;gap:6px;">
+                        <input id="_cableLenInput" type="number" inputmode="decimal" min="0.1" max="${CL_MAX_LEN}" step="0.1" value="${_esc(cur)}"
+                            style="width:90px;min-height:40px;padding:4px 8px;border:1.5px solid #cbd5e1;border-radius:8px;font-size:16px;text-align:right;"> m
+                    </label>
+                    <div style="font-size:11px;color:#64748b;margin:6px 0;">Hiện đo trên bản đồ: ${isFinite(geo) ? geo.toFixed(1) + ' m' : '—'}<br>
+                        📌 <b>${_esc(anchor)}</b> đứng yên — nhánh phía xa dời theo.</div>
+                    <button id="_cableLenApply" style="width:100%;min-height:40px;background:#f59e0b;color:#fff;border:none;border-radius:8px;font-weight:800;cursor:pointer;">Áp dụng</button>
+                `)
+                .openOn(map);
+            setTimeout(() => {
+                const inp = document.getElementById('_cableLenInput');
+                const btn = document.getElementById('_cableLenApply');
+                const go = () => _applyCableLength(childName, inp ? inp.value : '');
+                if (inp) { inp.focus(); inp.select(); inp.addEventListener('keydown', e => { if (e.key === 'Enter') go(); }); }
+                if (btn) btn.addEventListener('click', go);
+            }, 0);
+        }
+        window._openCableLengthEditor = _openCableLengthEditor;
+
+        async function _applyCableLength(childName, value) {
+            if (!canDrag()) return;
+            const L_ = parseFloat(String(value).replace(',', '.'));
+            const rows = _raAllRows();
+            const plan = _clPlanLength(rows, childName, L_, _cableAnchor);
+            const msg = {
+                len: `Số mét phải lớn hơn 0 và không quá ${CL_MAX_LEN} m.`,
+                no_row: 'Không tìm thấy trụ ' + childName + '.',
+                no_parent: 'Trụ ' + childName + ' chưa có cáp nối (Marker gốc).',
+                cycle: 'Cáp có vòng lặp quanh ' + childName + ' — sửa Marker gốc trước.',
+                same: 'Hai trụ trùng toạ độ — không xác định được hướng để dời.',
+                bad_coord: 'Có trụ trong nhánh bị lỗi toạ độ — không dời được.',
+                dup: 'Có trụ trùng tên ở 2 vị trí khác nhau (' + (plan.names || []).slice(0, 5).join(', ') + ') — đổi tên trước khi sửa cáp, nếu không sẽ dời nhầm trụ.'
+            };
+            if (plan.error) { displayError(msg[plan.error] || plan.error); return; }
+            if (plan.moving.length > 30 && !confirm(`Sẽ dời ${plan.moving.length} trụ (cả nhánh phía ${plan.head}). Tiếp tục?`)) return;
+            map.closePopup();
+            _raClose();   // panel căn tuyến (nếu đang mở) sẽ bị thanh hoàn tác thay chỗ
+            const L_r = plan.length;   // đã làm tròn 0.1m
+            // Snapshot nguyên văn để hoàn tác: các dòng bị dời + dòng của đoạn cáp vừa sửa
+            const edgeRows = plan.edgeRows;
+            const affected = new Set([...plan.moves.map(m => m.row), ...edgeRows]);
+            const snaps = [...affected].map(r => ({ row: r, vals: _RA_SNAP_COLS.map(c => r[c]) }));
+            const tsNow = new Date().toLocaleString('vi-VN');
+            plan.moves.forEach(m => {
+                const r = m.row;
+                r[2] = m.lat; r[3] = m.lon; r[13] = tsNow;
+                const vn = convertLatLonToVn2000(m.lat, m.lon);
+                r[19] = Math.round(vn.x); r[20] = Math.round(vn.y);
+                dirtyMovedRows.add(r);
+                _invalidatePopupCacheForRow(r);
+                _raMoveMarker(r, m.lat, m.lon);
+            });
+            // Nhánh tịnh tiến nguyên khối → các đoạn trong nhánh giữ số mét; chỉ đoạn vừa sửa đổi
+            edgeRows.forEach(r => { r[15] = L_r; r[13] = tsNow; dirtyMovedRows.add(r); _invalidatePopupCacheForRow(r); });
+            updateDirtyMovedBadge();
+            _raUndo = { snaps, applied: new Map(plan.moves.map(m => [m.row, [m.row[2], m.row[3]]])) };
+            if (_cableVisible) _rebuildCableLines();
+            const res = await pushMovedMarkersToSheet();
+            const failed = res && res.failed;
+            _raShowUndoBar(failed
+                ? `Đã dời ${plan.moving.length} trụ trên app, nhưng ${failed} dòng chưa lên được sheet — bấm "Cập nhật" để thử lại.`
+                : `Cáp ${childName} = ${L_r} m — đã dời ${plan.moving.length} trụ (${plan.fixed} đứng yên).`, !!failed);
+        }
+        window._applyCableLength = _applyCableLength;
 
         function _deleteCableSegment(childName) {
             if (!Array.isArray(loadedData)) return;
@@ -8724,7 +9000,7 @@
                     // Hoà khoảng cách tại nút nối 2 way → ưu tiên đoạn mà chân đường nằm trong (không vượt đầu mút)
                     if (!best || d < best.dist - 1e-6 || (Math.abs(d - best.dist) <= 1e-6 && endOver < best.endOver)) {
                         const cross = dx * (py - a.y) - dy * (px - a.x);
-                        best = { key: l.key, qx, qy, dist: d, side: cross < 0 ? -1 : 1, nx: -dy / len, ny: dx / len, endOver };
+                        best = { key: l.key, qx, qy, dist: d, side: cross < 0 ? -1 : 1, nx: -dy / len, ny: dx / len, endOver, width: l.width };
                     }
                 }
             }
@@ -8766,6 +9042,31 @@
             c.value = v;
             return c;
         }
+        // v162 — ĐƯỜNG ĐÔI: OSM vẽ 2 tim 1 chiều song song cùng tên (vd Nguyễn Thị Minh Khai). Trụ trên dải phân cách
+        // bám tim gần nhất → mỗi trụ theo 1 tim khác nhau → căn gãy khúc. Từ chân đường q bắn tia theo pháp tuyến; gặp
+        // tim song song cùng tên cách 2..40m → đó là chiều còn lại, TRỤC GIỮA = trung điểm 2 chân đường.
+        const RA_DUAL_MIN = 2, RA_DUAL_MAX = 40, RA_DUAL_COS = Math.cos(20 * Math.PI / 180);
+        function _raAxis(px, py, n, lines, key) {
+            const dx = n.ny, dy = -n.nx;   // hướng đường tại chân (n = pháp tuyến trái)
+            let best = null;
+            for (const l of lines) {
+                if (l.key !== key) continue;
+                for (let i = 0; i < l.pts.length - 1; i++) {
+                    const a = l.pts[i], b = l.pts[i + 1];
+                    const ex = b.x - a.x, ey = b.y - a.y, el = Math.hypot(ex, ey);
+                    if (el < 1e-9 || Math.abs((ex * dx + ey * dy) / el) < RA_DUAL_COS) continue;
+                    const den = n.nx * ey - n.ny * ex;
+                    if (Math.abs(den) < 1e-12) continue;
+                    const wx = a.x - n.qx, wy = a.y - n.qy;
+                    const s = (wx * ey - wy * ex) / den, u = (wx * n.ny - wy * n.nx) / den;   // q + s·n = a + u·e
+                    if (u < 0 || u > 1 || Math.abs(s) < RA_DUAL_MIN || Math.abs(s) > RA_DUAL_MAX) continue;
+                    if (!best || Math.abs(s) < Math.abs(best.s)) best = { s };
+                }
+            }
+            if (!best) return { mx: n.qx, my: n.qy, signed: n.side * n.dist, half0: 0, gap: 0 };
+            const mx = n.qx + n.nx * best.s / 2, my = n.qy + n.ny * best.s / 2;
+            return { mx, my, signed: (px - mx) * n.nx + (py - my) * n.ny, half0: Math.abs(best.s) / 2, gap: Math.abs(best.s) };
+        }
         const RA_SPLIT_GAP = 6;   // tách 2 hàng (2 bên đường) chỉ khi khoảng cách có dấu chia 2 cụm cách nhau ≥ 6m
         // Kế hoạch căn. Khoảng cách CÓ DẤU tới tim (+ = bên trái hướng đường) → mặc định 1 hàng = trung vị;
         // GPS nhiễu làm trụ vắt qua tim nên KHÔNG chia bên theo dấu từng trụ.
@@ -8789,7 +9090,13 @@
             const proj = poles.map(p => _raNearestOnLines(p.x, p.y, lines, roadKey));
             const median = arr => { const s = arr.slice().sort((a, b) => a - b), m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
             const offs = Array.isArray(o.offsets) ? o.offsets : [];
-            const signed = proj.map(n => n.side * n.dist);
+            const edge = Array.isArray(o.edge) ? o.edge : [];
+            // Trục tham chiếu mỗi trụ: tim (đường 1 tim) hoặc trục giữa 2 tim (đường đôi)
+            const axis = proj.map((n, i) => _raAxis(poles[i].x, poles[i].y, n, lines, roadKey));
+            const wOver = Number(o.width) > 0 ? Number(o.width) : null;   // bề rộng 1 chiều xe người dùng sửa
+            // Nửa bề rộng cả con đường tại trụ: ½ khoảng 2 tim (đường đôi) + ½ bề rộng 1 chiều xe
+            const halfOf = i => axis[i].half0 + (wOver || proj[i].width || 6) / 2;
+            const signed = axis.map(a => a.signed);
             // Vượt đầu mút tự do > 1m: chân đường kẹp ở đầu mút, dời sẽ trượt dọc tuyến → không căn, không tính trung vị
             const isEnd = proj.map(n => n.dist <= o.maxDist && n.endOver > 1);
             const use = proj.map((n, i) => n.dist <= o.maxDist && !isEnd[i]);
@@ -8807,18 +9114,28 @@
                 const ov = offs[g];
                 const pos = members.filter(s => s > 0).length, neg = members.filter(s => s < 0).length;
                 const sidePref = pos > neg ? 1 : neg > pos ? -1 : (Math.sign(median(members)) || 1);   // phía nhiều trụ hơn
-                return { offset: (ov != null && isFinite(ov)) ? ov : median(members), median: median(members), count: members.length, sidePref };
+                const e = edge[g];
+                // Mốc mép: offset hiển thị = ½ bề rộng trung vị + value (từng trụ vẫn dùng ½ bề rộng của chính nó)
+                const halfMed = median(signed.map((s, i) => i).filter(i => use[i] && groupOf(signed[i]) === g).map(halfOf));
+                const offset = e ? (e.side < 0 ? -1 : 1) * (halfMed + Number(e.value || 0))
+                    : (ov != null && isFinite(ov)) ? ov : median(members);
+                return { offset, median: median(members), count: members.length, sidePref, halfMed };
             });
             const items = poles.map((p, i) => {
                 const n = proj[i];
                 if (!use[i]) return { x: p.x, y: p.y, dist: n.dist, signed: signed[i], group: -1, move: 0, flag: isEnd[i] ? 'end' : 'far', checked: false };
-                const g = groupOf(signed[i]), S = groups[g].offset;
-                const x = n.qx + S * n.nx, y = n.qy + S * n.ny;
+                const g = groupOf(signed[i]), e = edge[g];
+                const S = e ? (e.side < 0 ? -1 : 1) * (halfOf(i) + Number(e.value || 0)) : groups[g].offset;
+                const ax = axis[i];
+                const x = ax.mx + S * n.nx, y = ax.my + S * n.ny;
                 const move = Math.hypot(x - p.x, y - p.y);
-                // Vị trí mới gần nhánh khác của đường hơn (đường đôi, nút giao, góc gấp) → không cách tim đúng |S|
-                const after = _raNearestOnLines(x, y, lines, roadKey);
+                // Vị trí mới gần nhánh khác của đường hơn (nút giao, góc gấp) → không cách trục đúng S
+                const an = _raNearestOnLines(x, y, lines, roadKey);
+                const after = { dist: Math.abs(_raAxis(x, y, an, lines, roadKey).signed) };
                 // Trụ lẻ ở hẳn bên kia tim (không đủ 2 trụ để thành hàng riêng) → đừng tự kéo qua đường
-                const crossMin = Array.isArray(o.crossMin) ? (Number.isFinite(o.crossMin[g]) ? o.crossMin[g] : 2) : o.crossMin;
+                // Mốc mép: chỉ coi là bên kia đường khi vượt ½ bề rộng CẢ con đường tại trụ đó
+                const crossMin = e ? Math.max(2, halfOf(i))
+                    : Array.isArray(o.crossMin) ? (Number.isFinite(o.crossMin[g]) ? o.crossMin[g] : 2) : o.crossMin;
                 const otherSide = S !== 0 && Math.sign(signed[i]) !== Math.sign(S);
                 const cross = otherSide && Math.abs(signed[i]) > crossMin;
                 // Khác phía, cách tim 2m..crossMin: có thể là GPS lệch HOẶC trụ thật bên kia đường hẹp → đề xuất nhưng bỏ tick
@@ -8826,9 +9143,10 @@
                 const flag = cross ? 'cross' : straddle ? 'straddle' : move > o.maxMove ? 'big'
                            : (Math.abs(after.dist - Math.abs(S)) > 0.5 ? 'junction' : 'ok');
                 return { x, y, dist: n.dist, signed: signed[i], group: g, move, flag, checked: flag === 'ok',
-                         nx: n.nx, ny: n.ny };
+                         nx: n.nx, ny: n.ny, dual: axis[i].gap > 0 };
             });
-            return { roadKey, groups, items };
+            const gaps = axis.filter((a, i) => use[i] && a.gap > 0).map(a => a.gap);
+            return { roadKey, groups, items, dual: gaps.length ? { count: gaps.length, gap: median(gaps) } : null };
         }
         // @@ROADALIGN_END
 
@@ -10479,7 +10797,7 @@
                         const oo = opts.osmOptions;
                         const stats = _drawOsmBasemapInDxf(push, drawData, cm, outDE, outDN, clipBounds, k0,
                             { center: oo.roadCenter !== false, edge: !!oo.roadEdge, name: !!oo.roadName, other: !!oo.roadOther, widths: oo.roadWidths,
-                              textHeight: 3 * scale / 1000 });  // 3mm trên giấy ở mọi tỉ lệ
+                              radii: oo.cornerRadii, textHeight: 3 * scale / 1000 });  // 3mm trên giấy ở mọi tỉ lệ
                         console.log('[CAD Gen] OSM basemap drawn:', stats.entityCount, 'entities, skipped:', stats.skipped);
                     } catch (err) {
                         console.warn('[CAD Gen] OSM basemap skip:', err.message);
@@ -16537,12 +16855,16 @@
                 st.cfg = base.groups.map(g => _raDefaultCfg(saved.ref === 'tim' ? 'tim' : 'mep', g, saved, st.width));
                 st.lastMep = st.cfg.map(c => (c.ref === 'mep' ? c.value : null));
             }
-            const offsets = st.cfg.map(c => { const t = _raTargetOffset(Object.assign({}, c, { width: st.width })); return t.error ? null : t.offset; });
-            // Mốc mép: trụ khác phía cách tim > ½ bề rộng mới là "bên kia đường"; 2m..½ bề rộng → 'straddle' (bỏ tick).
-            // Tính theo từng hàng vì mỗi hàng chọn mốc riêng.
-            const crossMin = st.cfg.map(c => (c.ref === 'mep' ? Math.max(2, st.width / 2) : 2));
-            const plan = _raPlanAlign(st.poles, st.lines, { offsets, crossMin });
+            // Mốc tim → khoảng cách có dấu tới tim/trục giữa. Mốc mép → để hàm tính dùng ½ bề rộng CỦA TỪNG TRỤ
+            // (đường đôi: ½ khoảng 2 tim + ½ bề rộng 1 chiều), nên không quy đổi sẵn ra 1 offset chung ở đây.
+            const offsets = st.cfg.map(c => (c.ref === 'tim' ? (c.side < 0 ? -1 : 1) * c.value : null));
+            const edge = st.cfg.map(c => (c.ref === 'mep' ? { side: c.side, value: c.value } : null));
+            const plan = _raPlanAlign(st.poles, st.lines, {
+                offsets, edge, crossMin: 2,
+                width: st.width !== st.osmWidth ? st.width : null   // chưa sửa → mỗi đoạn dùng bề rộng OSM của chính nó
+            });
             st.groups = plan.groups;
+            st.dual = plan.dual;
             st.entries = st.order.map(i => {
                 const item = plan.items[i], row = st.rows[i];
                 item.rtk = String(row[24] || '').trim() === 'rtk';
@@ -16681,14 +17003,16 @@
                         ${numInput(+c.value.toFixed(2), `_raSetValue(${gi}, this.value)`, c.ref === 'mep' ? 'Khoảng cách từ mép đường (m)' : 'Khoảng cách từ tim đường (m)',
                             c.ref === 'mep' ? -st.width / 2 : 0, c.ref === 'mep' ? RA_MAX_DIST - st.width / 2 : RA_MAX_DIST)}
                         <span style="flex:1;color:#64748b;font-size:12px;">m ${c.ref === 'mep' ? 'từ mép (+ ra vỉa hè, − vào lòng đường)' : 'từ tim'}
-                            → <b style="color:#1e293b;">cách tim ${dist.toFixed(1)} m</b></span></label>
+                            → <b style="color:#1e293b;">cách ${st.dual ? 'trục giữa' : 'tim'} ${dist.toFixed(1)} m</b></span></label>
                 </div>`;
             }).join('');
             el.innerHTML = `
                 <div style="padding:12px 14px 10px;border-bottom:1px solid #e2e8f0;overflow:auto;max-height:${window.innerWidth < 600 ? '28vh' : '45vh'};flex:none;">
                     <div style="font-weight:800;font-size:14px;">📏 Căn thẳng tuyến ${_esc(st.base)}</div>
                     <div style="color:#64748b;margin-top:2px;">Theo đường <b>${_esc(roadName)}</b> — mỗi trụ chỉ dời vuông góc với đường.</div>
-                    ${anyMep ? `<label style="display:flex;gap:6px;align-items:center;margin-top:8px;"><span style="flex:1;color:#64748b;">Bề rộng mặt đường
+                    ${st.dual ? `<div style="margin-top:6px;padding:6px 8px;background:#eff6ff;border-radius:8px;color:#1e40af;font-size:12px;">
+                        🛣 <b>Đường đôi</b> — 2 tim 2 chiều xe cách nhau ~${st.dual.gap.toFixed(1)} m. Căn theo <b>trục giữa</b>; mép = mép ngoài cả con đường.</div>` : ''}
+                    ${anyMep ? `<label style="display:flex;gap:6px;align-items:center;margin-top:8px;"><span style="flex:1;color:#64748b;">${st.dual ? 'Bề rộng 1 chiều xe' : 'Bề rộng mặt đường'}
                         <span style="font-size:12px;">(OSM: ${st.osmWidth.toFixed(1)} m)</span></span>
                         ${numInput(st.width, '_raSetWidth(this.value)', 'Bề rộng mặt đường (m)', 0.5, RA_MAX_WIDTH)} m</label>` : ''}
                     ${groupsHtml}
@@ -17297,6 +17621,7 @@
                 roads:     roadCenter || roadEdge || roadName || roadOther,   // cần fetch đường không
                 roadCenter, roadEdge, roadName, roadOther,
                 roadWidths: _cgReadRoadWidths(),
+                cornerRadii: _cgReadCornerRadii(),
                 buildings: (document.getElementById('cgOsmBuildings') || {}).checked || false,
                 water:     (document.getElementById('cgOsmWater')     || {}).checked || false,
                 admin:     (document.getElementById('cgOsmAdmin')     || {}).checked || false
@@ -17314,11 +17639,21 @@
             }
             return w;
         }
+        // v161 — bán kính bo góc giao lộ theo cấp đường (0 = không bo)
+        const _CG_CORNER_R_IDS = { major: 'cgOsmRMajor', secondary: 'cgOsmRSecondary', residential: 'cgOsmRResidential', service: 'cgOsmRService' };
+        function _cgReadCornerRadii() {
+            const r = {};
+            for (const [k, id] of Object.entries(_CG_CORNER_R_IDS)) {
+                const v = parseFloat((document.getElementById(id) || {}).value);
+                r[k] = (isFinite(v) && v >= 0 && v <= 50) ? v : OSM_CORNER_RADIUS_DEFAULTS[k];
+            }
+            return r;
+        }
         const _CG_ROAD_LAYER_IDS = { center: 'cgOsmRoadCenter', edge: 'cgOsmRoadEdge', name: 'cgOsmRoadName', other: 'cgOsmRoadOther' };
         function _cgSaveRoadWidths() {
             const layers = {};
             for (const [k, id] of Object.entries(_CG_ROAD_LAYER_IDS)) layers[k] = !!(document.getElementById(id) || {}).checked;
-            try { localStorage.setItem('cg_osm_road_widths', JSON.stringify(Object.assign(_cgReadRoadWidths(), { layers }))); } catch(e){_swallow(e);}
+            try { localStorage.setItem('cg_osm_road_widths', JSON.stringify(Object.assign(_cgReadRoadWidths(), { layers, radii: _cgReadCornerRadii() }))); } catch(e){_swallow(e);}
         }
         function _cgRestoreRoadWidths() {
             let saved = null;
@@ -17331,6 +17666,10 @@
             for (const [k, id] of Object.entries(_CG_ROAD_LAYER_IDS)) {
                 const el = document.getElementById(id);
                 if (el && saved.layers && typeof saved.layers[k] === 'boolean') el.checked = saved.layers[k];
+            }
+            for (const [k, id] of Object.entries(_CG_CORNER_R_IDS)) {
+                const el = document.getElementById(id);
+                if (el && saved.radii && Number.isFinite(saved.radii[k])) el.value = saved.radii[k];
             }
         }
         window._cgSaveRoadWidths = _cgSaveRoadWidths;
@@ -17631,6 +17970,141 @@
             const pathLen = r => { let s = 0; for (let i = 1; i < r.length; i++) s += Math.hypot(r[i].x - r[i - 1].x, r[i].y - r[i - 1].y); return s; };
             return runs.filter(r => r.length >= 2 && pathLen(r) > 0.01);
         }
+        // v161 — Bo góc giao lộ. Bán kính theo cấp đường LỚN HƠN trong 2 đường gặp nhau (0 = không bo).
+        const OSM_CORNER_RADIUS_DEFAULTS = { major: 12, secondary: 10, residential: 6, service: 3 };
+        const _OSM_CLASS_RANK = { service: 0, residential: 1, secondary: 2, major: 3 };
+        // Cấp đường — cùng cách phân nhóm với _osmRoadWidth
+        function _osmRoadClass(tags) {
+            let hw = String((tags && tags.highway) || '');
+            if (hw === 'construction') hw = String(tags.construction || 'residential');
+            if (['motorway', 'trunk', 'primary'].includes(hw)) return 'major';
+            if (['secondary', 'tertiary'].includes(hw)) return 'secondary';
+            if (hw === 'service') return 'service';
+            return 'residential';
+        }
+        // runs: [{pts, chain, cls}] — mép đường SAU khi cắt nút giao (_trimEdgeRun). Tại góc giao lộ, 2 đầu mút của 2 chuỗi
+        // khác nhau gần trùng nhau (< tol) → thay góc nhọn bằng cung tròn tiếp xúc 2 mép, rút ngắn 2 mép tới điểm tiếp xúc.
+        // Trả về { runs (bản sao đã rút), arcs: [{cx, cy, r, start, end}] } — góc độ, cung đi NGƯỢC chiều kim đồng hồ start→end.
+        // clip (tuỳ chọn): khung bản vẽ — đầu mút nằm trên mép khung là do CẮT KHUNG, không phải góc giao lộ.
+        function _filletCorners(runs, radii, tol, clip) {
+            tol = tol || 0.5;
+            const rad = Object.assign({}, OSM_CORNER_RADIUS_DEFAULTS, radii || {});
+            const out = runs.map(r => Object.assign({}, r, { pts: r.pts.map(p => ({ x: p.x, y: p.y })) }));
+            const ends = [];
+            out.forEach((r, k) => {
+                const n = r.pts.length;
+                if (n < 2) return;
+                ends.push({ k, atStart: true }, { k, atStart: false });
+            });
+            const endPt = e => (e.atStart ? out[e.k].pts[0] : out[e.k].pts[out[e.k].pts.length - 1]);
+            const nextPt = e => (e.atStart ? out[e.k].pts[1] : out[e.k].pts[out[e.k].pts.length - 2]);
+            const onClip = p => !!clip && [p.x - clip.minX, clip.maxX - p.x, p.y - clip.minY, clip.maxY - p.y].some(d => Math.abs(d) < 0.01);
+            // Hình học của 1 cặp đầu mút: góc C, hướng vào 2 mép u1/u2, góc giao θ, bán kính theo cấp lớn hơn. null = không bo.
+            const geom = (a, b) => {
+                const ra = out[a.k], rb = out[b.k];
+                if (ra.name && ra.name === rb.name) return null;   // cùng tên đường: chỗ bẻ tại nút chia chuỗi, không phải giao lộ
+                const p1 = endPt(a), q1 = nextPt(a), p2 = endPt(b), q2 = nextPt(b);
+                const l1 = Math.hypot(q1.x - p1.x, q1.y - p1.y), l2 = Math.hypot(q2.x - p2.x, q2.y - p2.y);
+                if (l1 < 1e-6 || l2 < 1e-6) return null;
+                const u1 = { x: (q1.x - p1.x) / l1, y: (q1.y - p1.y) / l1 }, u2 = { x: (q2.x - p2.x) / l2, y: (q2.y - p2.y) / l2 };
+                const cr = u1.x * u2.y - u1.y * u2.x;
+                if (Math.abs(cr) < 1e-9) return null;
+                // Góc thật = giao 2 đường thẳng chứa đoạn cuối (đầu mút cắt nút giao lệch ~5cm khỏi mép bên kia)
+                const s = ((p2.x - p1.x) * u2.y - (p2.y - p1.y) * u2.x) / cr;
+                const C = { x: p1.x + u1.x * s, y: p1.y + u1.y * s };
+                if (Math.hypot(C.x - p1.x, C.y - p1.y) > 2 * tol) return null;
+                const theta = Math.acos(Math.max(-1, Math.min(1, u1.x * u2.x + u1.y * u2.y)));
+                const deg = theta * 180 / Math.PI;
+                if (deg < 10 || deg > 170) return null;
+                const big = (_OSM_CLASS_RANK[ra.cls] || 0) >= (_OSM_CLASS_RANK[rb.cls] || 0) ? ra.cls : rb.cls;
+                const R = Number(rad[big]);
+                return R > 0 ? { C, u1, u2, theta, R } : null;
+            };
+            // Ghép cặp: chỉ cặp HỢP LỆ, gần nhất trước, mỗi đầu mút 1 lần. Lưới ô = tol để không phải so N².
+            const cell = p => Math.floor(p.x / tol) + ',' + Math.floor(p.y / tol);
+            const grid = new Map();
+            ends.forEach((e, i) => {
+                const p = endPt(e);
+                if (onClip(p)) return;
+                const k = cell(p);
+                if (!grid.has(k)) grid.set(k, []);
+                grid.get(k).push(i);
+            });
+            const cand = [];
+            grid.forEach((list, key) => {
+                const [cx, cy] = key.split(',').map(Number);
+                const near = [];
+                for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) (grid.get((cx + dx) + ',' + (cy + dy)) || []).forEach(j => near.push(j));
+                list.forEach(i => near.forEach(j => {
+                    if (j <= i) return;
+                    const a = ends[i], b = ends[j];
+                    if (a.k === b.k || out[a.k].chain === out[b.k].chain) return;
+                    const pa = endPt(a), pb = endPt(b), d = Math.hypot(pa.x - pb.x, pa.y - pb.y);
+                    if (d >= tol) return;
+                    const g = geom(a, b);
+                    if (g) cand.push({ a, b, d, g });
+                }));
+            });
+            cand.sort((x, y) => x.d - y.d);
+            const used = new Set(), pairs = [];
+            const id = e => e.k + (e.atStart ? 's' : 'e');
+            for (const c of cand) if (!used.has(id(c.a)) && !used.has(id(c.b))) { used.add(id(c.a)); used.add(id(c.b)); pairs.push(c); }
+            const filleted = new Map();   // run k → số đầu mút được bo (2 đầu → mỗi đầu chỉ dùng ½ chiều dài)
+            pairs.forEach(c => [c.a, c.b].forEach(e => filleted.set(e.k, (filleted.get(e.k) || 0) + 1)));
+            // Đỉnh của run tính từ đầu mút e đi vào trong
+            const inward = e => (e.atStart ? out[e.k].pts.slice() : out[e.k].pts.slice().reverse());
+            // Chiều dài phần GẦN THẲNG (lệch ≤ 5° so với u) tính từ góc C — OSM hay có nút sát giao lộ,
+            // nếu chỉ dùng đoạn cuối thì bán kính bị ép rất nhỏ
+            const COS5 = Math.cos(5 * Math.PI / 180);
+            const straightLen = (e, C, u) => {
+                const p = inward(e);
+                let len = 0, prev = C;
+                for (let i = 1; i < p.length; i++) {
+                    const dx = p[i].x - prev.x, dy = p[i].y - prev.y, l = Math.hypot(dx, dy);
+                    if (l < 1e-9) continue;
+                    if ((dx * u.x + dy * u.y) / l < COS5) break;
+                    len += l; prev = p[i];
+                }
+                return len;
+            };
+            const totalLen = e => { const p = out[e.k].pts; let s = 0; for (let i = 1; i < p.length; i++) s += Math.hypot(p[i].x - p[i - 1].x, p[i].y - p[i - 1].y); return s; };
+            // Các đỉnh còn lại sau khi bỏ phần run cách C dưới t (dọc theo run), đầu mút mới = T. null = không còn đủ 2 điểm.
+            const cutRun = (e, C, t, T) => {
+                const p = inward(e), keep = [T];
+                let acc = 0, prev = C;
+                for (let i = 1; i < p.length; i++) {
+                    acc += Math.hypot(p[i].x - prev.x, p[i].y - prev.y); prev = p[i];
+                    if (acc > t + 1e-6) keep.push(p[i]);
+                }
+                if (keep.length < 2) return null;
+                return e.atStart ? keep : keep.reverse();
+            };
+            const arcs = [];
+            for (const { a, b, g } of pairs) {
+                const { C, u1, u2, theta } = g;
+                let R = g.R;
+                let t = R / Math.tan(theta / 2);
+                // Run bị bo cả 2 đầu → mỗi đầu dùng tối đa ½ chiều dài để 2 cung không chồng nhau
+                const avail = (e, u) => Math.min(straightLen(e, C, u), filleted.get(e.k) === 2 ? totalLen(e) / 2 : Infinity);
+                const tMax = Math.min(avail(a, u1), avail(b, u2)) * 0.999;
+                if (t > tMax) { t = tMax; R = t * Math.tan(theta / 2); }
+                if (R < 0.1) continue;
+                const T1 = { x: C.x + u1.x * t, y: C.y + u1.y * t }, T2 = { x: C.x + u2.x * t, y: C.y + u2.y * t };
+                const bx = u1.x + u2.x, by = u1.y + u2.y, bl = Math.hypot(bx, by);
+                const h = R / Math.sin(theta / 2);
+                const O = { x: C.x + bx / bl * h, y: C.y + by / bl * h };
+                // Rút 2 mép về điểm tiếp xúc (bỏ các đỉnh nằm trong phần bị bo); không cắt được gọn → bỏ góc này
+                const ka = cutRun(a, C, t, T1), kb = cutRun(b, C, t, T2);
+                if (!ka || !kb) continue;
+                out[a.k].pts = ka;
+                out[b.k].pts = kb;
+                const ang = P => (Math.atan2(P.y - O.y, P.x - O.x) * 180 / Math.PI + 360) % 360;
+                let st = ang(T1), en = ang(T2);
+                if ((en - st + 360) % 360 > 180) [st, en] = [en, st];   // cung ngắn (quét 180° − góc giao)
+                arcs.push({ cx: O.x, cy: O.y, r: R, start: st, end: en });
+            }
+            return { runs: out, arcs };
+        }
         // @@OSMROAD_END
 
         function _drawOsmBasemapInDxf(push, osmData, cm, outDE, outDN, clipBounds, k0, roadOpts) {
@@ -17703,7 +18177,7 @@
                 const pts = convert(w.coords);
                 const centerRuns = clippedRuns(pts);
                 if (ro.center) writePolylines(centerRuns, 'OSM_TIM_DUONG');
-                if (ro.edge) drivable.push({ pts, width: _osmRoadWidth(w.tags, ro.widths), layer: _osmRoadLayer(w.tags) });
+                if (ro.edge) drivable.push({ pts, width: _osmRoadWidth(w.tags, ro.widths), layer: _osmRoadLayer(w.tags), cls: _osmRoadClass(w.tags), name: (w.tags && w.tags.name) || '' });
                 const name = w.tags && w.tags.name;
                 if (ro.name && name) {
                     // Đặt nhãn ở giữa chiều dài của chuỗi dài nhất nằm trong khung
@@ -17726,12 +18200,21 @@
             if (ro.edge && drivable.length) {
                 const chains = _mergeRoadChains(drivable);
                 const corr = _corridorIndex(chains.map((c, i) => ({ pts: c.pts, hw: c.width / 2, id: i, layer: c.layer })), 25);
+                const edgeRuns = [];
                 chains.forEach((c, i) => {
                     for (const side of [1, -1]) {
                         for (const run of clippedRuns(_offsetPolyline(c.pts, side * c.width / 2))) {
-                            writePolylines(_trimEdgeRun(run, corr, i, c.layer), 'OSM_MEP_DUONG');
+                            _trimEdgeRun(run, corr, i, c.layer).forEach(pts => edgeRuns.push({ pts, chain: i, cls: c.cls, name: c.name }));
                         }
                     }
+                });
+                // v161 — bo góc giao lộ (ARC tiếp xúc 2 mép). Khác tầng không có góc chung vì mép không bị cắt ở đó.
+                const fil = _filletCorners(edgeRuns, ro.radii, 0.5, hasClip ? clipBounds : null);
+                writePolylines(fil.runs.map(r => r.pts), 'OSM_MEP_DUONG');
+                fil.arcs.forEach(a => {
+                    push('0', 'ARC', '8', 'OSM_MEP_DUONG', '10', a.cx.toFixed(4), '20', a.cy.toFixed(4), '30', '0',
+                        '40', a.r.toFixed(4), '50', a.start.toFixed(4), '51', a.end.toFixed(4));
+                    entityCount++;
                 });
             }
             // Buildings — outline only
@@ -19096,7 +19579,7 @@
                     const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
                     const jsonData = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
                     loadedData = jsonData;
-                    dirtyMovedRows.clear(); updateDirtyMovedBadge();
+                    dirtyMovedRows.clear(); updateDirtyMovedBadge(); _onCableDataReload();
                     if (_cableVisible) { _removeCableLines(); _cableVisible = false; const _cb = document.getElementById('btnToggleCable'); if (_cb) _cb.classList.remove('active'); }
                     addMarkersToMap(jsonData);
                 } catch (error) {
@@ -20393,7 +20876,7 @@
                 const rows = parseCSVText(await res.text());
                 if (rows.length < 2) throw new Error('Dữ liệu rỗng');
                 loadedData = rows;
-                dirtyMovedRows.clear(); updateDirtyMovedBadge();
+                dirtyMovedRows.clear(); updateDirtyMovedBadge(); _onCableDataReload();
                 _zoomTier = 'all'; // reset tier để _applyZoomTier tính lại đúng theo zoom hiện tại
                 addMarkersToMap(rows.slice(1));
                 displayError('');
@@ -20409,7 +20892,7 @@
             let renderedFromCache = false;
             if (cached && Array.isArray(cached.data) && cached.data.length > 1) {
                 loadedData = cached.data;
-                dirtyMovedRows.clear(); updateDirtyMovedBadge();
+                dirtyMovedRows.clear(); updateDirtyMovedBadge(); _onCableDataReload();
                 _zoomTier = 'all';
                 addMarkersToMap(loadedData.slice(1));
                 displayError('');
@@ -20428,7 +20911,7 @@
                 const oldHash = cached ? (cached.data.length + '|' + (cached.data[1] ? cached.data[1][0] : '')) : '';
                 if (!renderedFromCache || newHash !== oldHash) {
                     loadedData = parsed;
-                    dirtyMovedRows.clear(); updateDirtyMovedBadge();
+                    dirtyMovedRows.clear(); updateDirtyMovedBadge(); _onCableDataReload();
                     _zoomTier = 'all';
                     addMarkersToMap(loadedData.slice(1));
                 }
