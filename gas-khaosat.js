@@ -1435,7 +1435,7 @@ function appendRow(sheet, headers, hIdx, data) {
 
 function buildFieldValues(data) {
   const result = {};
-  const skip = new Set(['action', 'sheet', 'oldTenTru']);
+  const skip = new Set(['action', 'sheet', 'oldTenTru', '_matchId']);
   for (const [key, value] of Object.entries(data)) {
     if (skip.has(key)) continue;
     const header = FIELD_MAP[key] || key;
@@ -1920,9 +1920,16 @@ function handleBatchMatchUpdate(sheetName, records) {
   // BULK READ: đọc toàn bộ data 1 lần
   var allData   = sheet.getRange(2, 1, lastRow - 1, headers.length).getValues();
   var nameToIdx = {};
+  // v160: rec._matchId → khớp theo ID trước (sheet có thể có 2 dòng trùng tên), không có thì theo tên
+  var idCol = hIdx[norm('ID')];
+  var idToIdx = {};
   for (var i = 0; i < allData.length; i++) {
     var nm = norm(String(allData[i][nameCol] || ''));
     if (nm && nameToIdx[nm] === undefined) nameToIdx[nm] = i;
+    if (idCol !== undefined) {
+      var rid = norm(String(allData[i][idCol] || ''));
+      if (rid && idToIdx[rid] === undefined) idToIdx[rid] = i;
+    }
   }
 
   // BULK UPDATE in-memory: thay setValue từng cell bằng cập nhật array
@@ -1931,7 +1938,8 @@ function handleBatchMatchUpdate(sheetName, records) {
   for (var k = 0; k < records.length; k++) {
     var rec = records[k];
     var rnm = norm(String(rec.tenTru || ''));
-    var rowIdx = nameToIdx[rnm];
+    var mid = norm(String(rec._matchId || ''));
+    var rowIdx = (mid && idToIdx[mid] !== undefined) ? idToIdx[mid] : nameToIdx[rnm];
     if (rowIdx === undefined) { notFound++; continue; }
 
     // Apply fields vào allData[rowIdx]

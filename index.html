@@ -16375,32 +16375,36 @@
             const origLabel = btnLabel ? btnLabel.textContent : '';
             if (btn) btn.disabled = true;
             let ok = 0, failed = 0;
-            // v141: Batch mode ≥20 rows (moved marker chỉ đổi lat/lon/capNhat + vn2000)
-            if (rows.length >= 20 && typeof _batchSyncRowsToGAS === 'function') {
+            // v160: LUÔN batch (1 request / 500 dòng) — trước đây <20 dòng gửi tuần tự từng dòng, mỗi dòng 1–3s.
+            // Marker đã dời chỉ đổi toạ độ + VN2000 + khoảng cách cáp + thời gian → gửi đúng các cột đó.
+            // Dòng không có tên trụ không khớp được qua batch → giữ đường cũ (syncRowToGAS, khớp theo ID).
+            const named = rows.filter(r => String(r[1] || '').trim());
+            const unnamed = rows.filter(r => !String(r[1] || '').trim());
+            if (btnLabel) btnLabel.textContent = `Đang cập nhật ${rows.length} marker...`;
+            if (named.length) {
                 const result = await _batchSyncRowsToGAS(
-                    rows,
-                    // khoangCach: dời trụ tính lại khoảng cách cáp của nó + trụ con (updateMarkerCoordinatesInData)
+                    named,
                     ['lat', 'lon', 'vn2000x', 'vn2000y', 'khoangCach', 'capNhat'],
                     (done, total, chunk, chunkTot) => {
-                        if (btnLabel) btnLabel.textContent = `⚡ Batch ${chunk}/${chunkTot} (${done}/${total})...`;
+                        if (btnLabel && chunkTot > 1) btnLabel.textContent = `Đang cập nhật ${done}/${total}...`;
                     }
                 );
-                ok = result.updated;
-                failed = result.failed + result.notFound;
-                if (ok > 0) {
-                    rows.forEach(r => dirtyMovedRows.delete(r));
-                    rows.forEach(r => _logAction && _logAction('move', r, { lat: r[2], lon: r[3] }));
+                const bad = result.failed + result.notFound;
+                ok += result.updated;
+                failed += bad;
+                // Không biết dòng nào lỗi → chỉ xoá dirty khi cả lô thành công (gửi lại là vô hại: ghi cùng giá trị)
+                if (bad === 0) named.forEach(r => dirtyMovedRows.delete(r));
+                if (result.updated > 0) {
+                    // 1 dòng log cho cả lô thay vì N request log đồng thời vào GAS
+                    const names = named.map(r => String(r[1]).trim());
+                    _logAction('move', named.length === 1 ? named[0] : ['', `${named.length} trụ`],
+                        named.length === 1 ? { lat: named[0][2], lon: named[0][3] }
+                                           : { count: named.length, tenTru: names.slice(0, 50).join(', ') + (names.length > 50 ? '…' : '') });
                 }
-            } else {
-                for (let i = 0; i < rows.length; i++) {
-                    if (btnLabel) btnLabel.textContent = `Đang cập nhật ${i+1}/${rows.length}...`;
-                    const success = await syncRowToGAS(rows[i], { silent: true });
-                    if (success) {
-                        dirtyMovedRows.delete(rows[i]);
-                        ok++;
-                        _logAction('move', rows[i], { lat: rows[i][2], lon: rows[i][3] });
-                    } else failed++;
-                }
+            }
+            for (const r of unnamed) {
+                if (await syncRowToGAS(r, { silent: true })) { dirtyMovedRows.delete(r); ok++; }
+                else failed++;
             }
             if (btnLabel) btnLabel.textContent = origLabel || 'Cập nhật';
             updateDirtyMovedBadge();
@@ -19633,7 +19637,8 @@
             for (let i = 0; i < rows.length; i += CHUNK_SIZE) {
                 const chunk = rows.slice(i, i + CHUNK_SIZE);
                 const records = chunk.map(row => {
-                    const rec = { tenTru: String(row[COL.tenTru] || '').trim() };
+                    // _matchId: GAS (v160+) khớp theo ID trước tên — sheet có dòng trùng tên; GAS cũ bỏ qua key này
+                    const rec = { tenTru: String(row[COL.tenTru] || '').trim(), _matchId: String(row[COL.id] || '').trim() };
                     for (const f of (fields || ['markerGoc', 'khoangCach', 'capNhat'])) {
                         if (COL[f] != null) {
                             const v = row[COL[f]];
@@ -19649,15 +19654,20 @@
 
             const runChunk = async (chunk) => {
                 try {
-                    const res = await fetch(KHAOSAT_GAS_URL, {
+                    const post = () => fetch(KHAOSAT_GAS_URL, {
                         method: 'POST',
                         body: JSON.stringify({
                             action: 'batch_match_update',
                             sheet: currentSheet,
                             records: chunk.records
                         })
-                    });
-                    const data = await res.json();
+                    }).then(r => r.json());
+                    let data = await post();
+                    // GAS đang giữ ScriptLock cho request khác → chờ ngắn rồi thử lại 1 lần
+                    if (data && data.status === 'busy') {
+                        await new Promise(r => setTimeout(r, 1500));
+                        data = await post();
+                    }
                     if (data.status === 'ok') {
                         totalUpdated += (data.updated || 0);
                         totalNotFound += (data.notFound || 0);
