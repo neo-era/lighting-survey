@@ -1594,6 +1594,10 @@
                         <button onclick="_lcToggleAllChecks(false)" style="padding:4px 10px;background:#f1f5f9;border:1px solid #cbd5e1;border-radius:5px;font-size:11px;cursor:pointer;">☐ Bỏ chọn</button>
                     </div>
                 </div>
+                <div id="lcXoaBar" style="display:none;margin-top:8px;padding:8px 10px;border:1.5px solid #fca5a5;background:#fef2f2;border-radius:8px;font-size:12px;color:#7f1d1d;align-items:center;gap:8px;flex-wrap:wrap;">
+                    <span id="lcXoaInfo" style="flex:1;min-width:200px;"></span>
+                    <button id="lcXoaBtn" onclick="_lcXoaDelete()" style="padding:6px 12px;background:#dc2626;border:none;color:#fff;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;min-height:34px;">🗑 Xoá trụ tên XÓA…</button>
+                </div>
                 <div id="lcTuBar" style="margin-top:8px;padding:8px;border:1.5px solid #c7d2fe;background:#eef2ff;border-radius:8px;display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-size:12px;">
                     <span style="font-weight:700;color:#3730a3;">Theo tủ:</span>
                     <button id="lcTuToggle" type="button" onclick="_lcTuTogglePanel()" aria-haspopup="listbox" aria-expanded="false" aria-controls="lcTuPanel" style="flex:1;min-width:180px;text-align:left;padding:6px 10px;border:1.5px solid #a5b4fc;border-radius:6px;font-size:13px;background:#fff;cursor:pointer;min-height:34px;">Chọn tủ ▾</button>
@@ -14144,7 +14148,98 @@
             for (const s of snap) { s.row[14] = s.p; s.row[15] = s.d; s.row[13] = s.c; }
             return snap.map(s => s.row);
         }
+        // v172 — trụ đặt tên tạm "XÓA" (nhập liệu đánh dấu bỏ): khớp đúng cả tên, không phân biệt hoa thường/dấu
+        const _isXoaName = n => normalizeText(String(n || '').trim()) === 'xoa';
+        function _xoaPlan(rows) {
+            const del = rows.filter(r => _isXoaName(r[1]));
+            const delSet = new Set(del);
+            const children = rows.filter(r => !delSet.has(r) && _isXoaName(r[14]));
+            const byTu = {};
+            del.forEach(r => { const t = String(r[7] || '').trim() || '(chưa gán tủ)'; byTu[t] = (byTu[t] || 0) + 1; });
+            // Dòng có ID xoá trước (khớp theo ID), dòng không ID sau (GAS khớp theo tên)
+            const order = del.filter(r => String(r[0] || '').trim()).concat(del.filter(r => !String(r[0] || '').trim()));
+            return { del: order, children, byTu };
+        }
+        function _rowsToCsv(header, rows) {
+            const q = v => { const t = v == null ? '' : String(v); return /[",\r\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t; };
+            return [header, ...rows].map(r => r.map(q).join(',')).join('\r\n');
+        }
         // @@TUCABLE_END
+
+        function _lcXoaRender() {
+            const bar = document.getElementById('lcXoaBar');
+            if (!bar) return;
+            const plan = _xoaPlan((loadedData || []).slice(1));
+            if (!plan.del.length) { bar.style.display = 'none'; return; }
+            bar.style.display = 'flex';
+            const tus = Object.entries(plan.byTu).map(([t, n]) => `${_esc(t)} (${n})`).join(', ');
+            const info = document.getElementById('lcXoaInfo');
+            if (info) info.innerHTML = `⚠ Có <b>${plan.del.length} trụ tên "XÓA"</b> — ${tus}` +
+                (plan.children.length ? ` · ${plan.children.length} trụ khác đang lấy "XÓA" làm Marker gốc` : '');
+            const btn = document.getElementById('lcXoaBtn');
+            if (btn) {
+                const admin = _lcTuIsAdmin();
+                btn.disabled = !admin || _lcTuBusy;
+                btn.title = admin ? '' : 'Chỉ admin được xoá dòng khỏi sheet';
+                btn.textContent = `🗑 Xoá ${plan.del.length} trụ tên XÓA…`;
+            }
+        }
+        async function _lcXoaDelete() {
+            if (_lcTuBusy) return;
+            if (!_lcTuIsAdmin()) { displayError && displayError('Chỉ admin được xoá dòng khỏi sheet.'); return; }
+            const plan = _xoaPlan((loadedData || []).slice(1));
+            if (!plan.del.length) return;
+            const tus = Object.entries(plan.byTu).map(([t, n]) => `• ${t}: ${n}`).join('\n');
+            const msg = `XOÁ HẲN ${plan.del.length} dòng tên "XÓA" khỏi sheet ${currentSheet || ''}?\n${tus}\n\n` +
+                (plan.children.length ? `• ${plan.children.length} trụ khác đang lấy "XÓA" làm Marker gốc → xoá trống Marker gốc + Khoảng cách (không xoá trụ)\n` : '') +
+                `• Tự tải file backup CSV trước khi xoá\n• KHÔNG hoàn tác trong app (khôi phục bằng Nhập CSV từ file backup)\n\nGõ XOA để xác nhận:`;
+            const typed = typeof uiPrompt === 'function' ? await uiPrompt(msg, '') : prompt(msg);
+            if (String(typed || '').trim().toUpperCase() !== 'XOA') {
+                if (typed != null) displayError && displayError('Chưa gõ đúng "XOA" — không xoá.');
+                return;
+            }
+            _lcTuBusy = true; _lcXoaRender(); _lcTuUpdate();
+            const btn = document.getElementById('lcXoaBtn');
+            let ok = 0, failed = 0;
+            const deleted = [];
+            try {
+                // 1. Backup
+                const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+                const csv = _rowsToCsv(loadedData[0] || [], plan.del.concat(plan.children));
+                _saveBlob(new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' }), `backup-xoa-${currentSheet || 'sheet'}-${stamp}.csv`);
+                // 2. Trụ con: bỏ gốc "XÓA"
+                if (plan.children.length) {
+                    const now = new Date().toISOString();
+                    plan.children.forEach(r => { r[14] = ''; r[15] = ''; r[13] = now; if (typeof _invalidatePopupCacheForRow === 'function') _invalidatePopupCacheForRow(r); });
+                    await _batchSyncRowsToGAS(plan.children, ['markerGoc', 'khoangCach', 'capNhat']);
+                }
+                // 3. Xoá từng dòng (ID trước, không ID sau)
+                for (let i = 0; i < plan.del.length; i++) {
+                    const r = plan.del[i];
+                    if (btn) btn.textContent = `⏳ Đang xoá ${i + 1}/${plan.del.length}...`;
+                    try {
+                        const resp = await fetch(KHAOSAT_GAS_URL, { method: 'POST',
+                            body: JSON.stringify({ action: 'delete_row', sheet: currentSheet, id: String(r[0] || '').trim(), tenTru: String(r[1] || '').trim() }) });
+                        const json = await resp.json();
+                        if (json && json.status === 'ok') { ok++; deleted.push(r); } else failed++;
+                    } catch (e) { failed++; }
+                }
+                // 4. Gỡ khỏi dữ liệu cục bộ (CSV publish trễ vài phút → không tải lại ngay)
+                const gone = new Set(deleted);
+                [loadedData, typeof newMarkerRows !== 'undefined' ? newMarkerRows : null].forEach(arr => {
+                    if (!Array.isArray(arr)) return;
+                    for (let k = arr.length - 1; k >= 0; k--) if (gone.has(arr[k])) arr.splice(k, 1);
+                });
+                if (typeof addMarkersToMap === 'function') addMarkersToMap(loadedData.slice(1), { fitView: false });
+                try { _logAction && _logAction('delete_xoa_rows', '', currentSheet || '', JSON.stringify({ ok, failed, children: plan.children.length, byTu: plan.byTu })); } catch (e) { _swallow(e); }
+            } finally {
+                _lcTuBusy = false;
+                await _lcTuAfterChange();
+                _lcXoaRender();
+            }
+            (failed ? displayError : displayInfo)(`🗑 Đã xoá ${ok}/${plan.del.length} trụ tên "XÓA"` + (failed ? ` · lỗi ${failed} (bấm lại để thử tiếp)` : '') + ' · đã tải file backup CSV');
+        }
+        window._lcXoaDelete = _lcXoaDelete;
 
         const LC_TU_BIG = 10;          // ≥ 10 tủ (hoặc tất cả) → chỉ admin + gõ "XOA"
         const LC_TU_MST_WARN = 50;     // > 50 tủ → báo xem trước Auto MST có thể chậm
@@ -14174,6 +14269,7 @@
         const _lcTuIsBig = () => { const n = _lcTuCabinets().length; return _lcTuSel.size >= LC_TU_BIG || (n > 1 && _lcTuSel.size === n); };
         function _lcTuInit() {
             _lcTuStatsCache = null;
+            _lcXoaRender();
             const all = new Set(_lcTuCabinets());
             for (const t of [..._lcTuSel]) if (!all.has(t)) _lcTuSel.delete(t);   // đổi địa bàn → bỏ tủ không còn
             _lcTuRenderList();
