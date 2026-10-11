@@ -8,7 +8,12 @@ PWA khảo sát hệ thống chiếu sáng công cộng. Single-page app + GAS b
 ## Cấu trúc file
 
 ```
-index.html          ← toàn bộ app (HTML + CSS + JS gộp 1 file)
+index.html          ← app chính (HTML + CSS + phần lớn JS)
+src/core/*.js       ← hàm thuần dùng chung (text, utils, vn2000, dxf-utils, cad-drawing, mst)
+src/features/*.js   ← tính năng tách khỏi index.html:
+                      đợt 1 (v173, nạp trước script chính): cable-check.js (Kiểm tra sơ đồ cáp), align-route.js (Căn thẳng tuyến UI)
+                      đợt 2 (v174, ngắt script tại chỗ): cad-export.js (Xuất CAD — gồm @@ROADLAMP, @@ROADALIGN), osm.js (Overpass + @@OSMROAD)
+tools/app-source.cjs ← index.html + src/*.js theo thứ tự nạp — test trích hàm/mốc @@ dùng hàm này
 gas-khaosat.js      ← dán vào Google Apps Script, deploy Web App
 manifest.json       ← PWA manifest (start_url, icons, theme_color)
 sw.js               ← Service Worker (cache offline, map tiles)
@@ -4012,3 +4017,14 @@ P68,P69 (BOM/điện) ─→ P70 (compile — attachment)
 - **Chi tiết cột đèn/tủ điện/tiếp địa** (mặt cắt kỹ thuật) — quá phức tạp, dùng template DXF từ kỹ sư CAD 1 lần rồi reference
 - **Ảnh hiện trạng phụ lục** — user upload manual sau
 - **Nội dung thuyết minh custom** — dùng Word template với placeholders, user fill thủ công cho phần đặc thù
+
+## Module hoá index.html (từ v173)
+
+- File tính năng là **classic script** (`<script src>`), KHÔNG phải ES module: hàm + `let/const` cấp cao nhất là toàn cục, các `onclick="..."` gọi thẳng.
+- 2 cách đặt file:
+  - **Nạp trước khối `<script>` chính** (đợt 1) — chỉ dùng khi file lúc nạp chỉ khai báo hàm/hằng + gắn `window`.
+  - **Ngắt khối script tại đúng chỗ cũ** `</script><script src=…></script><script>` (đợt 2) — giữ thứ tự chạy lúc nạp. Điều kiện: không đoạn nào **gọi lúc nạp** tới hàm khai báo ở đoạn sau (hàm ở file sau không còn hoist). Rà bằng parser (acorn) trước khi tách.
+- Top-level `let/const` của các classic script dùng chung 1 phạm vi toàn cục → không được khai báo trùng tên giữa các file.
+- Mỗi lần tách: **chỉ cắt/dán nguyên văn** (giữ cả thụt lề — đổi khoảng trắng trong template string nhiều dòng), thêm vào precache `sw.js` + bump cache, thêm vào `MODULES` trong `tests/module-split.test.mjs`.
+- `tests/module-split.test.mjs` kiểm: thứ tự nạp, precache, không còn bản trùng trong index.html, mọi handler `on*="..."` trỏ tới hàm có thật.
+- Lộ trình: ~~đợt 1~~ ✅ v173 · ~~đợt 2~~ ✅ v174 · đợt 3 import (CSV/CAD)/print PDF/mst-ui/report · đợt 4 lõi (`src/app/`) · đợt 5 CSS.

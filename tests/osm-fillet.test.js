@@ -3,7 +3,7 @@ const fs = require('fs');
 const path = require('path');
 
 function load() {
-    const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+    const html = require('../tools/app-source.cjs').appSource();   // index.html + src/*.js (module hoá)
     const m = html.match(/\/\/ @@OSMROAD_START([\s\S]*?)\/\/ @@OSMROAD_END/);
     if (!m) throw new Error('Thiếu block @@OSMROAD');
     const names = ['_offsetPolyline', '_corridorIndex', '_trimEdgeRun', '_osmRoadClass', '_filletCorners', 'OSM_CORNER_RADIUS_DEFAULTS'];

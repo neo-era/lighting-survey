@@ -3,13 +3,16 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath, pathToFileURL } from 'url';
+import appSrc from '../app-source.cjs';
+const { appSource } = appSrc;
 
 export const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 export const CACHE_DIR = path.join(REPO, 'tools', 'dxf-check', '.cache');
 
 function readIndex() {
     // index.html có thể là CRLF (Windows) hoặc LF → chuẩn hoá để regex theo dòng khớp
-    return fs.readFileSync(path.join(REPO, 'index.html'), 'utf8').split('\r\n').join('\n');
+    // index.html + src/*.js nội bộ (module hoá v173+) — chuẩn hoá CRLF để regex theo dòng khớp
+    return appSource().split('\r\n').join('\n');
 }
 
 function pick(html, re, label) {

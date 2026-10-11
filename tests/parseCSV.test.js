@@ -7,7 +7,7 @@ const path = require('path');
 
 // Extract parseCSVText từ index.html
 function extractParseCSVText() {
-    const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+    const html = require('../tools/app-source.cjs').appSource();   // index.html + src/*.js (module hoá)
     const m = html.match(/function\s+parseCSVText\s*\([\s\S]*?^\s{8}\}/m);
     if (!m) throw new Error('Không tìm thấy parseCSVText trong index.html');
     return new Function(m[0] + '\nreturn parseCSVText;')();

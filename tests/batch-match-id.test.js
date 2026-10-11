@@ -70,7 +70,7 @@ function load(sheet) {
 
 // Client: pushMovedMarkersToSheet dùng batch cho MỌI số lượng + gửi _matchId
 {
-    const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+    const html = require('../tools/app-source.cjs').appSource();   // index.html + src/*.js (module hoá)
     const fn = html.match(/async function pushMovedMarkersToSheet\(\) \{[\s\S]*?\n        \}/);
     ok('pushMovedMarkersToSheet không còn ngưỡng rows.length >= 20', fn && !/rows\.length\s*>=\s*20/.test(fn[0]));
     const bs = html.match(/async function _batchSyncRowsToGAS\([\s\S]*?\n        \}/);
