@@ -272,6 +272,21 @@ function distAlong(px, py, pts) {
     ok('đoạn đường đôi: mép = 6 + 3.5 + 0.5 = 10', near(pe.items[2].y, 10) && near(pe.items[3].y, 10));
 }
 
+// === v164: tuyến chạy qua 2 đường → căn theo đường của TRỤ ĐƯỢC BẤM (opts.roadKey) ===
+{
+    const R = [road([[-200, 0], [0, 0]], { highway: 'secondary', name: 'Lý Tự Trọng' }),
+               road([[0, 0], [0, 300]], { highway: 'secondary', name: 'Lê Thánh Tôn' })];
+    // 5 trụ dọc Lý Tự Trọng (đa số), 3 trụ dọc Lê Thánh Tôn
+    const poles = [[-190, 5], [-150, 4], [-110, 6], [-70, 5], [-40, 4.6], [6, 80], [5, 140], [7, 200]].map(([x, y]) => ({ x, y }));
+    const def = H._raPlanAlign(poles, lines(R));
+    ok('mặc định: đa số chọn Lý Tự Trọng', def.roadKey === 'Lý Tự Trọng');
+    const forced = H._raPlanAlign(poles, lines(R), { roadKey: 'Lê Thánh Tôn' });
+    ok('roadKey = Lê Thánh Tôn → căn 3 trụ trên Lê Thánh Tôn', forced.roadKey === 'Lê Thánh Tôn'
+        && [5, 6, 7].every(i => forced.items[i].flag === 'ok' && near(forced.items[i].x, 6)));
+    ok('trụ trên Lý Tự Trọng → xa đường, không dời', [0, 1, 2].every(i => forced.items[i].flag === 'far'));
+    ok('roadKey không tồn tại → quay về bỏ phiếu đa số', H._raPlanAlign(poles, lines(R), { roadKey: 'KHÔNG CÓ' }).roadKey === 'Lý Tự Trọng');
+}
+
 // === Đường cong (cung tròn R=200) ===
 {
     const arc = []; for (let a = -0.6; a <= 0.6001; a += 0.02) arc.push([200 * Math.sin(a), 200 - 200 * Math.cos(a)]);

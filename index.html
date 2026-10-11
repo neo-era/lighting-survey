@@ -670,6 +670,11 @@
         }
         .custom-crosshair-icon { background: transparent; border: none; }
         @keyframes ks-pulse { 0%,100%{transform:scale(1);opacity:1} 50%{transform:scale(1.5);opacity:.7} }
+        @keyframes cgSpin { to { transform: rotate(360deg); } }
+        .cg-busy-spin { display:inline-block; width:12px; height:12px; margin-right:6px; vertical-align:-2px;
+            border:2px solid currentColor; border-right-color:transparent; border-radius:50%; animation:cgSpin .8s linear infinite; }
+        .ctrl-btn.cg-busy { cursor:progress; opacity:1 !important; }
+        .ctrl-btn.cg-locked { opacity:.45; pointer-events:none; }
         @keyframes gpsPillBlink { 0%,100%{opacity:1} 50%{opacity:.35} }
         @keyframes gpsPillPulse { 0%,100%{box-shadow:0 2px 10px rgba(0,0,0,.25)} 50%{box-shadow:0 0 0 4px rgba(255,255,255,.35),0 2px 10px rgba(0,0,0,.25)} }
         #gpsBgStatusPill.tappable { cursor:pointer; animation:gpsPillPulse 1.5s ease-in-out infinite; }
@@ -1588,6 +1593,16 @@
                         <button onclick="_lcSelectAll()" style="padding:4px 10px;background:#f1f5f9;border:1px solid #cbd5e1;border-radius:5px;font-size:11px;cursor:pointer;">☑ Tất cả</button>
                         <button onclick="_lcToggleAllChecks(false)" style="padding:4px 10px;background:#f1f5f9;border:1px solid #cbd5e1;border-radius:5px;font-size:11px;cursor:pointer;">☐ Bỏ chọn</button>
                     </div>
+                </div>
+                <div id="lcTuBar" style="margin-top:8px;padding:8px;border:1.5px solid #c7d2fe;background:#eef2ff;border-radius:8px;display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-size:12px;">
+                    <label for="lcTuInput" style="font-weight:700;color:#3730a3;margin:0;">Theo tủ:</label>
+                    <input id="lcTuInput" list="lcTuList" placeholder="🔍 Gõ tên tủ…" autocomplete="off" oninput="_lcTuOnInput()" style="flex:1;min-width:180px;padding:6px 8px;border:1.5px solid #a5b4fc;border-radius:6px;font-size:13px;">
+                    <datalist id="lcTuList"></datalist>
+                    <span id="lcTuInfo" style="color:#475569;font-size:11px;min-width:90px;">—</span>
+                    <button id="lcTuBtnClear" onclick="_lcTuClear(false)" disabled style="padding:6px 10px;background:#fff;border:1.5px solid #dc2626;color:#dc2626;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;min-height:34px;">🗑 Xoá toàn bộ cáp của tủ</button>
+                    <button id="lcTuBtnRerun" onclick="_lcTuRerun()" disabled style="padding:6px 10px;background:#fff;border:1.5px solid #059669;color:#059669;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;min-height:34px;">🌳 Chạy lại tối ưu</button>
+                    <button id="lcTuBtnBoth" onclick="_lcTuClear(true)" disabled style="padding:6px 10px;background:#059669;border:1.5px solid #059669;color:#fff;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;min-height:34px;">🗑+🌳 Xoá + chạy lại</button>
+                    <button id="lcTuBtnUndo" onclick="_lcTuUndo()" style="display:none;padding:6px 10px;background:#fff7ed;border:1.5px solid #ea580c;color:#c2410c;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;min-height:34px;">↩ Hoàn tác</button>
                 </div>
                 <div style="margin-top:6px;padding:6px 8px;font-size:11px;color:#7f1d1d;background:#fef2f2;border-radius:5px;line-height:1.4;">
                     Xóa cáp = CLEAR cột <code>Marker gốc</code> + <code>Khoảng cách</code> (không xóa trụ). Fan-out / 🟤 Trùng tên / 🟪 Parent xa không xóa qua modal — dùng Auto MST hoặc sửa marker thủ công.
@@ -8745,10 +8760,40 @@
             ];
         }
 
+        // v163 — Bảng VPORT *ACTIVE: AutoCAD (đã thử 2021) dùng bảng này để đặt khung nhìn khi MỞ file, bỏ qua
+        // $VIEWCTR/$VIEWSIZE ở HEADER. Thiếu bảng → mặc định tâm (0,0) cao 1000 → màn hình trống vì bản vẽ ở
+        // toạ độ VN-2000 ~600 000 / 1 200 000. Chèn làm bảng ĐẦU TIÊN của section TABLES (đúng thứ tự R12).
+        function _dxfActiveVport(bounds, margin) {
+            const m = margin || 0;
+            const minX = bounds.minX - m, maxX = bounds.maxX + m, minY = bounds.minY - m, maxY = bounds.maxY + m;
+            const w = Math.max(1, maxX - minX), h = Math.max(1, maxY - minY);
+            const viewH = Math.max(h, w / 1.4) * 1.04;   // giống _dxfHeaderView: màn hẹp nhất ~1.4 vẫn thấy đủ bề ngang
+            const f = v => Number(v).toFixed(4);
+            return ['0', 'TABLE', '2', 'VPORT', '70', '1',
+                '0', 'VPORT', '2', '*ACTIVE', '70', '0',
+                '10', '0.0', '20', '0.0', '11', '1.0', '21', '1.0',
+                '12', f((minX + maxX) / 2), '22', f((minY + maxY) / 2),
+                '13', '0.0', '23', '0.0', '14', '1.0', '24', '1.0', '15', '1.0', '25', '1.0',
+                '16', '0.0', '26', '0.0', '36', '1.0', '17', '0.0', '27', '0.0', '37', '0.0',
+                '40', f(viewH), '41', '1.6', '42', '50.0', '43', '0.0', '44', '0.0', '50', '0.0', '51', '0.0',
+                '71', '0', '72', '100', '73', '1', '74', '3', '75', '0', '76', '0', '77', '0', '78', '0',
+                '0', 'ENDTAB'];
+        }
+        function _dxfInjectActiveVport(L, bounds, margin) {
+            if (!bounds || !isFinite(bounds.minX) || !isFinite(bounds.maxX)) return;
+            for (let i = 0; i + 3 < L.length; i++) {
+                if (L[i] === '0' && L[i + 1] === 'SECTION' && L[i + 2] === '2' && L[i + 3] === 'TABLES') {
+                    L.splice(i + 4, 0, ..._dxfActiveVport(bounds, margin));
+                    return;
+                }
+            }
+        }
+
         // Key duy nhất cho state (dùng cho legend detection)
         function _stateKey(type, state) {
             const isCabinet = (type === 5 || type === 6);
-            return (isCabinet ? 'cab_' : 'pole_') + (state || 'giu');
+            if (isCabinet) return 'cab';   // v165 — mọi tủ chung block SYM_CAB
+            return 'pole_' + (state || 'giu');
         }
 
         // Label ngắn Vietnamese cho legend
@@ -8761,6 +8806,7 @@
             'pole_moi_led':     'Bộ đèn LED + cần + trụ STK lắp mới',
             'pole_moi_led_thay':'LED thay HPS trên trụ STK hiện hữu',
             'pole_thao_lap':    'Trụ tháo gỡ, lắp đặt lại',
+            'cab':              'Tủ điều khiển chiếu sáng',
             'cab_giu':          'TĐK chiếu sáng hiện hữu giữ nguyên',
             'cab_thu':          'TĐK chiếu sáng thu hồi',
             'cab_moi_led':      'TĐK chiếu sáng lắp mới',
@@ -9087,6 +9133,9 @@
             votes.forEach((v, k) => {
                 if (!bestV || v.count > bestV.count || (v.count === bestV.count && v.sum < bestV.sum)) { roadKey = k; bestV = v; }
             });
+            // v164 — tuyến chạy qua nhiều đường (vd LTT_LTT1: Lý Tự Trọng + Lê Thánh Tôn): căn theo đường của trụ
+            // người dùng bấm, không theo đa số. Trụ trên đường khác → "xa đường", căn riêng bằng cách bấm trụ ở đó.
+            if (o.roadKey && lines.some(l => l.key === o.roadKey)) roadKey = o.roadKey;
             const proj = poles.map(p => _raNearestOnLines(p.x, p.y, lines, roadKey));
             const median = arr => { const s = arr.slice().sort((a, b) => a - b), m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
             const offs = Array.isArray(o.offsets) ? o.offsets : [];
@@ -9185,7 +9234,7 @@
             const soLuong = parseInt(opts.soLuongDen) || 1;
             state = state || 'giu';
             const _lampM = /^lamp([1-4])$/.exec(state);
-            if (_lampM) return _rlDrawLampBlock(push, x, y, parseInt(_lampM[1]), opts.legend ? 0.35 : 1);
+            if (_lampM) return _rlDrawLampBlock(push, x, y, parseInt(_lampM[1]), 1);
 
             const drawEllipseFilled = (cx, cy, rx, ry) => {
                 // DXF không hỗ trợ filled ellipse trực tiếp — dùng SOLID 4-vertex square approximation
@@ -9440,55 +9489,31 @@
         }
 
         // ─── CABINET / TĐK symbols ───
+        // v165 — MỌI tủ dùng chung 1 ký hiệu (không phân biệt trạng thái cải tạo):
+        // chữ nhật ngang 1.55:1, đường chéo dưới-trái → trên-phải, tam giác trên-trái GẠCH CHÉO.
+        // Gạch = các LINE 45° (DXF R12 không có HATCH), cắt đúng theo 3 cạnh tam giác.
+        const CAB_SYM_RATIO = 1.55;
+        function _drawCabinetGeom(push, cx, cy, h) {
+            const w = h * CAB_SYM_RATIO;
+            const x1 = cx - w / 2, x2 = cx + w / 2, y1 = cy - h / 2, y2 = cy + h / 2;
+            const ln = (ax, ay, bx, by) => push('0', 'LINE', '8', '0',
+                '10', ax.toFixed(4), '20', ay.toFixed(4), '30', '0', '11', bx.toFixed(4), '21', by.toFixed(4), '31', '0');
+            ln(x1, y1, x2, y1); ln(x2, y1, x2, y2); ln(x2, y2, x1, y2); ln(x1, y2, x1, y1);
+            ln(x1, y1, x2, y2);
+            // Đường gạch: y = x - k (hướng "/"), khoảng cách vuông góc = h/16 (0.25 m khi h = 4 m).
+            // Tam giác = {x ≥ x1, y ≤ y2, trên đường chéo}. Gạch dốc 1 > dốc chéo m nên đoạn nằm trong là
+            // x ∈ [max(x1, xChéo), xTrên]; k chạy từ đỉnh trên-trái (x1-y2) tới đỉnh trên-phải (x2-y2).
+            const step = (h / 16) * Math.SQRT2;
+            const m = h / w;
+            const kMin = x1 - y2, kMax = x2 - y2;
+            for (let k = kMin + step / 2; k < kMax; k += step) {
+                const xDiag = (y1 - m * x1 + k) / (1 - m);
+                const xa = Math.max(x1, xDiag), xb = y2 + k;
+                if (xb - xa > 1e-6) ln(xa, xa - k, xb, xb - k);
+            }
+        }
         function _drawCabinetSymbol(push, x, y, state) {
-            const H = 2;   // half-width
-            state = state || 'giu';
-            const x1 = x - H, y1 = y - H, x2 = x + H, y2 = y + H;
-
-            // Special: PLC-50A dùng TAM GIÁC lớn thay vì rectangle
-            if (state === 'moi_plc50a') {
-                // Tam giác đều pointing right + fill đen
-                const H2 = 2.5;
-                push('0', 'SOLID', '8', '0');
-                push('10', (x - H2).toFixed(4), '20', (y + H2).toFixed(4), '30', '0');
-                push('11', (x + H2).toFixed(4), '21', y.toFixed(4), '31', '0');
-                push('12', (x - H2).toFixed(4), '22', (y - H2).toFixed(4), '32', '0');
-                push('13', (x - H2).toFixed(4), '23', (y - H2).toFixed(4), '33', '0');
-                return;
-            }
-
-            // Frame (4 LINE) — always drawn
-            push('0', 'LINE', '8', '0', '10', x1.toFixed(4), '20', y1.toFixed(4), '30', '0', '11', x2.toFixed(4), '21', y1.toFixed(4), '31', '0');
-            push('0', 'LINE', '8', '0', '10', x2.toFixed(4), '20', y1.toFixed(4), '30', '0', '11', x2.toFixed(4), '21', y2.toFixed(4), '31', '0');
-            push('0', 'LINE', '8', '0', '10', x2.toFixed(4), '20', y2.toFixed(4), '30', '0', '11', x1.toFixed(4), '21', y2.toFixed(4), '31', '0');
-            push('0', 'LINE', '8', '0', '10', x1.toFixed(4), '20', y2.toFixed(4), '30', '0', '11', x1.toFixed(4), '21', y1.toFixed(4), '31', '0');
-
-            switch (state) {
-                case 'thu':   // Thu hồi: diagonal fill (upper-left triangle filled)
-                    push('0', 'SOLID', '8', '0');
-                    push('10', x1.toFixed(4), '20', y2.toFixed(4), '30', '0');
-                    push('11', x2.toFixed(4), '21', y2.toFixed(4), '31', '0');
-                    push('12', x1.toFixed(4), '22', y1.toFixed(4), '32', '0');
-                    push('13', x1.toFixed(4), '23', y1.toFixed(4), '33', '0');
-                    break;
-                case 'moi_led':   // Lắp mới: diagonal fill (upper-right triangle filled)
-                    push('0', 'SOLID', '8', '0');
-                    push('10', x1.toFixed(4), '20', y2.toFixed(4), '30', '0');
-                    push('11', x2.toFixed(4), '21', y2.toFixed(4), '31', '0');
-                    push('12', x2.toFixed(4), '22', y1.toFixed(4), '32', '0');
-                    push('13', x2.toFixed(4), '23', y1.toFixed(4), '33', '0');
-                    break;
-                case 'thao_lap':   // DCM tháo lắp: play button ▶ ở giữa (triangle solid)
-                    push('0', 'SOLID', '8', '0');
-                    push('10', (x - 0.6).toFixed(4), '20', (y - 0.8).toFixed(4), '30', '0');
-                    push('11', (x + 0.8).toFixed(4), '21', y.toFixed(4), '31', '0');
-                    push('12', (x - 0.6).toFixed(4), '22', (y + 0.8).toFixed(4), '32', '0');
-                    push('13', (x - 0.6).toFixed(4), '23', (y + 0.8).toFixed(4), '33', '0');
-                    break;
-                case 'giu':
-                default:   // Giữ nguyên — chỉ frame contour
-                    break;
-            }
+            _drawCabinetGeom(push, x, y, 4);
         }
 
         // Tổng hợp thông tin đèn từ rows cho phần "Thông tin đèn/trụ" trong bản ký hiệu
@@ -9508,24 +9533,63 @@
 
         // ─── AUTO-LEGEND — vẽ CHÚ THÍCH box chỉ với symbols xuất hiện ───
         // lampSpecs: Map từ _buildLampSpecs(rows) — tuỳ chọn
-        function _drawAutoLegend(push, escape, mapBounds, usedStates, usedCableStates, lampSpecs) {
+        // ĐVT theo key chú thích
+        function _legendUnit(kind, key) {
+            if (kind === 'cable') return 'm';
+            if (key === 'pole_moi_tiepdia') return 'Cọc';
+            if (/^cab(_|$)/.test(key)) return 'Tủ';
+            return 'Trụ';
+        }
+        // Số lượng: số nguyên, dấu chấm ngăn nghìn (4215.5 → "4.216")
+        function _legendQty(v) {
+            const n = Math.round(Number(v) || 0);
+            return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+        }
+        // Tổng mét cáp theo loại (row[22], mặc định 'noi') — chỉ đoạn có trụ gốc nằm trong tập xuất.
+        // Ưu tiên số mét đã ghi (row[15], chấp nhận dấu phẩy thập phân); chưa ghi → đo Haversine.
+        function _legendCableMeters(rows) {
+            const pos = new Map();
+            for (const r of rows) {
+                const lat = parseCoord(r[2]), lon = parseCoord(r[3]);
+                if (isFinite(lat) && isFinite(lon)) pos.set(String(r[1] || '').trim(), [lat, lon]);
+            }
+            const out = new Map();
+            for (const r of rows) {
+                const parent = String(r[14] || '').trim();
+                if (!parent || !pos.has(parent)) continue;
+                let m = parseFloat(String(r[15] || '').replace(',', '.'));
+                if (!(m > 0)) {
+                    const me = pos.get(String(r[1] || '').trim());
+                    if (!me) continue;
+                    const pp = pos.get(parent);
+                    m = haversineM(me[0], me[1], pp[0], pp[1]);
+                }
+                const st = String(r[22] || 'noi').trim() || 'noi';
+                out.set(st, (out.get(st) || 0) + m);
+            }
+            return out;
+        }
+
+        // ─── AUTO-LEGEND — bảng CHÚ THÍCH: Ký hiệu | Diễn giải | ĐVT | Số lượng ───
+        // Ký hiệu vẽ bằng ĐÚNG hàm đã sinh block (tỉ lệ 1:1) → trùng nét block trên bản vẽ.
+        // counts (tuỳ chọn): { states: Map(key→số), cables: Map(state→mét) } — thiếu → bỏ trống cột SL.
+        function _drawAutoLegend(push, escape, mapBounds, usedStates, usedCableStates, lampSpecs, counts) {
             usedStates = usedStates || new Set();
             usedCableStates = usedCableStates || new Set();
+            counts = counts || {};
+            const stCnt = counts.states || new Map(), cabM = counts.cables || null;
             const items = [];
-            // Marker states
             for (const key of usedStates) {
                 const label = _STATE_LABELS[key];
                 if (!label) continue;
-                items.push({ kind: 'marker', key, label });
+                items.push({ kind: 'marker', key, label, qty: stCnt.has(key) ? _legendQty(stCnt.get(key)) : '' });
             }
-            // Cable states
             for (const key of usedCableStates) {
                 const label = _CABLE_STATE_LABELS[key];
                 if (!label) continue;
-                items.push({ kind: 'cable', key, label });
+                items.push({ kind: 'cable', key, label, qty: cabM ? _legendQty(cabM.get(key) || 0) : '' });
             }
 
-            // Lamp specs rows (sorted by loaiDen → congSuat → soLuong)
             const lampRows = lampSpecs ? [...lampSpecs.entries()]
                 .filter(([, c]) => c > 0)
                 .sort(([a], [b]) => a.localeCompare(b))
@@ -9533,46 +9597,87 @@
 
             if (items.length === 0 && lampRows.length === 0) return;
 
-            // Layout: box góc dưới-trái mapBounds, cách 5m
+            // Vẽ ký hiệu vào mảng tạm tại (0,0) → đo bbox → vẽ lại căn giữa ô
+            const P2 = [['10', '20'], ['11', '21'], ['12', '22'], ['13', '23']];
+            function symbolOf(it, ox, oy) {
+                const buf = [];
+                const p = (...a) => { for (const v of a) buf.push(String(v)); };
+                if (it.kind === 'cable') _drawCableSymbol(p, ox - 4, oy, ox + 4, oy, it.key);
+                else if (/^cab(_|$)/.test(it.key)) _drawCabinetSymbol(p, ox, oy, it.key.replace(/^cab_?/, ''));
+                else _drawPoleSymbol(p, ox, oy, it.key.replace(/^pole_/, ''), { soLuongDen: 1 });
+                return buf;
+            }
+            function bboxOf(buf) {
+                let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+                let ent = null, g = {};
+                const flush = () => {
+                    if (!ent) return;
+                    const r = ent === 'CIRCLE' ? (+g['40'] || 0) : 0;
+                    for (const [kx, ky] of P2) if (g[kx] != null && g[ky] != null) {
+                        x0 = Math.min(x0, +g[kx] - r); x1 = Math.max(x1, +g[kx] + r);
+                        y0 = Math.min(y0, +g[ky] - r); y1 = Math.max(y1, +g[ky] + r);
+                    }
+                };
+                for (let i = 0; i + 1 < buf.length; i += 2) {
+                    if (buf[i] === '0') { flush(); ent = buf[i + 1]; g = {}; } else if (!(buf[i] in g)) g[buf[i]] = buf[i + 1];
+                }
+                flush();
+                return isFinite(x0) ? { x0, y0, x1, y1 } : { x0: -1, y0: -1, x1: 1, y1: 1 };
+            }
+            for (const it of items) it.bb = bboxOf(symbolOf(it, 0, 0));
+
+            // Kích thước cột
+            const TXT = 1.7, PADY = 1.2;
+            const symColW = Math.max(14, ...items.map(it => it.bb.x1 - it.bb.x0 + 4));
+            const maxLabel = Math.max(10, ...items.map(it => it.label.length));
+            const descW = Math.max(52, maxLabel * TXT * 0.82 + 4);
+            const unitW = 12, qtyW = 16;
+            const boxW = symColW + descW + unitW + qtyW;
+            for (const it of items) it.h = Math.max(6, it.bb.y1 - it.bb.y0 + 2 * PADY);
+            const titleH = 8, headH = 6;
+            const tableH = items.length ? headH + items.reduce((a, it) => a + it.h, 0) : 0;
             const rowH = 6;
-            const boxW = 90;
-            const lampSepH = lampRows.length > 0 ? 7 : 0;  // chiều cao phần separator đèn
-            const boxH = 8 + items.length * rowH + lampSepH + lampRows.length * rowH + 4;
+            const lampSepH = lampRows.length > 0 ? 7 : 0;
+            const boxH = titleH + tableH + lampSepH + lampRows.length * rowH + 4;
             const bx = mapBounds.minX;
             const byTop = mapBounds.minY - 5;
             const byBot = byTop - boxH;
+            const F = v => v.toFixed(4);
+            const ln = (x1, y1, x2, y2) => push('0', 'LINE', '8', '0', '10', F(x1), '20', F(y1), '30', '0', '11', F(x2), '21', F(y2), '31', '0');
+            const tx = (x, y, h, str) => { push('0', 'TEXT', '8', '0'); push('10', F(x), '20', F(y), '30', '0'); push('40', String(h)); push('1', escape(str)); };
 
-            // Frame
-            push('0', 'LINE', '8', '0', '10', bx.toFixed(4), '20', byTop.toFixed(4), '30', '0', '11', (bx + boxW).toFixed(4), '21', byTop.toFixed(4), '31', '0');
-            push('0', 'LINE', '8', '0', '10', (bx + boxW).toFixed(4), '20', byTop.toFixed(4), '30', '0', '11', (bx + boxW).toFixed(4), '21', byBot.toFixed(4), '31', '0');
-            push('0', 'LINE', '8', '0', '10', (bx + boxW).toFixed(4), '20', byBot.toFixed(4), '30', '0', '11', bx.toFixed(4), '21', byBot.toFixed(4), '31', '0');
-            push('0', 'LINE', '8', '0', '10', bx.toFixed(4), '20', byBot.toFixed(4), '30', '0', '11', bx.toFixed(4), '21', byTop.toFixed(4), '31', '0');
+            // Khung ngoài + tiêu đề
+            ln(bx, byTop, bx + boxW, byTop); ln(bx + boxW, byTop, bx + boxW, byBot);
+            ln(bx + boxW, byBot, bx, byBot); ln(bx, byBot, bx, byTop);
+            tx(bx + 3, byTop - 5, 3.0, 'Chú Thích:');
 
-            // Header: "Chú Thích:"
-            push('0', 'TEXT', '8', '0');
-            push('10', (bx + 3).toFixed(4), '20', (byTop - 5).toFixed(4), '30', '0');
-            push('40', '3.0');
-            push('1', escape('Chú Thích:'));
-
-            // Iterate symbol + state items
-            let yCur = byTop - 12;
+            // Bảng 4 cột
+            const cX = [bx, bx + symColW, bx + symColW + descW, bx + symColW + descW + unitW, bx + boxW];
+            const tTop = byTop - titleH, tBot = tTop - tableH;
+            let yCur = tTop;
+            if (items.length) {
+                ln(bx, tTop, bx + boxW, tTop);
+                for (let i = 1; i < 4; i++) ln(cX[i], tTop, cX[i], tBot);
+                yCur = tTop - headH;
+                ln(bx, yCur, bx + boxW, yCur);
+                tx(cX[0] + 1.5, tTop - 4, TXT, 'Ký hiệu');
+                tx(cX[1] + 1.5, tTop - 4, TXT, 'Diễn giải');
+                tx(cX[2] + 1.5, tTop - 4, TXT, 'ĐVT');
+                tx(cX[3] + 1.5, tTop - 4, TXT, 'Số lượng');
+            }
+            for (const it of items) {
+                const yc = yCur - it.h / 2;
+                const cx = (cX[0] + cX[1]) / 2;
+                const ox = cx - (it.bb.x0 + it.bb.x1) / 2, oy = yc - (it.bb.y0 + it.bb.y1) / 2;
+                push(...symbolOf(it, ox, oy));
+                tx(cX[1] + 1.5, yc - TXT / 2, TXT, it.label);
+                tx(cX[2] + 1.5, yc - TXT / 2, TXT, _legendUnit(it.kind, it.key));
+                if (it.qty) tx(cX[4] - 1.5 - it.qty.length * TXT * 0.62, yc - TXT / 2, TXT, it.qty);
+                yCur -= it.h;
+                ln(bx, yCur, bx + boxW, yCur);
+            }
             const symX = bx + 5;
             const textX = bx + 12;
-            for (const it of items) {
-                if (it.kind === 'marker') {
-                    const isCabinet = it.key.startsWith('cab_');
-                    const state = it.key.replace(/^(pole_|cab_)/, '');
-                    if (isCabinet) _drawCabinetSymbol(push, symX, yCur, state);
-                    else _drawPoleSymbol(push, symX, yCur, state, { soLuongDen: 1, legend: true });
-                } else if (it.kind === 'cable') {
-                    _drawCableSymbol(push, symX - 3, yCur, symX + 3, yCur, it.key);
-                }
-                push('0', 'TEXT', '8', '0');
-                push('10', textX.toFixed(4), '20', (yCur - 1).toFixed(4), '30', '0');
-                push('40', '1.7');
-                push('1', escape(': ' + it.label));
-                yCur -= rowH;
-            }
 
             // ── Phần THÔNG TIN ĐÈN/TRỤ ──
             if (lampRows.length > 0) {
@@ -9688,6 +9793,8 @@
             const bounds = { minX: TU_X - 30, minY: 0, maxX: rightEndX + 15, maxY: 15 };
             const usedStates = new Set();
             const usedCableStates = new Set();
+            const stateCounts = new Map();
+            const _cnt = k => stateCounts.set(k, (stateCounts.get(k) || 0) + 1);
 
             // Draw mỗi tủ 1 hàng
             tuNames.forEach((tuName, rowIdx) => {
@@ -9698,19 +9805,11 @@
                     return t >= 1 && t <= 4;
                 });
 
-                // Cabinet symbol (rectangle 8×8m) tại TU_X
+                // Ký hiệu tủ (chung với mặt bằng) cao 8 m tại TU_X
                 const tuY1 = tuY - TU_HW, tuY2 = tuY + TU_HW;
-                const tuX1 = TU_X - TU_HW, tuX2 = TU_X + TU_HW;
-                push('0', 'LINE', '8', '0', '10', tuX1.toFixed(4), '20', tuY1.toFixed(4), '30', '0', '11', tuX2.toFixed(4), '21', tuY1.toFixed(4), '31', '0');
-                push('0', 'LINE', '8', '0', '10', tuX2.toFixed(4), '20', tuY1.toFixed(4), '30', '0', '11', tuX2.toFixed(4), '21', tuY2.toFixed(4), '31', '0');
-                push('0', 'LINE', '8', '0', '10', tuX2.toFixed(4), '20', tuY2.toFixed(4), '30', '0', '11', tuX1.toFixed(4), '21', tuY2.toFixed(4), '31', '0');
-                push('0', 'LINE', '8', '0', '10', tuX1.toFixed(4), '20', tuY2.toFixed(4), '30', '0', '11', tuX1.toFixed(4), '21', tuY1.toFixed(4), '31', '0');
-                // Diagonal fill upper-left (chuẩn tủ chiếu sáng)
-                push('0', 'SOLID', '8', '0');
-                push('10', tuX1.toFixed(4), '20', tuY2.toFixed(4), '30', '0');
-                push('11', tuX2.toFixed(4), '21', tuY2.toFixed(4), '31', '0');
-                push('12', tuX1.toFixed(4), '22', tuY1.toFixed(4), '32', '0');
-                push('13', tuX1.toFixed(4), '23', tuY1.toFixed(4), '33', '0');
+                const tuX1 = TU_X - TU_HW * CAB_SYM_RATIO, tuX2 = TU_X + TU_HW * CAB_SYM_RATIO;
+                _drawCabinetGeom(push, TU_X, tuY, TU_HW * 2);
+                usedStates.add('cab'); _cnt('cab');
 
                 // Cabinet name label (dưới tủ)
                 push('0', 'TEXT', '8', '0');
@@ -9720,10 +9819,10 @@
 
                 // "Đến lưới hạ thế" — bên trái tủ với arrow
                 push('0', 'TEXT', '8', '0');
-                push('10', (TU_X - 26).toFixed(4), '20', (tuY - 1).toFixed(4), '30', '0');
+                push('10', (tuX1 - 24).toFixed(4), '20', (tuY - 1).toFixed(4), '30', '0');
                 push('40', '2.0');
                 push('1', _dxfEscape('Đến lưới hạ thế'));
-                push('0', 'LINE', '8', '0', '10', (TU_X - 6).toFixed(4), '20', tuY.toFixed(4), '30', '0', '11', tuX1.toFixed(4), '21', tuY.toFixed(4), '31', '0');
+                push('0', 'LINE', '8', '0', '10', (tuX1 - 2).toFixed(4), '20', tuY.toFixed(4), '30', '0', '11', tuX1.toFixed(4), '21', tuY.toFixed(4), '31', '0');
                 // Arrow tip vào tủ
                 push('0', 'LINE', '8', '0', '10', (tuX1 - 1.5).toFixed(4), '20', (tuY + 0.6).toFixed(4), '30', '0', '11', tuX1.toFixed(4), '21', tuY.toFixed(4), '31', '0');
                 push('0', 'LINE', '8', '0', '10', (tuX1 - 1.5).toFixed(4), '20', (tuY - 0.6).toFixed(4), '30', '0', '11', tuX1.toFixed(4), '21', tuY.toFixed(4), '31', '0');
@@ -9735,7 +9834,7 @@
                     const yh = tuY - 4 - gi * 0.5;
                     push('0', 'LINE', '8', '0', '10', (GROUND_X - w).toFixed(4), '20', yh.toFixed(4), '30', '0', '11', (GROUND_X + w).toFixed(4), '21', yh.toFixed(4), '31', '0');
                 });
-                usedStates.add('pole_moi_tiepdia');
+                usedStates.add('pole_moi_tiepdia'); _cnt('pole_moi_tiepdia');
                 // Wire ground → cabinet
                 push('0', 'LINE', '8', '0', '10', tuX2.toFixed(4), '20', tuY.toFixed(4), '30', '0', '11', (GROUND_X - 1.8).toFixed(4), '21', tuY.toFixed(4), '31', '0');
 
@@ -9759,7 +9858,7 @@
                     // bóng vươn ±Y (cao nhất ~4.2m → dưới nhãn pha ở POLE_H+2, trên nhãn tên ở -3)
                     const nLamp = Math.min(4, Math.max(1, parseInt(r[21]) || 1));
                     _rlDrawLampBlock(push, poleX, tuY + CABLE_Y_OFF, nLamp, 1);
-                    usedStates.add('pole_lamp' + nLamp);
+                    usedStates.add('pole_lamp' + nLamp); _cnt('pole_lamp' + nLamp);
 
                     // Phase label above (A/B/C)
                     const phase = String(r[26] || '').trim();
@@ -9877,12 +9976,17 @@
             }
 
             // Auto-legend (sơ đồ nguyên lý — lấy lampSpecs từ rows)
-            _drawAutoLegend(push, _dxfEscape, { minX: bounds.minX + 20, minY: 0, maxX: bounds.maxX, maxY: bounds.maxY }, usedStates, usedCableStates, _buildLampSpecs(rows));
+            // Cáp: liệt kê mọi loại có số mét (không chỉ loại cáp của trụ đầu mỗi tủ)
+            const cableMeters = _legendCableMeters(rows);
+            for (const k of cableMeters.keys()) usedCableStates.add(k);
+            _drawAutoLegend(push, _dxfEscape, { minX: bounds.minX + 20, minY: 0, maxX: bounds.maxX, maxY: bounds.maxY }, usedStates, usedCableStates, _buildLampSpecs(rows),
+                { states: stateCounts, cables: cableMeters });
             }
 
             // Patch HEADER — extents + khung nhìn để mở ra thấy nội dung ngay
             L.splice(0, 6, '0', 'SECTION', '2', 'HEADER',
                 ..._dxfHeaderView(bounds, 20), '0', 'ENDSEC');
+            _dxfInjectActiveVport(L, bounds, 20);
 
             push('0', 'ENDSEC', '0', 'EOF');
             return L.join('\r\n');
@@ -10326,18 +10430,8 @@
             // Vẽ mỗi tủ + label + coord
             const coordVisible = opts.showCoords !== false;   // default true
             cabPositions.forEach(c => {
-                // Cabinet rectangle với upper-left triangle SOLID
-                const x1 = c.x - CAB_HW, y1 = c.y - CAB_HW, x2 = c.x + CAB_HW, y2 = c.y + CAB_HW;
-                push('0', 'LINE', '8', '0', '10', x1.toFixed(4), '20', y1.toFixed(4), '30', '0', '11', x2.toFixed(4), '21', y1.toFixed(4), '31', '0');
-                push('0', 'LINE', '8', '0', '10', x2.toFixed(4), '20', y1.toFixed(4), '30', '0', '11', x2.toFixed(4), '21', y2.toFixed(4), '31', '0');
-                push('0', 'LINE', '8', '0', '10', x2.toFixed(4), '20', y2.toFixed(4), '30', '0', '11', x1.toFixed(4), '21', y2.toFixed(4), '31', '0');
-                push('0', 'LINE', '8', '0', '10', x1.toFixed(4), '20', y2.toFixed(4), '30', '0', '11', x1.toFixed(4), '21', y1.toFixed(4), '31', '0');
-                // Upper-left triangle fill
-                push('0', 'SOLID', '8', '0');
-                push('10', x1.toFixed(4), '20', y2.toFixed(4), '30', '0');
-                push('11', x2.toFixed(4), '21', y2.toFixed(4), '31', '0');
-                push('12', x1.toFixed(4), '22', y1.toFixed(4), '32', '0');
-                push('13', x1.toFixed(4), '23', y1.toFixed(4), '33', '0');
+                // Ký hiệu tủ (chung với mặt bằng), cao 2·CAB_HW
+                _drawCabinetGeom(push, c.x, c.y, CAB_HW * 2);
 
                 // Label tủ (dưới cabinet)
                 push('0', 'TEXT', '8', '0');
@@ -10349,11 +10443,11 @@
                 if (coordVisible) {
                     const coordStr = c.x.toFixed(2) + ' / ' + c.y.toFixed(2);
                     push('0', 'TEXT', '8', '0');
-                    push('10', (c.x + CAB_HW + 2).toFixed(4), '20', (c.y + CAB_HW * 0.5).toFixed(4), '30', '0');
+                    push('10', (c.x + CAB_HW * CAB_SYM_RATIO + 2).toFixed(4), '20', (c.y + CAB_HW * 0.5).toFixed(4), '30', '0');
                     push('40', COORD_H.toFixed(2));
                     push('1', _dxfEscape(coordStr));
                     push('0', 'TEXT', '8', '0');
-                    push('10', (c.x + CAB_HW + 2).toFixed(4), '20', (c.y - CAB_HW * 0.5).toFixed(4), '30', '0');
+                    push('10', (c.x + CAB_HW * CAB_SYM_RATIO + 2).toFixed(4), '20', (c.y - CAB_HW * 0.5).toFixed(4), '30', '0');
                     push('40', COORD_H.toFixed(2));
                     push('1', _dxfEscape('(VN-2000)'));
                 }
@@ -10555,6 +10649,7 @@
             // Patch HEADER — extents + khung nhìn để mở ra thấy nội dung ngay
             L.splice(0, 6, '0', 'SECTION', '2', 'HEADER',
                 ..._dxfHeaderView(bounds, 20), '0', 'ENDSEC');
+            _dxfInjectActiveVport(L, bounds, 20);
 
             push('0', 'ENDSEC', '0', 'EOF');
             return L.join('\r\n');
@@ -10610,6 +10705,7 @@
 
             // Track states used (cho auto-legend Phase C)
             const _usedStates = new Set();
+            const _stateCounts = new Map();   // key chú thích → số đối tượng (cột Số lượng)
             const _usedCableStates = new Set();
 
             // ─── Ký hiệu marker xuất ra dưới dạng BLOCK ───
@@ -10725,19 +10821,19 @@
                     const _bn  = _ensureSymbolBlock(_key, type, lampState, { soLuongDen: nLamp });
                     push('0', 'INSERT', '8', '0', '2', _bn,
                          '10', x.toFixed(4), '20', y.toFixed(4), '30', '0', '50', rot.toFixed(2));
-                    _usedStates.add(_key);
+                    _usedStates.add(_key); _stateCounts.set(_key, (_stateCounts.get(_key) || 0) + 1);
                 } else {
                     // Ký hiệu = INSERT block (định nghĩa sinh 1 lần mỗi state)
                     const _key = _stateKey(type, state);
                     const _bn  = _ensureSymbolBlock(_key, type, state, { soLuongDen, loaiDen });
                     push('0', 'INSERT', '8', '0', '2', _bn,
                          '10', x.toFixed(4), '20', y.toFixed(4), '30', '0');
-                    _usedStates.add(_key);
+                    _usedStates.add(_key); _stateCounts.set(_key, (_stateCounts.get(_key) || 0) + 1);
                 }
 
-                // TEXT label tên trụ (cao 2m thực địa @ 1:1000)
+                // TEXT label tên trụ (cao 2m thực địa @ 1:1000) — tủ rộng 6.2 m nên đẩy nhãn ra ngoài khung
                 push('0', 'TEXT', '8', '0');
-                push('10', (x + 3).toFixed(4), '20', (y - 1).toFixed(4), '30', '0');
+                push('10', (x + (_isPole ? 3 : 4)).toFixed(4), '20', (y - 1).toFixed(4), '30', '0');
                 push('40', '2.0');
                 push('1', _dxfEscape(name));
 
@@ -10750,6 +10846,7 @@
             opts.__usedStates = _usedStates;
             opts.__usedCableStates = _usedCableStates;
             opts.__lampSpecs = _buildLampSpecs(rows);
+            opts.__legendCounts = { states: _stateCounts, cables: _legendCableMeters(rows) };
 
             // Draw cables (dispatch pattern theo loaiCap state — P59+)
             // Skip toàn bộ block nếu user tắt cable trong modal (opts.includeCable === false)
@@ -11118,19 +11215,12 @@
                     push('1', _dxfEscape('BẢNG KÝ HIỆU'));
                     let ry = lgTop - 9;
                     for (const t of usedTypes) {
-                        push('0', 'CIRCLE', '8', '0');
-                        push('10', (lgX + 4).toFixed(4), '20', (ry - 1).toFixed(4), '30', '0');
-                        push('40', '1.0');
                         if (t === 5 || t === 6) {
-                            const cx = lgX + 4, cy = ry - 1, H = 1.5;
-                            push('0', 'LINE', '8', '0', '10', (cx - H).toFixed(4), '20', (cy - H).toFixed(4), '30', '0',
-                                 '11', (cx + H).toFixed(4), '21', (cy - H).toFixed(4), '31', '0');
-                            push('0', 'LINE', '8', '0', '10', (cx + H).toFixed(4), '20', (cy - H).toFixed(4), '30', '0',
-                                 '11', (cx + H).toFixed(4), '21', (cy + H).toFixed(4), '31', '0');
-                            push('0', 'LINE', '8', '0', '10', (cx + H).toFixed(4), '20', (cy + H).toFixed(4), '30', '0',
-                                 '11', (cx - H).toFixed(4), '21', (cy + H).toFixed(4), '31', '0');
-                            push('0', 'LINE', '8', '0', '10', (cx - H).toFixed(4), '20', (cy + H).toFixed(4), '30', '0',
-                                 '11', (cx - H).toFixed(4), '21', (cy - H).toFixed(4), '31', '0');
+                            _drawCabinetGeom(push, lgX + 4, ry - 1, 2.4);   // v165 — cùng ký hiệu block SYM_CAB
+                        } else {
+                            push('0', 'CIRCLE', '8', '0');
+                            push('10', (lgX + 4).toFixed(4), '20', (ry - 1).toFixed(4), '30', '0');
+                            push('40', '1.0');
                         }
                         push('0', 'TEXT', '8', '0');
                         push('10', (lgX + 8).toFixed(4), '20', (ry - 2).toFixed(4), '30', '0');
@@ -11155,7 +11245,7 @@
                 push('1', 'B');
 
                 // === 4b. AUTO-LEGEND "CHÚ THÍCH" (P59+) — NGOÀI frame outer (strip dưới, cột phải) ===
-                _drawAutoLegend(push, _dxfEscape, _stripAlMapBounds, opts.__usedStates, opts.__usedCableStates, opts.__lampSpecs);
+                _drawAutoLegend(push, _dxfEscape, _stripAlMapBounds, opts.__usedStates, opts.__usedCableStates, opts.__lampSpecs, opts.__legendCounts);
 
                 // === 5. APPROVAL STAMPS (P58) — 4 ô chuẩn hồ sơ Sở XD ===
                 if (activeStamps.length > 0) {
@@ -11242,6 +11332,7 @@
             // 'none': nền OSM/CAD được cắt theo bounds ±30m → lề 35 để khung nhìn ôm hết nền
             L.splice(0, 6, '0', 'SECTION', '2', 'HEADER',
                 ..._dxfHeaderView(bounds, _noTitle ? 35 : 20), '0', 'ENDSEC');
+            _dxfInjectActiveVport(L, bounds, _noTitle ? 35 : 20);
 
             // CRLF line-ending — AutoCAD strict
             return L.join('\r\n');
@@ -12527,7 +12618,48 @@
         window._openCadGenerator = _openCadGenerator;
 
         // ── Export handler (Phase C: preview + multi-sheet + zip) ────
+        // Trạng thái đang chạy cho nút xuất: nút bấm hiện vòng xoay + "Đang xuất… Ns", các nút còn lại khoá
+        // (chống bấm trùng khi đang tải nền OSM / tạo file). Luôn khôi phục trong finally.
+        const _CG_EXPORT_BTNS = { preview: 'cgBtnPreview', dxf: 'cgBtnDxf', pdf: 'cgBtnPdf', both: 'cgBtnBoth' };
+        let _cgExportBusy = false;
         async function _onCgExport(mode) {
+            if (_cgExportBusy) return;
+            _cgExportBusy = true;
+            const btn = document.getElementById(_CG_EXPORT_BTNS[mode]);
+            const footer = btn && btn.parentElement;
+            const others = footer ? [...footer.querySelectorAll('button[id]')].filter(b => b !== btn) : [];   // nút Hủy (không id) vẫn bấm được
+            const origHtml = btn ? btn.innerHTML : '';
+            const t0 = Date.now();
+            const render = () => {
+                if (!btn) return;
+                const sec = Math.floor((Date.now() - t0) / 1000);
+                btn.innerHTML = '<span class="cg-busy-spin" aria-hidden="true"></span>Đang xuất…' + (sec > 0 ? ' ' + sec + 's' : '');
+            };
+            let timer = null;
+            if (btn) {
+                btn.disabled = true;
+                btn.classList.add('cg-busy');
+                btn.setAttribute('aria-busy', 'true');
+                render();
+                timer = setInterval(render, 1000);
+            }
+            others.forEach(b => { b.dataset.cgWasDisabled = b.disabled ? '1' : ''; b.disabled = true; b.classList.add('cg-locked'); });
+            try {
+                await _onCgExportRun(mode);
+            } finally {
+                if (timer) clearInterval(timer);
+                if (btn) {
+                    btn.innerHTML = origHtml;
+                    btn.disabled = false;
+                    btn.classList.remove('cg-busy');
+                    btn.removeAttribute('aria-busy');
+                }
+                others.forEach(b => { b.disabled = b.dataset.cgWasDisabled === '1'; b.classList.remove('cg-locked'); delete b.dataset.cgWasDisabled; });
+                _cgExportBusy = false;
+            }
+        }
+
+        async function _onCgExportRun(mode) {
             const cbOut = document.getElementById('cgExcludeOutliers');
             const cbStamps = document.getElementById('cgShowStamps');
             // P58: Persist stamps meta vào localStorage TRƯỚC khi build opts
@@ -13720,8 +13852,8 @@
             [btnDiff, btnAll].forEach(b => b && (b.disabled = true));
             if (activeBtn) activeBtn.textContent = '⏳ Đang sync...';
 
-            const rowByName = new Map();
-            (loadedData || []).slice(1).forEach(r => rowByName.set(String(r[1] || '').trim(), r));
+            // v168 — trùng tên: lấy dòng CÓ toạ độ (trước đây lấy dòng cuối = dòng import trống toạ độ)
+            const rowByName = _rowMapByNamePreferCoord((loadedData || []).slice(1));
 
             // P3: Collect target edges từ all tủ (multi-select)
             // P1: Nếu diffOnly → chỉ include edges thuộc diff.changed + diff.added của TỪNG tủ
@@ -13897,8 +14029,8 @@
             const bar = document.getElementById('mstRollbackBar');
             if (bar) bar.innerHTML = '<span id="rollbackProgress">⏳ Rollback 0/' + undo.snapshot.length + '...</span>';
 
-            const rowByName = new Map();
-            (loadedData || []).slice(1).forEach(r => rowByName.set(String(r[1] || '').trim(), r));
+            // v168 — trùng tên: lấy dòng CÓ toạ độ (trước đây lấy dòng cuối = dòng import trống toạ độ)
+            const rowByName = _rowMapByNamePreferCoord((loadedData || []).slice(1));
 
             let restored = 0, synced = 0, failed = 0;
             const total = undo.snapshot.length;
@@ -13967,6 +14099,159 @@
         // ═══════════════════════════════════════════════════════════════════
         let _lcHighlightLayer = null;
 
+        // ─── v168 — Xoá toàn bộ tuyến cáp của 1 tủ + chạy lại tối ưu (modal Kiểm tra sơ đồ cáp) ───
+        // @@TUCABLE_START
+        const _rowHasCoord = r => isFinite(parseCoord(r[2])) && isFinite(parseCoord(r[3]));
+        // Map tên → dòng; trùng tên thì ưu tiên dòng CÓ toạ độ (dòng import trùng tên thường trống toạ độ)
+        function _rowMapByNamePreferCoord(rows) {
+            const m = new Map();
+            for (const r of rows) {
+                const k = String(r[1] || '').trim();
+                if (!k) continue;
+                const cur = m.get(k);
+                if (!cur || (!_rowHasCoord(cur) && _rowHasCoord(r))) m.set(k, r);
+            }
+            return m;
+        }
+        // Các dòng thuộc tủ (cột Tủ điều khiển) đang có cáp (Marker gốc hoặc Khoảng cách) — gồm cả dòng trùng tên
+        function _tuCablePlan(rows, tuName) {
+            const tu = String(tuName || '').trim();
+            const inTu = tu ? rows.filter(r => String(r[7] || '').trim() === tu) : [];
+            const targets = inTu.filter(r => String(r[14] || '').trim() !== '' || String(r[15] || '').trim() !== '');
+            const withCoord = targets.filter(_rowHasCoord).length;
+            const poles = new Set(inTu.filter(r => { const t = parseInt(r[6]); return t >= 1 && t <= 4; })
+                .map(r => String(r[1] || '').trim()));
+            return { tu, targets, withCoord, noCoord: targets.length - withCoord, rowCount: inTu.length, poleCount: poles.size };
+        }
+        // Xoá cáp tại chỗ; trả snapshot để hoàn tác (giữ tham chiếu dòng + ID)
+        function _tuCableClearApply(plan, nowIso) {
+            const snap = plan.targets.map(r => ({ row: r, id: String(r[0] || ''), p: r[14], d: r[15], c: r[13] }));
+            for (const r of plan.targets) { r[14] = ''; r[15] = ''; r[13] = nowIso; }
+            return snap;
+        }
+        function _tuCableUndoApply(snap) {
+            for (const s of snap) { s.row[14] = s.p; s.row[15] = s.d; s.row[13] = s.c; }
+            return snap.map(s => s.row);
+        }
+        // @@TUCABLE_END
+
+        let _lcTuUndoState = null;   // { tu, snap }
+        let _lcTuBusy = false;
+        function _lcTuCabinets() {
+            const set = new Set();
+            for (const r of (loadedData || []).slice(1)) { const t = String(r[7] || '').trim(); if (t) set.add(t); }
+            return [...set].sort((a, b) => a.localeCompare(b, 'vi', { numeric: true }));
+        }
+        function _lcTuInit() {
+            const dl = document.getElementById('lcTuList');
+            if (dl) dl.innerHTML = _lcTuCabinets().map(t => `<option value="${_esc(t)}"></option>`).join('');
+            _lcTuOnInput();
+        }
+        // Khớp tên tủ không phân biệt dấu/hoa thường
+        function _lcTuResolve(text) {
+            const q = normalizeTextSearchable(text || '');
+            if (!q) return '';
+            const all = _lcTuCabinets();
+            return all.find(t => t === String(text).trim()) || all.find(t => normalizeTextSearchable(t) === q) || '';
+        }
+        function _lcTuOnInput() {
+            const inp = document.getElementById('lcTuInput');
+            const info = document.getElementById('lcTuInfo');
+            const tu = _lcTuResolve(inp ? inp.value : '');
+            const plan = tu ? _tuCablePlan((loadedData || []).slice(1), tu) : null;
+            if (info) info.textContent = plan ? `${plan.poleCount} trụ · ${plan.rowCount} dòng · ${plan.targets.length} cáp` : (inp && inp.value ? 'Không có tủ này' : '—');
+            const canEdit_ = typeof canEdit !== 'function' || canEdit();
+            const on = !!plan && !_lcTuBusy && canEdit_;
+            const set = (id, v) => { const b = document.getElementById(id); if (b) b.disabled = !v; };
+            set('lcTuBtnClear', on && plan.targets.length > 0);
+            set('lcTuBtnBoth', on && plan.targets.length > 0);
+            set('lcTuBtnRerun', on);
+            return tu;
+        }
+        function _lcTuSet(tu) {
+            const inp = document.getElementById('lcTuInput');
+            if (inp && tu) { inp.value = tu; _lcTuOnInput(); }
+        }
+        async function _lcTuAfterChange() {
+            _lcClearHighlight();
+            if (_cableVisible && typeof _rebuildCableLines === 'function') _rebuildCableLines();
+            _lcRefreshList();
+            _lcTuOnInput();
+        }
+        async function _lcTuSync(rows, label) {
+            if (!rows.length) return { updated: 0, failed: 0, notFound: 0 };
+            const btn = document.getElementById('lcTuBtnClear');
+            return await _batchSyncRowsToGAS(rows, ['markerGoc', 'khoangCach', 'capNhat'], (done, tot) => {
+                if (btn) btn.textContent = `⏳ ${label} ${done}/${tot}...`;
+            });
+        }
+        // rerunAfter = true → xoá xong mở Auto MST cho tủ này
+        async function _lcTuClear(rerunAfter) {
+            if (_lcTuBusy) return;
+            const tu = _lcTuOnInput();
+            if (!tu) { displayError && displayError('Chọn tủ trước.'); return; }
+            const plan = _tuCablePlan((loadedData || []).slice(1), tu);
+            if (!plan.targets.length) { displayInfo && displayInfo(`Tủ "${tu}" không còn cáp nào.`); if (rerunAfter) _lcTuRerun(); return; }
+            const msg = `Xoá toàn bộ cáp của tủ "${tu}"?\n\n• ${plan.targets.length} đoạn cáp (${plan.withCoord} dòng có toạ độ + ${plan.noCoord} dòng không toạ độ / trùng tên)\n• CLEAR "Marker gốc" + "Khoảng cách" — KHÔNG xoá trụ\n• Ghi Google Sheet ngay, có nút Hoàn tác` + (rerunAfter ? '\n\nXoá xong sẽ mở Auto MST để chạy lại tuyến tối ưu.' : '');
+            const okGo = typeof uiConfirm === 'function' ? await uiConfirm(msg) : confirm(msg);
+            if (!okGo) return;
+            _lcTuBusy = true; _lcTuOnInput();
+            const btn = document.getElementById('lcTuBtnClear');
+            const orig = btn ? btn.textContent : '';
+            let res = null;
+            try {
+                const snap = _tuCableClearApply(plan, new Date().toISOString());
+                plan.targets.forEach(r => { if (typeof _invalidatePopupCacheForRow === 'function') _invalidatePopupCacheForRow(r); });
+                // Bật Hoàn tác TRƯỚC khi ghi sheet — ghi lỗi giữa chừng vẫn khôi phục được
+                _lcTuUndoState = { tu, snap };
+                const ub = document.getElementById('lcTuBtnUndo');
+                if (ub) { ub.style.display = ''; ub.textContent = `↩ Hoàn tác (${tu})`; }
+                res = await _lcTuSync(plan.targets, 'Đang xoá');
+                try { _logAction && _logAction('delete_tu_cables', '', currentSheet || '', JSON.stringify({ tu, count: plan.targets.length, ids: snap.map(s => s.id) })); } catch (e) { _swallow(e); }
+            } finally {
+                _lcTuBusy = false;
+                if (btn) btn.textContent = orig;
+                await _lcTuAfterChange();
+            }
+            if (!res) return;   // lỗi ghi sheet đã ném ra ngoài — không báo "đã xoá"
+            const bad = (res.failed || 0) + (res.notFound || 0);
+            (bad ? displayError : displayInfo)(`🗑 Tủ "${tu}": đã xoá ${plan.targets.length} cáp · ghi sheet ${res.updated || 0}/${plan.targets.length}` + (bad ? ` · lỗi ${bad}` : ''));
+            if (rerunAfter) _lcTuRerun();
+        }
+        async function _lcTuUndo() {
+            const st = _lcTuUndoState;
+            if (!st || _lcTuBusy) return;
+            _lcTuBusy = true;
+            let res;
+            try {
+                const rows = _tuCableUndoApply(st.snap);
+                rows.forEach(r => { if (typeof _invalidatePopupCacheForRow === 'function') _invalidatePopupCacheForRow(r); });
+                res = await _lcTuSync(rows, 'Hoàn tác');
+                _lcTuUndoState = null;
+                const ub = document.getElementById('lcTuBtnUndo');
+                if (ub) ub.style.display = 'none';
+                try { _logAction && _logAction('undo_delete_tu_cables', '', currentSheet || '', JSON.stringify({ tu: st.tu, count: rows.length })); } catch (e) { _swallow(e); }
+            } finally {
+                _lcTuBusy = false;
+                await _lcTuAfterChange();
+            }
+            if (res) displayInfo && displayInfo(`↩ Đã khôi phục ${st.snap.length} cáp của tủ "${st.tu}" · ghi sheet ${res.updated || 0}`);
+        }
+        function _lcTuRerun() {
+            const tu = _lcTuOnInput();
+            if (!tu) return;
+            _closeLongCableCheck();
+            _openAutoMstModal();
+            const sel = document.getElementById('mstTuSelect');
+            if (sel) {
+                Array.from(sel.options).forEach(o => { o.selected = o.value === tu; });
+                _onMstTuChange();
+                if (typeof _mstDoPreview === 'function') _mstDoPreview();
+            }
+        }
+        window._lcTuOnInput = _lcTuOnInput; window._lcTuClear = _lcTuClear;
+        window._lcTuUndo = _lcTuUndo; window._lcTuRerun = _lcTuRerun;
+
         function _openLongCableCheck() {
             const modal = document.getElementById('longCableModal');
             if (!modal) return;
@@ -13977,6 +14262,7 @@
             modal.style.display = 'flex';
             if (typeof closeControlsModal === 'function') closeControlsModal();
             _lcRefreshList();
+            _lcTuInit();
         }
         window._openLongCableCheck = _openLongCableCheck;
 
@@ -14356,6 +14642,7 @@
         function _focusLongCable(idx) {
             const it = _lcCurrentList[idx];
             if (!it) return;
+            if (it.row) _lcTuSet(String(it.row[7] || '').trim());   // v168 — chọn sẵn tủ của dòng lỗi
             _lcClearHighlight();
             const cfg = CABLE_ISSUE_TYPES[it.type];
             const color = cfg.color;
@@ -16784,9 +17071,13 @@
             const frame = _raLocalFrame((bounds.minLat + bounds.maxLat) / 2, (bounds.minLon + bounds.maxLon) / 2);
             const poles = rows.map(r => frame.toXY(parseCoord(r[2]), parseCoord(r[3])));
             const lines = _raRoadLines(osm.roads, frame);
+            // v164 — tuyến qua nhiều đường: căn theo đường gần trụ người dùng vừa bấm
+            const clickXY = frame.toXY(parseCoord(row[2]), parseCoord(row[3]));
+            const clickNear = _raNearestOnLines(clickXY.x, clickXY.y, lines, null);
+            const roadKey = clickNear && clickNear.dist <= 30 ? clickNear.key : null;
             const collator = new Intl.Collator('vi', { numeric: true, sensitivity: 'base' });
             const order = rows.map((_, i) => i).sort((a, b) => collator.compare(String(rows[a][1] || ''), String(rows[b][1] || '')));
-            _raState = { rows, poles, lines, frame, order, base, cfg: null, width: null, manual: new Map(),
+            _raState = { rows, poles, lines, frame, order, base, roadKey, cfg: null, width: null, manual: new Map(),
                          layer: L.layerGroup().addTo(map) };
             _raRecompute();
             if (!_raState) return;
@@ -16835,7 +17126,7 @@
         function _raRecompute() {
             const st = _raState;
             if (!st) return;
-            const base = _raPlanAlign(st.poles, st.lines);   // hàng + trung vị + phía nhiều trụ (không phụ thuộc mốc)
+            const base = _raPlanAlign(st.poles, st.lines, { roadKey: st.roadKey });   // hàng + trung vị + phía nhiều trụ (không phụ thuộc mốc)
             if (base.error) {
                 _raClose();
                 displayError(base.error === 'no_road'
@@ -16860,7 +17151,7 @@
             const offsets = st.cfg.map(c => (c.ref === 'tim' ? (c.side < 0 ? -1 : 1) * c.value : null));
             const edge = st.cfg.map(c => (c.ref === 'mep' ? { side: c.side, value: c.value } : null));
             const plan = _raPlanAlign(st.poles, st.lines, {
-                offsets, edge, crossMin: 2,
+                offsets, edge, crossMin: 2, roadKey: st.roadKey,
                 width: st.width !== st.osmWidth ? st.width : null   // chưa sửa → mỗi đoạn dùng bề rộng OSM của chính nó
             });
             st.groups = plan.groups;

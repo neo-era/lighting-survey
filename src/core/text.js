@@ -20,9 +20,13 @@
 
     // Strip trailing digits + separators (_, space, -) khỏi tên marker để lấy basename.
     // VD: 'VTS_H232VTS_19' → 'vts_h232vts' | 'C1.01' → 'c1.' | 'ADV_2_1' → 'adv_2'
-    // Dùng cho: dropdown "Marker gốc", filter basename trong CAD generator.
+    // Dùng cho: dropdown "Marker gốc", filter basename trong CAD generator, căn thẳng tuyến.
+    // Bỏ trước phần ngoặc ở CUỐI tên (số thứ tự phụ, vd 'LTT_LTT1_12 (48)') — nếu không, '(48)' chặn
+    // việc cắt số → mỗi trụ thành 1 tuyến riêng.
     function normalizeMarkerBaseName(name) {
-        const base = (name || '').toString().trim().replace(/[_\s\-]*\d+$/, '');
+        const base = (name || '').toString().trim()
+            .replace(/\s*\([^()]*\)$/, '')
+            .replace(/[_\s\-]*\d+$/, '');
         return normalizeText(base);
     }
 
