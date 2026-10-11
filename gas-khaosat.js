@@ -1059,6 +1059,11 @@ function doPost(e) {
     if (data.action === 'list_dia_ban')     return handleListDiaBan(data);
     if (data.action === 'create_dia_ban')   return _withScriptLock(function() { return handleCreateDiaBan(data); });
 
+    // v151: Archive / restore / delete địa bàn
+    if (data.action === 'archive_dia_ban')  return _withScriptLock(function() { return handleArchiveDiaBan(data); });
+    if (data.action === 'restore_dia_ban')  return _withScriptLock(function() { return handleRestoreDiaBan(data); });
+    if (data.action === 'delete_dia_ban')   return _withScriptLock(function() { return handleDeleteDiaBan(data); });
+
     // Kiểm tra kết nối đọc/ghi Google Sheet
     if (data.action === 'check_sheet') return handleCheckSheet(data);
 
@@ -3518,28 +3523,186 @@ function handleListDiaBan(data) {
   try {
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     var sh = ss.getSheetByName(DIA_BAN_SHEET);
+    // v151: includeArchived flag — mặc định false (chỉ active cho dropdown)
+    var includeArchived = data && data.includeArchived === true;
     if (!sh) return jsonResponse({ status: 'ok', items: [] });
     var lastRow = sh.getLastRow();
     if (lastRow < 2) return jsonResponse({ status: 'ok', items: [] });
     var values = sh.getRange(2, 1, lastRow - 1, DIA_BAN_HEADERS.length).getValues();
+
+    // v151: Get row counts cho mỗi sheet (chỉ khi includeArchived — admin manage modal)
+    var rowCountMap = {};
+    if (includeArchived) {
+      var allSheets = ss.getSheets();
+      for (var si = 0; si < allSheets.length; si++) {
+        rowCountMap[allSheets[si].getName()] = Math.max(0, allSheets[si].getLastRow() - 1);
+      }
+    }
+
     var items = [];
     for (var i = 0; i < values.length; i++) {
       var r = values[i];
-      if (String(r[9] || 'active') === 'archived') continue;
+      var status = String(r[9] || 'active');
+      if (!includeArchived && status === 'archived') continue;
+      var sheetName = String(r[0] || '');
       items.push({
-        sheet: String(r[0] || ''),
+        sheet: sheetName,
         label: String(r[1] || ''),
         csvUrl: String(r[2] || ''),
         prefix: String(r[3] || ''),
         region: String(r[4] || ''),
         centerLat: r[5] !== '' ? Number(r[5]) : null,
-        centerLon: r[6] !== '' ? Number(r[6]) : null
+        centerLon: r[6] !== '' ? Number(r[6]) : null,
+        createdAt: String(r[7] || ''),
+        createdBy: String(r[8] || ''),
+        status: status,
+        rowCount: includeArchived ? (rowCountMap[sheetName] || 0) : undefined
       });
     }
     return jsonResponse({ status: 'ok', items: items });
   } catch (err) {
     return jsonResponse({ status: 'error', message: 'list_dia_ban: ' + err.message });
   }
+}
+
+// v151 — Protected sheets không được xóa
+var PROTECTED_DIA_BAN_SHEETS = ['DanhSachTru'];
+
+// v151 — Find row trong DiaBan theo sheet name
+function _findDiaBanRow(diaBanSh, sheetName) {
+  var lastRow = diaBanSh.getLastRow();
+  if (lastRow < 2) return -1;
+  var sheetCol = diaBanSh.getRange(2, 1, lastRow - 1, 1).getValues();
+  for (var i = 0; i < sheetCol.length; i++) {
+    if (String(sheetCol[i][0]).trim() === String(sheetName).trim()) {
+      return i + 2;
+    }
+  }
+  return -1;
+}
+
+function handleArchiveDiaBan(data) {
+  var auth = _requireAdmin(data);
+  if (!auth.ok) return jsonResponse({ status: 'error', message: auth.error });
+
+  var sheetName = String(data.sheet || '').trim();
+  if (!sheetName) return jsonResponse({ status: 'error', message: 'Thiếu sheet name' });
+  if (PROTECTED_DIA_BAN_SHEETS.indexOf(sheetName) >= 0) {
+    return jsonResponse({ status: 'error', message: 'Không được archive sheet gốc: ' + sheetName });
+  }
+
+  var diaBanSh = _getOrCreateDiaBanSheet();
+  var rowNum = _findDiaBanRow(diaBanSh, sheetName);
+  if (rowNum < 0) {
+    // Sheet chưa có trong DiaBan (hardcode legacy) → tạo row mới với status=archived
+    // v151 fix F5: validate sheet THẬT SỰ tồn tại trong Google Sheet trước khi tạo entry rác
+    var ssCheck = SpreadsheetApp.getActiveSpreadsheet();
+    if (!ssCheck.getSheetByName(sheetName)) {
+      return jsonResponse({ status: 'error', message: 'Sheet "' + sheetName + '" không tồn tại trong Google Sheet. Không tạo entry rác.' });
+    }
+    diaBanSh.appendRow([
+      sheetName, sheetName, '', '', '', '', '',
+      new Date().toISOString(), auth.adminUser, 'archived'
+    ]);
+    _logToHistory({ loaiThaoTac: 'archive_dia_ban', tenTru: sheetName, nguoiThucHien: auth.adminUser, chiTiet: 'legacy sheet archived' });
+    return jsonResponse({ status: 'ok', action: 'archived', createdNew: true });
+  }
+
+  var currentStatus = String(diaBanSh.getRange(rowNum, 10).getValue() || 'active').trim();
+  if (currentStatus === 'archived') {
+    return jsonResponse({ status: 'ok', action: 'noop', message: 'Sheet đã archived' });
+  }
+
+  diaBanSh.getRange(rowNum, 10).setValue('archived');
+  _logToHistory({ loaiThaoTac: 'archive_dia_ban', tenTru: sheetName, nguoiThucHien: auth.adminUser, chiTiet: '' });
+  return jsonResponse({ status: 'ok', action: 'archived' });
+}
+
+function handleRestoreDiaBan(data) {
+  var auth = _requireAdmin(data);
+  if (!auth.ok) return jsonResponse({ status: 'error', message: auth.error });
+
+  var sheetName = String(data.sheet || '').trim();
+  if (!sheetName) return jsonResponse({ status: 'error', message: 'Thiếu sheet name' });
+
+  var diaBanSh = _getOrCreateDiaBanSheet();
+  var rowNum = _findDiaBanRow(diaBanSh, sheetName);
+  if (rowNum < 0) return jsonResponse({ status: 'error', message: 'Sheet không có trong DiaBan: ' + sheetName });
+
+  var currentStatus = String(diaBanSh.getRange(rowNum, 10).getValue() || '').trim();
+  if (currentStatus === 'active') {
+    return jsonResponse({ status: 'ok', action: 'noop', message: 'Sheet đã active' });
+  }
+
+  diaBanSh.getRange(rowNum, 10).setValue('active');
+  _logToHistory({ loaiThaoTac: 'restore_dia_ban', tenTru: sheetName, nguoiThucHien: auth.adminUser, chiTiet: '' });
+  return jsonResponse({ status: 'ok', action: 'restored' });
+}
+
+function handleDeleteDiaBan(data) {
+  var auth = _requireAdmin(data);
+  if (!auth.ok) return jsonResponse({ status: 'error', message: auth.error });
+
+  var sheetName = String(data.sheet || '').trim();
+  var confirmText = String(data.confirmText || '').trim();
+  var alsoDeleteTab = data.alsoDeleteTab === true;
+
+  if (!sheetName) return jsonResponse({ status: 'error', message: 'Thiếu sheet name' });
+  if (PROTECTED_DIA_BAN_SHEETS.indexOf(sheetName) >= 0) {
+    return jsonResponse({ status: 'error', message: 'Không được xóa sheet gốc: ' + sheetName });
+  }
+
+  // Validate confirm text
+  var required = alsoDeleteTab ? sheetName : 'DELETE';
+  if (confirmText !== required) {
+    return jsonResponse({
+      status: 'error',
+      field: 'confirmText',
+      message: 'Confirm text sai — cần gõ chính xác "' + required + '"'
+    });
+  }
+
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var diaBanSh = _getOrCreateDiaBanSheet();
+  var rowNum = _findDiaBanRow(diaBanSh, sheetName);
+
+  // Count rows trong tab Sheet (nếu còn tồn tại) để log
+  var rowCountBefore = 0;
+  var tabSheet = ss.getSheetByName(sheetName);
+  if (tabSheet) {
+    rowCountBefore = Math.max(0, tabSheet.getLastRow() - 1);
+  }
+
+  // Delete tab Sheet nếu alsoDeleteTab
+  var deletedTab = false;
+  if (alsoDeleteTab && tabSheet) {
+    try {
+      ss.deleteSheet(tabSheet);
+      deletedTab = true;
+    } catch (e) {
+      return jsonResponse({ status: 'error', message: 'Không xóa được tab Sheet: ' + e.message });
+    }
+  }
+
+  // Delete row trong DiaBan
+  if (rowNum > 0) {
+    diaBanSh.deleteRow(rowNum);
+  }
+
+  _logToHistory({
+    loaiThaoTac: 'delete_dia_ban',
+    tenTru: sheetName,
+    nguoiThucHien: auth.adminUser,
+    chiTiet: JSON.stringify({ alsoDeleteTab: alsoDeleteTab, deletedTab: deletedTab, rowCountBefore: rowCountBefore })
+  });
+
+  return jsonResponse({
+    status: 'ok',
+    sheet: sheetName,
+    deletedTab: deletedTab,
+    deletedConfig: rowNum > 0,
+    rowCountBefore: rowCountBefore
+  });
 }
 
 function handleCreateDiaBan(data) {

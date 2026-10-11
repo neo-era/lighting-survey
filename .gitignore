@@ -5,6 +5,8 @@ Thumbs.db
 
 # Test artifacts (P35 + P38)
 coverage/
+tools/dxf-check/.cache/
+tools/dxf-check/out/
 playwright-report/
 test-results/
 .playwright/

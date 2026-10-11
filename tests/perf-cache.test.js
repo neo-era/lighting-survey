@@ -47,7 +47,7 @@ for (let type = 1; type <= 4; type++) {
     }
 }
 assert('permutation coverage → cache holds distinct entries',
-    iconCache.size === 1 + 4*3*2);
+    iconCache.size === 4*3*2);   // (100W, 1 bóng, loại 1) đã có trong cache — trùng, không cộng thêm
 
 // === Popup cache ===
 const popupCache = new Map();

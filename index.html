@@ -1221,6 +1221,7 @@
                             <option value="consulting">🏢 Tư vấn thiết kế</option>
                             <option value="contractor">🏗 Nhà thầu thi công</option>
                             <option value="knop12">🏙 Nhà nước (KNỞ P12 — CTCP CSCC)</option>
+                            <option value="none">🚫 Không xuất khung tên (chỉ dữ liệu)</option>
                         </select>
                         <button type="button" onclick="_cgOpenUploadTemplate()" style="padding:6px 12px;border:1.5px solid #2563eb;background:#eff6ff;color:#2563eb;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;">
                             ➕ Upload
@@ -1264,6 +1265,19 @@
                     </div>
                 </div>
 
+                <!-- v152: Block đèn xoay theo hướng đường OSM -->
+                <div style="margin-bottom:14px;">
+                    <label style="display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;color:#334155;cursor:pointer;user-select:none;">
+                        <input type="checkbox" id="cgOrientByRoad" style="width:16px;height:16px;cursor:pointer;"
+                               onchange="try{localStorage.setItem('cg_orient_by_road', this.checked ? '1' : '0')}catch(e){}">
+                        🧭 Block đèn xoay theo hướng đường OSM
+                    </label>
+                    <div style="margin-top:4px;padding:5px 8px;font-size:11px;color:#64748b;background:#f8fafc;border-radius:4px;">
+                        Trụ đèn vẽ bằng block 1–4 bóng (theo cột Số lượng đèn), vuông góc tim đường gần nhất (≤40m).
+                        Không có đường → xoay theo tuyến cáp tới trụ cha. Thay ký hiệu trạng thái cải tạo của trụ.
+                    </div>
+                </div>
+
                 <!-- Section 4c2: OSM Basemap (P65+P66+P67) -->
                 <div style="margin-bottom:14px;">
                     <label style="display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;color:#334155;cursor:pointer;user-select:none;">
@@ -1271,11 +1285,23 @@
                         🗺 Chèn nền bản đồ OSM (đường + nhà + ranh giới)
                     </label>
                     <div id="cgOsmOptions" style="display:none;margin-top:8px;padding:8px;border:1.5px solid #93c5fd;border-radius:6px;background:#eff6ff;">
-                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:11px;">
-                            <label><input type="checkbox" id="cgOsmRoads" checked> 🛣 Đường phố</label>
+                        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;font-size:11px;">
+                            <label title="Lớp OSM_TIM_DUONG — nét gạch chấm"><input type="checkbox" id="cgOsmRoadCenter" checked onchange="_cgSaveRoadWidths()"> Tim đường</label>
+                            <label title="Lớp OSM_MEP_DUONG — 2 nét mép theo bề rộng"><input type="checkbox" id="cgOsmRoadEdge" checked onchange="_cgSaveRoadWidths()"> Mép đường</label>
+                            <label title="Lớp OSM_TEN_DUONG"><input type="checkbox" id="cgOsmRoadName" checked onchange="_cgSaveRoadWidths()"> Tên đường</label>
                             <label><input type="checkbox" id="cgOsmBuildings"> 🏠 Nhà cửa</label>
                             <label><input type="checkbox" id="cgOsmWater"> 💧 Sông ngòi</label>
                             <label><input type="checkbox" id="cgOsmAdmin"> 🏛 Ranh phường</label>
+                            <label style="grid-column:span 3;" title="Lớp OSM_DUONG_KHAC — 1 nét xám"><input type="checkbox" id="cgOsmRoadOther" onchange="_cgSaveRoadWidths()"> Đường khác (đi bộ, bãi xe)</label>
+                        </div>
+                        <div style="margin-top:8px;font-size:11px;color:#334155;">
+                            <div style="font-weight:700;margin-bottom:4px;" title="Dùng khi OSM không ghi width/lanes">Bề rộng mặt đường mặc định (m)</div>
+                            <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;">
+                                <label>Chính<input type="number" id="cgOsmWMajor" min="2" max="80" step="0.5" value="14" onchange="_cgSaveRoadWidths()" style="width:100%;padding:3px 5px;border:1px solid #93c5fd;border-radius:4px;font-size:13px;"></label>
+                                <label>Cấp 2<input type="number" id="cgOsmWSecondary" min="2" max="80" step="0.5" value="10" onchange="_cgSaveRoadWidths()" style="width:100%;padding:3px 5px;border:1px solid #93c5fd;border-radius:4px;font-size:13px;"></label>
+                                <label>Dân cư<input type="number" id="cgOsmWResidential" min="2" max="80" step="0.5" value="6" onchange="_cgSaveRoadWidths()" style="width:100%;padding:3px 5px;border:1px solid #93c5fd;border-radius:4px;font-size:13px;"></label>
+                                <label>Hẻm<input type="number" id="cgOsmWService" min="2" max="80" step="0.5" value="4" onchange="_cgSaveRoadWidths()" style="width:100%;padding:3px 5px;border:1px solid #93c5fd;border-radius:4px;font-size:13px;"></label>
+                            </div>
                         </div>
                         <div id="cgOsmInfo" style="margin-top:6px;padding:5px;font-size:10px;color:#1e40af;background:#dbeafe;border-radius:4px;">Tải lần đầu ~10-30s (fetch từ Overpass API, cache 30 ngày)</div>
                     </div>
@@ -1858,11 +1884,17 @@
                                     color:#2563eb;background:#eff6ff;border:1px solid #bfdbfe;
                                     border-radius:6px;padding:4px 10px;text-align:center;">
                         </div>
-                        <!-- v150 — nút tạo địa bàn mới (admin only) -->
-                        <button id="btnCreateDiaBan" onclick="_openCreateDiaBan()" class="ctrl-btn outline"
-                                style="display:none;margin-top:6px;padding:7px;font-size:12px;color:#059669;border-color:#a7f3d0;background:#f0fdf4;width:100%;">
-                            ➕ Thêm địa bàn mới
-                        </button>
+                        <!-- v150+v151 — admin tạo + quản lý địa bàn -->
+                        <div id="btnDiaBanAdminWrap" style="display:none;margin-top:6px;gap:6px;">
+                            <button id="btnCreateDiaBan" onclick="_openCreateDiaBan()" class="ctrl-btn outline"
+                                    style="padding:7px;font-size:12px;color:#059669;border-color:#a7f3d0;background:#f0fdf4;flex:1;margin-bottom:0;">
+                                ➕ Thêm địa bàn
+                            </button>
+                            <button id="btnManageDiaBan" onclick="_openManageDiaBan()" class="ctrl-btn outline"
+                                    style="padding:7px;font-size:12px;color:#64748b;border-color:#cbd5e1;background:#f8fafc;margin-bottom:0;width:44px;" title="Quản lý địa bàn (archive/xóa)">
+                                ⚙
+                            </button>
+                        </div>
                     </div>
 
                     <div class="ctrl-divider"></div>
@@ -2239,6 +2271,78 @@
                 <div class="modal-footer" style="padding:8px 16px;justify-content:space-between;align-items:center;">
                     <small style="color:#94a3b8;">Ảnh đường phố: <a href="https://www.mapillary.com" target="_blank" style="color:#2563eb;">Mapillary</a> — cộng đồng đóng góp</small>
                     <button type="button" class="btn btn-secondary btn-sm" data-dismiss="modal" onclick="_cleanupMapillary()">Đóng</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- v151 — Manage Dia Ban modal (archive/delete/restore) -->
+    <div class="modal fade" id="manageDiaBanModal" tabindex="-1" role="dialog">
+        <div class="modal-dialog modal-lg modal-dialog-centered" role="document">
+            <div class="modal-content">
+                <div class="modal-header" style="padding:12px 18px;background:#1e293b;color:#fff;">
+                    <h5 class="modal-title" style="font-size:15px;font-weight:700;">⚙ Quản lý địa bàn</h5>
+                    <button type="button" class="close" data-dismiss="modal" style="color:#fff;opacity:.9;">&times;</button>
+                </div>
+                <div class="modal-body" style="padding:0;max-height:70vh;overflow-y:auto;">
+                    <div style="display:flex;border-bottom:1px solid #e2e8f0;background:#f8fafc;">
+                        <button id="mdbTabActive" class="mdb-tab" onclick="_switchMdbTab('active')"
+                                style="flex:1;padding:12px;background:#fff;border:none;border-bottom:2px solid #2563eb;font-weight:700;font-size:13px;color:#2563eb;cursor:pointer;">
+                            🟢 Active <span id="mdbActiveCount" style="opacity:.6;">(0)</span>
+                        </button>
+                        <button id="mdbTabArchived" class="mdb-tab" onclick="_switchMdbTab('archived')"
+                                style="flex:1;padding:12px;background:transparent;border:none;border-bottom:2px solid transparent;font-weight:600;font-size:13px;color:#64748b;cursor:pointer;">
+                            📥 Archived <span id="mdbArchivedCount" style="opacity:.6;">(0)</span>
+                        </button>
+                    </div>
+                    <div id="mdbListWrap" style="padding:8px 16px;">
+                        <div id="mdbEmpty" style="padding:40px;text-align:center;color:#94a3b8;font-size:13px;">Đang tải...</div>
+                        <div id="mdbList"></div>
+                    </div>
+                </div>
+                <div class="modal-footer" style="padding:10px 18px;border-top:1px solid #e2e8f0;">
+                    <button type="button" class="btn btn-outline-secondary btn-sm" data-dismiss="modal">Đóng</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- v151 — Delete Dia Ban confirm modal (2-tier confirm) -->
+    <div class="modal fade" id="deleteDiaBanModal" tabindex="-1" role="dialog">
+        <div class="modal-dialog modal-dialog-centered" role="document">
+            <div class="modal-content">
+                <div class="modal-header" style="padding:12px 18px;background:#dc2626;color:#fff;">
+                    <h5 class="modal-title" style="font-size:15px;font-weight:700;">🚨 XÓA ĐỊA BÀN</h5>
+                    <button type="button" class="close" data-dismiss="modal" style="color:#fff;opacity:.9;">&times;</button>
+                </div>
+                <div class="modal-body" style="padding:16px 18px;">
+                    <div style="font-size:14px;color:#1e293b;margin-bottom:8px;">
+                        Sheet: <b id="ddbSheetName" style="font-family:monospace;color:#dc2626;"></b>
+                    </div>
+                    <div style="font-size:13px;color:#64748b;margin-bottom:12px;">
+                        Rows hiện có: <b id="ddbRowCount" style="color:#1e293b;">—</b>
+                    </div>
+                    <div id="ddbError" style="display:none;background:#fef2f2;color:#dc2626;padding:8px 12px;border-radius:6px;font-size:13px;margin-bottom:12px;border:1px solid #fecaca;"></div>
+
+                    <label style="display:flex;align-items:center;gap:8px;background:#fef3c7;padding:10px 12px;border-radius:6px;border:1px solid #fcd34d;cursor:pointer;margin-bottom:12px;">
+                        <input type="checkbox" id="ddbAlsoDeleteTab" onchange="_ddbUpdateConfirmUI()" style="width:18px;height:18px;cursor:pointer;">
+                        <span style="font-size:13px;color:#92400e;">
+                            <b>⚠ Cũng xóa tab Google Sheet</b><br>
+                            <small>MẤT DATA KHÔNG HỒI PHỤC qua app (chỉ Google Sheet revision history manual)</small>
+                        </span>
+                    </label>
+
+                    <div>
+                        <label style="font-size:12px;font-weight:700;color:#334155;text-transform:uppercase;margin-bottom:4px;display:block;">
+                            Gõ <span id="ddbRequiredText" style="font-family:monospace;color:#dc2626;">DELETE</span> để xác nhận
+                        </label>
+                        <input type="text" id="ddbConfirmInput" class="form-control" placeholder="DELETE"
+                               style="font-size:15px;font-family:monospace;" autocomplete="off">
+                    </div>
+                </div>
+                <div class="modal-footer" style="padding:10px 18px;border-top:1px solid #e2e8f0;">
+                    <button type="button" class="btn btn-outline-secondary btn-sm" data-dismiss="modal">Hủy</button>
+                    <button type="button" id="ddbSubmitBtn" class="btn btn-danger btn-sm" onclick="_submitDeleteDiaBan()">🗑 Xóa</button>
                 </div>
             </div>
         </div>
@@ -5387,9 +5491,9 @@
             if (optCamera) optCamera.style.display = isAdmin ? '' : 'none';
             const optDenTat = document.getElementById('pageOptDenTat');
             if (optDenTat) optDenTat.style.display = isAdmin ? '' : 'none';
-            // v150 — nút tạo địa bàn chỉ hiện cho admin
-            const btnCDB = document.getElementById('btnCreateDiaBan');
-            if (btnCDB) btnCDB.style.display = isAdmin ? '' : 'none';
+            // v150+v151 — nút admin địa bàn (tạo + quản lý)
+            const btnDBWrap = document.getElementById('btnDiaBanAdminWrap');
+            if (btnDBWrap) btnDBWrap.style.display = isAdmin ? 'flex' : 'none';
             _buildDistrictOptions();
             // v150 — fetch dynamic districts từ GAS (background, không block UI)
             _loadDynamicDistricts();
@@ -5540,6 +5644,251 @@
             }
         }
         window._submitCreateDiaBan = _submitCreateDiaBan;
+
+        // v151 — Manage Dia Ban (archive/restore/delete)
+        const PROTECTED_DIA_BAN_SHEETS = ['DanhSachTru'];
+        let _mdbItems = [];       // tất cả items từ list_dia_ban (includeArchived=true)
+        let _mdbCurrentTab = 'active';
+        let _ddbTargetItem = null; // item đang chuẩn bị delete
+
+        async function _openManageDiaBan() {
+            if (!currentUser || currentUser.role !== 'admin') {
+                displayError('Chỉ admin được quản lý địa bàn.');
+                return;
+            }
+            if (typeof closeControlsModal === 'function') closeControlsModal();
+            if (typeof $ === 'function' && $.fn.modal) $('#manageDiaBanModal').modal('show');
+            await _mdbReload();
+        }
+        window._openManageDiaBan = _openManageDiaBan;
+
+        async function _mdbReload() {
+            document.getElementById('mdbEmpty').style.display = 'block';
+            document.getElementById('mdbEmpty').textContent = 'Đang tải...';
+            document.getElementById('mdbList').innerHTML = '';
+            try {
+                const res = await fetch(KHAOSAT_GAS_URL, {
+                    method: 'POST',
+                    body: JSON.stringify({ action: 'list_dia_ban', includeArchived: true }),
+                    headers: { 'Content-Type': 'text/plain' }
+                });
+                const data = await res.json();
+                if (data.status !== 'ok') throw new Error(data.message || 'Load lỗi');
+                _mdbItems = data.items || [];
+                _switchMdbTab(_mdbCurrentTab);
+            } catch (e) {
+                document.getElementById('mdbEmpty').textContent = 'Lỗi tải: ' + e.message;
+            }
+        }
+        window._mdbReload = _mdbReload;
+
+        function _switchMdbTab(tab) {
+            _mdbCurrentTab = tab;
+            const tabA = document.getElementById('mdbTabActive');
+            const tabR = document.getElementById('mdbTabArchived');
+            const activeStyle = 'flex:1;padding:12px;background:#fff;border:none;border-bottom:2px solid #2563eb;font-weight:700;font-size:13px;color:#2563eb;cursor:pointer;';
+            const inactiveStyle = 'flex:1;padding:12px;background:transparent;border:none;border-bottom:2px solid transparent;font-weight:600;font-size:13px;color:#64748b;cursor:pointer;';
+            tabA.setAttribute('style', tab === 'active' ? activeStyle : inactiveStyle);
+            tabR.setAttribute('style', tab === 'archived' ? activeStyle : inactiveStyle);
+
+            const activeItems = _mdbItems.filter(it => (it.status || 'active') === 'active');
+            const archivedItems = _mdbItems.filter(it => it.status === 'archived');
+            document.getElementById('mdbActiveCount').textContent = '(' + activeItems.length + ')';
+            document.getElementById('mdbArchivedCount').textContent = '(' + archivedItems.length + ')';
+
+            const items = tab === 'active' ? activeItems : archivedItems;
+            _mdbRenderList(items);
+        }
+        window._switchMdbTab = _switchMdbTab;
+
+        function _mdbRenderList(items) {
+            const listEl = document.getElementById('mdbList');
+            const emptyEl = document.getElementById('mdbEmpty');
+            if (items.length === 0) {
+                emptyEl.textContent = 'Không có địa bàn nào trong tab này';
+                emptyEl.style.display = 'block';
+                listEl.innerHTML = '';
+                return;
+            }
+            emptyEl.style.display = 'none';
+            listEl.innerHTML = items.map(it => {
+                const protected_ = PROTECTED_DIA_BAN_SHEETS.includes(it.sheet);
+                const isArchived = it.status === 'archived';
+                const rowCount = (typeof it.rowCount === 'number') ? it.rowCount : '—';
+                const createdInfo = it.createdAt ? '· Tạo ' + String(it.createdAt).slice(0, 10) : '';
+
+                let actions = '';
+                if (protected_) {
+                    actions = '<span style="color:#94a3b8;font-size:11px;font-style:italic;">🔒 Protected (hệ thống)</span>';
+                } else if (isArchived) {
+                    actions = '<button class="btn btn-sm btn-outline-success" onclick="_mdbRestore(\'' + it.sheet + '\')" style="font-size:11px;padding:3px 10px;">↶ Restore</button>' +
+                              ' <button class="btn btn-sm btn-outline-danger" onclick="_openDeleteDiaBan(\'' + it.sheet + '\', ' + (typeof it.rowCount === 'number' ? it.rowCount : 0) + ')" style="font-size:11px;padding:3px 10px;">🗑 Xóa</button>';
+                } else {
+                    actions = '<button class="btn btn-sm btn-outline-warning" onclick="_mdbArchive(\'' + it.sheet + '\')" style="font-size:11px;padding:3px 10px;">📥 Archive</button>' +
+                              ' <button class="btn btn-sm btn-outline-danger" onclick="_openDeleteDiaBan(\'' + it.sheet + '\', ' + (typeof it.rowCount === 'number' ? it.rowCount : 0) + ')" style="font-size:11px;padding:3px 10px;">🗑 Xóa</button>';
+                }
+
+                return '<div style="padding:10px 12px;border-bottom:1px solid #f1f5f9;display:flex;align-items:center;justify-content:space-between;gap:12px;">' +
+                       '<div style="flex:1;min-width:0;">' +
+                       '<div style="font-weight:700;color:#1e293b;font-size:14px;">' + (it.label || it.sheet) + '</div>' +
+                       '<div style="font-size:11px;color:#64748b;font-family:monospace;margin-top:2px;">' +
+                       it.sheet + ' · ' + rowCount + ' rows · ' + (it.prefix || '—') + ' ' + createdInfo +
+                       '</div>' +
+                       '</div>' +
+                       '<div style="flex-shrink:0;">' + actions + '</div>' +
+                       '</div>';
+            }).join('');
+        }
+
+        async function _mdbArchive(sheet) {
+            const confirmed = (typeof uiConfirm === 'function')
+                ? await uiConfirm('Ẩn địa bàn "' + sheet + '" khỏi dropdown?\n\nData KHÔNG bị xóa. Có thể khôi phục trong tab Archived.')
+                : confirm('Ẩn địa bàn "' + sheet + '"? Data KHÔNG bị xóa, có thể restore.');
+            if (!confirmed) return;
+
+            const auth = await _getAdminAuth();
+            if (!auth || !auth.username || !auth.password) {
+                displayError('Cần xác nhận mật khẩu admin.');
+                return;
+            }
+
+            try {
+                const res = await fetch(KHAOSAT_GAS_URL, {
+                    method: 'POST',
+                    body: JSON.stringify({ action: 'archive_dia_ban', sheet, adminAuth: auth }),
+                    headers: { 'Content-Type': 'text/plain' }
+                });
+                const data = await res.json();
+                if (data.status !== 'ok') {
+                    displayError(data.message || 'Archive lỗi');
+                    return;
+                }
+                if (typeof displaySuccess === 'function') displaySuccess('✅ Đã archive "' + sheet + '"');
+                // Auto switch nếu đang xem sheet này
+                if (currentSheet === sheet && typeof switchDistrict === 'function') {
+                    await switchDistrict('DanhSachTru');
+                }
+                await _loadDynamicDistricts();
+                await _mdbReload();
+            } catch (e) {
+                displayError('Lỗi: ' + e.message);
+            }
+        }
+        window._mdbArchive = _mdbArchive;
+
+        async function _mdbRestore(sheet) {
+            const auth = await _getAdminAuth();
+            if (!auth || !auth.username || !auth.password) {
+                displayError('Cần xác nhận mật khẩu admin.');
+                return;
+            }
+            try {
+                const res = await fetch(KHAOSAT_GAS_URL, {
+                    method: 'POST',
+                    body: JSON.stringify({ action: 'restore_dia_ban', sheet, adminAuth: auth }),
+                    headers: { 'Content-Type': 'text/plain' }
+                });
+                const data = await res.json();
+                if (data.status !== 'ok') {
+                    displayError(data.message || 'Restore lỗi');
+                    return;
+                }
+                if (typeof displaySuccess === 'function') displaySuccess('✅ Đã restore "' + sheet + '"');
+                await _loadDynamicDistricts();
+                await _mdbReload();
+            } catch (e) {
+                displayError('Lỗi: ' + e.message);
+            }
+        }
+        window._mdbRestore = _mdbRestore;
+
+        // Delete modal — mở từ _mdbRenderList
+        function _openDeleteDiaBan(sheet, rowCount) {
+            _ddbTargetItem = { sheet, rowCount };
+            document.getElementById('ddbSheetName').textContent = sheet;
+            document.getElementById('ddbRowCount').textContent = (typeof rowCount === 'number' ? rowCount : '—') + ' marker';
+            document.getElementById('ddbAlsoDeleteTab').checked = false;
+            document.getElementById('ddbConfirmInput').value = '';
+            document.getElementById('ddbError').style.display = 'none';
+            _ddbUpdateConfirmUI();
+            if (typeof $ === 'function' && $.fn.modal) {
+                $('#deleteDiaBanModal').modal('show');
+                setTimeout(() => document.getElementById('ddbConfirmInput').focus(), 300);
+            }
+        }
+        window._openDeleteDiaBan = _openDeleteDiaBan;
+
+        function _ddbUpdateConfirmUI() {
+            const checkbox = document.getElementById('ddbAlsoDeleteTab');
+            const required = checkbox.checked ? _ddbTargetItem.sheet : 'DELETE';
+            document.getElementById('ddbRequiredText').textContent = required;
+            document.getElementById('ddbConfirmInput').placeholder = required;
+            document.getElementById('ddbConfirmInput').value = '';
+        }
+        window._ddbUpdateConfirmUI = _ddbUpdateConfirmUI;
+
+        async function _submitDeleteDiaBan() {
+            if (!_ddbTargetItem) return;
+            const errEl = document.getElementById('ddbError');
+            errEl.style.display = 'none';
+            const btn = document.getElementById('ddbSubmitBtn');
+
+            const alsoDeleteTab = document.getElementById('ddbAlsoDeleteTab').checked;
+            const confirmText = document.getElementById('ddbConfirmInput').value.trim();
+            const required = alsoDeleteTab ? _ddbTargetItem.sheet : 'DELETE';
+            if (confirmText !== required) {
+                errEl.textContent = 'Confirm text sai — cần gõ chính xác "' + required + '"';
+                errEl.style.display = 'block';
+                return;
+            }
+
+            const auth = await _getAdminAuth();
+            if (!auth || !auth.username || !auth.password) {
+                errEl.textContent = 'Cần xác nhận mật khẩu admin.';
+                errEl.style.display = 'block';
+                return;
+            }
+
+            btn.disabled = true;
+            btn.innerHTML = '⏳ Đang xóa...';
+            try {
+                const res = await fetch(KHAOSAT_GAS_URL, {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        action: 'delete_dia_ban',
+                        sheet: _ddbTargetItem.sheet,
+                        confirmText,
+                        alsoDeleteTab,
+                        adminAuth: auth
+                    }),
+                    headers: { 'Content-Type': 'text/plain' }
+                });
+                const data = await res.json();
+                if (data.status !== 'ok') {
+                    errEl.textContent = data.message || 'Xóa lỗi';
+                    errEl.style.display = 'block';
+                    return;
+                }
+                if (typeof $ === 'function' && $.fn.modal) $('#deleteDiaBanModal').modal('hide');
+                const msg = '✅ Đã xóa "' + _ddbTargetItem.sheet + '"' +
+                            (data.deletedTab ? ' (xóa cả tab Sheet, ' + data.rowCountBefore + ' marker)' : ' (giữ tab Sheet)');
+                if (typeof displaySuccess === 'function') displaySuccess(msg);
+                // Auto switch nếu đang xem sheet này
+                if (currentSheet === _ddbTargetItem.sheet && typeof switchDistrict === 'function') {
+                    await switchDistrict('DanhSachTru');
+                }
+                _ddbTargetItem = null;
+                await _loadDynamicDistricts();
+                await _mdbReload();
+            } catch (e) {
+                errEl.textContent = 'Lỗi mạng: ' + e.message;
+                errEl.style.display = 'block';
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '🗑 Xóa';
+            }
+        }
+        window._submitDeleteDiaBan = _submitDeleteDiaBan;
 
         function _allowedPages() {
             // Admin luôn thấy tất cả địa bàn, bất kể cột vung trong sheet TaiKhoan
@@ -8144,8 +8493,142 @@
             'pole_moi_dacau':     'BỘ ĐÈN PHA LED 40W CHIẾU SÁNG DẠ CẦU',
             'pole_moi_6m_2x60w':  'TRỤ ĐÈN CAO 6M LẮP 2 BỘ ĐÈN PHA LED 60W',
             'cab_moi_plc50a':     'TỦ ĐIỀU KHIỂN CHIẾU SÁNG PLC-50A',
-            'pole_moi_tiepdia':   'CỌC TIẾP ĐỊA'
+            'pole_moi_tiepdia':   'CỌC TIẾP ĐỊA',
+            // v152 — block đèn xoay theo hướng đường
+            'pole_lamp1': 'Trụ đèn 1 bóng',
+            'pole_lamp2': 'Trụ đèn 2 bóng',
+            'pole_lamp3': 'Trụ đèn 3 bóng',
+            'pole_lamp4': 'Trụ đèn 4 bóng'
         };
+
+        // ─── Block đèn xoay theo hướng đường OSM (v152) — docs/design-road-oriented-lamp-block.md ───
+        // Marker @@ROADLAMP_* để tests/road-lamp-block.test.js trích các hàm thuần này ra chạy bằng Node.
+        // @@ROADLAMP_START
+        // highway=construction GIỮ LẠI: tuyến mới thi công chính là nơi lắp đèn (VD khu J3/J4 DanhSachTru: 131/134 trụ)
+        const _RL_NON_DRIVABLE = new Set(['footway', 'path', 'steps', 'pedestrian', 'cycleway',
+            'track', 'bridleway', 'corridor', 'proposed', 'elevator', 'platform']);
+        function _rlIsDrivable(tags) {
+            const h = tags && tags.highway;
+            if (!h || _RL_NON_DRIVABLE.has(h)) return false;
+            // Hẻm thường là highway=service → giữ; chỉ bỏ lối bãi xe / lối vào nhà
+            if (h === 'service' && ['parking_aisle', 'driveway', 'drive-through'].includes(tags.service)) return false;
+            return true;
+        }
+        // Lưới chỉ mục đoạn thẳng (mét) để tìm đoạn gần nhất nhanh khi có hàng nghìn trụ
+        function _rlBuildIndex(segs, cell) {
+            const grid = new Map();
+            segs.forEach((s, i) => {
+                const i0 = Math.floor(Math.min(s.x1, s.x2) / cell), i1 = Math.floor(Math.max(s.x1, s.x2) / cell);
+                const j0 = Math.floor(Math.min(s.y1, s.y2) / cell), j1 = Math.floor(Math.max(s.y1, s.y2) / cell);
+                for (let a = i0; a <= i1; a++) for (let b = j0; b <= j1; b++) {
+                    const k = a + ',' + b;
+                    if (!grid.has(k)) grid.set(k, []);
+                    grid.get(k).push(i);
+                }
+            });
+            return { segs, grid, cell };
+        }
+        function _rlNearest(px, py, index, maxDist) {
+            const { segs, grid, cell } = index;
+            const r = Math.ceil(maxDist / cell);
+            const ci = Math.floor(px / cell), cj = Math.floor(py / cell);
+            const seen = new Set();
+            let best = null;
+            for (let a = ci - r; a <= ci + r; a++) for (let b = cj - r; b <= cj + r; b++) {
+                const list = grid.get(a + ',' + b);
+                if (!list) continue;
+                for (const i of list) {
+                    if (seen.has(i)) continue;
+                    seen.add(i);
+                    const s = segs[i];
+                    const dx = s.x2 - s.x1, dy = s.y2 - s.y1;
+                    const len2 = dx * dx + dy * dy;
+                    if (len2 < 1e-9) continue;
+                    const t = Math.max(0, Math.min(1, ((px - s.x1) * dx + (py - s.y1) * dy) / len2));
+                    const qx = s.x1 + t * dx, qy = s.y1 + t * dy;
+                    const d = Math.hypot(px - qx, py - qy);
+                    if (d <= maxDist && (!best || d < best.dist)) {
+                        best = { dist: d, qx, qy, ang: Math.atan2(dy, dx) * 180 / Math.PI };
+                    }
+                }
+            }
+            return best;
+        }
+        // Góc INSERT (độ, ngược chiều kim đồng hồ). Block cục bộ: X = hướng đường, đèn vươn theo ±Y.
+        function _rlRotation(px, py, n, near, parent) {
+            const axis = a => { let r = ((a % 180) + 180) % 180; return r > 90 ? r - 180 : r; };  // về (-90, 90]
+            if (near) {
+                if (n === 1 && near.dist >= 0.3) {
+                    return Math.atan2(near.qy - py, near.qx - px) * 180 / Math.PI - 90;  // đèn quay về phía đường
+                }
+                return axis(near.ang);
+            }
+            if (parent) {
+                const dx = px - parent.x, dy = py - parent.y;
+                if (Math.hypot(dx, dy) < 1e-6) return 0;
+                return axis(Math.atan2(dy, dx) * 180 / Math.PI);  // tuyến cáp xem như hướng đường
+            }
+            return 0;
+        }
+        function _rlLampDirs(n) {
+            const k = Math.min(4, Math.max(1, parseInt(n) || 1));
+            return [[0, 1], [0, -1], [1, 0], [-1, 0]].slice(0, k);
+        }
+        // Vẽ block đèn tại (x,y), hướng cục bộ (chưa xoay — INSERT lo phần xoay)
+        function _rlDrawLampBlock(push, x, y, n, scale) {
+            const s = scale || 1;
+            const half = 0.9 * s, circR = 0.6 * s, armEnd = 1.4 * s, ry = 1.4 * s, rx = 0.8 * s;
+            const P = v => v.toFixed(4);
+            const line = (x1, y1, x2, y2) => push('0', 'LINE', '8', '0',
+                '10', P(x1), '20', P(y1), '30', '0', '11', P(x2), '21', P(y2), '31', '0');
+            // Ô vuông + tròn (trụ)
+            line(x - half, y - half, x + half, y - half);
+            line(x + half, y - half, x + half, y + half);
+            line(x + half, y + half, x - half, y + half);
+            line(x - half, y + half, x - half, y - half);
+            push('0', 'CIRCLE', '8', '0', '10', P(x), '20', P(y), '30', '0', '40', P(circR));
+            const SEG = 24, FILL_STEP = 15;
+            for (const [dx, dy] of _rlLampDirs(n)) {
+                const ux = -dy, uy = dx;  // vuông góc hướng cần
+                line(x + dx * half, y + dy * half, x + dx * armEnd, y + dy * armEnd);  // cần đèn
+                const cx = x + dx * (armEnd + ry), cy = y + dy * (armEnd + ry);
+                const pt = deg => {
+                    const t = deg * Math.PI / 180;
+                    return [cx + dx * ry * Math.cos(t) + ux * rx * Math.sin(t),
+                            cy + dy * ry * Math.cos(t) + uy * rx * Math.sin(t)];
+                };
+                for (let i = 0; i < SEG; i++) {  // viền ellipse
+                    const [ax, ay] = pt(i * 360 / SEG), [bx, by] = pt((i + 1) * 360 / SEG);
+                    line(ax, ay, bx, by);
+                }
+                // Nửa xa trụ tô đen: quạt tam giác SOLID (đỉnh 3 = đỉnh 4)
+                for (let t = -90; t < 90; t += FILL_STEP) {
+                    const [ax, ay] = pt(t), [bx, by] = pt(t + FILL_STEP);
+                    push('0', 'SOLID', '8', '0',
+                        '10', P(cx), '20', P(cy), '30', '0',
+                        '11', P(ax), '21', P(ay), '31', '0',
+                        '12', P(bx), '22', P(by), '32', '0',
+                        '13', P(bx), '23', P(by), '33', '0');
+                }
+            }
+        }
+        // @@ROADLAMP_END
+
+        // Lấy đoạn đường xe chạy (VN2000 + offset xuất) cho bbox — dùng chung dữ liệu Overpass/cache của nền OSM
+        function _rlRoadSegments(osmData, cm, k0, outDE, outDN) {
+            const segs = [];
+            (osmData && osmData.roads || []).forEach(rd => {
+                if (!_rlIsDrivable(rd.tags) || !rd.coords || rd.coords.length < 2) return;
+                const pts = rd.coords.map(([lon, lat]) => {
+                    const vn = convertLatLonToVn2000(lat, lon, cm, k0);
+                    return { x: vn.x + outDE, y: vn.y + outDN };
+                });
+                for (let i = 1; i < pts.length; i++) {
+                    segs.push({ x1: pts[i - 1].x, y1: pts[i - 1].y, x2: pts[i].x, y2: pts[i].y });
+                }
+            });
+            return segs;
+        }
 
         // Vẽ 1 marker symbol dựa trên (type, state, opts).
         // - type: 1-4 = pole, 5-6 = cabinet
@@ -8165,6 +8648,8 @@
             const udcR = 0.6;   // radius UDC
             const soLuong = parseInt(opts.soLuongDen) || 1;
             state = state || 'giu';
+            const _lampM = /^lamp([1-4])$/.exec(state);
+            if (_lampM) return _rlDrawLampBlock(push, x, y, parseInt(_lampM[1]), opts.legend ? 0.35 : 1);
 
             const drawEllipseFilled = (cx, cy, rx, ry) => {
                 // DXF không hỗ trợ filled ellipse trực tiếp — dùng SOLID 4-vertex square approximation
@@ -8542,7 +9027,7 @@
                     const isCabinet = it.key.startsWith('cab_');
                     const state = it.key.replace(/^(pole_|cab_)/, '');
                     if (isCabinet) _drawCabinetSymbol(push, symX, yCur, state);
-                    else _drawPoleSymbol(push, symX, yCur, state, { soLuongDen: 1 });
+                    else _drawPoleSymbol(push, symX, yCur, state, { soLuongDen: 1, legend: true });
                 } else if (it.kind === 'cable') {
                     _drawCableSymbol(push, symX - 3, yCur, symX + 3, yCur, it.key);
                 }
@@ -8636,7 +9121,6 @@
             const ROW_H       = 60;   // gap giữa các hàng tủ
             const COL_W       = 15;   // gap ngang giữa các trụ
             const POLE_H      = 8;    // chiều cao cột dọc trụ
-            const CIRCLE_R    = 1;    // radius đèn (circle top)
             const TU_X        = -30;  // vị trí X của tủ (bên trái)
             const GROUND_X    = -18;  // vị trí X của cọc tiếp địa
             const TU_HW       = 4;    // half-width tủ (rectangle 8m)
@@ -8735,12 +9219,11 @@
                 // Draw mỗi trụ
                 polesOnly.forEach((r, colIdx) => {
                     const poleX = colIdx * COL_W;
-                    // Cột dọc trụ (từ busbar lên đến đèn)
-                    push('0', 'LINE', '8', '0', '10', poleX.toFixed(4), '20', (tuY + CABLE_Y_OFF).toFixed(4), '30', '0', '11', poleX.toFixed(4), '21', (tuY + POLE_H).toFixed(4), '31', '0');
-                    // Circle top (đèn)
-                    push('0', 'CIRCLE', '8', '0');
-                    push('10', poleX.toFixed(4), '20', (tuY + POLE_H).toFixed(4), '30', '0');
-                    push('40', CIRCLE_R.toFixed(4));
+                    // v156 — block đèn 1–4 bóng (đồng bộ bản vẽ mặt bằng), ô vuông nằm trên đường cáp ngang,
+                    // bóng vươn ±Y (cao nhất ~4.2m → dưới nhãn pha ở POLE_H+2, trên nhãn tên ở -3)
+                    const nLamp = Math.min(4, Math.max(1, parseInt(r[21]) || 1));
+                    _rlDrawLampBlock(push, poleX, tuY + CABLE_Y_OFF, nLamp, 1);
+                    usedStates.add('pole_lamp' + nLamp);
 
                     // Phase label above (A/B/C)
                     const phase = String(r[26] || '').trim();
@@ -8757,10 +9240,6 @@
                     push('10', (poleX - 3).toFixed(4), '20', (tuY - 3).toFixed(4), '30', '0');
                     push('40', '2.0');
                     push('1', _dxfEscape(name));
-
-                    // Track marker state cho auto-legend
-                    const state = String(r[29] || '').trim() || 'giu';
-                    usedStates.add('pole_' + state);
                 });
 
                 // Update bounds
@@ -8768,7 +9247,8 @@
                 bounds.maxY = Math.max(bounds.maxY, tuY + POLE_H + 5);
             });
 
-            // === POLISH: Frame + Title block (reuse P59 helpers) ===
+            // === POLISH: Frame + Title block (reuse P59 helpers) — 'none' = chỉ dữ liệu ===
+            if (!_cgIsNoTitle(opts.templateId)) {
             // Auto override NOI_DUNG_BV cho single-line
             const template = TITLE_TEMPLATES[opts.templateId] || TITLE_TEMPLATES.state;
             const md = {};
@@ -8862,6 +9342,7 @@
 
             // Auto-legend (sơ đồ nguyên lý — lấy lampSpecs từ rows)
             _drawAutoLegend(push, _dxfEscape, { minX: bounds.minX + 20, minY: 0, maxX: bounds.maxX, maxY: bounds.maxY }, usedStates, usedCableStates, _buildLampSpecs(rows));
+            }
 
             // Patch HEADER — extents + khung nhìn để mở ra thấy nội dung ngay
             L.splice(0, 6, '0', 'SECTION', '2', 'HEADER',
@@ -9089,7 +9570,8 @@
                     outputOffset: { dE: 0, dN: 0 },
                     paper: 'a3', scale: 1000, cm: 105.75,
                     excludeOutliers: cbOut ? cbOut.checked : false,
-                    stamps: stampsMeta
+                    stamps: stampsMeta,
+                    orientByRoad: !!(document.getElementById('cgOrientByRoad') || {}).checked  // v152
                 };
                 const results = [];
 
@@ -9347,6 +9829,8 @@
             bounds.minY -= CAB_HW * 5;   // extra for labels + ghi chú box below
             bounds.maxY += CAB_HW * 3;   // extra top for compass
 
+            // 'none' = chỉ dữ liệu: bỏ la bàn, ghi chú, khung viền, khung tên
+            if (!_cgIsNoTitle(opts.templateId)) {
             // ═══ COMPASS ROSE (góc trên-phải, cách bounds cluster để không overlap) ═══
             const compassSize = Math.max(30, bMax / 15);
             const compassGap = compassSize * 0.8;
@@ -9530,6 +10014,7 @@
                     push('1', _dxfEscape(line));
                 });
             }
+            }
 
             // Patch HEADER — extents + khung nhìn để mở ra thấy nội dung ngay
             L.splice(0, 6, '0', 'SECTION', '2', 'HEADER',
@@ -9560,9 +10045,19 @@
             // LAYER — tách cáp ra lớp riêng để bật/tắt độc lập trong AutoCAD.
             // Marker + text tên trụ vẫn ở layer '0'. Nét đứt cáp được vẽ bằng nhiều LINE rời
             // (hình học) nên linetype là CONTINUOUS, không phải DASHED.
-            push('0', 'TABLE', '2', 'LAYER', '70', '2');
+            // LTYPE phải đứng trước LAYER. CENTER (gạch chấm, chu kỳ 20m thực địa) cho tim đường OSM.
+            push('0', 'TABLE', '2', 'LTYPE', '70', '2');
+            push('0', 'LTYPE', '2', 'CONTINUOUS', '70', '0', '3', 'Solid line', '72', '65', '73', '0', '40', '0.0');
+            push('0', 'LTYPE', '2', 'CENTER', '70', '0', '3', 'Center ____ _ ____ _ ____', '72', '65', '73', '4', '40', '20.0',
+                 '49', '12.5', '49', '-2.5', '49', '2.5', '49', '-2.5');
+            push('0', 'ENDTAB');
+            push('0', 'TABLE', '2', 'LAYER', '70', '6');
             push('0', 'LAYER', '2', '0',              '70', '0', '62', '7', '6', 'CONTINUOUS');
             push('0', 'LAYER', '2', 'LIGHTING_CABLE', '70', '0', '62', '6', '6', 'CONTINUOUS');
+            push('0', 'LAYER', '2', 'OSM_TIM_DUONG',  '70', '0', '62', '1', '6', 'CENTER');
+            push('0', 'LAYER', '2', 'OSM_MEP_DUONG',  '70', '0', '62', '7', '6', 'CONTINUOUS');
+            push('0', 'LAYER', '2', 'OSM_TEN_DUONG',  '70', '0', '62', '3', '6', 'CONTINUOUS');
+            push('0', 'LAYER', '2', 'OSM_DUONG_KHAC', '70', '0', '62', '8', '6', 'CONTINUOUS');
             push('0', 'ENDTAB');
             push('0', 'TABLE', '2', 'STYLE', '70', '1');
             push('0', 'STYLE', '2', 'STANDARD', '70', '0', '40', '0', '41', '1',
@@ -9606,6 +10101,60 @@
                 return bn;
             }
 
+            // Bbox lat/lon của rows — dùng cho Overpass (nền OSM + hướng đường)
+            let _osmBbox = null;
+            {
+                let minLat = Infinity, maxLat = -Infinity, minLon = Infinity, maxLon = -Infinity;
+                for (const r of rows) {
+                    const lat = parseCoord(r[2]), lon = parseCoord(r[3]);
+                    if (!isFinite(lat) || !isFinite(lon)) continue;
+                    if (lat < minLat) minLat = lat;
+                    if (lat > maxLat) maxLat = lat;
+                    if (lon < minLon) minLon = lon;
+                    if (lon > maxLon) maxLon = lon;
+                }
+                // Padding ~100m để nền không "cụt" ngay biên marker
+                if (isFinite(minLat)) _osmBbox = { minLat: minLat - 0.001, maxLat: maxLat + 0.001, minLon: minLon - 0.001, maxLon: maxLon + 0.001 };
+            }
+
+            // v152 — Fetch Overpass 1 LẦN trước vòng lặp: rate-limit 5s của _fetchOsmBasemap
+            // sẽ chặn lần gọi thứ 2 nếu nền OSM và hướng đường fetch riêng.
+            const _orientByRoad = opts.orientByRoad === true;
+            const _needRoads = _orientByRoad || !!(opts.osmOptions && opts.osmOptions.roads);
+            let _osmData = null, _osmErr = null;
+            if (opts._osmPrefetch) {
+                // Luồng nhiều tờ / batch đã fetch 1 lần cho bbox tổng (xem _cgPrefetchOsm)
+                _osmData = opts._osmPrefetch.data;
+                _osmErr = opts._osmPrefetch.err;
+            } else if (_osmBbox && (opts.osmOptions || _orientByRoad) && typeof _fetchOsmBasemap === 'function') {
+                const fetchOpts = Object.assign({ roads: false, buildings: false, water: false, admin: false },
+                    opts.osmOptions || {}, { roads: _needRoads });
+                try {
+                    if (_orientByRoad && typeof displayInfo === 'function') displayInfo('🧭 Đang lấy hướng đường từ OSM...');
+                    _osmData = await _fetchOsmBasemap(_osmBbox, fetchOpts);
+                } catch (err) {
+                    _osmErr = err;
+                    console.warn('[CAD Gen] Overpass lỗi:', err.message);
+                }
+            }
+
+            let _roadIdx = null, _parentLL = null;
+            const _rlStats = { road: 0, parent: 0, none: 0 };
+            if (_orientByRoad) {
+                const segs = _rlRoadSegments(_osmData, cm, k0, outDE, outDN);
+                _roadIdx = segs.length ? _rlBuildIndex(segs, 50) : null;
+                // Vị trí trụ cha cho fallback — tra trong toàn bộ dữ liệu (cha có thể nằm ngoài bộ lọc)
+                _parentLL = new Map();
+                (loadedData || []).slice(1).forEach(r => {
+                    const nm = String(r[1] || '').trim();
+                    const la = parseCoord(r[2]), lo = parseCoord(r[3]);
+                    if (nm && isFinite(la) && isFinite(lo) && !_parentLL.has(nm)) _parentLL.set(nm, [la, lo]);
+                });
+                if (_osmErr && typeof displayWarning === 'function') {
+                    displayWarning('⚠ Không lấy được đường OSM (' + _osmErr.message + ') — block xoay theo tuyến cáp.');
+                }
+            }
+
             // Iterate markers: dispatch symbol theo (type, trangThai) — P59+
             for (const r of rows) {
                 const lat = parseCoord(r[2]), lon = parseCoord(r[3]);
@@ -9620,12 +10169,35 @@
                 const soLuongDen = parseInt(r[21]) || 1;
                 const loaiDen = String(r[10] || '').toUpperCase();
 
-                // Ký hiệu = INSERT block (định nghĩa sinh 1 lần mỗi state)
-                const _key = _stateKey(type, state);
-                const _bn  = _ensureSymbolBlock(_key, type, state, { soLuongDen, loaiDen });
-                push('0', 'INSERT', '8', '0', '2', _bn,
-                     '10', x.toFixed(4), '20', y.toFixed(4), '30', '0');
-                _usedStates.add(_key);
+                const _isPole = type >= 1 && type <= 4;
+                if (_orientByRoad && _isPole) {
+                    // v152 — block đèn N bóng, xoay vuông góc tim đường (fallback: tuyến cáp tới trụ cha)
+                    const nLamp = Math.min(4, Math.max(1, soLuongDen));
+                    const lampState = 'lamp' + nLamp;
+                    const near = _roadIdx ? _rlNearest(x, y, _roadIdx, 40) : null;
+                    let parentXY = null;
+                    if (!near) {
+                        const pll = _parentLL.get(String(r[14] || '').trim());
+                        if (pll && String(r[14]).trim() !== name) {
+                            const pv = convertLatLonToVn2000(pll[0], pll[1], cm, k0);
+                            parentXY = { x: pv.x + outDE, y: pv.y + outDN };
+                        }
+                    }
+                    _rlStats[near ? 'road' : (parentXY ? 'parent' : 'none')]++;
+                    const rot = _rlRotation(x, y, nLamp, near, parentXY);
+                    const _key = 'pole_' + lampState;
+                    const _bn  = _ensureSymbolBlock(_key, type, lampState, { soLuongDen: nLamp });
+                    push('0', 'INSERT', '8', '0', '2', _bn,
+                         '10', x.toFixed(4), '20', y.toFixed(4), '30', '0', '50', rot.toFixed(2));
+                    _usedStates.add(_key);
+                } else {
+                    // Ký hiệu = INSERT block (định nghĩa sinh 1 lần mỗi state)
+                    const _key = _stateKey(type, state);
+                    const _bn  = _ensureSymbolBlock(_key, type, state, { soLuongDen, loaiDen });
+                    push('0', 'INSERT', '8', '0', '2', _bn,
+                         '10', x.toFixed(4), '20', y.toFixed(4), '30', '0');
+                    _usedStates.add(_key);
+                }
 
                 // TEXT label tên trụ (cao 2m thực địa @ 1:1000)
                 push('0', 'TEXT', '8', '0');
@@ -9668,40 +10240,34 @@
             }
 
             // P65+P66: Fetch + draw OSM basemap (roads/buildings/water/admin) — nếu user bật
-            if (opts.osmOptions && typeof _fetchOsmBasemap === 'function' && typeof _drawOsmBasemapInDxf === 'function') {
-                try {
-                    // Compute bbox lat/lon từ rows (trực tiếp, không convert ngược)
-                    let minLat = Infinity, maxLat = -Infinity, minLon = Infinity, maxLon = -Infinity;
-                    for (const r of rows) {
-                        const lat = parseCoord(r[2]), lon = parseCoord(r[3]);
-                        if (!isFinite(lat) || !isFinite(lon)) continue;
-                        if (lat < minLat) minLat = lat;
-                        if (lat > maxLat) maxLat = lat;
-                        if (lon < minLon) minLon = lon;
-                        if (lon > maxLon) maxLon = lon;
+            if (_orientByRoad) console.log('[CAD Gen] Hướng block đèn:', _rlStats);
+            if (opts.osmOptions && typeof _drawOsmBasemapInDxf === 'function') {
+                if (_osmErr || !_osmData) {
+                    // Không throw — OSM fail không được block export
+                    if (typeof displayError === 'function') {
+                        displayError('⚠ Nền OSM lỗi (' + (_osmErr ? _osmErr.message : 'không có dữ liệu') + ') — bản vẽ vẫn xuất bình thường không có nền.');
                     }
-                    if (isFinite(minLat)) {
-                        // Padding 100m ~ 0.001 độ (đủ để nền không "cụt" ngay biên marker)
-                        const pad = 0.001;
-                        const bbox = {
-                            minLat: minLat - pad, maxLat: maxLat + pad,
-                            minLon: minLon - pad, maxLon: maxLon + pad
-                        };
-                        const osmData = await _fetchOsmBasemap(bbox, opts.osmOptions);
+                } else {
+                    try {
+                        // Chỉ vẽ lớp user chọn — roads có thể đã fetch thêm chỉ để tính hướng block
+                        const drawData = Object.assign({}, _osmData);
+                        if (!opts.osmOptions.roads) drawData.roads = [];
                         // Trim OSM tại bounds markers + padding 30m → KHÔNG scale bản vẽ
                         const CLIP_PAD = 30;
                         const clipBounds = {
                             minX: bounds.minX - CLIP_PAD, minY: bounds.minY - CLIP_PAD,
                             maxX: bounds.maxX + CLIP_PAD, maxY: bounds.maxY + CLIP_PAD
                         };
-                        const stats = _drawOsmBasemapInDxf(push, osmData, cm, outDE, outDN, clipBounds);
+                        const oo = opts.osmOptions;
+                        const stats = _drawOsmBasemapInDxf(push, drawData, cm, outDE, outDN, clipBounds, k0,
+                            { center: oo.roadCenter !== false, edge: !!oo.roadEdge, name: !!oo.roadName, other: !!oo.roadOther, widths: oo.roadWidths,
+                              textHeight: 3 * scale / 1000 });  // 3mm trên giấy ở mọi tỉ lệ
                         console.log('[CAD Gen] OSM basemap drawn:', stats.entityCount, 'entities, skipped:', stats.skipped);
-                    }
-                } catch (err) {
-                    // Không throw — OSM fail không được block export
-                    console.warn('[CAD Gen] OSM basemap skip:', err.message);
-                    if (typeof displayError === 'function') {
-                        displayError('⚠ Nền OSM lỗi (' + err.message + ') — bản vẽ vẫn xuất bình thường không có nền.');
+                    } catch (err) {
+                        console.warn('[CAD Gen] OSM basemap skip:', err.message);
+                        if (typeof displayError === 'function') {
+                            displayError('⚠ Nền OSM lỗi (' + err.message + ') — bản vẽ vẫn xuất bình thường không có nền.');
+                        }
                     }
                 }
             }
@@ -9739,7 +10305,9 @@
 
             // Title block — pre-compute size + expand bounds (RENDER được deferred đến POLISH block để dùng bounds đã pad aspect ratio)
             let _titleRender = null;  // { type: 'state'|'dienluc'|'simple', tbW, tbH, ... }
-            if (isFinite(bounds.maxX)) {
+            // 'none' = chỉ dữ liệu (trụ + cáp + nền): bỏ khung tên, khung viền, chú thích, mũi tên Bắc, thước, ô con dấu
+            const _noTitle = _cgIsNoTitle(opts.templateId);
+            if (!_noTitle && isFinite(bounds.maxX)) {
                 if (opts.templateId === 'state') {
                     // P59 v2 + TCVN: Portrait 80×260m — sát góc phải, full height
                     const tbW = 80, tbH = 260;
@@ -9797,7 +10365,7 @@
 
             // === POLISH v73 (chỉ LINE + TEXT + CIRCLE — R12 compat) ===
             // Trình tự: (a) compute size + expand bounds cho legend/north/stamps; (b) vẽ frame ôm bounds đã expand; (c) vẽ scale bar, legend, north arrow, stamps
-            if (isFinite(bounds.maxX) && isFinite(mapBounds.maxX)) {
+            if (!_noTitle && isFinite(bounds.maxX) && isFinite(mapBounds.maxX)) {
                 // P58: Pre-compute stamps size (đặt phía trên bản vẽ, trong frame)
                 // Vẽ tất cả 4 ô nếu `enabled !== false` — kể cả trống (làm placeholder cho user ký tay in ra)
                 const stampsMeta = opts.stamps || {};
@@ -10135,8 +10703,9 @@
             }
 
             // Patch HEADER — extents + khung nhìn để mở ra thấy nội dung ngay
+            // 'none': nền OSM/CAD được cắt theo bounds ±30m → lề 35 để khung nhìn ôm hết nền
             L.splice(0, 6, '0', 'SECTION', '2', 'HEADER',
-                ..._dxfHeaderView(bounds, 20), '0', 'ENDSEC');
+                ..._dxfHeaderView(bounds, _noTitle ? 35 : 20), '0', 'ENDSEC');
 
             // CRLF line-ending — AutoCAD strict
             return L.join('\r\n');
@@ -10819,6 +11388,9 @@
                 if (typeof displayError === 'function') displayError('Chưa có dữ liệu marker để xuất bản vẽ.');
                 return;
             }
+            const _cbOrient = document.getElementById('cgOrientByRoad');
+            if (_cbOrient) { try { _cbOrient.checked = localStorage.getItem('cg_orient_by_road') === '1'; } catch(e){_swallow(e);} }
+            _cgRestoreRoadWidths();
             _cgCurrentFilters = _restoreCadExportFilters();
             _cgRenderOffsetPresets();
             _cgRenderFilterAccordion();
@@ -11194,6 +11766,7 @@
         function _collectMetadata() {
             const templateId = document.getElementById('cgTemplateId').value;
             const template = TITLE_TEMPLATES[templateId];
+            if (!template) return {};   // 'none' — không có khung tên
             const md = {};
             template.fields.forEach(f => {
                 const el = document.getElementById(`cgMeta_${f.key}`);
@@ -11443,10 +12016,20 @@
                 stamps: stampsMeta,  // null nếu tắt → generator skip stamps
                 drawingType: drawingType,  // P60: 'site-plan' | 'single-line' | 'overview'
                 osmOptions: (typeof _cgCollectOsmOpts === 'function') ? _cgCollectOsmOpts() : null,  // P65+P66: null nếu tắt
+                orientByRoad: !!(document.getElementById('cgOrientByRoad') || {}).checked,  // v152
                 cadBaseOptions: (typeof _cgCollectCadBaseOpts === 'function') ? _cgCollectCadBaseOpts() : null,  // CAD nền từ upload
                 includeCable: (document.getElementById('cgIncludeCable') || {}).checked !== false,  // default true — cho phép tắt cáp
                 frameMode: (document.getElementById('cgFrameMode') || {}).value || 'auto-fit'   // 'auto-fit' | 'a3-standard'
             };
+
+            // 'none' = chỉ dữ liệu: PDF luôn vẽ khung tên (exportDrawingPDF) → chỉ cho xuất DXF; không có ô con dấu
+            if (_cgIsNoTitle(opts.templateId)) {
+                if (mode !== 'dxf') {
+                    displayError && displayError('"Không xuất khung tên" chỉ xuất DXF. Chọn template khác để xem trước / xuất PDF.');
+                    return;
+                }
+                opts.stamps = null;
+            }
 
             // P60/P61/P62: Dispatch generator theo loại bản vẽ
             // Overview + Single-line dùng function riêng, không đi qua wrapper outlier
@@ -11542,16 +12125,20 @@
                         console.log('[Export DXF] DXF length:', dxfText ? dxfText.length : 'NULL');
                         if (!dxfText) throw new Error('Generator trả về null/undefined');
                         const baseName = `thiet-ke-${opts.templateId}-${stamp}`;
-                        const packed = await _maybeZipWithStamps(dxfText, baseName);
+                        // 'none': không có khung tên/ô dấu → không kèm ảnh dấu/chữ ký
+                        const packed = _cgIsNoTitle(opts.templateId)
+                            ? { blob: new Blob([dxfText], { type: 'application/dxf' }), filename: baseName + '.dxf', isZip: false }
+                            : await _maybeZipWithStamps(dxfText, baseName);
                         _saveBlob(packed.blob, packed.filename);
                         displayInfo && displayInfo(packed.isZip ? '✅ Đã xuất zip (DXF + dấu/chữ ký)' : '✅ Đã xuất DXF');
                         if (opts.templateId === 'state') _pushRevisionOnExport('state');
                     } else {
                         if (partitions.length > 10 && !confirm(`Bản vẽ có ${partitions.length} tờ. Việc xuất zip có thể mất nhiều thời gian. Tiếp tục?`)) return;
                         const dxfFiles = [];
+                        const osmPrefetch = await _cgPrefetchOsm(opts);
                         for (const sb of partitions) {
                             try {
-                                const dxfText = await _generateCadDrawing({ ...opts, sheetBounds: sb });
+                                const dxfText = await _generateCadDrawing({ ...opts, sheetBounds: sb, _osmPrefetch: osmPrefetch });
                                 const label = `thiet-ke-${opts.templateId}-${stamp}_${String(sb.index).padStart(2, '0')}-of-${String(sb.total).padStart(2, '0')}.dxf`;
                                 dxfFiles.push({ name: label, content: dxfText });
                             } catch (err) {
@@ -11588,8 +12175,9 @@
 
                     // Build DXF files (mỗi partition 1 file)
                     const dxfFiles = [];
+                    const osmPrefetch = isMultiSheet ? await _cgPrefetchOsm(opts) : null;
                     for (const sb of partitions) {
-                        const subOpts = { ...opts };
+                        const subOpts = { ...opts, _osmPrefetch: osmPrefetch };
                         if (isMultiSheet) subOpts.sheetBounds = sb;
                         try {
                             const dxfText = await _generateCadDrawing(subOpts);
@@ -11625,6 +12213,31 @@
         }
         window._onCgExport = _onCgExport;
 
+        // v152 — Fetch Overpass 1 lần cho bbox toàn bộ trụ đang lọc, dùng chung cho nhiều tờ/nhiều tủ.
+        // Không có cái này, tờ thứ 2 trở đi bị rate-limit 5s của _fetchOsmBasemap → mất nền + hướng block.
+        async function _cgPrefetchOsm(opts, filters) {
+            if (!(opts.osmOptions || opts.orientByRoad) || typeof _fetchOsmBasemap !== 'function') return null;
+            let minLat = Infinity, maxLat = -Infinity, minLon = Infinity, maxLon = -Infinity;
+            for (const r of _filterRowsForCadExport(filters || opts.filters || {})) {
+                const lat = parseCoord(r[2]), lon = parseCoord(r[3]);
+                if (!isFinite(lat) || !isFinite(lon)) continue;
+                if (lat < minLat) minLat = lat;
+                if (lat > maxLat) maxLat = lat;
+                if (lon < minLon) minLon = lon;
+                if (lon > maxLon) maxLon = lon;
+            }
+            if (!isFinite(minLat)) return null;
+            const bbox = { minLat: minLat - 0.001, maxLat: maxLat + 0.001, minLon: minLon - 0.001, maxLon: maxLon + 0.001 };
+            const fetchOpts = Object.assign({ roads: false, buildings: false, water: false, admin: false },
+                opts.osmOptions || {}, { roads: !!(opts.orientByRoad || (opts.osmOptions && opts.osmOptions.roads)) });
+            try {
+                if (typeof displayInfo === 'function') displayInfo('🗺 Đang tải dữ liệu OSM cho toàn bộ bản vẽ...');
+                return { data: await _fetchOsmBasemap(bbox, fetchOpts), err: null };
+            } catch (err) {
+                return { data: null, err };
+            }
+        }
+
         // ── T25: Batch export — mỗi tủ 1 DXF trong zip ────────────────
         async function _onCgBatchExport() {
             const allTus = _getUniqueCabinets();
@@ -11648,8 +12261,17 @@
                 paper: 'a3',
                 scale: parseInt(document.getElementById('cgScale').value) || 1000,
                 cm: parseFloat(document.getElementById('cgMeridian').value) || 105.75,
-                stamps: stampsMetaBatch
+                stamps: stampsMetaBatch,
+                orientByRoad: !!(document.getElementById('cgOrientByRoad') || {}).checked  // v152
             };
+            if (baseOpts.orientByRoad) {
+                baseOpts._osmPrefetch = await _cgPrefetchOsm(baseOpts, {
+                    tus: [],
+                    basenames: _cgCurrentFilters.basenames || [],
+                    nguoiKS:   _cgCurrentFilters.nguoiKS   || [],
+                    phuongXa:  _cgCurrentFilters.phuongXa  || []
+                });
+            }
 
             const btn = document.getElementById('cgBtnBatch');
             const oldText = btn.textContent;
@@ -12091,11 +12713,16 @@
             const currentVal = sel.value;
             sel.innerHTML = Object.entries(TITLE_TEMPLATES).map(([id, tpl]) =>
                 `<option value="${id}">${tpl.label}</option>`
-            ).join('');
+            ).join('') + `<option value="none">🚫 Không xuất khung tên (chỉ dữ liệu)</option>`;
             // Try restore previous selection
-            if (TITLE_TEMPLATES[currentVal]) sel.value = currentVal;
+            if (TITLE_TEMPLATES[currentVal] || _cgIsNoTitle(currentVal)) sel.value = currentVal;
         }
         window._cgRefreshTemplateDropdown = _cgRefreshTemplateDropdown;
+
+        // 'none' không phải template trong TITLE_TEMPLATES — generator bỏ khung tên + trang trí, chỉ vẽ dữ liệu.
+        // Viết literal (không dùng const) để hàm hoist an toàn, không dính TDZ nếu script lỗi giữa chừng.
+        function _cgIsNoTitle(templateId) { return templateId === 'none'; }
+        window._cgIsNoTitle = _cgIsNoTitle;
 
         // ── Multi-sheet split ─────────────────────────────────────────
         // A3 landscape @ 1:1000 → view = 420m × 297m thực địa
@@ -16007,8 +16634,13 @@
         function _cgCollectOsmOpts() {
             const cb = document.getElementById('cgIncludeOsm');
             if (!cb || !cb.checked) return null;
+            const chk = id => !!(document.getElementById(id) || {}).checked;
+            const roadCenter = chk('cgOsmRoadCenter'), roadEdge = chk('cgOsmRoadEdge'), roadName = chk('cgOsmRoadName');
+            const roadOther = chk('cgOsmRoadOther');
             return {
-                roads:     (document.getElementById('cgOsmRoads')     || {}).checked !== false,
+                roads:     roadCenter || roadEdge || roadName || roadOther,   // cần fetch đường không
+                roadCenter, roadEdge, roadName, roadOther,
+                roadWidths: _cgReadRoadWidths(),
                 buildings: (document.getElementById('cgOsmBuildings') || {}).checked || false,
                 water:     (document.getElementById('cgOsmWater')     || {}).checked || false,
                 admin:     (document.getElementById('cgOsmAdmin')     || {}).checked || false
@@ -16016,13 +16648,48 @@
         }
         window._cgCollectOsmOpts = _cgCollectOsmOpts;
 
+        // v154 — bảng bề rộng mặt đường mặc định (m), lưu localStorage
+        const _CG_ROAD_W_IDS = { major: 'cgOsmWMajor', secondary: 'cgOsmWSecondary', residential: 'cgOsmWResidential', service: 'cgOsmWService' };
+        function _cgReadRoadWidths() {
+            const w = {};
+            for (const [k, id] of Object.entries(_CG_ROAD_W_IDS)) {
+                const v = parseFloat((document.getElementById(id) || {}).value);
+                w[k] = (isFinite(v) && v > 0 && v < 100) ? v : OSM_ROAD_WIDTH_DEFAULTS[k];
+            }
+            return w;
+        }
+        const _CG_ROAD_LAYER_IDS = { center: 'cgOsmRoadCenter', edge: 'cgOsmRoadEdge', name: 'cgOsmRoadName', other: 'cgOsmRoadOther' };
+        function _cgSaveRoadWidths() {
+            const layers = {};
+            for (const [k, id] of Object.entries(_CG_ROAD_LAYER_IDS)) layers[k] = !!(document.getElementById(id) || {}).checked;
+            try { localStorage.setItem('cg_osm_road_widths', JSON.stringify(Object.assign(_cgReadRoadWidths(), { layers }))); } catch(e){_swallow(e);}
+        }
+        function _cgRestoreRoadWidths() {
+            let saved = null;
+            try { saved = JSON.parse(localStorage.getItem('cg_osm_road_widths') || 'null'); } catch(e){_swallow(e);}
+            if (!saved) return;
+            for (const [k, id] of Object.entries(_CG_ROAD_W_IDS)) {
+                const el = document.getElementById(id);
+                if (el && isFinite(saved[k])) el.value = saved[k];
+            }
+            for (const [k, id] of Object.entries(_CG_ROAD_LAYER_IDS)) {
+                const el = document.getElementById(id);
+                if (el && saved.layers && typeof saved.layers[k] === 'boolean') el.checked = saved.layers[k];
+            }
+        }
+        window._cgSaveRoadWidths = _cgSaveRoadWidths;
+
         async function _fetchOsmBasemap(bounds, options) {
             const opts = Object.assign({ roads: true, buildings: true, water: false, admin: false }, options || {});
             const cacheKey = _osmBoundsKey(bounds);
             // Try cache first (reuse csv-cache store với prefix osm_)
             try {
                 const cached = await _idbGet(cacheKey);
-                if (cached && cached.fetchedAt && (Date.now() - cached.fetchedAt) < OSM_CACHE_TTL_MS) {
+                // Cache chỉ khóa theo bbox → kiểm cache đã fetch đủ lớp đang cần chưa.
+                // Cache cũ (trước v152) không lưu opts → không biết đã có lớp nào → fetch lại 1 lần.
+                const had = (cached && cached.opts) || {};
+                const covers = ['roads', 'buildings', 'water', 'admin'].every(k => !opts[k] || had[k]);
+                if (cached && covers && cached.fetchedAt && (Date.now() - cached.fetchedAt) < OSM_CACHE_TTL_MS) {
                     return cached.data;
                 }
             } catch(e) { /* silent */ }
@@ -16082,7 +16749,7 @@
 
             // Cache
             try {
-                await _idbSet(cacheKey, { data, fetchedAt: Date.now(), bounds });
+                await _idbSet(cacheKey, { data, fetchedAt: Date.now(), bounds, opts });
             } catch(e) { /* silent */ }
 
             return data;
@@ -16091,10 +16758,226 @@
 
         // ─────────────────────────────────────────────────────────────
         // P66+P67: Render OSM basemap + ranh giới hành chính trong DXF
-        // Layers: OSM_ROAD_MAJOR (weight 1.5) / OSM_ROAD_MINOR (0.5) /
+        // Layers: OSM_TIM_DUONG / OSM_MEP_DUONG / OSM_TEN_DUONG (v154) /
         //         OSM_BUILDING / OSM_WATER / ADMIN_BOUNDARY
         // ─────────────────────────────────────────────────────────────
-        function _drawOsmBasemapInDxf(push, osmData, cm, outDE, outDN, clipBounds) {
+        // ─── v154: Đường OSM theo lớp (tim / mép / tên) — docs/design-osm-road-layers.md ───
+        // Marker @@OSMROAD_* để tests/osm-road-layers.test.js trích các hàm thuần này ra chạy bằng Node.
+        // @@OSMROAD_START
+        const OSM_ROAD_WIDTH_DEFAULTS = { major: 14, secondary: 10, residential: 6, service: 4 };
+        function _osmRoadWidth(tags, defaults) {
+            const d = Object.assign({}, OSM_ROAD_WIDTH_DEFAULTS, defaults || {});
+            const w = parseFloat(String((tags && tags.width) || '').replace(',', '.'));
+            if (isFinite(w) && w > 0 && w < 100) return w;
+            const lanes = parseInt(tags && tags.lanes);
+            if (lanes >= 1 && lanes <= 12) return lanes * 3.5;
+            let hw = String((tags && tags.highway) || '');
+            if (hw === 'construction') hw = String(tags.construction || 'residential');
+            if (['motorway', 'trunk', 'primary'].includes(hw)) return d.major;
+            if (['secondary', 'tertiary'].includes(hw)) return d.secondary;
+            if (hw === 'service') return d.service;
+            return d.residential;
+        }
+        // Dời song song sang TRÁI hướng đi một đoạn d (d âm = sang phải). Nối miter; góc gắt → vát (bevel).
+        function _offsetPolyline(pts, d) {
+            const p = [];
+            for (const q of pts) {
+                const last = p[p.length - 1];
+                if (!last || Math.hypot(q.x - last.x, q.y - last.y) > 1e-6) p.push(q);
+            }
+            if (p.length < 2) return [];
+            const nrm = (a, b) => { const dx = b.x - a.x, dy = b.y - a.y, l = Math.hypot(dx, dy); return { x: -dy / l, y: dx / l }; };
+            const joint = (out, c, n1, n2) => {
+                const k = 1 + n1.x * n2.x + n1.y * n2.y;   // = 1 + cos(góc giữa 2 pháp tuyến)
+                if (k < 0.25) {   // gần quay đầu → miter bắn rất xa, dùng 2 điểm vát
+                    out.push({ x: c.x + d * n1.x, y: c.y + d * n1.y });
+                    out.push({ x: c.x + d * n2.x, y: c.y + d * n2.y });
+                } else {
+                    out.push({ x: c.x + d * (n1.x + n2.x) / k, y: c.y + d * (n1.y + n2.y) / k });
+                }
+            };
+            // Vòng khép kín (vòng xuyến): điểm nối đầu-cuối cũng cần miter, nếu không mép bị khấc
+            const closed = p.length >= 4 && Math.hypot(p[0].x - p[p.length - 1].x, p[0].y - p[p.length - 1].y) < 1e-6;
+            const out = [];
+            const n0 = nrm(p[0], p[1]);
+            if (closed) joint(out, p[0], nrm(p[p.length - 2], p[p.length - 1]), n0);
+            else out.push({ x: p[0].x + d * n0.x, y: p[0].y + d * n0.y });
+            for (let i = 1; i < p.length - 1; i++) joint(out, p[i], nrm(p[i - 1], p[i]), nrm(p[i], p[i + 1]));
+            if (closed) out.push({ x: out[0].x, y: out[0].y });
+            else {
+                const nl = nrm(p[p.length - 2], p[p.length - 1]);
+                out.push({ x: p[p.length - 1].x + d * nl.x, y: p[p.length - 1].y + d * nl.y });
+            }
+            return out;
+        }
+        // Gom các đoạn đã cắt khung (null = bị loại) thành chuỗi điểm liền nhau → ghi 1 POLYLINE/chuỗi
+        // để nét CENTER chạy liên tục thay vì bắt đầu lại ở mỗi nút OSM.
+        function _chainRuns(segs) {
+            const runs = [];
+            let cur = null;
+            for (const s of segs) {
+                if (!s) { cur = null; continue; }
+                const last = cur && cur[cur.length - 1];
+                if (last && Math.hypot(last.x - s.x1, last.y - s.y1) < 1e-6) cur.push({ x: s.x2, y: s.y2 });
+                else { cur = [{ x: s.x1, y: s.y1 }, { x: s.x2, y: s.y2 }]; runs.push(cur); }
+            }
+            return runs;
+        }
+        // Điểm đặt tên đường: giữa chiều dài cả chuỗi, góc theo đoạn chứa điểm đó, luôn đọc xuôi (-90°, 90°]
+        function _roadLabelPlacement(pts, minLen) {
+            let total = 0;
+            for (let i = 1; i < pts.length; i++) total += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
+            if (!(total >= minLen)) return null;
+            let acc = 0;
+            for (let i = 1; i < pts.length; i++) {
+                const a = pts[i - 1], b = pts[i];
+                const len = Math.hypot(b.x - a.x, b.y - a.y);
+                if (acc + len >= total / 2 && len > 0) {
+                    const t = (total / 2 - acc) / len;
+                    let rot = Math.atan2(b.y - a.y, b.x - a.x) * 180 / Math.PI;
+                    rot = ((rot % 180) + 180) % 180;
+                    if (rot > 90) rot -= 180;
+                    return { x: a.x + t * (b.x - a.x), y: a.y + t * (b.y - a.y), rot, len: total };
+                }
+                acc += len;
+            }
+            return null;
+        }
+        function _labelTooClose(placed, name, x, y, minDist) {
+            return placed.some(p => p.name === name && Math.hypot(p.x - x, p.y - y) < minDist);
+        }
+        // v156 — Lối đi bộ / bãi xe… → lớp OSM_DUONG_KHAC (không vẽ proposed/elevator/platform)
+        const _OSM_OTHER_HW = new Set(['footway', 'path', 'steps', 'pedestrian', 'cycleway', 'track', 'bridleway', 'corridor']);
+        function _osmRoadIsOther(tags) {
+            const h = tags && tags.highway;
+            if (!h) return false;
+            if (_OSM_OTHER_HW.has(h)) return true;
+            return h === 'service' && ['parking_aisle', 'driveway', 'drive-through'].includes(tags.service);
+        }
+        // v156 — Ghép các way nối tiếp (đúng 2 đầu way gặp nhau, cùng bề rộng) thành 1 chuỗi để mép
+        // đường chạy liền qua điểm OSM chia way. Ngã ba/ngã tư (≥3 đầu way) giữ nguyên.
+        function _mergeRoadChains(roads) {
+            const key = p => p.x.toFixed(2) + ',' + p.y.toFixed(2);
+            const ends = new Map();
+            roads.forEach((r, i) => {
+                if (!r.pts || r.pts.length < 2) return;
+                [[r.pts[0], true], [r.pts[r.pts.length - 1], false]].forEach(([p, atStart]) => {
+                    const k = key(p);
+                    if (!ends.has(k)) ends.set(k, []);
+                    ends.get(k).push({ i, atStart });
+                });
+            });
+            const visited = new Array(roads.length).fill(false);
+            // Không ghép qua 2 tầng khác nhau (đầu cầu/hầm) để giữ tầng riêng cho bước cắt nút giao
+            const nextAt = (p, width, layer) => {
+                const list = ends.get(key(p));
+                if (!list || list.length !== 2) return null;
+                const o = list.find(e => !visited[e.i]);
+                return (o && roads[o.i].width === width && (roads[o.i].layer || 0) === (layer || 0)) ? o : null;
+            };
+            const out = [];
+            const build = i => {
+                const r = roads[i];
+                visited[i] = true;
+                const pts = r.pts.slice();
+                for (let o; (o = nextAt(pts[pts.length - 1], r.width, r.layer)); ) {   // nối về phía cuối
+                    visited[o.i] = true;
+                    const q = roads[o.i].pts;
+                    pts.push(...(o.atStart ? q.slice(1) : q.slice(0, -1).reverse()));
+                }
+                for (let o; (o = nextAt(pts[0], r.width, r.layer)); ) {               // nối về phía đầu
+                    visited[o.i] = true;
+                    const q = roads[o.i].pts;
+                    pts.unshift(...(o.atStart ? q.slice(1).reverse() : q.slice(0, -1)));
+                }
+                out.push(Object.assign({}, r, { pts }));
+            };
+            // Bắt đầu từ way có đầu mút "cụt" hoặc ở nút giao để chuỗi không bị cắt giữa; còn lại (vòng kín) sau
+            const isChainEnd = p => { const l = ends.get(key(p)); return !l || l.length !== 2; };
+            roads.forEach((r, i) => { if (!visited[i] && r.pts && r.pts.length >= 2 && (isChainEnd(r.pts[0]) || isChainEnd(r.pts[r.pts.length - 1]))) build(i); });
+            roads.forEach((r, i) => { if (!visited[i] && r.pts && r.pts.length >= 2) build(i); });
+            return out;
+        }
+        // Tầng OSM: layer ghi rõ → dùng; cầu không ghi layer → 1; hầm → -1; còn lại 0
+        function _osmRoadLayer(tags) {
+            const l = parseInt(tags && tags.layer);
+            if (isFinite(l)) return l;
+            if (tags && tags.bridge && tags.bridge !== 'no') return 1;
+            if (tags && tags.tunnel && tags.tunnel !== 'no') return -1;
+            return 0;
+        }
+        // v156 — Chỉ mục hành lang mặt đường (tim ± hw) theo lưới để tra "điểm nằm trong lòng tuyến khác".
+        // Đầu mút tuyến (không khép kín) là đầu BẰNG: đánh dấu capStart/capEnd để không "khoét tròn"
+        // mép đường bên kia khi tuyến rộng đâm vào tuyến hẹp.
+        function _corridorIndex(corridors, cell) {
+            const grid = new Map();
+            corridors.forEach(c => {
+                const n = (c.pts || []).length;
+                const closed = n >= 3 && Math.hypot(c.pts[0].x - c.pts[n - 1].x, c.pts[0].y - c.pts[n - 1].y) < 1e-6;
+                for (let i = 1; i < n; i++) {
+                    const s = { x1: c.pts[i - 1].x, y1: c.pts[i - 1].y, x2: c.pts[i].x, y2: c.pts[i].y, hw: c.hw, id: c.id,
+                                layer: c.layer || 0, capStart: !closed && i === 1, capEnd: !closed && i === n - 1 };
+                    const i0 = Math.floor((Math.min(s.x1, s.x2) - s.hw) / cell), i1 = Math.floor((Math.max(s.x1, s.x2) + s.hw) / cell);
+                    const j0 = Math.floor((Math.min(s.y1, s.y2) - s.hw) / cell), j1 = Math.floor((Math.max(s.y1, s.y2) + s.hw) / cell);
+                    for (let a = i0; a <= i1; a++) for (let b = j0; b <= j1; b++) {
+                        const k = a + ',' + b;
+                        if (!grid.has(k)) grid.set(k, []);
+                        grid.get(k).push(s);
+                    }
+                }
+            });
+            return { grid, cell };
+        }
+        function _insideOtherCorridor(x, y, idx, selfId, eps, selfLayer) {
+            const list = idx.grid.get(Math.floor(x / idx.cell) + ',' + Math.floor(y / idx.cell));
+            if (!list) return false;
+            for (const s of list) {
+                if (s.id === selfId) continue;
+                if (s.layer !== (selfLayer || 0)) continue;   // cầu vượt / hầm chui: không giao thật
+                const dx = s.x2 - s.x1, dy = s.y2 - s.y1, l2 = dx * dx + dy * dy;
+                const raw = l2 < 1e-12 ? 0 : ((x - s.x1) * dx + (y - s.y1) * dy) / l2;
+                if ((raw < 0 && s.capStart) || (raw > 1 && s.capEnd)) continue;   // đầu bằng ở đầu mút tuyến
+                const t = Math.max(0, Math.min(1, raw));
+                if (Math.hypot(x - s.x1 - t * dx, y - s.y1 - t * dy) < s.hw - eps) return true;
+            }
+            return false;
+        }
+        // v156 — Cắt bỏ phần mép đường nằm trong lòng tuyến khác (nút giao). Trả về các chuỗi điểm còn lại.
+        // Lấy mẫu ≤1m/bước, ranh giới vào/ra tìm bằng chia đôi (~mm); chỉ giữ đỉnh gốc + điểm cắt.
+        function _trimEdgeRun(pts, idx, selfId, selfLayer) {
+            const EPS = 0.05;
+            if (!pts || pts.length < 2) return [];
+            const inside = p => _insideOtherCorridor(p.x, p.y, idx, selfId, EPS, selfLayer);
+            const lerp = (a, b, t) => ({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t });
+            const runs = [];
+            let cur = null;
+            if (!inside(pts[0])) { cur = [pts[0]]; runs.push(cur); }
+            for (let i = 1; i < pts.length; i++) {
+                const a = pts[i - 1], b = pts[i];
+                const n = Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.y - a.y) / 1.0));
+                let tPrev = 0, inPrev = inside(a);
+                for (let k = 1; k <= n; k++) {
+                    const t = k / n, inNow = inside(lerp(a, b, t));
+                    if (inNow !== inPrev) {
+                        let lo = tPrev, hi = t;   // lo cùng trạng thái inPrev
+                        for (let it = 0; it < 14; it++) {
+                            const mid = (lo + hi) / 2;
+                            if (inside(lerp(a, b, mid)) === inPrev) lo = mid; else hi = mid;
+                        }
+                        const q = lerp(a, b, inPrev ? hi : lo);
+                        if (inPrev) { cur = [q]; runs.push(cur); }   // ra khỏi lòng đường khác
+                        else { cur.push(q); cur = null; }            // đi vào lòng đường khác
+                    }
+                    if (k === n && !inNow) cur.push(b);
+                    tPrev = t; inPrev = inNow;
+                }
+            }
+            const pathLen = r => { let s = 0; for (let i = 1; i < r.length; i++) s += Math.hypot(r[i].x - r[i - 1].x, r[i].y - r[i - 1].y); return s; };
+            return runs.filter(r => r.length >= 2 && pathLen(r) > 0.01);
+        }
+        // @@OSMROAD_END
+
+        function _drawOsmBasemapInDxf(push, osmData, cm, outDE, outDN, clipBounds, k0, roadOpts) {
             if (!osmData) return { entityCount: 0 };
             let entityCount = 0, skipped = 0;
             const hasClip = clipBounds && isFinite(clipBounds.minX) && isFinite(clipBounds.maxX);
@@ -16119,7 +17002,7 @@
             };
             // Convert GeoJSON [lon, lat] → VN2000 + apply offset
             const convert = (coords) => coords.map(([lon, lat]) => {
-                const vn = convertLatLonToVn2000(lat, lon, cm);
+                const vn = convertLatLonToVn2000(lat, lon, cm, k0);  // k0 phải khớp marker, nếu không lệch ~357m khi CM=105°
                 return { x: vn.x + outDE, y: vn.y + outDN };
             });
             const drawPolyline = (pts, layer) => {
@@ -16132,13 +17015,69 @@
                     entityCount++;
                 }
             };
-            // Roads — split major vs minor by highway type
+            // v154 — Đường xe chạy: tim / mép / tên, mỗi loại 1 lớp
+            const ro = Object.assign({ center: true, edge: false, name: false, other: false, widths: null, textHeight: 3 }, roadOpts || {});
+            const placedLabels = [];
+            // Cắt khung rồi gom thành chuỗi liền → 1 POLYLINE R12/chuỗi (70=128: nét gạch chạy liên tục qua các nút)
+            const clippedRuns = pts => {
+                const segs = [];
+                for (let i = 1; i < pts.length; i++) {
+                    const s = clipSeg(pts[i-1].x, pts[i-1].y, pts[i].x, pts[i].y);
+                    if (!s) skipped++;
+                    segs.push(s);
+                }
+                return _chainRuns(segs);
+            };
+            const writePolylines = (runs, layer) => {
+                for (const run of runs) {
+                    push('0', 'POLYLINE', '8', layer, '66', '1', '10', '0', '20', '0', '30', '0', '70', '128');
+                    for (const v of run) push('0', 'VERTEX', '8', layer, '10', v.x.toFixed(4), '20', v.y.toFixed(4), '30', '0');
+                    push('0', 'SEQEND', '8', layer);
+                    entityCount++;
+                }
+            };
+            const drivable = [];   // { pts, width } — dùng cho mép đường sau vòng lặp
             (osmData.roads || []).forEach(w => {
-                const hw = String(w.tags.highway || '').toLowerCase();
-                const isMajor = ['primary', 'secondary', 'trunk', 'motorway', 'primary_link'].includes(hw);
-                const layer = isMajor ? 'OSM_ROAD_MAJOR' : 'OSM_ROAD_MINOR';
-                drawPolyline(convert(w.coords), layer);
+                if (!w.coords || w.coords.length < 2) return;
+                if (!_rlIsDrivable(w.tags)) {
+                    // v156 — lối đi bộ / bãi xe: 1 nét trên lớp riêng, chỉ khi user bật
+                    if (ro.other && _osmRoadIsOther(w.tags)) writePolylines(clippedRuns(convert(w.coords)), 'OSM_DUONG_KHAC');
+                    return;
+                }
+                const pts = convert(w.coords);
+                const centerRuns = clippedRuns(pts);
+                if (ro.center) writePolylines(centerRuns, 'OSM_TIM_DUONG');
+                if (ro.edge) drivable.push({ pts, width: _osmRoadWidth(w.tags, ro.widths), layer: _osmRoadLayer(w.tags) });
+                const name = w.tags && w.tags.name;
+                if (ro.name && name) {
+                    // Đặt nhãn ở giữa chiều dài của chuỗi dài nhất nằm trong khung
+                    let lp = null;
+                    for (const run of centerRuns) {
+                        const c = _roadLabelPlacement(run, 30);
+                        if (c && (!lp || c.len > lp.len)) lp = c;
+                    }
+                    if (lp && !_labelTooClose(placedLabels, name, lp.x, lp.y, 100)) {
+                        placedLabels.push({ name, x: lp.x, y: lp.y });
+                        push('0', 'TEXT', '8', 'OSM_TEN_DUONG',
+                            '10', lp.x.toFixed(4), '20', lp.y.toFixed(4), '30', '0',
+                            '40', ro.textHeight.toFixed(2), '1', _dxfEscape(name), '50', lp.rot.toFixed(2),
+                            '72', '1', '11', lp.x.toFixed(4), '21', lp.y.toFixed(4), '31', '0', '73', '2');
+                        entityCount++;
+                    }
+                }
             });
+            // v156 — Mép đường: ghép way nối tiếp → dời ±½ bề rộng → cắt khung → cắt phần nằm trong lòng tuyến khác
+            if (ro.edge && drivable.length) {
+                const chains = _mergeRoadChains(drivable);
+                const corr = _corridorIndex(chains.map((c, i) => ({ pts: c.pts, hw: c.width / 2, id: i, layer: c.layer })), 25);
+                chains.forEach((c, i) => {
+                    for (const side of [1, -1]) {
+                        for (const run of clippedRuns(_offsetPolyline(c.pts, side * c.width / 2))) {
+                            writePolylines(_trimEdgeRun(run, corr, i, c.layer), 'OSM_MEP_DUONG');
+                        }
+                    }
+                });
+            }
             // Buildings — outline only
             (osmData.buildings || []).forEach(w => {
                 drawPolyline(convert(w.coords), 'OSM_BUILDING');

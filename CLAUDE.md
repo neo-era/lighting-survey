@@ -3956,7 +3956,7 @@ Roadmap tự động hóa hồ sơ chiếu sáng đô thị chuẩn Sở Xây d�
 
 ### Phase 5 — Basemap từ OSM ✅ DONE (2026-08-10)
 - **P65 ✅**: `_fetchOsmBasemap(bounds, opts)` — Overpass API + IndexedDB cache 30 ngày + rate limit 5s
-- **P66 ✅**: `_drawOsmBasemapInDxf(push, osmData, cm, dE, dN)` — 5 layers OSM_ROAD_MAJOR/MINOR/BUILDING/WATER/ADMIN
+- **P66 ✅**: `_drawOsmBasemapInDxf(push, osmData, cm, dE, dN, clip, k0, roadOpts)` — đường xe chạy trên 3 lớp OSM_TIM_DUONG (CENTER, POLYLINE) / OSM_MEP_DUONG (±½ bề rộng) / OSM_TEN_DUONG (v154, xem docs/design-osm-road-layers.md) + OSM_BUILDING/OSM_WATER/ADMIN_BOUNDARY
 - **P67 ✅**: Admin boundary rendered + label centroid (dùng OSM `admin_level=9/10` tags — không cần GeoJSON riêng)
 - UI: checkbox `#cgIncludeOsm` + 4 sub-checkbox (đường/nhà/sông/ranh)
 
