@@ -17064,7 +17064,7 @@
             try {
                 osm = await _raFetchRoads(bounds);
             } catch (e) {
-                if (token === _raToken) displayError('Không tải được bản đồ đường OSM (' + e.message + '). Kiểm tra mạng rồi thử lại.');
+                if (token === _raToken) displayError('Không tải được bản đồ đường OSM — các máy chủ đều bận hoặc mất mạng (' + e.message + '). Thử lại sau ít phút.');
                 return;
             }
             if (token !== _raToken) return;   // người dùng đã mở tuyến khác trong lúc chờ
@@ -17886,6 +17886,47 @@
         // Cache trong IndexedDB (TTL 30 ngày)
         // ─────────────────────────────────────────────────────────────
         const OVERPASS_URL = 'https://overpass-api.de/api/interpreter';
+        // v169 — máy chủ dự phòng: overpass-api.de hay 504/429 khi quá tải → tự chuyển máy khác.
+        // Chỉ giữ máy chủ trả CORS (Access-Control-Allow-Origin) để trình duyệt đọc được.
+        const OVERPASS_URLS = [
+            OVERPASS_URL,
+            'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
+            'https://overpass.kumi.systems/api/interpreter',
+            'https://overpass.private.coffee/api/interpreter'
+        ];
+        const OVERPASS_TIMEOUT_MS = 45000;
+        let _overpassGoodIdx = 0;   // nhớ máy chủ chạy được lần trước → lần sau thử nó trước
+        // Gửi query lần lượt qua các máy chủ; trả JSON của máy chủ đầu tiên thành công.
+        // Lỗi mạng / timeout / HTTP lỗi / JSON hỏng → thử máy kế. Hết máy → ném lỗi gom đủ từng máy.
+        async function _overpassFetch(q, onTry) {
+            const n = OVERPASS_URLS.length, errs = [];
+            for (let k = 0; k < n; k++) {
+                const idx = (_overpassGoodIdx + k) % n;
+                const url = OVERPASS_URLS[idx];
+                const host = url.replace(/^https?:\/\//, '').split('/')[0];
+                if (onTry) onTry(host, k);
+                const ctl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+                const timer = ctl ? setTimeout(() => ctl.abort(), OVERPASS_TIMEOUT_MS) : null;
+                try {
+                    const res = await fetch(url, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                        body: 'data=' + encodeURIComponent(q),
+                        signal: ctl ? ctl.signal : undefined
+                    });
+                    if (!res.ok) { errs.push(host + ' HTTP ' + res.status); continue; }
+                    const json = await res.json();
+                    if (!json || !Array.isArray(json.elements)) { errs.push(host + ' dữ liệu hỏng'); continue; }
+                    _overpassGoodIdx = idx;
+                    return json;
+                } catch (e) {
+                    errs.push(host + ' ' + (e && e.name === 'AbortError' ? 'quá thời gian' : 'lỗi mạng'));
+                } finally {
+                    if (timer) clearTimeout(timer);
+                }
+            }
+            throw new Error('Overpass: ' + errs.join(' · '));
+        }
         const OSM_CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000;   // 30 ngày
         let _osmFetchLastMs = 0;
 
@@ -17968,6 +18009,7 @@
         async function _fetchOsmBasemap(bounds, options) {
             const opts = Object.assign({ roads: true, buildings: true, water: false, admin: false }, options || {});
             const cacheKey = _osmBoundsKey(bounds);
+            let staleCovered = null;   // cache hết hạn nhưng đủ lớp — dùng khi mọi máy chủ Overpass đều lỗi
             // Try cache first (reuse csv-cache store với prefix osm_)
             try {
                 const cached = await _idbGet(cacheKey);
@@ -17978,6 +18020,7 @@
                 if (cached && covers && cached.fetchedAt && (Date.now() - cached.fetchedAt) < OSM_CACHE_TTL_MS) {
                     return cached.data;
                 }
+                if (cached && covers && cached.data) staleCovered = cached.data;
             } catch(e) { /* silent */ }
 
             // Rate limit — 5s giữa các request
@@ -17998,14 +18041,19 @@
             if (opts.admin) queries.push(`relation["boundary"="administrative"]["admin_level"~"^(6|8)$"](${bbox});`);
             const q = `[out:json][timeout:30];(${queries.join('')});out geom;`;
 
-            // Fetch
-            const res = await fetch(OVERPASS_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                body: 'data=' + encodeURIComponent(q)
-            });
-            if (!res.ok) throw new Error('Overpass HTTP ' + res.status);
-            const json = await res.json();
+            // Fetch — tự chuyển máy chủ dự phòng khi lỗi; hết máy → dùng cache cũ nếu có
+            let json;
+            try {
+                json = await _overpassFetch(q, (host, k) => {
+                    if (k > 0 && typeof displayInfo === 'function') displayInfo('Máy chủ OSM bận — đang thử ' + host + '...');
+                });
+            } catch (e) {
+                if (staleCovered) {
+                    if (typeof displayInfo === 'function') displayInfo('⚠ Không tải được OSM mới — dùng bản đường đã lưu trước đó.');
+                    return staleCovered;
+                }
+                throw e;
+            }
 
             // Parse elements → GeoJSON-like features
             const data = { roads: [], buildings: [], water: [], admin: [] };
