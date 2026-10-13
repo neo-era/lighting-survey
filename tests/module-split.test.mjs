@@ -26,6 +26,7 @@ const MODULES = {
     'src/features/report.js': { place: 'tail', fns: ['showReportModal', 'exportReport', 'getReportFilteredRows', 'renderReportPreview'] },
     'src/features/daily-report.js': { place: 'tail', fns: ['openDailyReportModal', '_loadDailyReport', '_renderDailyReport'] },
     'src/features/csv-import.js': { place: 'tail', fns: ['_onCsvImportChange', '_parseCsvSmart', '_detectCsvFormat', '_confirmCsvImport', '_extractLatLon'] },
+    'src/features/print.js': { place: 'tail', fns: ['_savePdFields','_restorePdFields','openPrintDrawingModal','_buildPrintCableSvg','_removePrintCableSvg','_switchToPrintTile','_restoreOriginalTiles','_waitForTileLoad','_zoomToScale','_showPrintOverlay','_hidePrintOverlay','_preparePrintLayout','openPrintPreview','closePrintPreview','exportDrawingPDF','_loadPrintLibs','_makeLampIconSvg','_makeCabinetIconSvg'] },
 };
 const firstInline = html.search(/<script>\s/);
 for (const [file, { place, fns }] of Object.entries(MODULES)) {
