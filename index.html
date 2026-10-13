@@ -5830,7 +5830,8 @@
                 const map = new Map(DISTRICT_PAGES.map(p => [p.sheet, p]));
                 data.items.forEach(it => {
                     if (!it.sheet || !it.label || !it.csvUrl) return;
-                    map.set(it.sheet, { sheet: it.sheet, label: it.label, csvUrl: it.csvUrl });
+                    // v177 — giữ vùng + tâm để địa bàn rỗng vẫn đưa được bản đồ về đúng chỗ
+                    map.set(it.sheet, { sheet: it.sheet, label: it.label, csvUrl: it.csvUrl, region: it.region || '', centerLat: it.centerLat, centerLon: it.centerLon });
                     // Register prefix nếu chưa có
                     if (it.prefix && !SHEET_ID_PREFIX[it.sheet]) {
                         SHEET_ID_PREFIX[it.sheet] = it.prefix;
@@ -11836,6 +11837,18 @@
                 const res = await fetch(csvUrl, { cache: 'no-store' });
                 if (!res.ok) throw new Error('HTTP ' + res.status);
                 const parsed = parseCSVText(await res.text());
+                // Địa bàn mới tạo, chưa có trụ: CSV chỉ có dòng tiêu đề → hợp lệ, không phải lỗi.
+                // Trang HTML (sheet chưa share / đăng nhập) không có cột "Tên trụ" → vẫn là lỗi.
+                if (parsed.length === 1 && parsed[0].some(h => /tên trụ/i.test(String(h || '')))) {
+                    loadedData = parsed;
+                    dirtyMovedRows.clear(); updateDirtyMovedBadge(); _onCableDataReload();
+                    _zoomTier = 'all';
+                    addMarkersToMap([]);
+                    displayError('');
+                    displayInfo('📍 Địa bàn chưa có trụ nào — bấm "+ Thêm marker" để bắt đầu khảo sát.');
+                    await _idbSet(sheetName, { data: parsed, fetchedAt: new Date().toISOString() });
+                    return;
+                }
                 if (parsed.length < 2) throw new Error('Dữ liệu rỗng');
                 // So sánh hash đơn giản: số hàng + ID đầu tiên
                 const newHash = parsed.length + '|' + (parsed[1] ? parsed[1][0] : '');
@@ -11857,6 +11870,22 @@
             }
         }
 
+        // Tâm địa bàn: tâm lưu trong sheet DiaBan (địa bàn tạo động) → DISTRICT_CENTERS → tâm theo vùng
+        const _REGION_CENTERS = {
+            TPHCM:     { lat: 10.7769, lon: 106.7009 },
+            BinhDuong: { lat: 10.9804, lon: 106.6519 },   // Thủ Dầu Một
+            LongAn:    { lat: 10.5359, lon: 106.4137 }    // Tân An
+        };
+        function _districtCenter(page) {
+            if (!page) return null;
+            const la = parseFloat(page.centerLat), lo = parseFloat(page.centerLon);
+            if (isFinite(la) && isFinite(lo)) return { lat: la, lon: lo, zoom: 14 };
+            const d = DISTRICT_CENTERS[page.sheet];
+            if (d) return { lat: d.lat, lon: d.lon, zoom: 14 };
+            const r = _REGION_CENTERS[page.region];
+            return r ? { lat: r.lat, lon: r.lon, zoom: 12 } : null;   // tâm cả vùng → nhìn rộng hơn
+        }
+
         async function switchDistrict(sheetName) {
             const page = DISTRICT_PAGES.find(p => p.sheet === sheetName);
             if (!page) return;
@@ -11870,10 +11899,18 @@
             }
             _activeFilters.tuDieuKhien = [];
             currentSheet = sheetName;
+            // Bỏ dữ liệu địa bàn cũ (giữ dòng tiêu đề) — nếu tải địa bàn mới lỗi / rỗng, mọi chức năng
+            // (tìm kiếm, xuất CAD, kiểm tra cáp, sinh ID…) không còn chạy trên dữ liệu địa bàn trước.
+            loadedData = (Array.isArray(loadedData) && loadedData[0]) ? [loadedData[0]] : [];
             addMarkersToMap([]); // xóa markers hiện tại
             // v147 — clear popup cache khi switch district để tránh hit cache của địa bàn cũ (row ID có thể trùng)
             _invalidatePopupCacheAll();
             await loadFromCSVWithCache(sheetName, page.csvUrl);
+            // Địa bàn chưa có trụ → đưa bản đồ về tâm địa bàn (không thì vẫn đứng ở địa bàn cũ)
+            if (currentSheet === sheetName && !(Array.isArray(loadedData) && loadedData.length > 1)) {
+                const c = _districtCenter(page);
+                if (c && map && typeof map.setView === 'function') map.setView([c.lat, c.lon], c.zoom);
+            }
             // Load CAD overlay cache theo địa bàn (P17)
             if (typeof _loadCachedCad === 'function') await _loadCachedCad(sheetName);
             // Cập nhật label địa bàn
