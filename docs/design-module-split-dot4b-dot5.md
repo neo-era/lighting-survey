@@ -26,3 +26,13 @@ index.html: 14.855 → **13.331 dòng** (−1.524 qua 2 đợt). Toàn bộ test
 ## Còn lại (đợt sau)
 - Lõi thật sự `src/app/` (map init, state toàn cục, markers, popup, CRUD/GAS, GPS, bootstrap) — rủi ro cao nhất, làm riêng từng cụm.
 - Cụm runtime khác còn inline: xoay map, polygon/ranh, voice/QR, thông báo, SuCo/BaoTri/NhiemVu, Dashboard, filter, routing.
+
+---
+
+## Đợt 4c — Tách Media loaders → src/features/media.js (place: before)
+- 13 hàm (voice 5 · QR 3 · Chart 1 · Mapillary 4) + 10 state → `src/features/media.js` (246 dòng).
+- Giữ ở index.html: `_loadExcelJS`/`_excelJsPromise` (dùng rộng cho export) và `MAPILLARY_TOKEN` (config) — media.js gọi như global runtime.
+- `Html5Qrcode` nạp động lúc runtime (window global), `_fillBaseSelect` gọi có guard `typeof` (hàm lồng) → an toàn, không đổi hành vi.
+- sw.js: precache media.js, bump CACHE v180→v181.
+- Test: `module-split` (+entry media.js) 68/0; full sweep 0 fail; vitest 47/47.
+- index.html: 13.331 → **13.101 dòng**.
