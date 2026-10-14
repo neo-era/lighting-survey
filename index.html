@@ -136,20 +136,20 @@
             </select>
 
             <!-- Bù offset local grid (nếu bản vẽ dùng hệ tọa độ công trình) -->
-            <div style="background:#fef3c7;padding:10px 12px;border-radius:6px;border-left:4px solid var(--secondary);margin-bottom:14px;">
-                <label style="display:block;font-size:12px;font-weight:700;color:#78350f;margin-bottom:2px;">🔀 Bù offset local grid (nếu bản vẽ dùng hệ tọa độ công trình)</label>
-                <div style="font-size:11px;color:#78350f;margin-bottom:6px;opacity:.85;">
+            <div style="background:var(--warn-bg);padding:10px 12px;border-radius:6px;border-left:4px solid var(--secondary);margin-bottom:14px;">
+                <label style="display:block;font-size:12px;font-weight:700;color:var(--warn-ink);margin-bottom:2px;">🔀 Bù offset local grid (nếu bản vẽ dùng hệ tọa độ công trình)</label>
+                <div style="font-size:11px;color:var(--warn-ink);margin-bottom:6px;opacity:.85;">
                     Nhiều dự án dùng grid cục bộ (VD Tham Lương lệch −391.75m E · +223.86m N so với VN-2000 chuẩn).<br>
                     App sẽ TRỪ offset khỏi tọa độ DXF trước khi convert sang Lat/Lon.
                 </div>
                 <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:6px;align-items:end;">
                     <div>
-                        <label style="font-size:11px;font-weight:600;color:#78350f;margin-bottom:2px;">ΔE (Easting, m)</label>
+                        <label style="font-size:11px;font-weight:600;color:var(--warn-ink);margin-bottom:2px;">ΔE (Easting, m)</label>
                         <input type="number" step="0.01" id="cadOffsetE" value="0" oninput="_onCadOffsetChange()"
                                style="width:100%;padding:6px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;font-family:monospace;">
                     </div>
                     <div>
-                        <label style="font-size:11px;font-weight:600;color:#78350f;margin-bottom:2px;">ΔN (Northing, m)</label>
+                        <label style="font-size:11px;font-weight:600;color:var(--warn-ink);margin-bottom:2px;">ΔN (Northing, m)</label>
                         <input type="number" step="0.01" id="cadOffsetN" value="0" oninput="_onCadOffsetChange()"
                                style="width:100%;padding:6px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;font-family:monospace;">
                     </div>
@@ -160,7 +160,7 @@
                         </button>
                     </div>
                 </div>
-                <div style="font-size:11px;color:#78350f;margin-top:4px;opacity:.75;">
+                <div style="font-size:11px;color:var(--warn-ink);margin-top:4px;opacity:.75;">
                     Để trống (0, 0) nếu bản vẽ đã ở VN-2000 chuẩn quốc gia. Giá trị sẽ tự nhớ cho lần sau.
                 </div>
             </div>
@@ -281,19 +281,19 @@
                 </div>
 
                 <!-- Section 2: Hệ tọa độ output -->
-                <div id="cgSectionOutputOffset" style="background:#fef3c7;padding:10px 12px;border-radius:6px;border-left:4px solid var(--secondary);margin-bottom:14px;">
-                    <label style="display:block;font-size:12px;font-weight:700;color:#78350f;margin-bottom:4px;">🔀 Hệ tọa độ output (dùng để khớp bản vẽ tham chiếu)</label>
+                <div id="cgSectionOutputOffset" style="background:var(--warn-bg);padding:10px 12px;border-radius:6px;border-left:4px solid var(--secondary);margin-bottom:14px;">
+                    <label style="display:block;font-size:12px;font-weight:700;color:var(--warn-ink);margin-bottom:4px;">🔀 Hệ tọa độ output (dùng để khớp bản vẽ tham chiếu)</label>
                     <div style="display:grid;grid-template-columns:1fr 90px 90px auto;gap:6px;align-items:end;">
                         <div>
-                            <label style="font-size:10px;font-weight:600;color:#78350f;">Preset</label>
+                            <label style="font-size:10px;font-weight:600;color:var(--warn-ink);">Preset</label>
                             <select id="cgOffsetPreset" onchange="_onCgOffsetPresetChange()" style="width:100%;padding:6px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;"></select>
                         </div>
                         <div>
-                            <label style="font-size:10px;font-weight:600;color:#78350f;">ΔE (m)</label>
+                            <label style="font-size:10px;font-weight:600;color:var(--warn-ink);">ΔE (m)</label>
                             <input type="number" step="0.01" id="cgOffsetE" value="0" oninput="_onCgOffsetInputChange()" style="width:100%;padding:6px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;font-family:monospace;">
                         </div>
                         <div>
-                            <label style="font-size:10px;font-weight:600;color:#78350f;">ΔN (m)</label>
+                            <label style="font-size:10px;font-weight:600;color:var(--warn-ink);">ΔN (m)</label>
                             <input type="number" step="0.01" id="cgOffsetN" value="0" oninput="_onCgOffsetInputChange()" style="width:100%;padding:6px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;font-family:monospace;">
                         </div>
                         <div>
@@ -301,7 +301,7 @@
                         </div>
                     </div>
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px;">
-                        <div style="font-size:10px;color:#78350f;opacity:.85;">
+                        <div style="font-size:10px;color:var(--warn-ink);opacity:.85;">
                             'VN2000 chuẩn' cho nhà nước · '📍 Tham Lương' cho khớp file cũ
                         </div>
                         <button type="button" onclick="_openCalibrateModal('cad')" style="font-size:10px;padding:3px 8px;background:var(--primary-light);color:var(--primary);border:1px solid #93c5fd;border-radius:4px;cursor:pointer;font-weight:700;white-space:nowrap;">🎯 Calibrate 2 điểm</button>
@@ -312,7 +312,7 @@
                 <div style="border:1.5px solid var(--border);border-radius:6px;padding:10px 12px;margin-bottom:14px;">
                     <div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:6px;">🎯 Bộ lọc đối tượng xuất <span style="font-size:10px;font-weight:400;color:var(--text-muted);">(AND đa dimension — trống = tất cả)</span></div>
                     <div id="cgFilterAccordion"></div>
-                    <div id="cgLiveCounter" style="margin-top:8px;padding:8px 10px;background:#f0fdf4;border-radius:6px;font-size:13px;font-weight:700;color:#166534;text-align:center;">
+                    <div id="cgLiveCounter" style="margin-top:8px;padding:8px 10px;background:var(--ok-bg);border-radius:6px;font-size:13px;font-weight:700;color:var(--ok-ink);text-align:center;">
                         —
                     </div>
                 </div>
@@ -437,8 +437,8 @@
                         <input type="checkbox" id="cgIncludeCadBase" onchange="_cgUpdateCadBaseInfo()" style="width:16px;height:16px;cursor:pointer;">
                         📐 Chèn nền CAD đã upload (bản vẽ hiện trạng)
                     </label>
-                    <div id="cgCadBaseInfo" style="display:none;margin-top:6px;padding:6px;font-size:11px;color:#065f46;background:#d1fae5;border-radius:4px;">—</div>
-                    <div id="cgCadBaseWarn" style="display:none;margin-top:6px;padding:6px;font-size:11px;color:#7f1d1d;background:#fef2f2;border-radius:4px;">⚠ Sheet này chưa có CAD upload. Bấm nút CAD trên topbar để upload trước.</div>
+                    <div id="cgCadBaseInfo" style="display:none;margin-top:6px;padding:6px;font-size:11px;color:var(--ok-ink);background:var(--ok-bg);border-radius:4px;">—</div>
+                    <div id="cgCadBaseWarn" style="display:none;margin-top:6px;padding:6px;font-size:11px;color:var(--danger-ink);background:var(--danger-bg);border-radius:4px;">⚠ Sheet này chưa có CAD upload. Bấm nút CAD trên topbar để upload trước.</div>
                 </div>
 
                 <!-- Section 4d: Con dấu phê duyệt (P58) -->
@@ -447,8 +447,8 @@
                         <input type="checkbox" id="cgShowStamps" onchange="_toggleStampsSection()" style="width:16px;height:16px;cursor:pointer;">
                         🔴 Chèn 4 ô con dấu phê duyệt (chuẩn Sở XD)
                     </label>
-                    <div id="cgStampsContainer" style="display:none;margin-top:8px;border:1.5px solid #fecaca;border-radius:6px;padding:10px;background:#fef2f2;">
-                        <div style="font-size:11px;color:#7f1d1d;margin-bottom:8px;">4 ô đỉnh bản vẽ theo mẫu hồ sơ Sở XD. Bỏ trống fields nếu chưa có văn bản.</div>
+                    <div id="cgStampsContainer" style="display:none;margin-top:8px;border:1.5px solid var(--danger-bd);border-radius:6px;padding:10px;background:var(--danger-bg);">
+                        <div style="font-size:11px;color:var(--danger-ink);margin-bottom:8px;">4 ô đỉnh bản vẽ theo mẫu hồ sơ Sở XD. Bỏ trống fields nếu chưa có văn bản.</div>
                         <div id="cgStampsFieldsList"></div>
                     </div>
                 </div>
@@ -468,7 +468,7 @@
                 <button id="cgBtnBatch" onclick="_onCgBatchExport()" title="Xuất mỗi tủ 1 file DXF riêng vào 1 file zip. Rate limit: ~2-5 giây/tủ. Sheet 100 tủ ≈ 5 phút." class="ctrl-btn primary" style="flex:1;min-width:110px;margin-bottom:0;padding:10px;font-size:12px;background:#7c3aed;">📦 Batch N tủ</button>
                 <button id="cgBtnStampMgr" onclick="_openStampManager()" title="Quản lý dấu tròn + chữ ký scan" class="ctrl-btn outline" style="flex:1;min-width:110px;margin-bottom:0;padding:10px;font-size:12px;color:var(--danger);border-color:var(--danger);">🖋 Dấu &amp; chữ ký</button>
                 <button id="cgBtnBom" onclick="_onCgExportBom()" title="Xuất bảng vật tư (BOM) Excel" class="ctrl-btn outline" style="flex:1;min-width:110px;margin-bottom:0;padding:10px;font-size:12px;color:var(--success);border-color:var(--success);">📊 BOM Excel</button>
-                <button id="cgBtnElectric" onclick="_onCgExportElectrical()" title="Xuất bảng tính toán điện (IEC 60364)" class="ctrl-btn outline" style="flex:1;min-width:110px;margin-bottom:0;padding:10px;font-size:12px;color:#0369a1;border-color:#0369a1;">🔌 Tính điện</button>
+                <button id="cgBtnElectric" onclick="_onCgExportElectrical()" title="Xuất bảng tính toán điện (IEC 60364)" class="ctrl-btn outline" style="flex:1;min-width:110px;margin-bottom:0;padding:10px;font-size:12px;color:var(--info-ink);border-color:var(--info-ink);">🔌 Tính điện</button>
                 <button id="cgBtnDossier" onclick="_onCgCompileFullDossier()" title="Compile hồ sơ nộp thẩm định (1 zip gồm: mặt bằng.dxf + sơ đồ nguyên lý.dxf + tổng thể.dxf + BOM Excel + tính điện Excel + folder dấu/chữ ký + README.txt). Mất ~30-60s." class="ctrl-btn primary" style="flex:1;min-width:130px;margin-bottom:0;padding:10px;font-size:12px;background:var(--danger);font-weight:800;">🗎 Compile hồ sơ</button>
             </div>
         </div>
@@ -493,12 +493,12 @@
     <div id="stampManagerModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9700;align-items:center;justify-content:center;padding:16px;" onclick="if(event.target===this)_closeStampManager()">
         <div style="background:var(--surface-solid);border-radius:10px;max-width:720px;width:100%;max-height:92vh;display:flex;flex-direction:column;overflow:hidden;">
             <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 20px;border-bottom:1px solid var(--border);">
-                <h4 style="margin:0;font-size:16px;font-weight:900;color:#7f1d1d;">🖋 Quản lý dấu & chữ ký</h4>
+                <h4 style="margin:0;font-size:16px;font-weight:900;color:var(--danger-ink);">🖋 Quản lý dấu & chữ ký</h4>
                 <button onclick="_closeStampManager()" style="background:transparent;border:none;font-size:22px;cursor:pointer;color:var(--text-muted);">×</button>
             </div>
             <div id="stampMgrBody" style="overflow-y:auto;padding:16px 20px;flex:1;">
-                <div style="background:#fef2f2;border-left:4px solid var(--danger);padding:10px 12px;border-radius:6px;margin-bottom:14px;">
-                    <div style="font-size:13px;font-weight:700;color:#7f1d1d;">📌 Hướng dẫn</div>
+                <div style="background:var(--danger-bg);border-left:4px solid var(--danger);padding:10px 12px;border-radius:6px;margin-bottom:14px;">
+                    <div style="font-size:13px;font-weight:700;color:var(--danger-ink);">📌 Hướng dẫn</div>
                     <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">
                         Upload dấu/chữ ký (PNG/JPG, max 500KB). File lớn tự resize xuống 400×400. Ảnh lưu trong trình duyệt (localStorage) và tự chèn vào bản vẽ DXF khi xuất.
                     </div>
@@ -628,14 +628,14 @@
                 <option value="nearest">⚠ Nearest-chain (test cho thấy dư 10-43% cáp so với Prim)</option>
             </select>
 
-            <div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;padding:8px 10px;margin-bottom:10px;background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:8px;font-size:12px;color:#14532d;">
+            <div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;padding:8px 10px;margin-bottom:10px;background:var(--ok-bg);border:1.5px solid #bbf7d0;border-radius:8px;font-size:12px;color:#14532d;">
                 <label style="display:flex;align-items:center;gap:6px;margin:0;font-weight:700;cursor:pointer;">
                     <input type="checkbox" id="mstAvoidRoad" checked onchange="_mstSaveRoadOpts()" style="width:18px;height:18px;"> 🛣 Tránh băng qua đường (OSM)
                 </label>
                 <label style="display:flex;align-items:center;gap:4px;margin:0;" title="Mỗi lần đoạn cáp cắt qua tim 1 đường xe chạy được tính thêm số mét này khi CHỌN tuyến (số mét ghi sheet vẫn là khoảng cách thật)">
                     Phí mỗi lần băng <input type="number" id="mstCrossPenalty" value="200" min="0" step="50" onchange="_mstSaveRoadOpts()" style="width:70px;padding:4px 6px;border:1.5px solid #86efac;border-radius:6px;font-size:16px;font-family:monospace;text-align:right;"> m
                 </label>
-                <span style="flex-basis:100%;color:#15803d;font-size:11px;">Cáp đi dọc từng hàng trụ; chỉ phạt khi băng qua chính con đường trụ đang đi dọc (cắt qua hẻm / đường nhánh đâm ngang không phạt).</span>
+                <span style="flex-basis:100%;color:var(--ok-ink);font-size:11px;">Cáp đi dọc từng hàng trụ; chỉ phạt khi băng qua chính con đường trụ đang đi dọc (cắt qua hẻm / đường nhánh đâm ngang không phạt).</span>
             </div>
             <label style="display:block;font-size:12px;font-weight:700;color:var(--text);margin-bottom:4px;">Cảnh báo đoạn cáp dài quá (m)</label>
             <div style="display:grid;grid-template-columns:1fr auto;gap:6px;margin-bottom:10px;">
@@ -647,7 +647,7 @@
                 Chọn tủ để xem preview...
             </div>
 
-            <div id="mstDiffSummary" style="display:none;padding:8px 10px;background:#fffbeb;border:1.5px solid #fde68a;border-radius:6px;margin-bottom:10px;font-size:12px;color:#78350f;">
+            <div id="mstDiffSummary" style="display:none;padding:8px 10px;background:var(--warn-bg);border:1.5px solid var(--warn-bd);border-radius:6px;margin-bottom:10px;font-size:12px;color:var(--warn-ink);">
                 <div style="font-weight:700;margin-bottom:4px;">📊 So sánh với sheet hiện tại:</div>
                 <div id="mstDiffContent" style="line-height:1.6;"></div>
             </div>
@@ -713,29 +713,29 @@
                         <button onclick="_lcToggleAllChecks(false)" style="padding:4px 10px;background:var(--surface-2);border:1px solid var(--border);border-radius:5px;font-size:11px;cursor:pointer;">☐ Bỏ chọn</button>
                     </div>
                 </div>
-                <div id="lcXoaBar" style="display:none;margin-top:8px;padding:8px 10px;border:1.5px solid #fca5a5;background:#fef2f2;border-radius:8px;font-size:12px;color:#7f1d1d;align-items:center;gap:8px;flex-wrap:wrap;">
+                <div id="lcXoaBar" style="display:none;margin-top:8px;padding:8px 10px;border:1.5px solid #fca5a5;background:var(--danger-bg);border-radius:8px;font-size:12px;color:var(--danger-ink);align-items:center;gap:8px;flex-wrap:wrap;">
                     <span id="lcXoaInfo" style="flex:1;min-width:200px;"></span>
                     <button id="lcXoaBtn" onclick="_lcXoaDelete()" style="padding:6px 12px;background:var(--danger);border:none;color:#fff;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;min-height:34px;">🗑 Xoá trụ tên XÓA…</button>
                 </div>
-                <div id="lcTuBar" style="margin-top:8px;padding:8px;border:1.5px solid #c7d2fe;background:#eef2ff;border-radius:8px;display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-size:12px;">
-                    <span style="font-weight:700;color:#3730a3;">Theo tủ:</span>
+                <div id="lcTuBar" style="margin-top:8px;padding:8px;border:1.5px solid #c7d2fe;background:var(--info-bg);border-radius:8px;display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-size:12px;">
+                    <span style="font-weight:700;color:var(--info-ink);">Theo tủ:</span>
                     <button id="lcTuToggle" type="button" onclick="_lcTuTogglePanel()" aria-haspopup="listbox" aria-expanded="false" aria-controls="lcTuPanel" style="flex:1;min-width:180px;text-align:left;padding:6px 10px;border:1.5px solid #a5b4fc;border-radius:6px;font-size:13px;background:var(--surface-solid);cursor:pointer;min-height:34px;">Chọn tủ ▾</button>
                     <span id="lcTuInfo" style="color:var(--text-muted);font-size:11px;min-width:90px;">—</span>
                     <button id="lcTuBtnClear" onclick="_lcTuClear(false)" disabled style="padding:6px 10px;background:var(--surface-solid);border:1.5px solid var(--danger);color:var(--danger);border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;min-height:34px;">🗑 Xoá toàn bộ cáp của tủ</button>
                     <button id="lcTuBtnRerun" onclick="_lcTuRerun()" disabled style="padding:6px 10px;background:var(--surface-solid);border:1.5px solid var(--success);color:var(--success);border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;min-height:34px;">🌳 Chạy lại tối ưu</button>
                     <button id="lcTuBtnBoth" onclick="_lcTuClear(true)" disabled style="padding:6px 10px;background:var(--success);border:1.5px solid var(--success);color:#fff;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;min-height:34px;">🗑+🌳 Xoá + chạy lại</button>
-                    <button id="lcTuBtnUndo" onclick="_lcTuUndo()" style="display:none;padding:6px 10px;background:#fff7ed;border:1.5px solid #ea580c;color:#c2410c;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;min-height:34px;">↩ Hoàn tác</button>
+                    <button id="lcTuBtnUndo" onclick="_lcTuUndo()" style="display:none;padding:6px 10px;background:var(--warn-bg);border:1.5px solid #ea580c;color:var(--warn-ink);border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;min-height:34px;">↩ Hoàn tác</button>
                     <div id="lcTuPanel" style="display:none;flex-basis:100%;margin-top:4px;padding:8px;background:var(--surface-solid);border:1.5px solid #a5b4fc;border-radius:8px;box-shadow:0 6px 18px rgba(30,41,59,.12);">
                         <input id="lcTuFilter" type="search" placeholder="🔍 Gõ lọc tên tủ…" autocomplete="off" oninput="_lcTuRenderList()" aria-label="Lọc tên tủ" style="width:100%;padding:6px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:16px;margin-bottom:6px;">
                         <div style="display:flex;gap:6px;margin-bottom:6px;flex-wrap:wrap;">
-                            <button type="button" onclick="_lcTuSelectAll(true)" style="padding:5px 10px;background:#eef2ff;border:1px solid #a5b4fc;border-radius:5px;font-size:12px;cursor:pointer;min-height:32px;">☑ Chọn tất cả (đang lọc)</button>
+                            <button type="button" onclick="_lcTuSelectAll(true)" style="padding:5px 10px;background:var(--info-bg);border:1px solid #a5b4fc;border-radius:5px;font-size:12px;cursor:pointer;min-height:32px;">☑ Chọn tất cả (đang lọc)</button>
                             <button type="button" onclick="_lcTuSelectAll(false)" style="padding:5px 10px;background:var(--surface-2);border:1px solid var(--border);border-radius:5px;font-size:12px;cursor:pointer;min-height:32px;">☐ Bỏ hết</button>
                             <span id="lcTuFilterInfo" style="align-self:center;color:var(--text-muted);font-size:11px;"></span>
                         </div>
                         <div id="lcTuListBox" role="listbox" aria-multiselectable="true" style="max-height:240px;overflow-y:auto;border-top:1px solid var(--border);"></div>
                     </div>
                 </div>
-                <div style="margin-top:6px;padding:6px 8px;font-size:11px;color:#7f1d1d;background:#fef2f2;border-radius:5px;line-height:1.4;">
+                <div style="margin-top:6px;padding:6px 8px;font-size:11px;color:var(--danger-ink);background:var(--danger-bg);border-radius:5px;line-height:1.4;">
                     Xóa cáp = CLEAR cột <code>Marker gốc</code> + <code>Khoảng cách</code> (không xóa trụ). Fan-out / 🟤 Trùng tên / 🟪 Parent xa không xóa qua modal — dùng Auto MST hoặc sửa marker thủ công.
                 </div>
             </div>
@@ -791,7 +791,7 @@
         <div style="background:var(--surface-solid);border-radius:12px;max-width:560px;width:100%;max-height:85vh;display:flex;flex-direction:column;padding:20px;box-shadow:0 10px 40px rgba(0,0,0,.3);">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
                 <h4 style="margin:0;font-size:17px;font-weight:800;color:var(--text);">
-                    🎨 Lớp bản vẽ CAD <span id="cadLayerTotalCount" style="color:#7c3aed;font-family:monospace;font-size:13px;">0</span> lớp
+                    🎨 Lớp bản vẽ CAD <span id="cadLayerTotalCount" style="color:var(--info-ink);font-family:monospace;font-size:13px;">0</span> lớp
                 </h4>
                 <button onclick="_closeCadLayers()" style="background:none;border:none;font-size:22px;cursor:pointer;color:var(--text-muted);">×</button>
             </div>
@@ -889,7 +889,7 @@
                 </div>
             </div>
 
-            <div style="background:#fef3c7;border-left:3px solid var(--secondary);padding:8px 10px;margin-bottom:14px;font-size:11px;color:#78350f;border-radius:4px;line-height:1.5;">
+            <div style="background:var(--warn-bg);border-left:3px solid var(--secondary);padding:8px 10px;margin-bottom:14px;font-size:11px;color:var(--warn-ink);border-radius:4px;line-height:1.5;">
                 <b>Lưu ý:</b> Nếu scale &gt; 1.02 (chênh 2%) hoặc xoay &gt; 2°, hãy verify điểm A, B đúng vị trí trước khi áp dụng.
             </div>
 
@@ -986,7 +986,7 @@
                         <span style="color:var(--text-muted);font-weight:600;">💡 Click tiêu đề để thu/mở section</span>
                         <div style="display:flex;gap:4px;">
                             <button onclick="_expandAllSections()" style="background:var(--primary-light);color:var(--primary);border:0;padding:3px 8px;border-radius:4px;cursor:pointer;font-size:10px;font-weight:700;">☰ Mở hết</button>
-                            <button onclick="_collapseAllSections()" style="background:#fef2f2;color:var(--danger);border:0;padding:3px 8px;border-radius:4px;cursor:pointer;font-size:10px;font-weight:700;">⚊ Thu hết</button>
+                            <button onclick="_collapseAllSections()" style="background:var(--danger-bg);color:var(--danger);border:0;padding:3px 8px;border-radius:4px;cursor:pointer;font-size:10px;font-weight:700;">⚊ Thu hết</button>
                         </div>
                     </div>
 
@@ -1017,7 +1017,7 @@
                                 <span>Thêm marker</span>
                             </button>
                             <button id="addFromSvBtn" class="ctrl-btn outline" onclick="closeControlsModal();_addMarkerFromSvUrl()" title="Paste URL Google Street View → auto tạo marker tại tọa độ đó"
-                                    style="padding:11px;font-size:13px;margin-bottom:0;color:var(--success);border-color:#a7f3d0;">
+                                    style="padding:11px;font-size:13px;margin-bottom:0;color:var(--success);border-color:var(--ok-bd);">
                                 🚶 Từ SV
                             </button>
                             <button id="filterBtn" class="ctrl-btn outline" onclick="closeControlsModal();openFilterPanel()" title="Bộ lọc"
@@ -1046,13 +1046,13 @@
                         </select>
                         <div id="currentDistrictLabel"
                              style="display:none;margin-top:6px;font-size:11px;font-weight:700;
-                                    color:var(--primary);background:var(--primary-light);border:1px solid #bfdbfe;
+                                    color:var(--primary);background:var(--primary-light);border:1px solid var(--info-bd);
                                     border-radius:6px;padding:4px 10px;text-align:center;">
                         </div>
                         <!-- v150+v151 — admin tạo + quản lý địa bàn -->
                         <div id="btnDiaBanAdminWrap" style="display:none;margin-top:6px;gap:6px;">
                             <button id="btnCreateDiaBan" onclick="_openCreateDiaBan()" class="ctrl-btn outline"
-                                    style="padding:7px;font-size:12px;color:var(--success);border-color:#a7f3d0;background:#f0fdf4;flex:1;margin-bottom:0;">
+                                    style="padding:7px;font-size:12px;color:var(--success);border-color:var(--ok-bd);background:var(--ok-bg);flex:1;margin-bottom:0;">
                                 ➕ Thêm địa bàn
                             </button>
                             <button id="btnManageDiaBan" onclick="_openManageDiaBan()" class="ctrl-btn outline"
@@ -1068,7 +1068,7 @@
                     <div class="ctrl-section" id="sec-scale">
                         <div class="ctrl-title" style="display:flex;align-items:center;justify-content:space-between;">
                             <span>📏 Tỷ lệ bản đồ <span style="font-size:9px;font-weight:600;color:var(--text-muted);text-transform:none;letter-spacing:0;">(A3)</span></span>
-                            <span id="panelZoomDisplay" style="font-size:10px;font-weight:700;color:var(--primary);font-family:monospace;letter-spacing:0;text-transform:none;background:var(--primary-light);border:1px solid #bfdbfe;border-radius:5px;padding:2px 8px;">Z 10</span>
+                            <span id="panelZoomDisplay" style="font-size:10px;font-weight:700;color:var(--primary);font-family:monospace;letter-spacing:0;text-transform:none;background:var(--primary-light);border:1px solid var(--info-bd);border-radius:5px;padding:2px 8px;">Z 10</span>
                         </div>
                         <select id="mapScaleSelect" onchange="_applyMapScale(this.value)"
                                 class="ctrl-input"
@@ -1112,7 +1112,7 @@
                     <div class="ctrl-section" id="sec-rotate">
                         <div class="ctrl-title" style="display:flex;align-items:center;justify-content:space-between;">
                             <span>🧭 Xoay bản đồ</span>
-                            <span id="panelRotDisplay" style="font-size:10px;font-weight:700;color:var(--primary);font-family:monospace;letter-spacing:0;text-transform:none;background:var(--primary-light);border:1px solid #bfdbfe;border-radius:5px;padding:2px 8px;">0°</span>
+                            <span id="panelRotDisplay" style="font-size:10px;font-weight:700;color:var(--primary);font-family:monospace;letter-spacing:0;text-transform:none;background:var(--primary-light);border:1px solid var(--info-bd);border-radius:5px;padding:2px 8px;">0°</span>
                         </div>
                         <div style="display:flex;align-items:center;gap:8px;">
                             <input type="range" id="panelRotSlider" min="0" max="359" step="1" value="0"
@@ -1240,21 +1240,21 @@
                         </button>
 
                         <!-- T24 Reverse-geocode batch — điền Đường + Phường/Xã tự động -->
-                        <button onclick="_batchReverseGeocode()" class="ctrl-btn outline" style="margin-bottom:0;font-size:12px;padding:8px;margin-top:6px;width:100%;color:#7c3aed;border-color:#c4b5fd;">
+                        <button onclick="_batchReverseGeocode()" class="ctrl-btn outline" style="margin-bottom:0;font-size:12px;padding:8px;margin-top:6px;width:100%;color:var(--info-ink);border-color:#c4b5fd;">
                             🌐 Điền địa chỉ tự động (Nominatim)
                         </button>
 
                         <!-- Recalc tất cả Khoảng cách cáp bằng Haversine -->
-                        <button onclick="_recalcAllCableDistances()" class="ctrl-btn outline" style="margin-bottom:0;font-size:12px;padding:8px;margin-top:6px;width:100%;color:#0369a1;border-color:#bae6fd;">
+                        <button onclick="_recalcAllCableDistances()" class="ctrl-btn outline" style="margin-bottom:0;font-size:12px;padding:8px;margin-top:6px;width:100%;color:var(--info-ink);border-color:#bae6fd;">
                             📏 Tính lại khoảng cách cáp (Haversine)
                         </button>
 
                         <!-- Excel round-trip edit: export → edit locally → import back -->
                         <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px;">
-                            <button onclick="_exportEditableExcel()" class="ctrl-btn outline" style="margin-bottom:0;font-size:12px;padding:8px;color:var(--success);border-color:#a7f3d0;">
+                            <button onclick="_exportEditableExcel()" class="ctrl-btn outline" style="margin-bottom:0;font-size:12px;padding:8px;color:var(--success);border-color:var(--ok-bd);">
                                 📥 Tải Excel
                             </button>
-                            <button onclick="document.getElementById('editExcelInput').click()" class="ctrl-btn outline" style="margin-bottom:0;font-size:12px;padding:8px;color:#b45309;border-color:#fde68a;">
+                            <button onclick="document.getElementById('editExcelInput').click()" class="ctrl-btn outline" style="margin-bottom:0;font-size:12px;padding:8px;color:var(--warn-ink);border-color:var(--warn-bd);">
                                 📤 Cập nhật Excel
                             </button>
                         </div>
@@ -1267,13 +1267,13 @@
                             <button id="btnDrawCable" onclick="toggleDrawCableMode()" class="ctrl-btn outline" style="margin-bottom:0;font-size:12px;padding:8px;">
                                 <i class="fa fa-plus-circle"></i> Vẽ cáp
                             </button>
-                            <button id="btnAutoMst" onclick="_openAutoMstModal()" class="ctrl-btn outline" style="margin-bottom:0;font-size:12px;padding:8px;color:var(--success);border-color:#a7f3d0;">
+                            <button id="btnAutoMst" onclick="_openAutoMstModal()" class="ctrl-btn outline" style="margin-bottom:0;font-size:12px;padding:8px;color:var(--success);border-color:var(--ok-bd);">
                                 🌳 Auto MST
                             </button>
-                            <button id="btnLongCableCheck" onclick="_openLongCableCheck()" class="ctrl-btn outline" style="margin-bottom:0;font-size:12px;padding:8px;color:var(--danger);border-color:#fecaca;">
+                            <button id="btnLongCableCheck" onclick="_openLongCableCheck()" class="ctrl-btn outline" style="margin-bottom:0;font-size:12px;padding:8px;color:var(--danger);border-color:var(--danger-bd);">
                                 🚨 Kiểm tra cáp
                             </button>
-                            <button id="btnCableAnchor" onclick="_toggleCableAnchor()" class="ctrl-btn outline" style="margin-bottom:0;font-size:12px;padding:8px;color:#7c3aed;border-color:#ddd6fe;"
+                            <button id="btnCableAnchor" onclick="_toggleCableAnchor()" class="ctrl-btn outline" style="margin-bottom:0;font-size:12px;padding:8px;color:var(--info-ink);border-color:var(--info-bd);"
                                 title="Trụ đứng yên khi sửa số mét cáp (mặc định: gốc cây cáp — thường là tủ)">
                                 📌 Trụ gốc: <span id="cableAnchorLabel">tủ</span>
                             </button>
@@ -1297,13 +1297,13 @@
                             <div id="cadFilename" style="font-weight:700;color:var(--text);word-break:break-all;"></div>
                             <div id="cadEntityCount" style="color:var(--text-muted);margin-top:2px;"></div>
                             <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-top:6px;">
-                                <button onclick="_openCadLayers()" class="ctrl-btn outline" style="margin-bottom:0;font-size:11px;padding:5px;color:#7c3aed;border-color:#ddd6fe;">
+                                <button onclick="_openCadLayers()" class="ctrl-btn outline" style="margin-bottom:0;font-size:11px;padding:5px;color:var(--info-ink);border-color:var(--info-bd);">
                                     🎨 Lớp
                                 </button>
-                                <button onclick="_openCadAdjust()" class="ctrl-btn outline" style="margin-bottom:0;font-size:11px;padding:5px;color:var(--primary);border-color:#bfdbfe;">
+                                <button onclick="_openCadAdjust()" class="ctrl-btn outline" style="margin-bottom:0;font-size:11px;padding:5px;color:var(--primary);border-color:var(--info-bd);">
                                     🎯 Chỉnh KTTT
                                 </button>
-                                <button onclick="_startCalibrate()" class="ctrl-btn outline" style="margin-bottom:0;font-size:11px;padding:5px;color:var(--success);border-color:#a7f3d0;">
+                                <button onclick="_startCalibrate()" class="ctrl-btn outline" style="margin-bottom:0;font-size:11px;padding:5px;color:var(--success);border-color:var(--ok-bd);">
                                     🎯 Calib 2 điểm
                                 </button>
                                 <button onclick="_removeCad()" class="ctrl-btn outline" style="margin-bottom:0;font-size:11px;padding:5px;color:var(--danger);border-color:#fca5a5;">
@@ -1325,8 +1325,8 @@
                                         <span>Bán kính:</span>
                                         <input type="range" id="cadSnapDistSlider" min="1" max="20" step="1" value="5"
                                                oninput="_onCadSnapDistChange(this.value)"
-                                               style="flex:1;accent-color:#7c3aed;">
-                                        <span id="cadSnapDistDisplay" style="font-family:monospace;font-weight:700;color:#7c3aed;min-width:32px;">5m</span>
+                                               style="flex:1;accent-color:var(--info-ink);">
+                                        <span id="cadSnapDistDisplay" style="font-family:monospace;font-weight:700;color:var(--info-ink);min-width:32px;">5m</span>
                                     </div>
                                 </div>
                             </div>
@@ -1338,8 +1338,8 @@
                                 </label>
                                 <div id="cadTextEditToolbar" style="display:none;padding-left:24px;margin-top:4px;">
                                     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;">
-                                        <button onclick="_cadTextUndo()" style="padding:4px;border:1px solid var(--secondary);background:#fef3c7;color:#78350f;font-size:10px;border-radius:4px;cursor:pointer;" title="Hoàn tác di chuyển gần nhất (Ctrl+Z)">↶ Undo</button>
-                                        <button onclick="_cadTextResetAll()" style="padding:4px;border:1px solid var(--danger);background:#fef2f2;color:#b91c1c;font-size:10px;border-radius:4px;cursor:pointer;" title="Reset về vị trí gốc từ file DXF ban đầu">🔄 Reset</button>
+                                        <button onclick="_cadTextUndo()" style="padding:4px;border:1px solid var(--secondary);background:var(--warn-bg);color:var(--warn-ink);font-size:10px;border-radius:4px;cursor:pointer;" title="Hoàn tác di chuyển gần nhất (Ctrl+Z)">↶ Undo</button>
+                                        <button onclick="_cadTextResetAll()" style="padding:4px;border:1px solid var(--danger);background:var(--danger-bg);color:var(--danger-ink);font-size:10px;border-radius:4px;cursor:pointer;" title="Reset về vị trí gốc từ file DXF ban đầu">🔄 Reset</button>
                                         <div style="display:flex;align-items:center;font-size:9px;color:var(--text-muted);gap:2px;">
                                             <label title="Snap tọa độ về grid (m). 0 = tắt">Grid:</label>
                                             <input type="number" id="cadTextSnapGrid" value="0" min="0" step="0.5" style="width:34px;padding:2px;border:1px solid var(--border);border-radius:3px;font-size:10px;font-family:monospace;">
@@ -1352,7 +1352,7 @@
                             </div>
                             <!-- P19: Reset calibration button (chỉ hiện nếu đã calibrate) -->
                             <button id="btnCadResetCalib" onclick="_resetCalibAffine()"
-                                    style="display:none;width:100%;margin-top:4px;padding:4px;border:1px solid #fca5a5;background:#fef2f2;color:#b91c1c;font-size:10px;border-radius:4px;cursor:pointer;">
+                                    style="display:none;width:100%;margin-top:4px;padding:4px;border:1px solid #fca5a5;background:var(--danger-bg);color:var(--danger-ink);font-size:10px;border-radius:4px;cursor:pointer;">
                                 ↺ Reset calibration
                             </button>
                             <!-- P20: Stake-out RTK button -->
@@ -1491,11 +1491,11 @@
                     <div style="font-size:13px;color:var(--text-muted);margin-bottom:12px;">
                         Rows hiện có: <b id="ddbRowCount" style="color:var(--text);">—</b>
                     </div>
-                    <div id="ddbError" style="display:none;background:#fef2f2;color:var(--danger);padding:8px 12px;border-radius:6px;font-size:13px;margin-bottom:12px;border:1px solid #fecaca;"></div>
+                    <div id="ddbError" style="display:none;background:var(--danger-bg);color:var(--danger);padding:8px 12px;border-radius:6px;font-size:13px;margin-bottom:12px;border:1px solid var(--danger-bd);"></div>
 
-                    <label style="display:flex;align-items:center;gap:8px;background:#fef3c7;padding:10px 12px;border-radius:6px;border:1px solid #fcd34d;cursor:pointer;margin-bottom:12px;">
+                    <label style="display:flex;align-items:center;gap:8px;background:var(--warn-bg);padding:10px 12px;border-radius:6px;border:1px solid #fcd34d;cursor:pointer;margin-bottom:12px;">
                         <input type="checkbox" id="ddbAlsoDeleteTab" onchange="_ddbUpdateConfirmUI()" style="width:18px;height:18px;cursor:pointer;">
-                        <span style="font-size:13px;color:#92400e;">
+                        <span style="font-size:13px;color:var(--warn-ink);">
                             <b>⚠ Cũng xóa tab Google Sheet</b><br>
                             <small>MẤT DATA KHÔNG HỒI PHỤC qua app (chỉ Google Sheet revision history manual)</small>
                         </span>
@@ -1532,8 +1532,8 @@
                         Tạo tab Google Sheet mới + tự động register vào dropdown địa bàn.
                         Admin only. Cần Google Sheet đã bật share "Anyone with the link → Viewer".
                     </div>
-                    <div id="cdbError" style="display:none;background:#fef2f2;color:var(--danger);padding:8px 12px;border-radius:6px;font-size:13px;margin-bottom:12px;border:1px solid #fecaca;"></div>
-                    <div id="cdbWarn" style="display:none;background:#fffbeb;color:#92400e;padding:8px 12px;border-radius:6px;font-size:13px;margin-bottom:12px;border:1px solid #fde68a;"></div>
+                    <div id="cdbError" style="display:none;background:var(--danger-bg);color:var(--danger);padding:8px 12px;border-radius:6px;font-size:13px;margin-bottom:12px;border:1px solid var(--danger-bd);"></div>
+                    <div id="cdbWarn" style="display:none;background:var(--warn-bg);color:var(--warn-ink);padding:8px 12px;border-radius:6px;font-size:13px;margin-bottom:12px;border:1px solid var(--warn-bd);"></div>
 
                     <div class="form-group" style="margin-bottom:10px;">
                         <label style="font-size:12px;font-weight:700;color:var(--text);text-transform:uppercase;margin-bottom:4px;">
@@ -1640,7 +1640,7 @@
                     <button type="button" class="close" data-dismiss="modal"><span>&times;</span></button>
                 </div>
                 <div class="modal-body" style="padding:16px;">
-                    <div id="ccError" style="display:none;color:var(--danger);font-size:13px;margin-bottom:10px;padding:8px 12px;background:#fef2f2;border-radius:6px;border:1px solid #fecaca;"></div>
+                    <div id="ccError" style="display:none;color:var(--danger);font-size:13px;margin-bottom:10px;padding:8px 12px;background:var(--danger-bg);border-radius:6px;border:1px solid var(--danger-bd);"></div>
                     <div class="form-group" style="margin-bottom:12px;">
                         <label style="font-size:12px;font-weight:700;color:var(--text-muted);text-transform:uppercase;">Tên đăng nhập mới <small style="font-weight:400;text-transform:none;">(để trống = giữ nguyên)</small></label>
                         <input type="text" id="ccNewUsername" class="form-control" style="font-size:16px;"
@@ -1846,17 +1846,17 @@
             <button onclick="_gpsWaitBetter()" style="background:none; border:none; color:var(--primary);
                 font-size:12px; font-weight:600; cursor:pointer; text-decoration:underline; font-family:inherit;">⏸ Đợi tốt hơn</button>
         </div>
-        <div id="gpsWarningBox" style="display:none; background:#fef3c7; border:1px solid var(--secondary); border-radius:8px;
-             padding:8px 10px; margin-top:8px; font-size:12px; color:#92400e;">
+        <div id="gpsWarningBox" style="display:none; background:var(--warn-bg); border:1px solid var(--secondary); border-radius:8px;
+             padding:8px 10px; margin-top:8px; font-size:12px; color:var(--warn-ink);">
             <div id="gpsWarningTitle" style="font-weight:700; margin-bottom:4px;"></div>
             <div id="gpsWarningBody" style="margin-bottom:6px;"></div>
             <div style="display:flex; gap:8px;">
                 <button onclick="window.open('huongdan.html#s15', '_blank')"
-                    style="background:white; border:1px solid var(--secondary); color:#92400e;
+                    style="background:white; border:1px solid var(--secondary); color:var(--warn-ink);
                            border-radius:6px; padding:4px 10px; font-size:11px; font-weight:600; cursor:pointer;
                            font-family:inherit;">📖 Hướng dẫn</button>
                 <button onclick="_gpsDismissWarning()"
-                    style="background:white; border:1px solid var(--secondary); color:#92400e;
+                    style="background:white; border:1px solid var(--secondary); color:var(--warn-ink);
                            border-radius:6px; padding:4px 10px; font-size:11px; font-weight:600; cursor:pointer;
                            font-family:inherit;">Tiếp tục đợi</button>
             </div>
@@ -1933,7 +1933,7 @@
                     <p id="csvImportFileInfo" style="font-size:13px;color:var(--text-muted);margin-bottom:12px;"></p>
 
                     <!-- Auto-detect format info -->
-                    <div id="csvImportFormatInfo" style="background:#f0fdf4;border-left:4px solid var(--success);padding:8px 12px;border-radius:6px;margin-bottom:12px;font-size:12px;color:#166534;"></div>
+                    <div id="csvImportFormatInfo" style="background:var(--ok-bg);border-left:4px solid var(--success);padding:8px 12px;border-radius:6px;margin-bottom:12px;font-size:12px;color:var(--ok-ink);"></div>
 
                     <!-- Định dạng tọa độ (override auto-detect) -->
                     <div class="form-group">
@@ -1995,19 +1995,19 @@
                     </div>
 
                     <!-- Bù offset local grid (chỉ hiện khi format VN-2000) -->
-                    <div class="form-group" id="csvOffsetGroup" style="display:none;background:#fef3c7;padding:10px 12px;border-radius:6px;border-left:4px solid var(--secondary);margin-bottom:12px;">
-                        <label style="font-size:13px;font-weight:700;color:#78350f;">🔀 Bù offset local grid (nếu file dùng hệ tọa độ công trình)</label>
-                        <div style="font-size:11px;color:#78350f;margin-bottom:6px;opacity:.85;">
+                    <div class="form-group" id="csvOffsetGroup" style="display:none;background:var(--warn-bg);padding:10px 12px;border-radius:6px;border-left:4px solid var(--secondary);margin-bottom:12px;">
+                        <label style="font-size:13px;font-weight:700;color:var(--warn-ink);">🔀 Bù offset local grid (nếu file dùng hệ tọa độ công trình)</label>
+                        <div style="font-size:11px;color:var(--warn-ink);margin-bottom:6px;opacity:.85;">
                             Nhiều dự án dùng grid cục bộ (VD Tham Lương lệch −391.75m E · +223.86m N so với VN-2000 chuẩn).<br>
                             App sẽ TRỪ offset này khỏi giá trị CSV để chuyển về VN-2000 chuẩn trước khi convert sang Lat/Lon.
                         </div>
                         <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:8px;align-items:end;">
                             <div>
-                                <label style="font-size:11px;font-weight:600;color:#78350f;margin-bottom:2px;">ΔE (Easting, m)</label>
+                                <label style="font-size:11px;font-weight:600;color:var(--warn-ink);margin-bottom:2px;">ΔE (Easting, m)</label>
                                 <input type="number" step="0.01" id="csvOffsetE" value="0" class="form-control form-control-sm" style="font-size:13px;font-family:monospace;" oninput="_onCsvOffsetChange()">
                             </div>
                             <div>
-                                <label style="font-size:11px;font-weight:600;color:#78350f;margin-bottom:2px;">ΔN (Northing, m)</label>
+                                <label style="font-size:11px;font-weight:600;color:var(--warn-ink);margin-bottom:2px;">ΔN (Northing, m)</label>
                                 <input type="number" step="0.01" id="csvOffsetN" value="0" class="form-control form-control-sm" style="font-size:13px;font-family:monospace;" oninput="_onCsvOffsetChange()">
                             </div>
                             <div>
@@ -2017,7 +2017,7 @@
                             </div>
                         </div>
                         <div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px;">
-                            <div style="font-size:11px;color:#78350f;opacity:.75;">
+                            <div style="font-size:11px;color:var(--warn-ink);opacity:.75;">
                                 Để trống (0, 0) nếu file đã ở VN-2000 chuẩn.
                             </div>
                             <button type="button" onclick="_openCalibrateModal('csv')" style="font-size:11px;padding:3px 8px;background:var(--primary-light);color:var(--primary);border:1px solid #93c5fd;border-radius:4px;cursor:pointer;font-weight:700;">
@@ -2136,7 +2136,7 @@
     <div class="modal fade" id="suCoModal" tabindex="-1" role="dialog" aria-labelledby="suCoModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered" role="document">
             <div class="modal-content">
-                <div class="modal-header" style="background:#fff7ed;border-bottom:2px solid var(--secondary);">
+                <div class="modal-header" style="background:var(--warn-bg);border-bottom:2px solid var(--secondary);">
                     <h5 class="modal-title" id="suCoModalLabel">⚠️ Báo sự cố đèn chiếu sáng</h5>
                     <button type="button" class="close" data-dismiss="modal" aria-label="Đóng"><span aria-hidden="true">&times;</span></button>
                 </div>
@@ -2187,7 +2187,7 @@
     <div class="modal fade" id="suCoAdminModal" tabindex="-1" role="dialog" aria-labelledby="suCoAdminModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered modal-xl" role="document">
             <div class="modal-content">
-                <div class="modal-header" style="background:#fff7ed;border-bottom:2px solid var(--secondary);">
+                <div class="modal-header" style="background:var(--warn-bg);border-bottom:2px solid var(--secondary);">
                     <h5 class="modal-title" id="suCoAdminModalLabel">⚠️ Danh sách sự cố</h5>
                     <button type="button" class="close" data-dismiss="modal" aria-label="Đóng"><span aria-hidden="true">&times;</span></button>
                 </div>
@@ -2446,7 +2446,7 @@
     <div class="modal fade" id="editUserModal" tabindex="-1" role="dialog" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered" role="document">
             <div class="modal-content">
-                <div class="modal-header" style="background:#fef3c7;border-bottom:2px solid var(--secondary);">
+                <div class="modal-header" style="background:var(--warn-bg);border-bottom:2px solid var(--secondary);">
                     <h5 class="modal-title">✏️ Sửa tài khoản</h5>
                     <button type="button" class="close" data-dismiss="modal"><span>&times;</span></button>
                 </div>
@@ -2498,7 +2498,7 @@
     <div class="modal fade" id="nhiemVuAdminModal" tabindex="-1" role="dialog" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered modal-xl" role="document">
             <div class="modal-content">
-                <div class="modal-header" style="background:#ede9fe;border-bottom:2px solid #8b5cf6;">
+                <div class="modal-header" style="background:var(--info-bg);border-bottom:2px solid #8b5cf6;">
                     <h5 class="modal-title">📋 Quản lý nhiệm vụ</h5>
                     <button type="button" class="close" data-dismiss="modal"><span>&times;</span></button>
                 </div>
@@ -2519,7 +2519,7 @@
     <div class="modal fade" id="nhiemVuCreateModal" tabindex="-1" role="dialog" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered" role="document">
             <div class="modal-content">
-                <div class="modal-header" style="background:#ede9fe;border-bottom:2px solid #8b5cf6;">
+                <div class="modal-header" style="background:var(--info-bg);border-bottom:2px solid #8b5cf6;">
                     <h5 class="modal-title">➕ Tạo nhiệm vụ mới</h5>
                     <button type="button" class="close" data-dismiss="modal"><span>&times;</span></button>
                 </div>
@@ -2548,7 +2548,7 @@
     <div class="modal fade" id="nhiemVuSubmitModal" tabindex="-1" role="dialog" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered" role="document">
             <div class="modal-content">
-                <div class="modal-header" style="background:#dcfce7;border-bottom:2px solid var(--success);">
+                <div class="modal-header" style="background:var(--ok-bg);border-bottom:2px solid var(--success);">
                     <h5 class="modal-title">📮 Nộp báo cáo</h5>
                     <button type="button" class="close" data-dismiss="modal"><span>&times;</span></button>
                 </div>
@@ -2591,9 +2591,9 @@
     <div class="modal fade" id="incidentResolveModal" tabindex="-1" role="dialog" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered" role="document">
             <div class="modal-content">
-                <div class="modal-header" style="background:#fff7ed;border-bottom:2px solid var(--secondary);padding:12px 16px">
+                <div class="modal-header" style="background:var(--warn-bg);border-bottom:2px solid var(--secondary);padding:12px 16px">
                     <div>
-                        <h5 class="modal-title" style="font-size:15px;font-weight:700;color:#9a3412;margin:0">⚠️ Xử lý sự cố</h5>
+                        <h5 class="modal-title" style="font-size:15px;font-weight:700;color:var(--warn-ink);margin:0">⚠️ Xử lý sự cố</h5>
                         <div id="irTruName" style="font-size:12px;color:var(--text-muted);margin-top:2px"></div>
                     </div>
                     <button type="button" class="close" data-dismiss="modal" aria-label="Đóng" style="margin-left:auto"><span>&times;</span></button>
@@ -2825,8 +2825,8 @@
     <div class="modal fade" id="editExcelModal" tabindex="-1" role="dialog" aria-labelledby="editExcelModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-lg" role="document">
             <div class="modal-content">
-                <div class="modal-header" style="background:#f0fdf4;border-bottom:1.5px solid #bbf7d0;">
-                    <h5 class="modal-title" id="editExcelModalLabel" style="color:#15803d;font-weight:700;">📋 Xác nhận cập nhật từ Excel</h5>
+                <div class="modal-header" style="background:var(--ok-bg);border-bottom:1.5px solid #bbf7d0;">
+                    <h5 class="modal-title" id="editExcelModalLabel" style="color:var(--ok-ink);font-weight:700;">📋 Xác nhận cập nhật từ Excel</h5>
                     <button type="button" class="close" data-dismiss="modal" aria-label="Close">
                         <span aria-hidden="true">&times;</span>
                     </button>
@@ -4249,7 +4249,7 @@
                     L.marker([w.c[1], w.c[0]], {
                         icon: L.divIcon({
                             className: '',
-                            html: '<span style="font-size:10px;font-weight:700;color:#7c3aed;' +
+                            html: '<span style="font-size:10px;font-weight:700;color:var(--info-ink);' +
                                   'white-space:nowrap;text-shadow:0 0 3px #fff,0 0 3px #fff,0 0 3px #fff">' +
                                   w.n + '</span>',
                             iconAnchor: [0, 8]
@@ -6037,14 +6037,14 @@
                 const itemsHtml = _inc.items.map(it => {
                     const mucDoHtml = it.mucDo === 'Khẩn cấp'
                         ? `<span style="color:var(--danger);font-weight:700">⚡ Khẩn cấp</span>`
-                        : `<span style="color:#92400e">Bình thường</span>`;
+                        : `<span style="color:var(--warn-ink)">Bình thường</span>`;
                     const ttColor = it.trangThai === 'Chờ xử lý' ? '#dc2626' : '#d97706';
                     return `<div style="font-size:12px;color:var(--text);margin-top:3px;">• ${it.loai || '—'} · ${mucDoHtml} · <span style="color:${ttColor};font-weight:600">${it.trangThai}</span></div>`;
                 }).join('');
                 const incClickable = canEdit();
-                incidentBlock = `<div style="background:#fff7ed;border:1.5px solid var(--secondary);border-radius:10px;margin:6px 16px 0;padding:9px 12px;${incClickable ? 'cursor:pointer;' : ''}" ${incClickable ? 'onclick="openIncidentResolveModal()"' : ''}>
+                incidentBlock = `<div style="background:var(--warn-bg);border:1.5px solid var(--secondary);border-radius:10px;margin:6px 16px 0;padding:9px 12px;${incClickable ? 'cursor:pointer;' : ''}" ${incClickable ? 'onclick="openIncidentResolveModal()"' : ''}>
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
-                      <span style="font-weight:700;color:#c2410c;font-size:12px;">⚠️ ${_inc.count} sự cố chưa xử lý</span>
+                      <span style="font-weight:700;color:var(--warn-ink);font-size:12px;">⚠️ ${_inc.count} sự cố chưa xử lý</span>
                       ${incClickable ? `<span style="font-size:11px;color:var(--secondary);font-weight:600">Nhấp để xử lý →</span>` : ''}
                     </div>
                     ${itemsHtml}
@@ -6112,7 +6112,7 @@
               ${canDrag() && type >= 1 && type <= 4 ? `
               <div style="padding:0 16px 12px;">
                 <button onclick="openAlignRoute()" title="Căn thẳng các trụ cùng tuyến theo tim đường OSM"
-                  style="width:100%;min-height:44px;border-radius:10px;border:1.5px solid #0ea5e9;background:#f0f9ff;color:#0369a1;font-size:13px;font-weight:700;cursor:pointer;">
+                  style="width:100%;min-height:44px;border-radius:10px;border:1.5px solid #0ea5e9;background:#f0f9ff;color:var(--info-ink);font-size:13px;font-weight:700;cursor:pointer;">
                   📏 Căn thẳng tuyến ${_esc(normalizeMarkerBaseName(String(name).trim()))}
                 </button>
               </div>` : ''}
@@ -6127,7 +6127,7 @@
                     : (_cableDrawChild.name !== name
                         ? `<button onclick="setCableParent()"
                              style="width:100%;padding:9px;border-radius:10px;border:1.5px dashed #15803d;
-                                    background:#f0fdf4;color:#15803d;font-size:12px;font-weight:700;cursor:pointer;">
+                                    background:var(--ok-bg);color:var(--ok-ink);font-size:12px;font-weight:700;cursor:pointer;">
                                🔗 Nối cáp: ${_cableDrawChild.name} → ${name || '?'}
                              </button>`
                         : `<div style="text-align:center;font-size:11px;color:var(--text-muted);padding:6px;">
@@ -6698,8 +6698,8 @@
                 const bg = i % 2 === 0 ? '#ffffff' : '#fef7f7';
                 html += `<div style="background:${bg};border:1px solid #fca5a5;border-radius:5px;padding:8px 10px;margin-bottom:6px;">
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-                        <div style="font-size:12px;font-weight:800;color:#7f1d1d;">${cfg.title}</div>
-                        <label style="font-size:11px;color:#7f1d1d;cursor:pointer;">
+                        <div style="font-size:12px;font-weight:800;color:var(--danger-ink);">${cfg.title}</div>
+                        <label style="font-size:11px;color:var(--danger-ink);cursor:pointer;">
                             <input type="checkbox" data-stamp="${cfg.key}" data-field="enabled" ${data.enabled !== false ? 'checked' : ''} style="vertical-align:middle;margin-right:4px;">
                             Hiển thị
                         </label>
@@ -7015,7 +7015,7 @@
                     <div style="display:flex;gap:4px;">
                         <input type="file" id="stampFile_${slot.key}" accept="image/png,image/jpeg" onchange="_onStampFileChange('${slot.key}', this)" style="display:none;">
                         <button onclick="document.getElementById('stampFile_${slot.key}').click()" style="flex:1;padding:5px;font-size:10px;font-weight:700;background:var(--primary-light);color:var(--primary);border:1px solid #93c5fd;border-radius:4px;cursor:pointer;">${hasImg ? '↻ Đổi' : '↑ Upload'}</button>
-                        ${hasImg ? `<button onclick="_deleteStampImage('${slot.key}')" style="padding:5px 8px;font-size:10px;font-weight:700;background:#fef2f2;color:var(--danger);border:1px solid #fca5a5;border-radius:4px;cursor:pointer;">🗑</button>` : ''}
+                        ${hasImg ? `<button onclick="_deleteStampImage('${slot.key}')" style="padding:5px 8px;font-size:10px;font-weight:700;background:var(--danger-bg);color:var(--danger);border:1px solid #fca5a5;border-radius:4px;cursor:pointer;">🗑</button>` : ''}
                     </div>
                 </div>`;
             };
@@ -10852,7 +10852,7 @@
                 } else if (nv.status === 'in_progress' || nv.status === 'rejected') {
                     actionBtn = `<button onclick="_openSubmitNhiemVuModal('${nv.id}')" class="ctrl-btn success" style="margin:0;padding:4px 8px;font-size:10px;">📮 Nộp</button>`;
                 } else if (nv.status === 'submitted') {
-                    actionBtn = `<span style="font-size:10px;color:#8b5cf6;font-weight:700;">Chờ duyệt...</span>`;
+                    actionBtn = `<span style="font-size:10px;color:var(--info-ink);font-weight:700;">Chờ duyệt...</span>`;
                 }
                 return `<div style="padding:6px 8px;background:${s.bg};border-radius:6px;margin-bottom:4px;font-size:11px;">
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px;">
@@ -11522,9 +11522,9 @@
 
             let html = `
                 <div style="display:flex;gap:8px;flex-wrap:wrap;padding:10px;background:var(--surface-2);border-radius:8px;margin-bottom:10px;font-size:12px;">
-                    <span style="background:#fee2e2;color:var(--danger);padding:4px 10px;border-radius:6px;font-weight:700;">👑 Admin: ${cnt.admin}</span>
-                    <span style="background:#dcfce7;color:var(--success);padding:4px 10px;border-radius:6px;font-weight:700;">👤 User: ${cnt.user}</span>
-                    <span style="background:#fef3c7;color:var(--secondary);padding:4px 10px;border-radius:6px;font-weight:700;">👁 User1: ${cnt.user1}</span>
+                    <span style="background:var(--danger-bg);color:var(--danger);padding:4px 10px;border-radius:6px;font-weight:700;">👑 Admin: ${cnt.admin}</span>
+                    <span style="background:var(--ok-bg);color:var(--success);padding:4px 10px;border-radius:6px;font-weight:700;">👤 User: ${cnt.user}</span>
+                    <span style="background:var(--warn-bg);color:var(--secondary);padding:4px 10px;border-radius:6px;font-weight:700;">👁 User1: ${cnt.user1}</span>
                     <span style="background:var(--surface-2);color:var(--text-muted);padding:4px 10px;border-radius:6px;font-weight:700;">🔒 Demo: ${cnt.demo}</span>
                     <span style="color:var(--text-muted);padding:4px 10px;margin-left:auto;">Hiển thị ${users.length}/${_adminUsersList.length}</span>
                 </div>
@@ -12152,9 +12152,9 @@
 
             const summary = `
                 <div style="display:flex;gap:8px;flex-wrap:wrap;padding:10px;background:var(--surface-2);border-radius:8px;margin-bottom:10px;font-size:12px;">
-                    <span style="background:#fef3c7;padding:4px 10px;border-radius:6px;font-weight:700;">🟡 Chờ xử lý: ${countByStatus['Chờ xử lý']}</span>
+                    <span style="background:var(--warn-bg);padding:4px 10px;border-radius:6px;font-weight:700;">🟡 Chờ xử lý: ${countByStatus['Chờ xử lý']}</span>
                     <span style="background:var(--primary-light);padding:4px 10px;border-radius:6px;font-weight:700;">🔵 Đang xử lý: ${countByStatus['Đang xử lý']}</span>
-                    <span style="background:#dcfce7;padding:4px 10px;border-radius:6px;font-weight:700;">🟢 Đã xử lý: ${countByStatus['Đã xử lý']}</span>
+                    <span style="background:var(--ok-bg);padding:4px 10px;border-radius:6px;font-weight:700;">🟢 Đã xử lý: ${countByStatus['Đã xử lý']}</span>
                     <span style="color:var(--text-muted);padding:4px 10px;margin-left:auto;">Hiển thị ${rows.length}/${_suCoAdminRows.length}</span>
                 </div>
                 <div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap;align-items:center;">
@@ -12252,11 +12252,11 @@
             body.innerHTML = inc.items.map((it, idx) => {
                 const mucDoHtml = it.mucDo === 'Khẩn cấp'
                     ? `<span style="color:var(--danger);font-weight:700">⚡ Khẩn cấp</span>`
-                    : `<span style="color:#92400e">Bình thường</span>`;
+                    : `<span style="color:var(--warn-ink)">Bình thường</span>`;
                 const ttColor = it.trangThai === 'Chờ xử lý' ? '#dc2626' : '#d97706';
                 const thoiGianStr = it.thoiGian ? it.thoiGian.slice(0, 16).replace('T', ' ') : '';
-                return `<div style="border:1px solid #fed7aa;border-radius:8px;padding:10px 12px;margin-bottom:10px;background:#fffbf5">
-                    <div style="font-weight:700;color:#9a3412;font-size:13px;margin-bottom:4px">${it.loai || '—'}</div>
+                return `<div style="border:1px solid var(--warn-bd);border-radius:8px;padding:10px 12px;margin-bottom:10px;background:#fffbf5">
+                    <div style="font-weight:700;color:var(--warn-ink);font-size:13px;margin-bottom:4px">${it.loai || '—'}</div>
                     <div style="font-size:12px;color:var(--text);margin-bottom:8px">
                         ${mucDoHtml} · <span style="color:${ttColor};font-weight:600">${it.trangThai}</span>
                         ${thoiGianStr ? `<span style="color:var(--text-muted);font-size:11px;margin-left:6px">${thoiGianStr}</span>` : ''}

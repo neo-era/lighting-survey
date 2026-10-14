@@ -30,6 +30,11 @@
             --bottombar-h: 0px;
             --safe-top:    env(safe-area-inset-top,    0px);
             --safe-bottom: env(safe-area-inset-bottom, 0px);
+            /* Semantic chips (token hoá sâu — alert/badge) */
+            --danger-bg:#fef2f2; --danger-ink:#b91c1c; --danger-bd:#fecaca;
+            --warn-bg:#fef3c7;   --warn-ink:#92400e;   --warn-bd:#fde68a;
+            --ok-bg:#f0fdf4;     --ok-ink:#15803d;     --ok-bd:#a7f3d0;
+            --info-bg:#eef2ff;   --info-ink:#4338ca;   --info-bd:#ddd6fe;
             color-scheme: light;
         }
         /* DARK — tự động theo hệ thống (trừ khi ép sáng) */
@@ -45,6 +50,10 @@
                 --shadow:    0 6px 18px rgba(0,0,0,.45);
                 --shadow-lg: 0 14px 36px rgba(0,0,0,.55);
                 --shadow-xl: 0 26px 60px rgba(0,0,0,.65);
+                --danger-bg:rgba(225,29,72,.16); --danger-ink:#fda4af; --danger-bd:rgba(225,29,72,.38);
+                --warn-bg:rgba(245,158,11,.15);  --warn-ink:#fcd34d;  --warn-bd:rgba(245,158,11,.38);
+                --ok-bg:rgba(20,184,166,.15);    --ok-ink:#5eead4;    --ok-bd:rgba(20,184,166,.38);
+                --info-bg:rgba(99,102,241,.17);  --info-ink:#a5b4fc;  --info-bd:rgba(99,102,241,.38);
                 color-scheme: dark;
             }
         }
@@ -485,7 +494,7 @@
         .cad-layer-row input[type="color"] { -webkit-appearance: none; appearance: none; border-radius: 3px; }
         .cad-layer-row .layer-name { font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .cad-layer-row .layer-summary { font-family: monospace; font-size: 10px; color: var(--text-muted); }
-        .cad-layer-row .layer-count { font-family: monospace; font-size: 11px; font-weight: 700; color: #7c3aed; background: var(--surface-2); padding: 2px 6px; border-radius: 4px; }
+        .cad-layer-row .layer-count { font-family: monospace; font-size: 11px; font-weight: 700; color: var(--info-ink); background: var(--surface-2); padding: 2px 6px; border-radius: 4px; }
 
         .ctrl-radio input { margin: 0; flex-shrink: 0; }
         .ctrl-radio .hint { color: var(--text-muted); font-size: 12px; }
@@ -786,7 +795,7 @@
         #printDrawingModal .pd-hint { font-size:12px; color:var(--text-muted); margin-top:6px; line-height:1.5; }
         .cable-label { background:none; border:none; }
         .cable-label-edit span { cursor:pointer; outline:2px solid var(--secondary); outline-offset:1px; }
-        .cable-label-edit span:hover { background:#fef3c7 !important; }
+        .cable-label-edit span:hover { background:var(--warn-bg) !important; }
         .cable-label span {
             background:rgba(255,255,255,.88); border:1px solid var(--primary);
             border-radius:4px; padding:1px 5px;
@@ -865,13 +874,13 @@
         .pc-btn.route  { background: #0ea5e9; color: #fff; }
         .pc-btn.sv     { background: var(--success); color: #fff; }
         .pc-btn.edit   { background: var(--surface-2); color: var(--text); }
-        .pc-btn.delete { background: #fee2e2; color: var(--danger); }
+        .pc-btn.delete { background: var(--danger-bg); color: var(--danger); }
         .pc-btn.delete.confirm { background: var(--danger); color: #fff; }
-        .pc-btn.street { background: #f0fdf4; color: var(--success); }
-        .pc-btn.report { background: #fff7ed; color: var(--secondary); }
+        .pc-btn.street { background: var(--ok-bg); color: var(--success); }
+        .pc-btn.report { background: var(--warn-bg); color: var(--secondary); }
         .pc-btn.baotri { background: var(--primary-light); color: var(--primary); }
         .sc-chip { padding: 7px 12px; border-radius: 20px; border: 1.5px solid var(--border); background: var(--surface-2); color: var(--text); font-size: 13px; font-weight: 600; cursor: pointer; transition: all .15s; }
-        .sc-chip.active { border-color: var(--secondary); background: #fff7ed; color: var(--secondary); }
+        .sc-chip.active { border-color: var(--secondary); background: var(--warn-bg); color: var(--secondary); }
         .sc-chip:active { transform: scale(.97); }
 
         /* ── Thumbnail icon on map ── */

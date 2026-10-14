@@ -33,3 +33,10 @@
 - module-split 68/0; full node-test 0 fail; vitest 47/47; css-extract 6/0.
 - Xem trước: bản `ui-preview.html` nhúng app.css thật (sáng/tối).
 - SW cache bump để client lấy CSS mới.
+
+## Lượt 2 — Token hoá sâu semantic chips ✅
+- Thêm token ngữ nghĩa: `--danger/warn/ok/info` × `-bg/-ink/-bd`; light giữ tông cũ, dark = nền mờ + chữ sáng.
+- Map 97 `style=` (alert/badge: nền nhạt→*-bg, chữ đậm→*-ink, viền→*-bd); app.css component (#7c3aed color→info-ink…).
+- Property-aware: `color:#7c3aed`→info-ink nhưng GIỮ `background:#7c3aed` (badge đặc).
+- Còn ~91 style= có hex: 41× `color:#fff` (đúng), badge nền đặc, overlay #000/#111, ~7 straggler nhạt lẻ — chấp nhận.
+- Test: css-extract 6/0, module-split 68/0, full node-test 0 fail, vitest 47/47. SW v183.
