@@ -25,11 +25,14 @@ const h = i => URLS[i].split('/')[2];
 // 1. Máy đầu 504 → máy 2 thành công
 calls = []; sb.ctx.fetch = mk({ [h(0)]: 504 });
 let j = await sb.ctx._overpassFetch('q');
-ok('504 ở máy chính → lấy từ máy dự phòng', j && j.elements.length === 1 && calls.length === 2 && calls[1] === URLS[1]);
+// v182 hedged request: máy lỗi → gọi NGAY máy kế (không chờ timeout); chi tiết ở tests/overpass-hedged.test.mjs
+ok('504 ở máy chính → chuyển ngay sang máy dự phòng', j && j.elements.length === 1 && calls.length === 2 && calls[1] === URLS[1]);
 // 2. Lần sau thử máy đã chạy được trước
 calls = []; sb.ctx.fetch = mk({});
 await sb.ctx._overpassFetch('q');
-ok('nhớ máy chạy được: lần sau gọi máy dự phòng trước', calls[0] === URLS[1] && calls.length === 1);
+// Bản cũ "nhớ máy chạy được rồi gọi nó đầu tiên" — chính cơ chế khiến một máy treo từng thắng làm MỌI lần
+// xuất sau ăn trọn timeout. Nay luôn bắt đầu từ máy chính; máy chính ổn thì chỉ tốn đúng 1 request.
+ok('không ưu tiên máy thắng cũ: luôn bắt đầu từ máy chính, chỉ 1 request', calls.length === 1 && calls[0] === URLS[0]);
 // 3. Lỗi mạng + 429 + JSON hỏng → máy cuối thành công
 sb.run('_overpassGoodIdx = 0');
 calls = []; sb.ctx.fetch = mk({ [h(0)]: 'net', [h(1)]: 429, [h(2)]: 'badjson' });
@@ -49,11 +52,12 @@ sb.ctx._idbSet = async (k, v) => { store.set(k, v); };
 const infos = []; sb.ctx.displayInfo = m => infos.push(m);
 const bounds = { minLat: 10, minLon: 106, maxLat: 10.01, maxLon: 106.01 };
 const key = sb.ctx._osmBoundsKey(bounds);
-const old = { roads: [{ name: 'cũ' }], buildings: [], water: [], admin: [] };
+const old = { roads: [{ name: 'cũ', coords: [[106.005, 10.005], [106.006, 10.006]] }], buildings: [], water: [], admin: [] };
 store.set(key, { data: old, fetchedAt: Date.now() - 40 * 864e5, bounds, opts: { roads: true } });
 sb.run('_osmFetchLastMs = 0');
 const got = await sb.ctx._fetchOsmBasemap(bounds, { roads: true, buildings: false });
-ok('mọi máy lỗi + có cache cũ đủ lớp → trả cache cũ', got === old);
+// v183: dữ liệu trả về là lát cắt mảng mới theo lớp + khung (không còn cùng object với cache)
+ok('mọi máy lỗi + có cache cũ đủ lớp → trả cache cũ', !!got && JSON.stringify(got.roads) === JSON.stringify(old.roads));
 ok('báo người dùng đang dùng bản đã lưu', infos.some(m => /đã lưu/.test(m)));
 // 6. Không có cache → ném lỗi
 store.clear(); sb.run('_osmFetchLastMs = 0');

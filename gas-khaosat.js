@@ -3484,19 +3484,39 @@ function _buildGvizUrl(spreadsheetId, sheetName) {
          '/gviz/tq?tqx=out:csv&sheet=' + encodeURIComponent(sheetName);
 }
 
-// Test GViz URL fetch được không — nếu 200 và content có CSV format thì OK
+// Test URL CSV có trả về dữ liệu thật không.
+//
+// ⚠ KHÔNG dò ký tự để đoán CSV. Khi sheet chưa chia sẻ công khai, Google trả TRANG ĐĂNG NHẬP
+// dạng HTTP 200 + text/html, mà HTML chứa sẵn cả dấu phẩy lẫn dấu nháy — bản cũ kiểm
+// `body.indexOf(',')` nên nhận nhầm là CSV, báo ok, địa bàn tạo ra im lặng không tải được
+// (trình duyệt chỉ thấy 'Failed to fetch' vì CORS chặn redirect sang trang login).
+// Cách đúng: loại HTML qua Content-Type + đầu body, rồi bắt buộc dòng đầu có cột "Tên trụ".
 function _testGvizUrl(url) {
   try {
     var res = UrlFetchApp.fetch(url, { muteHttpExceptions: true, followRedirects: true });
     var code = res.getResponseCode();
-    if (code !== 200) return { ok: false, code: code };
-    var body = res.getContentText().slice(0, 200);
-    if (body.indexOf(',') === -1 && body.indexOf('"') === -1) {
-      return { ok: false, code: code, body: body };
+    if (code !== 200) {
+      return { ok: false, code: code, reason: 'HTTP ' + code + ' — nhiều khả năng sheet chưa chia sẻ công khai' };
+    }
+    var headers = res.getHeaders() || {};
+    var ctKey = Object.keys(headers).filter(function (k) { return String(k).toLowerCase() === 'content-type'; })[0];
+    var ct = String(ctKey ? headers[ctKey] : '');
+    var body = String(res.getContentText() || '');
+    if (!body.trim()) {
+      return { ok: false, code: code, reason: 'Nội dung trả về rỗng' };
+    }
+    if (/text\/html/i.test(ct) || /^\s*<(!doctype|html)/i.test(body)) {
+      return { ok: false, code: code, reason: 'Google trả trang HTML (đăng nhập) thay vì CSV — sheet chưa chia sẻ công khai' };
+    }
+    var first = body.split(/\r?\n/)[0] || '';
+    // norm() chuan hoa NFC: header dan tu macOS / IMPORTRANGE co the o dang NFD,
+    // khi do regex viet bang NFC se khong khop -> bao fail oan du sheet dung.
+    if (!/tên\s*trụ/.test(norm(first))) {
+      return { ok: false, code: code, reason: 'Dòng đầu không có cột "Tên trụ" — không phải sheet khảo sát' };
     }
     return { ok: true, code: code };
   } catch (e) {
-    return { ok: false, err: e.message };
+    return { ok: false, reason: 'Không gọi được URL: ' + ((e && e.message) ? e.message : String(e)) };
   }
 }
 
@@ -3756,8 +3776,11 @@ function handleCreateDiaBan(data) {
 
     var ssId = ss.getId();
     var csvUrl = _buildGvizUrl(ssId, vSheet.name);
+    // Ép ghi tab mới xuống Sheet trước khi test — nếu chưa commit, gviz lặng lẽ trả về
+    // sheet ĐẦU TIÊN thay vì báo lỗi (đã kiểm: tab sai → HTTP 200 + CSV của sheet 1).
+    try { SpreadsheetApp.flush(); } catch (e) { /* không chặn luồng tạo */ }
     var testRes = _testGvizUrl(csvUrl);
-    var csvMethod = testRes.ok ? 'gviz' : 'gviz-untested';
+    var csvMethod = testRes.ok ? 'gviz' : 'gviz-chua-cong-khai';
 
     var now = new Date();
     var username = (data.adminAuth && data.adminAuth.username) || 'admin';
@@ -3775,7 +3798,7 @@ function handleCreateDiaBan(data) {
       prefix: vPrefix.prefix,
       csvMethod: csvMethod,
       warn: vPrefix.warn,
-      hint: !testRes.ok ? 'GViz test fail (code=' + testRes.code + '). Nếu dropdown không load được dữ liệu, kiểm tra Google Sheet share settings: File → Share → Anyone with the link → Viewer.' : null
+      hint: !testRes.ok ? ('⚠ Địa bàn đã tạo NHƯNG chưa tải được dữ liệu: ' + (testRes.reason || 'không rõ') + '. ' + (/HTTP|HTML/i.test(testRes.reason || '') ? 'Mở Google Sheet → Share → Anyone with the link → Viewer, rồi tải lại trang.' : 'Kiểm tra lại tên tab và cột tiêu đề trong Google Sheet.')) : null
     });
   } catch (err) {
     if (newSheet) {

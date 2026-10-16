@@ -17,38 +17,118 @@
             'https://overpass.kumi.systems/api/interpreter',
             'https://overpass.private.coffee/api/interpreter'
         ];
-        const OVERPASS_TIMEOUT_MS = 45000;
-        let _overpassGoodIdx = 0;   // nhớ máy chủ chạy được lần trước → lần sau thử nó trước
-        // Gửi query lần lượt qua các máy chủ; trả JSON của máy chủ đầu tiên thành công.
-        // Lỗi mạng / timeout / HTTP lỗi / JSON hỏng → thử máy kế. Hết máy → ném lỗi gom đủ từng máy.
-        async function _overpassFetch(q, onTry) {
-            const n = OVERPASS_URLS.length, errs = [];
-            for (let k = 0; k < n; k++) {
-                const idx = (_overpassGoodIdx + k) % n;
-                const url = OVERPASS_URLS[idx];
-                const host = url.replace(/^https?:\/\//, '').split('/')[0];
-                if (onTry) onTry(host, k);
-                const ctl = typeof AbortController !== 'undefined' ? new AbortController() : null;
-                const timer = ctl ? setTimeout(() => ctl.abort(), OVERPASS_TIMEOUT_MS) : null;
-                try {
-                    const res = await fetch(url, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                        body: 'data=' + encodeURIComponent(q),
-                        signal: ctl ? ctl.signal : undefined
-                    });
-                    if (!res.ok) { errs.push(host + ' HTTP ' + res.status); continue; }
-                    const json = await res.json();
-                    if (!json || !Array.isArray(json.elements)) { errs.push(host + ' dữ liệu hỏng'); continue; }
-                    _overpassGoodIdx = idx;
-                    return json;
-                } catch (e) {
-                    errs.push(host + ' ' + (e && e.name === 'AbortError' ? 'quá thời gian' : 'lỗi mạng'));
-                } finally {
-                    if (timer) clearTimeout(timer);
+        // Timeout MỖI request theo diện tích vùng tải (xem _overpassTimeoutFor): vùng vài trụ trả trong 1–3s
+        // nên quá 8s gần như chắc là máy treo; bản vẽ lớn có nhà cửa thì cần tới 30s.
+        const OVERPASS_TIMEOUT_MIN_MS = 8000;
+        const OVERPASS_TIMEOUT_MS = 30000;      // trần
+        const OVERPASS_HEDGE_MS = 2000;         // máy đang gọi chưa trả sau chừng này → gọi thêm máy kế
+        let _overpassGoodIdx = 0;               // máy thắng gần nhất — chỉ để log, KHÔNG quyết định thứ tự gọi
+
+        function _overpassTimeoutFor(bounds, opts) {
+            if (!bounds) return OVERPASS_TIMEOUT_MS;
+            const midLat = (bounds.minLat + bounds.maxLat) / 2;
+            const km2 = Math.abs(bounds.maxLat - bounds.minLat) * 111.32
+                      * Math.abs(bounds.maxLon - bounds.minLon) * 111.32 * Math.cos(midLat * Math.PI / 180);
+            const perKm2 = (opts && opts.buildings) ? 3000 : 1500;   // nhà cửa nặng gấp đôi đường
+            return Math.round(Math.min(OVERPASS_TIMEOUT_MS, Math.max(OVERPASS_TIMEOUT_MIN_MS, OVERPASS_TIMEOUT_MIN_MS + perKm2 * km2)));
+        }
+
+        // Hedged request: gọi máy 1 trước; máy lỗi → gọi NGAY máy kế; máy chưa trả sau OVERPASS_HEDGE_MS → gọi THÊM
+        // máy kế (chạy song song). Máy trả JSON hợp lệ đầu tiên thắng, các request còn lại bị huỷ.
+        //
+        // ⚠ Không quay lại kiểu tuần tự chờ timeout: bản cũ thử lần lượt 4 máy × 45s → tối đa 180s chặn xuất CAD
+        // (đo thật: maps.mail.ru TREO 51s), lại "nhớ máy thắng lần trước để gọi đầu tiên" nên máy treo từng thắng
+        // làm MỌI lần xuất sau ăn trọn timeout.
+        // ⚠ Cũng không bắn cả 4 máy cùng lúc: máy chủ Overpass công cộng tính quota theo thời gian chạy query và
+        // ngắt kết nối phía trình duyệt KHÔNG dừng query phía máy chủ → bắn 4 = ăn quota 4 máy mỗi lần, dễ 429.
+        //
+        // opts.signal   — AbortSignal: nút xuất đang bận bấm lần nữa → dừng toàn bộ (bỏ qua nền OSM).
+        // opts.timeoutMs — timeout mỗi request (mặc định OVERPASS_TIMEOUT_MS). Hẹn giờ ĐỘC LẬP với AbortController,
+        //                  nên trình duyệt cũ không có AbortController cũng không treo vĩnh viễn.
+        // opts.hedgeMs  — mặc định OVERPASS_HEDGE_MS (test truyền nhỏ để chạy nhanh).
+        function _overpassFetch(q, onTry, opts) {
+            const ext = opts && opts.signal;
+            const timeoutMs = (opts && opts.timeoutMs) || OVERPASS_TIMEOUT_MS;
+            const hedgeMs = (opts && opts.hedgeMs != null) ? opts.hedgeMs : OVERPASS_HEDGE_MS;
+            const n = OVERPASS_URLS.length;
+            const hasAC = typeof AbortController !== 'undefined';
+            const ctls = [], timers = [], errs = [];
+            let settled = false, launched = 0, finished = 0, hedgeTimer = null;
+
+            return new Promise((resolve, reject) => {
+                const cleanup = () => {
+                    timers.forEach(t => clearTimeout(t));
+                    if (hedgeTimer) clearTimeout(hedgeTimer);
+                    ctls.forEach(c => { try { c.abort(); } catch (_) { /* đã xong */ } });
+                    if (ext) ext.removeEventListener('abort', onExtAbort);
+                };
+                const finish = (fn, val) => { if (settled) return; settled = true; cleanup(); fn(val); };
+                function onExtAbort() {
+                    const e = new Error('Đã huỷ tải nền OSM');
+                    e.name = 'AbortError';
+                    finish(reject, e);
                 }
-            }
-            throw new Error('Overpass: ' + errs.join(' · '));
+                const maybeAllFailed = () => {
+                    if (!settled && launched === n && finished === n) finish(reject, new Error('Overpass: ' + errs.join(' · ')));
+                };
+                const armHedge = () => {
+                    if (hedgeTimer) clearTimeout(hedgeTimer);
+                    if (launched < n) hedgeTimer = setTimeout(launch, hedgeMs);
+                };
+
+                function launch() {
+                    if (settled || launched >= n) return;
+                    const idx = launched++;
+                    const url = OVERPASS_URLS[idx];
+                    const host = url.replace(/^https?:\/\//, '').split('/')[0];
+                    if (onTry) { try { onTry(host, idx); } catch (_) { /* UI lỗi không được làm hỏng tải */ } }
+                    const ctl = hasAC ? new AbortController() : null;
+                    if (ctl) ctls.push(ctl);
+                    let done = false;
+                    const fail = (why) => {
+                        if (done) return;
+                        done = true; finished++;
+                        if (settled) return;
+                        errs.push(host + ' ' + why);
+                        launch();            // máy này hỏng → gọi ngay máy kế, không đợi hedge
+                        maybeAllFailed();
+                    };
+                    timers.push(setTimeout(() => {
+                        if (ctl) { try { ctl.abort(); } catch (_) { /* bỏ qua */ } }
+                        fail('quá thời gian');
+                    }, timeoutMs));
+                    armHedge();
+
+                    Promise.resolve()
+                        .then(() => fetch(url, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                            body: 'data=' + encodeURIComponent(q),
+                            signal: ctl ? ctl.signal : undefined
+                        }))
+                        .then(res => {
+                            if (!res.ok) throw new Error('HTTP ' + res.status);
+                            return res.json();
+                        })
+                        .then(json => {
+                            if (!json || !Array.isArray(json.elements)) throw new Error('dữ liệu hỏng');
+                            if (done) return;
+                            done = true; finished++;
+                            _overpassGoodIdx = idx;
+                            finish(resolve, json);
+                        })
+                        .catch(e => {
+                            fail((e && e.name === 'AbortError') ? 'đã huỷ'
+                                : (e && /^HTTP |dữ liệu hỏng/.test(e.message) ? e.message : 'lỗi mạng'));
+                        });
+                }
+
+                if (ext) {
+                    if (ext.aborted) { onExtAbort(); return; }
+                    ext.addEventListener('abort', onExtAbort);
+                }
+                launch();
+            });
         }
         const OSM_CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000;   // 30 ngày
         let _osmFetchLastMs = 0;
@@ -129,87 +209,180 @@
         }
         window._cgSaveRoadWidths = _cgSaveRoadWidths;
 
-        async function _fetchOsmBasemap(bounds, options) {
+        // ── Cache bộ nhớ + dùng chung request (v183, phục vụ tải sẵn khi mở modal Xuất CAD) ──
+        // IndexedDB khoá theo ĐÚNG khung → bật "loại điểm ngoại lai" hoặc xuất nhiều tờ (khung lúc xuất nhỏ hơn
+        // khung tải sẵn) là trượt. Cache bộ nhớ tra theo BAO CHỨA nên khung con luôn trúng.
+        const _OSM_MEM_MAX = 3;      // vài vùng gần nhất — dữ liệu 1 quận có thể vài MB, không giữ nhiều
+        const _osmMem = [];          // [{ bounds, opts, data, fetchedAt }] — mới nhất ở đầu
+        const _osmInflight = [];     // [{ bounds, opts, promise }] — request đang chạy, cho bên khác chờ chung
+        const _OSM_LAYERS = ['roads', 'buildings', 'water', 'admin'];
+        function _osmBoxContains(o, i) {
+            return !!o && !!i && o.minLat <= i.minLat && o.maxLat >= i.maxLat && o.minLon <= i.minLon && o.maxLon >= i.maxLon;
+        }
+        function _osmLayersCover(had, want) { return _OSM_LAYERS.every(k => !want[k] || (had && had[k])); }
+        // Lát cắt trả cho bên gọi: CHỈ các lớp được xin, CHỈ các way chạm khung xin, luôn là MẢNG MỚI.
+        // Vì cache có thể giàu hơn yêu cầu (tải sẵn có nhà → người dùng bỏ tick nhà; tải sẵn cả quận → MST xin
+        // khung ±65m): không cắt thì hàm vẽ vẽ luôn lớp đã tắt, và MST/căn tuyến duyệt cả quận → UI đơ.
+        // Mảng mới cũng cách ly dữ liệu dùng chung khỏi nơi gọi lỡ sửa tại chỗ.
+        function _osmWayTouches(coords, b) {
+            let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+            for (const c of coords || []) {
+                if (c[0] < x0) x0 = c[0]; if (c[0] > x1) x1 = c[0];
+                if (c[1] < y0) y0 = c[1]; if (c[1] > y1) y1 = c[1];
+            }
+            return x1 >= b.minLon && x0 <= b.maxLon && y1 >= b.minLat && y0 <= b.maxLat;   // coords = [lon, lat]
+        }
+        function _osmView(data, bounds, opts) {
+            const out = {};
+            for (const k of _OSM_LAYERS) {
+                const arr = (opts[k] && data && Array.isArray(data[k])) ? data[k] : [];
+                out[k] = bounds ? arr.filter(w => _osmWayTouches(w.coords, bounds)) : arr.slice();
+            }
+            return out;
+        }
+        function _osmSleep(ms, signal) {
+            return new Promise((resolve, reject) => {
+                const t = setTimeout(() => { if (signal) signal.removeEventListener('abort', onAbort); resolve(); }, ms);
+                function onAbort() { clearTimeout(t); const e = new Error('Đã huỷ tải nền OSM'); e.name = 'AbortError'; reject(e); }
+                if (signal) { if (signal.aborted) return onAbort(); signal.addEventListener('abort', onAbort); }
+            });
+        }
+        // Chờ promise nhưng thôi chờ khi signal huỷ — KHÔNG huỷ bản thân promise (request dùng chung chạy tiếp)
+        function _osmAwait(promise, signal) {
+            if (!signal) return promise;
+            const abortErr = () => { const e = new Error('Đã huỷ tải nền OSM'); e.name = 'AbortError'; return e; };
+            if (signal.aborted) return Promise.reject(abortErr());
+            return new Promise((resolve, reject) => {
+                const onAbort = () => reject(abortErr());
+                signal.addEventListener('abort', onAbort);
+                promise.then(v => { signal.removeEventListener('abort', onAbort); resolve(v); },
+                             e => { signal.removeEventListener('abort', onAbort); reject(e); });
+            });
+        }
+
+        // Xoá cache bộ nhớ — gọi khi đóng modal Xuất CAD. Dữ liệu có nhà của cả quận có thể vài chục MB;
+        // IndexedDB vẫn giữ nên mở lại modal với cùng bộ lọc vẫn nhanh.
+        function _osmClearMem() { _osmMem.length = 0; }
+        window._osmClearMem = _osmClearMem;
+
+        // signal (tuỳ chọn): AbortSignal — bên gọi THÔI CHỜ khi huỷ; request dùng chung vẫn chạy tiếp để lấp cache.
+        //   Cố ý KHÔNG đặt trong `options` vì `options` được lưu IndexedDB — AbortSignal không clone được.
+        // extra.quiet: không hiện toast (tải sẵn chạy ngầm).
+        async function _fetchOsmBasemap(bounds, options, signal, extra) {
             const opts = Object.assign({ roads: true, buildings: true, water: false, admin: false }, options || {});
+            const quiet = !!(extra && extra.quiet);
             const cacheKey = _osmBoundsKey(bounds);
+
+            // 1. Cache bộ nhớ — bao chứa + đủ lớp + còn hạn
+            const nowMs0 = Date.now();
+            for (const m of _osmMem) {
+                if (_osmBoxContains(m.bounds, bounds) && _osmLayersCover(m.opts, opts) && nowMs0 - m.fetchedAt < OSM_CACHE_TTL_MS) return _osmView(m.data, bounds, opts);
+            }
+
+            // 2. IndexedDB — khớp đúng khung
             let staleCovered = null;   // cache hết hạn nhưng đủ lớp — dùng khi mọi máy chủ Overpass đều lỗi
-            // Try cache first (reuse csv-cache store với prefix osm_)
             try {
                 const cached = await _idbGet(cacheKey);
-                // Cache chỉ khóa theo bbox → kiểm cache đã fetch đủ lớp đang cần chưa.
                 // Cache cũ (trước v152) không lưu opts → không biết đã có lớp nào → fetch lại 1 lần.
                 const had = (cached && cached.opts) || {};
-                const covers = ['roads', 'buildings', 'water', 'admin'].every(k => !opts[k] || had[k]);
+                const covers = _osmLayersCover(had, opts);
                 if (cached && covers && cached.fetchedAt && (Date.now() - cached.fetchedAt) < OSM_CACHE_TTL_MS) {
-                    return cached.data;
+                    return _osmView(cached.data, bounds, opts);
                 }
                 if (cached && covers && cached.data) staleCovered = cached.data;
             } catch(e) { /* silent */ }
 
-            // Rate limit — 5s giữa các request
-            const nowMs = Date.now();
-            if (nowMs - _osmFetchLastMs < 5000) {
-                throw new Error('Đợi 5s giữa các request Overpass API để tránh rate limit.');
-            }
-            _osmFetchLastMs = nowMs;
-
-            // Build query
-            const bbox = `${bounds.minLat},${bounds.minLon},${bounds.maxLat},${bounds.maxLon}`;
-            const queries = [];
-            if (opts.roads) queries.push(`way["highway"](${bbox});`);
-            if (opts.buildings) queries.push(`way["building"](${bbox});`);
-            if (opts.water) queries.push(`way["waterway"](${bbox});`);
-            // VN: sau sáp nhập 2025, phường/xã map ở admin_level=6 (168 phường/xã TPHCM).
-            // Tên nằm ở relation, không ở way → phải query relation.
-            if (opts.admin) queries.push(`relation["boundary"="administrative"]["admin_level"~"^(6|8)$"](${bbox});`);
-            const q = `[out:json][timeout:30];(${queries.join('')});out geom;`;
-
-            // Fetch — tự chuyển máy chủ dự phòng khi lỗi; hết máy → dùng cache cũ nếu có
-            let json;
-            try {
-                json = await _overpassFetch(q, (host, k) => {
-                    if (k > 0 && typeof displayInfo === 'function') displayInfo('Máy chủ OSM bận — đang thử ' + host + '...');
-                });
-            } catch (e) {
-                if (staleCovered) {
-                    if (typeof displayInfo === 'function') displayInfo('⚠ Không tải được OSM mới — dùng bản đường đã lưu trước đó.');
-                    return staleCovered;
-                }
-                throw e;
-            }
-
-            // Parse elements → GeoJSON-like features
-            const data = { roads: [], buildings: [], water: [], admin: [] };
-            (json.elements || []).forEach(el => {
-                const tags = el.tags || {};
-                // Ranh hành chính = relation; geometry nằm ở members role='outer'
-                if (el.type === 'relation' && tags.boundary === 'administrative') {
-                    const segTags = { boundary: 'administrative', admin_level: tags.admin_level };
-                    let sumLon = 0, sumLat = 0, n = 0;
-                    (el.members || []).forEach(m => {
-                        if (m.type !== 'way' || m.role !== 'outer' || !m.geometry) return;
-                        const coords = m.geometry.map(g => [g.lon, g.lat]);
-                        coords.forEach(c => { sumLon += c[0]; sumLat += c[1]; n++; });
-                        data.admin.push({ coords, tags: segTags }); // đoạn ranh — không nhãn
+            // 3. Đang có request bao chứa chạy dở (vd tải sẵn) → chờ chung, không gọi lại, không dính rate-limit
+            for (const f of _osmInflight) {
+                if (_osmBoxContains(f.bounds, bounds) && _osmLayersCover(f.opts, opts)) {
+                    return _osmAwait(f.promise, signal).then(d => _osmView(d, bounds, opts), e => {
+                        if (staleCovered && !(e && e.name === 'AbortError')) {
+                            if (!quiet && typeof displayInfo === 'function') displayInfo('⚠ Không tải được OSM mới — dùng bản đường đã lưu trước đó.');
+                            return _osmView(staleCovered, bounds, opts);
+                        }
+                        throw e;
                     });
-                    // 1 entry nhãn duy nhất tại centroid (coords 1 điểm → không vẽ line)
-                    if (n > 0 && tags.name) data.admin.push({ coords: [[sumLon / n, sumLat / n]], tags });
-                    return;
                 }
-                if (el.type !== 'way' || !el.geometry) return;
-                const coords = el.geometry.map(g => [g.lon, g.lat]);
-                if (tags.highway) data.roads.push({ coords, tags });
-                else if (tags.building) data.buildings.push({ coords, tags });
-                else if (tags.waterway) data.water.push({ coords, tags });
-                else if (tags.boundary === 'administrative') data.admin.push({ coords, tags });
-            });
+            }
 
-            // Cache
-            try {
-                await _idbSet(cacheKey, { data, fetchedAt: Date.now(), bounds, opts });
-            } catch(e) { /* silent */ }
+            // Rate limit — 5s giữa các request.
+            // Bên chủ động (bấm xuất) CHỜ hết phần còn lại rồi thử lại từ đầu (lúc đó có thể đã có cache / request
+            // chung bao chứa). Trước đây ném lỗi → tải sẵn vừa chạy là lần xuất mất nền. Tải sẵn (quiet) thì nhường.
+            const waitMs = 5000 - (Date.now() - _osmFetchLastMs);
+            if (waitMs > 0) {
+                if (quiet) throw new Error('Đợi 5s giữa các request Overpass API để tránh rate limit.');
+                await _osmSleep(waitMs + 20, signal);
+                return _fetchOsmBasemap(bounds, options, signal, extra);
+            }
+            _osmFetchLastMs = Date.now();
 
-            return data;
+            const entry = { bounds, opts, promise: null };
+            entry.promise = (async () => {
+                // Build query
+                const bbox = `${bounds.minLat},${bounds.minLon},${bounds.maxLat},${bounds.maxLon}`;
+                const queries = [];
+                if (opts.roads) queries.push(`way["highway"](${bbox});`);
+                if (opts.buildings) queries.push(`way["building"](${bbox});`);
+                if (opts.water) queries.push(`way["waterway"](${bbox});`);
+                // VN: sau sáp nhập 2025, phường/xã map ở admin_level=6 (168 phường/xã TPHCM).
+                // Tên nằm ở relation, không ở way → phải query relation.
+                if (opts.admin) queries.push(`relation["boundary"="administrative"]["admin_level"~"^(6|8)$"](${bbox});`);
+                const q = `[out:json][timeout:30];(${queries.join('')});out geom;`;
+
+                // Fetch — hedged qua các máy chủ; hết máy → dùng cache cũ nếu có.
+                // KHÔNG truyền signal của bên gọi: request này có thể đang được nhiều bên chờ chung.
+                let json;
+                try {
+                    json = await _overpassFetch(q, (host, k) => {
+                        if (!quiet && typeof displayInfo === 'function') displayInfo(k === 0 ? '🌐 Đang tải nền OSM…' : '🌐 Máy chủ OSM chậm/lỗi — thử thêm ' + host + '…');
+                    }, { timeoutMs: _overpassTimeoutFor(bounds, opts) });
+                } catch (e) {
+                    if (staleCovered) {
+                        if (!quiet && typeof displayInfo === 'function') displayInfo('⚠ Không tải được OSM mới — dùng bản đường đã lưu trước đó.');
+                        return staleCovered;   // bên gọi cắt lát ở dưới (_osmAwait(...).then(_osmView))
+                    }
+                    throw e;
+                }
+
+                // Parse elements → GeoJSON-like features
+                const data = { roads: [], buildings: [], water: [], admin: [] };
+                (json.elements || []).forEach(el => {
+                    const tags = el.tags || {};
+                    // Ranh hành chính = relation; geometry nằm ở members role='outer'
+                    if (el.type === 'relation' && tags.boundary === 'administrative') {
+                        const segTags = { boundary: 'administrative', admin_level: tags.admin_level };
+                        let sumLon = 0, sumLat = 0, n = 0;
+                        (el.members || []).forEach(m => {
+                            if (m.type !== 'way' || m.role !== 'outer' || !m.geometry) return;
+                            const coords = m.geometry.map(g => [g.lon, g.lat]);
+                            coords.forEach(c => { sumLon += c[0]; sumLat += c[1]; n++; });
+                            data.admin.push({ coords, tags: segTags }); // đoạn ranh — không nhãn
+                        });
+                        // 1 entry nhãn duy nhất tại centroid (coords 1 điểm → không vẽ line)
+                        if (n > 0 && tags.name) data.admin.push({ coords: [[sumLon / n, sumLat / n]], tags });
+                        return;
+                    }
+                    if (el.type !== 'way' || !el.geometry) return;
+                    const coords = el.geometry.map(g => [g.lon, g.lat]);
+                    if (tags.highway) data.roads.push({ coords, tags });
+                    else if (tags.building) data.buildings.push({ coords, tags });
+                    else if (tags.waterway) data.water.push({ coords, tags });
+                    else if (tags.boundary === 'administrative') data.admin.push({ coords, tags });
+                });
+
+                // Cache — bộ nhớ (bao chứa) + IndexedDB (đúng khung, sống qua lần mở app sau)
+                _osmMem.unshift({ bounds, opts, data, fetchedAt: Date.now() });
+                if (_osmMem.length > _OSM_MEM_MAX) _osmMem.length = _OSM_MEM_MAX;
+                // KHÔNG await: _idbSet không bắt tx.onabort (vd hết dung lượng) → có thể treo vĩnh viễn và kẹt
+                // mọi bên đang chờ chung request này. Ghi ngầm, lỗi thì thôi (đã có cache bộ nhớ).
+                try { Promise.resolve(_idbSet(cacheKey, { data, fetchedAt: Date.now(), bounds, opts })).catch(() => {}); } catch(e) { /* silent */ }
+
+                return data;
+            })();
+            _osmInflight.push(entry);
+            const unregister = () => { const i = _osmInflight.indexOf(entry); if (i >= 0) _osmInflight.splice(i, 1); };
+            entry.promise.then(unregister, unregister);
+            return _osmAwait(entry.promise, signal).then(d => _osmView(d, bounds, opts));
         }
         window._fetchOsmBasemap = _fetchOsmBasemap;
 

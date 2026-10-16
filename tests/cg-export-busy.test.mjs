@@ -22,6 +22,7 @@ const btns = {
 const footer = { querySelectorAll: sel => sel === 'button[id]' ? Object.values(btns) : [] };
 Object.values(btns).forEach(b => { b.parentElement = footer; });
 sb.ctx.setInterval = setInterval; sb.ctx.clearInterval = clearInterval;
+sb.ctx.AbortController = AbortController;
 sb.ctx.document = Object.assign(sb.ctx.document || {}, { getElementById: id => btns[id] || null });
 
 let release, runs = 0, throwNext = false;
@@ -32,13 +33,28 @@ const p = sb.ctx._onCgExport('dxf');
 await new Promise(r => setTimeout(r, 0));
 const d = btns.cgBtnDxf;
 ok('đang chạy: nút DXF hiện vòng xoay + "Đang xuất…"', /cg-busy-spin/.test(d.innerHTML) && /Đang xuất…/.test(d.innerHTML));
-ok('đang chạy: nút DXF bị disable + aria-busy', d.disabled && d.attrs['aria-busy'] === 'true' && d.classList.has('cg-busy'));
+// v182: nút đang bận KHÔNG disabled nữa — bấm lần nữa = bỏ qua nền OSM, xuất ngay (Overpass có máy treo 45s+).
+ok('đang chạy: nút DXF aria-busy + cg-busy, vẫn bấm được để bỏ qua OSM', !d.disabled && d.attrs['aria-busy'] === 'true' && d.classList.has('cg-busy'));
 ok('đang chạy: các nút xuất khác bị khoá', btns.cgBtnPdf.disabled && btns.cgBtnPreview.disabled && btns.cgBtnBoth.disabled);
 sb.ctx._onCgExport('dxf'); sb.ctx._onCgExport('pdf');
 await new Promise(r => setTimeout(r, 0));
 ok('bấm thêm khi đang chạy → không chạy lần 2', runs === 1);
+ok('bấm lại trong 800ms đầu → CHƯA bỏ qua OSM (chống double-click vô tình)',
+    !!sb.run('_cgExportAbort') && sb.run('_cgExportAbort.signal.aborted') === false);
 await new Promise(r => setTimeout(r, 1100));
 ok('đếm giây: sau ~1s hiện "1s"', /Đang xuất… 1s/.test(d.innerHTML));
+// Không đang chờ OSM (vd đang tạo PDF) → bấm nút bận không làm gì, không hiện gợi ý bỏ qua
+sb.ctx._onCgExport('dxf');
+ok('không chờ OSM → bấm nút bận KHÔNG bỏ qua gì', sb.run('_cgExportAbort.signal.aborted') === false);
+ok('không chờ OSM → không có gợi ý bỏ qua', !d.title);
+// Đang chờ Overpass → nhãn nói rõ, có gợi ý; bấm = bỏ qua nền OSM
+sb.run('_cgOsmFetching = true');
+await new Promise(r => setTimeout(r, 300));
+ok('đang chờ OSM → nhãn "Đang tải nền OSM…" + gợi ý bỏ qua', /Đang tải nền OSM…/.test(d.innerHTML) && /bỏ qua nền OSM/.test(d.title || ''));
+sb.ctx._onCgExport('dxf');
+ok('bấm lại khi đang chờ OSM (>800ms) → phát tín hiệu bỏ qua', sb.run('_cgExportAbort.signal.aborted') === true);
+ok('bỏ qua OSM không khởi chạy lần xuất thứ 2', runs === 1);
+sb.run('_cgOsmFetching = false');
 release(); await p;
 ok('xong: nút DXF trở lại "DXF", bật lại', d.innerHTML === 'DXF' && !d.disabled && !d.classList.has('cg-busy') && !('aria-busy' in d.attrs));
 ok('xong: nút khác bật lại; nút vốn disabled (BOM) vẫn disabled',

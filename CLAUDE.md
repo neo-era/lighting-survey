@@ -1521,7 +1521,7 @@ Cho phép app quản lý dữ liệu nhiều địa bàn hành chính (quận, h
 // Mỗi địa bàn cần 1 CSV URL riêng (publish từng tab trong Google Sheet)
 const DISTRICT_PAGES = [
     { label: 'Tổng quan',        sheet: 'DanhSachTru', csvUrl: KHAOSAT_CSV_URL },
-    { label: 'Quận 1',           sheet: 'Quan1',       csvUrl: 'https://docs.google.com/spreadsheets/d/.../gviz/tq?tqx=out:csv&sheet=Quan1' },
+    { label: 'Quận 1',           sheet: 'Quan1',       csvUrl: 'https://docs.google.com/spreadsheets/d/e/2PACX-.../pub?output=csv&gid=...' },
     { label: 'Quận 3',           sheet: 'Quan3',       csvUrl: '...' },
     { label: 'Quận 5',           sheet: 'Quan5',       csvUrl: '...' },
     { label: 'Quận 8',           sheet: 'Quan8',       csvUrl: '...' },
