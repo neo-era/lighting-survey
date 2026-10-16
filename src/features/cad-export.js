@@ -2438,7 +2438,7 @@
                     opts.osmOptions || {}, { roads: _needRoads });
                 try {
                     if (_orientByRoad && typeof displayInfo === 'function') displayInfo('🧭 Đang lấy hướng đường từ OSM...');
-                    _osmData = await _fetchOsmBasemap(_osmBbox, fetchOpts);
+                    _osmData = await _cgFetchOsm(_osmBbox, fetchOpts, opts.signal);
                 } catch (err) {
                     _osmErr = err;
                     console.warn('[CAD Gen] Overpass lỗi:', err.message);
@@ -2457,7 +2457,8 @@
                     const la = parseCoord(r[2]), lo = parseCoord(r[3]);
                     if (nm && isFinite(la) && isFinite(lo) && !_parentLL.has(nm)) _parentLL.set(nm, [la, lo]);
                 });
-                if (_osmErr && typeof displayWarning === 'function') {
+                if (_osmErr && _osmErr.name === 'AbortError') _cgNotifyOsmSkipped();
+                else if (_osmErr && typeof displayWarning === 'function') {
                     displayWarning('⚠ Không lấy được đường OSM (' + _osmErr.message + ') — block xoay theo tuyến cáp.');
                 }
             }
@@ -2553,7 +2554,8 @@
                 if (_osmErr || !_osmData) {
                     // Không throw — OSM fail không được block export
                     if (typeof displayError === 'function') {
-                        displayError('⚠ Nền OSM lỗi (' + (_osmErr ? _osmErr.message : 'không có dữ liệu') + ') — bản vẽ vẫn xuất bình thường không có nền.');
+                        if (_osmErr && _osmErr.name === 'AbortError') _cgNotifyOsmSkipped();
+                        else displayError('⚠ Nền OSM lỗi (' + (_osmErr ? _osmErr.message : 'không có dữ liệu') + ') — bản vẽ vẫn xuất bình thường không có nền.');
                     }
                 } else {
                     try {
@@ -3703,6 +3705,12 @@
             _cgAutoDetectMeridian();
             modal.style.display = 'flex';
             if (typeof closeControlsModal === 'function') closeControlsModal();
+            // Tải sẵn nền OSM; đổi bật/tắt OSM, hướng theo đường, lớp, bộ lọc → hẹn lại (debounce)
+            if (!modal.dataset.cgWarmHooked) {
+                modal.addEventListener('change', () => _cgScheduleWarmOsm(1500));
+                modal.dataset.cgWarmHooked = '1';
+            }
+            _cgScheduleWarmOsm(600);
         }
 
         // F3: Auto-detect meridian từ centroid Lat/Lon của filtered rows
@@ -3737,6 +3745,9 @@
         function _closeCadGenerator() {
             const modal = document.getElementById('cadGeneratorModal');
             if (modal) modal.style.display = 'none';
+            // Bỏ hẹn tải sẵn + nhả RAM: dữ liệu OSM có nhà của cả quận có thể vài chục MB (IndexedDB vẫn giữ)
+            if (_cgWarmTimer) { clearTimeout(_cgWarmTimer); _cgWarmTimer = null; }
+            if (typeof _osmClearMem === 'function') _osmClearMem();
         }
         window._openCadGenerator = _openCadGenerator;
         window._closeCadGenerator = _closeCadGenerator;
@@ -3914,6 +3925,7 @@
         }
 
         function _cgUpdateLiveCounter() {
+            _cgScheduleWarmOsm(1500);   // khung đổi → tải sẵn lại nền OSM (debounce)
             const rows = _filterRowsForCadExport(_cgCurrentFilters);
             const el = document.getElementById('cgLiveCounter');
             const total = (loadedData || []).length - 1;
@@ -4297,9 +4309,33 @@
         // (chống bấm trùng khi đang tải nền OSM / tạo file). Luôn khôi phục trong finally.
         const _CG_EXPORT_BTNS = { preview: 'cgBtnPreview', dxf: 'cgBtnDxf', pdf: 'cgBtnPdf', both: 'cgBtnBoth' };
         let _cgExportBusy = false;
+        let _cgExportAbort = null;     // AbortController của lần xuất đang chạy
+        let _cgOsmFetching = false;    // đang chờ Overpass — chỉ lúc này bấm nút bận mới có tác dụng
+        let _cgOsmSkipNotified = false; // đã báo "bỏ qua nền OSM" trong lần xuất này chưa (nhiều tờ → chỉ báo 1 lần)
+        // Bọc lời gọi Overpass của luồng xuất: bật/tắt cờ để nút bận biết khi nào cho bỏ qua
+        async function _cgFetchOsm(bbox, fetchOpts, signal) {
+            _cgOsmFetching = true;
+            try { return await _fetchOsmBasemap(bbox, fetchOpts, signal); }
+            finally { _cgOsmFetching = false; }
+        }
+        function _cgNotifyOsmSkipped() {
+            if (_cgOsmSkipNotified) return;
+            _cgOsmSkipNotified = true;
+            if (typeof displayInfo === 'function') displayInfo('⏭ Đã bỏ qua nền OSM theo yêu cầu — bản vẽ xuất không có nền đường.');
+        }
+        let _cgExportT0 = 0;
+        // Bấm lại nút đang bận = BỎ QUA nền OSM, xuất ngay. Không huỷ hẳn việc xuất: nền OSM vốn là phần
+        // tuỳ chọn (lỗi OSM đã không chặn xuất), nên dừng chờ mạng rồi vẫn ra bản vẽ là kết quả hữu ích nhất.
+        // Bỏ qua cú bấm trong 800ms đầu để double-click vô tình không kích hoạt.
         async function _onCgExport(mode) {
-            if (_cgExportBusy) return;
+            if (_cgExportBusy) {
+                if (_cgOsmFetching && _cgExportAbort && !_cgExportAbort.signal.aborted && Date.now() - _cgExportT0 > 800) _cgExportAbort.abort();
+                return;
+            }
             _cgExportBusy = true;
+            _cgExportAbort = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+            _cgExportT0 = Date.now();
+            _cgOsmSkipNotified = false;
             const btn = document.getElementById(_CG_EXPORT_BTNS[mode]);
             const footer = btn && btn.parentElement;
             const others = footer ? [...footer.querySelectorAll('button[id]')].filter(b => b !== btn) : [];   // nút Hủy (không id) vẫn bấm được
@@ -4308,15 +4344,21 @@
             const render = () => {
                 if (!btn) return;
                 const sec = Math.floor((Date.now() - t0) / 1000);
-                btn.innerHTML = '<span class="cg-busy-spin" aria-hidden="true"></span>Đang xuất…' + (sec > 0 ? ' ' + sec + 's' : '');
+                const skipping = _cgExportAbort && _cgExportAbort.signal.aborted;
+                const canSkip = _cgOsmFetching && !!_cgExportAbort && !skipping;
+                const what = skipping ? 'Bỏ qua OSM…' : (_cgOsmFetching ? 'Đang tải nền OSM…' : 'Đang xuất…');
+                btn.innerHTML = '<span class="cg-busy-spin" aria-hidden="true"></span>' + what + (sec > 0 ? ' ' + sec + 's' : '');
+                const tip = canSkip ? 'Bấm để bỏ qua nền OSM và xuất ngay' : '';
+                if (tip) { btn.title = tip; btn.setAttribute('aria-label', what + ' ' + tip); }
+                else { btn.removeAttribute('title'); btn.removeAttribute('aria-label'); }
             };
             let timer = null;
             if (btn) {
-                btn.disabled = true;
+                // Không disabled: bấm lần nữa = bỏ qua nền OSM (đã chặn chạy trùng bằng _cgExportBusy)
                 btn.classList.add('cg-busy');
                 btn.setAttribute('aria-busy', 'true');
                 render();
-                timer = setInterval(render, 1000);
+                timer = setInterval(render, 250);   // 250ms: nhãn "Đang tải nền OSM…" hiện ngay khi bắt đầu chờ
             }
             others.forEach(b => { b.dataset.cgWasDisabled = b.disabled ? '1' : ''; b.disabled = true; b.classList.add('cg-locked'); });
             try {
@@ -4328,8 +4370,11 @@
                     btn.disabled = false;
                     btn.classList.remove('cg-busy');
                     btn.removeAttribute('aria-busy');
+                    btn.removeAttribute('title');
+                    btn.removeAttribute('aria-label');
                 }
                 others.forEach(b => { b.disabled = b.dataset.cgWasDisabled === '1'; b.classList.remove('cg-locked'); delete b.dataset.cgWasDisabled; });
+                _cgExportAbort = null;
                 _cgExportBusy = false;
             }
         }
@@ -4362,7 +4407,10 @@
                 orientByRoad: !!(document.getElementById('cgOrientByRoad') || {}).checked,  // v152
                 cadBaseOptions: (typeof _cgCollectCadBaseOpts === 'function') ? _cgCollectCadBaseOpts() : null,  // CAD nền từ upload
                 includeCable: (document.getElementById('cgIncludeCable') || {}).checked !== false,  // default true — cho phép tắt cáp
-                frameMode: (document.getElementById('cgFrameMode') || {}).value || 'auto-fit'   // 'auto-fit' | 'a3-standard'
+                frameMode: (document.getElementById('cgFrameMode') || {}).value || 'auto-fit',   // 'auto-fit' | 'a3-standard'
+                // Chỉ gắn khi xuất file: opts của preview được giữ lại (_pdfPreviewCurrentOpts) để xuất DXF sau —
+                // nếu mang theo signal đã huỷ thì lần xuất đó sẽ bỏ qua OSM mà người dùng không hề yêu cầu.
+                signal: (_cgExportAbort && (mode === 'dxf' || mode === 'both')) ? _cgExportAbort.signal : undefined
             };
 
             // 'none' = chỉ dữ liệu: PDF luôn vẽ khung tên (exportDrawingPDF) → chỉ cho xuất DXF; không có ô con dấu
@@ -4558,10 +4606,12 @@
 
         // v152 — Fetch Overpass 1 lần cho bbox toàn bộ trụ đang lọc, dùng chung cho nhiều tờ/nhiều tủ.
         // Không có cái này, tờ thứ 2 trở đi bị rate-limit 5s của _fetchOsmBasemap → mất nền + hướng block.
-        async function _cgPrefetchOsm(opts, filters) {
-            if (!(opts.osmOptions || opts.orientByRoad) || typeof _fetchOsmBasemap !== 'function') return null;
+        // Khung OSM cho tập marker theo bộ lọc — CÙNG công thức với _generateCadDrawing (±0.001° ≈ 100m).
+        // Không áp "loại điểm ngoại lai": bỏ điểm chỉ làm khung nhỏ lại, nên khung này luôn BAO CHỨA khung lúc xuất
+        // → cache bộ nhớ của _fetchOsmBasemap (tra theo bao chứa) vẫn trúng.
+        function _cgOsmBboxForFilters(filters) {
             let minLat = Infinity, maxLat = -Infinity, minLon = Infinity, maxLon = -Infinity;
-            for (const r of _filterRowsForCadExport(filters || opts.filters || {})) {
+            for (const r of _filterRowsForCadExport(filters || {})) {
                 const lat = parseCoord(r[2]), lon = parseCoord(r[3]);
                 if (!isFinite(lat) || !isFinite(lon)) continue;
                 if (lat < minLat) minLat = lat;
@@ -4570,12 +4620,55 @@
                 if (lon > maxLon) maxLon = lon;
             }
             if (!isFinite(minLat)) return null;
-            const bbox = { minLat: minLat - 0.001, maxLat: maxLat + 0.001, minLon: minLon - 0.001, maxLon: maxLon + 0.001 };
-            const fetchOpts = Object.assign({ roads: false, buildings: false, water: false, admin: false },
-                opts.osmOptions || {}, { roads: !!(opts.orientByRoad || (opts.osmOptions && opts.osmOptions.roads)) });
+            return { minLat: minLat - 0.001, maxLat: maxLat + 0.001, minLon: minLon - 0.001, maxLon: maxLon + 0.001 };
+        }
+        function _cgOsmFetchOpts(osmOptions, orientByRoad) {
+            return Object.assign({ roads: false, buildings: false, water: false, admin: false },
+                osmOptions || {}, { roads: !!(orientByRoad || (osmOptions && osmOptions.roads)) });
+        }
+
+        // ── Tải sẵn nền OSM khi mở modal Xuất CAD ──
+        // Người dùng mất 10–60s chọn bộ lọc / khung tên → đủ để tải xong, bấm xuất là trúng cache.
+        // KHÔNG tải lúc mở bản đồ: phần lớn người dùng (khảo sát viên) không bao giờ xuất CAD — tải lúc đó chỉ tốn
+        // 3G, chặn UI khi parse JSON lớn, và nhân tải lên máy chủ Overpass công cộng (thêm 429 cho người cần xuất).
+        // var (không phải let): _cgUpdateLiveCounter nằm PHÍA TRÊN trong file và có thể chạy trước dòng này → let sẽ dính TDZ
+        var _cgWarmTimer = null;
+        var _cgWarmFailAt = 0;   // lần tải sẵn lỗi gần nhất — nghỉ 30s, tránh mỗi lần sửa ô lại bắn Overpass
+        function _cgScheduleWarmOsm(delayMs) {
+            if (_cgWarmTimer) clearTimeout(_cgWarmTimer);
+            _cgWarmTimer = setTimeout(_cgWarmOsm, delayMs);
+        }
+        function _cgWarmOsm() {
+            _cgWarmTimer = null;
+            const modal = document.getElementById('cadGeneratorModal');
+            if (!modal || modal.style.display === 'none' || typeof _fetchOsmBasemap !== 'function') return;
+            if (_cgExportBusy) return;                              // đang xuất → lần xuất tự tải, đừng bắn thêm
+            if (Date.now() - _cgWarmFailAt < 30000) return;          // vừa lỗi → nghỉ, lúc xuất sẽ thử lại
+            const osmOptions = (typeof _cgCollectOsmOpts === 'function') ? _cgCollectOsmOpts() : null;
+            const orientByRoad = !!(document.getElementById('cgOrientByRoad') || {}).checked;
+            if (!osmOptions && !orientByRoad) return;            // không dùng OSM → không tải
+            const bbox = _cgOsmBboxForFilters(_cgCurrentFilters);
+            if (!bbox) return;
+            // Tôn trọng rate-limit 5s: vừa có request thì hẹn lại, đừng để lỗi nuốt mất lượt tải sẵn
+            const wait = 5000 - (Date.now() - (typeof _osmFetchLastMs === 'number' ? _osmFetchLastMs : 0));
+            if (wait > 0) { _cgScheduleWarmOsm(wait + 100); return; }
+            _fetchOsmBasemap(bbox, _cgOsmFetchOpts(osmOptions, orientByRoad), undefined, { quiet: true })
+                .catch(e => {
+                    // Rate-limit thì hẹn lại; lỗi mạng thật thì nghỉ 30s
+                    if (e && /Đợi 5s/.test(e.message)) { _cgScheduleWarmOsm(5100); return; }
+                    _cgWarmFailAt = Date.now();
+                    console.warn('[CAD] Tải sẵn OSM lỗi (lúc xuất sẽ thử lại):', e && e.message);
+                });
+        }
+
+        async function _cgPrefetchOsm(opts, filters) {
+            if (!(opts.osmOptions || opts.orientByRoad) || typeof _fetchOsmBasemap !== 'function') return null;
+            const bbox = _cgOsmBboxForFilters(filters || opts.filters || {});
+            if (!bbox) return null;
+            const fetchOpts = _cgOsmFetchOpts(opts.osmOptions, opts.orientByRoad);
             try {
                 if (typeof displayInfo === 'function') displayInfo('🗺 Đang tải dữ liệu OSM cho toàn bộ bản vẽ...');
-                return { data: await _fetchOsmBasemap(bbox, fetchOpts), err: null };
+                return { data: await _cgFetchOsm(bbox, fetchOpts, opts.signal), err: null };
             } catch (err) {
                 return { data: null, err };
             }
@@ -4773,7 +4866,7 @@
                 await exportDrawingPDF({ returnBlob: true });
                 const blob = window._lastPdfBlob;
                 if (!blob) throw new Error('Không tạo được PDF Blob');
-                _pdfPreviewCurrentOpts = opts;
+                _pdfPreviewCurrentOpts = Object.assign({}, opts, { signal: undefined });   // không giữ signal của lần bấm này
                 _showPdfPreviewModal(blob);
             } catch (err) {
                 console.error('[Preview PDF]', err);

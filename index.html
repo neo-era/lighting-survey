@@ -9623,7 +9623,14 @@
                 await _idbSet(sheetName, { data: parsed, fetchedAt: new Date().toISOString() });
             } catch (err) {
                 if (!renderedFromCache) {
-                    displayError('Không tải được dữ liệu: ' + err.message);
+                    // 'Failed to fetch' là lỗi trần của trình duyệt, không kèm status — hay gặp nhất
+                    // khi URL CSV đòi đăng nhập (sheet chưa chia sẻ công khai): Google chuyển hướng
+                    // sang trang login khác origin và CORS chặn, nên fetch không đọc được mã lỗi.
+                    var _m = String((err && err.message) || err || '');
+                    var _hint = /failed to fetch|networkerror|load failed|access control|^HTTP (401|403)$|dữ liệu rỗng/i.test(_m)
+                        ? ' — kiểm tra mạng, hoặc Google Sheet của địa bàn này chưa chia sẻ công khai (Share → Anyone with the link → Viewer).'
+                        : '';
+                    displayError('Không tải được dữ liệu: ' + _m + _hint);
                     if (sheetName === 'DanhSachTru') loadDefaultFile();
                 }
             }
