@@ -603,6 +603,43 @@
     </div>
 
     <!-- ═══ AUTO-GEN CABLE MST MODAL (T22) ═══ -->
+    <!-- v179 — Xuất tổng hợp tuyến theo mẫu Excel -->
+    <div id="routeSummaryModal" role="dialog" aria-modal="true" aria-labelledby="rsTitleH" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:9700;align-items:center;justify-content:center;padding:16px;" onclick="if(event.target===this)_closeRouteSummary()" onkeydown="if(event.key==='Escape')_closeRouteSummary()">
+        <div style="background:#fff;border-radius:14px;max-width:520px;width:100%;max-height:92vh;overflow:auto;padding:18px 20px;box-shadow:0 12px 40px rgba(15,23,42,.3);font-size:13px;color:#1e293b;">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+                <h4 id="rsTitleH" style="margin:0;font-size:16px;font-weight:800;">📑 Xuất tổng hợp tuyến</h4>
+                <button onclick="_closeRouteSummary()" aria-label="Đóng" style="background:none;border:none;font-size:24px;cursor:pointer;color:#64748b;min-width:44px;min-height:44px;">×</button>
+            </div>
+            <div style="font-weight:700;margin:4px 0 6px;">Mẫu</div>
+            <label style="display:flex;gap:8px;align-items:flex-start;padding:8px 10px;border:1.5px solid #cbd5e1;border-radius:10px;margin-bottom:6px;cursor:pointer;">
+                <input type="radio" name="rsTpl" value="ct5" checked onchange="_rsUpdateInfo()" style="width:18px;height:18px;margin-top:2px;">
+                <span><b>Tổng hợp tuyến khảo sát</b> <span style="color:#64748b;">(mẫu CT5 — lý trình, vỉa hè, dải phân cách, HPS/LED, loại trụ, toạ độ đầu/cuối)</span></span></label>
+            <label style="display:flex;gap:8px;align-items:flex-start;padding:8px 10px;border:1.5px solid #cbd5e1;border-radius:10px;margin-bottom:10px;cursor:pointer;">
+                <input type="radio" name="rsTpl" value="wdx" onchange="_rsUpdateInfo()" style="width:18px;height:18px;margin-top:2px;">
+                <span><b>Dữ liệu WebDialux-CS</b> <span style="color:#64748b;">(38 cột — nạp thẳng vào WebDialux-CS để tính chiếu sáng)</span></span></label>
+            <div style="font-weight:700;margin:4px 0 6px;">Gom trụ thành tuyến</div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;">
+                <label style="flex:1;min-width:110px;display:flex;gap:6px;align-items:center;padding:8px 10px;border:1.5px solid #cbd5e1;border-radius:10px;cursor:pointer;min-height:44px;"><input type="radio" name="rsMode" value="tu" checked onchange="_rsUpdateInfo()"> Theo tủ</label>
+                <label style="flex:1;min-width:110px;display:flex;gap:6px;align-items:center;padding:8px 10px;border:1.5px solid #cbd5e1;border-radius:10px;cursor:pointer;min-height:44px;"><input type="radio" name="rsMode" value="duong_tu" onchange="_rsUpdateInfo()"> Đường + Tủ</label>
+                <label style="flex:1;min-width:110px;display:flex;gap:6px;align-items:center;padding:8px 10px;border:1.5px solid #cbd5e1;border-radius:10px;cursor:pointer;min-height:44px;"><input type="radio" name="rsMode" value="ten" onchange="_rsUpdateInfo()"> Tên tuyến</label>
+            </div>
+            <label style="display:block;font-weight:700;margin-bottom:4px;" for="rsTu">Phạm vi</label>
+            <select id="rsTu" onchange="_rsUpdateInfo()" style="width:100%;min-height:44px;padding:6px 8px;border:1.5px solid #cbd5e1;border-radius:8px;font-size:16px;margin-bottom:6px;"></select>
+            <div id="rsInfo" aria-live="polite" style="color:#0f766e;font-weight:700;margin-bottom:10px;">—</div>
+            <div id="rsTitleWrap">
+                <label style="display:block;font-weight:700;margin-bottom:4px;" for="rsTitle">Tiêu đề bảng</label>
+                <input id="rsTitle" type="text" style="width:100%;min-height:44px;padding:6px 8px;border:1.5px solid #cbd5e1;border-radius:8px;font-size:16px;margin-bottom:10px;">
+            </div>
+            <label style="display:flex;gap:8px;align-items:flex-start;padding:8px 10px;background:#fffbeb;border:1.5px solid #fde68a;border-radius:10px;cursor:pointer;margin-bottom:12px;">
+                <input type="checkbox" id="rsOsm" checked style="width:18px;height:18px;margin-top:2px;">
+                <span>Điền thêm từ bản đồ OSM — bề rộng lòng đường, số làn, dải phân cách, loại tuyến, cách bố trí, lý trình. <b>Ô đoán từ OSM tô vàng</b> để anh rà.</span></label>
+            <div style="display:grid;grid-template-columns:1fr 2fr;gap:8px;">
+                <button onclick="_closeRouteSummary()" class="ctrl-btn outline" style="margin-bottom:0;min-height:44px;">Hủy</button>
+                <button id="rsBtn" onclick="_exportRouteSummary()" class="ctrl-btn primary" style="margin-bottom:0;min-height:44px;font-weight:800;">⬇ Xuất Excel</button>
+            </div>
+        </div>
+    </div>
+
     <div id="autoMstModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9700;align-items:center;justify-content:center;padding:16px;" onclick="if(event.target===this)_closeAutoMstModal()">
         <div style="background:var(--surface-solid);border-radius:12px;max-width:520px;width:100%;padding:20px;box-shadow:0 10px 40px rgba(0,0,0,.3);">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
@@ -1232,6 +1269,11 @@
                         <input type="file" id="csvImportInput" accept=".csv,.xlsx,.xls" style="display:none" onchange="_onCsvImportChange(this)">
                         <button onclick="document.getElementById('csvImportInput').click()" class="ctrl-btn outline" style="margin-bottom:0;font-size:12px;padding:8px;margin-top:6px;width:100%;">
                             📂 Nhập tọa độ CSV/Excel (VN-2000 · Lat/Lon · Nuwa RTK)
+                        </button>
+
+                        <!-- v179 — Xuất tổng hợp tuyến theo mẫu Excel (CT5 / WebDialux-CS) -->
+                        <button onclick="_openRouteSummary()" class="ctrl-btn outline" style="margin-bottom:0;font-size:12px;padding:8px;margin-top:6px;width:100%;color:#0f766e;border-color:#5eead4;">
+                            📑 Xuất tổng hợp tuyến (mẫu CT5 · WebDialux)
                         </button>
 
                         <!-- T21 CAD Generator — xuất bản vẽ thiết kế DXF+PDF -->
@@ -2863,6 +2905,7 @@
     <script src="src/core/mst.js"></script>
     <script src="src/features/cable-check.js"></script>
     <script src="src/features/align-route.js"></script>
+    <script src="src/features/route-summary.js"></script>
     <script src="src/features/cable.js"></script>
     <script src="src/features/media.js"></script>
 
