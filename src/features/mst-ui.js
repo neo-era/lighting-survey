@@ -10,19 +10,61 @@
         let _mstResult = null;       // { edges: [{fromRow, toRow, dist}], nodes, warnings }
         let _mstPreviewLayer = null; // L.layerGroup của preview trên map
 
-        function _openAutoMstModal() {
+        // v185 — Gom node theo TỦ (cột Tủ điều khiển) hoặc theo TÊN TUYẾN (tên trụ bỏ số) — dữ liệu chưa gán tủ cho trụ
+        // (vd Bàu Bàng: chỉ dòng tủ có cột Tủ) thì gom theo tủ mỗi tủ chỉ 1 node → không chạy được.
+        // Giá trị option chế độ tên tuyến: 'ten:<basename chuẩn hoá>'.
+        let _mstGroupBy = 'tu';
+        const _mstIsPoleRow = r => { const t = parseInt(r[6]); return t >= 1 && t <= 4; };
+        const _mstRawBase = n => String(n || '').trim().replace(/\s*\([^()]*\)$/, '').replace(/[_\s\-]*\d+$/, '') || String(n || '').trim();
+        function _mstRouteOptions() {
+            const m = new Map();   // basename chuẩn hoá → { label, n }
+            for (const r of (loadedData || []).slice(1)) {
+                if (!_mstIsPoleRow(r) || !isFinite(parseCoord(r[2])) || !isFinite(parseCoord(r[3]))) continue;
+                const nb = normalizeMarkerBaseName(String(r[1] || '').trim());
+                if (!nb) continue;
+                if (!m.has(nb)) m.set(nb, { label: _mstRawBase(r[1]), n: 0 });
+                m.get(nb).n++;
+            }
+            return [...m].map(([nb, v]) => ({ value: 'ten:' + nb, label: `${v.label} (${v.n} trụ)`, n: v.n }))
+                .sort((a, b) => a.label.localeCompare(b.label, 'vi', { numeric: true }));
+        }
+        function _mstFillSelect() {
+            const sel = document.getElementById('mstTuSelect');
+            if (!sel) return 0;
+            let opts;
+            if (_mstGroupBy === 'ten') opts = _mstRouteOptions();
+            else opts = _getUniqueCabinets().map(t => ({ value: t, label: t }));
+            sel.innerHTML = opts.map(o => `<option value="${_esc(o.value)}">${_esc(o.label)}</option>`).join('');
+            if (sel.options.length > 0) sel.options[0].selected = true;
+            document.querySelectorAll('input[name="mstGroupBy"]').forEach(el => { el.checked = el.value === _mstGroupBy; });
+            const lbl = document.getElementById('mstTuLabel');
+            if (lbl) lbl.textContent = _mstGroupBy === 'ten' ? 'Chọn tuyến' : 'Chọn tủ điều khiển';
+            return opts.length;
+        }
+        function _mstSetGroupBy(v) {
+            _mstGroupBy = v === 'ten' ? 'ten' : 'tu';
+            try { localStorage.setItem('mst_group_by', _mstGroupBy); } catch (e) { _swallow(e); }
+            _mstFillSelect();
+            _onMstTuChange();
+        }
+        window._mstSetGroupBy = _mstSetGroupBy;
+
+        // forceMode: 'tu' khi mở từ Kiểm tra sơ đồ cáp (chọn sẵn theo tên tủ)
+        function _openAutoMstModal(forceMode) {
             const modal = document.getElementById('autoMstModal');
             if (!modal) return;
-            // Populate tủ dropdown
-            const tus = _getUniqueCabinets();
-            if (tus.length === 0) {
-                displayError && displayError('Không có tủ điều khiển nào trong dữ liệu');
+            let saved = null;
+            try { saved = localStorage.getItem('mst_group_by'); } catch (e) { _swallow(e); }
+            _mstGroupBy = forceMode || (saved === 'ten' ? 'ten' : 'tu');
+            // Theo tủ mà không tủ nào có ≥ 2 node (trụ chưa gán tủ) → tự chuyển sang theo tên tuyến
+            if (!forceMode && _mstGroupBy === 'tu' && !_getUniqueCabinets().some(t => _mstGetNodesForTu(t).length >= 2)) {
+                _mstGroupBy = 'ten';
+                displayInfo && displayInfo('Trụ chưa gán tủ điều khiển — chuyển sang gom theo tên tuyến.');
+            }
+            if (!_mstFillSelect()) {
+                displayError && displayError(_mstGroupBy === 'ten' ? 'Không có trụ đèn nào có toạ độ' : 'Không có tủ điều khiển nào trong dữ liệu');
                 return;
             }
-            const sel = document.getElementById('mstTuSelect');
-            sel.innerHTML = tus.map(t => `<option value="${_esc(t)}">${_esc(t)}</option>`).join('');
-            // Chọn tủ đầu tiên mặc định (multi-select vẫn support Ctrl/⌘+click add more)
-            if (sel.options.length > 0) sel.options[0].selected = true;
             _mstResult = null;
             _mstRestoreRoadOpts();
             document.getElementById('mstBtnApply').disabled = true;
@@ -93,8 +135,8 @@
                 if (tus.length <= 8) lines.push(`<span style="color:#059669;">✓ ${_esc(tu)}: ${nodes.length} nodes</span>`);
             }
             preview.innerHTML = `
-                <b>${tus.length}</b> tủ đã chọn · <b>${totalNodes}</b> trụ+tủ tổng<br>
-                <span style="color:#64748b;font-size:11px;">Trong đó ${totalWithParent} đã có Marker gốc.${totalEmpty ? ' ' + totalEmpty + ' tủ trống.' : ''}</span>
+                <b>${tus.length}</b> ${_mstGroupBy === 'ten' ? 'tuyến' : 'tủ'} đã chọn · <b>${totalNodes}</b> trụ+tủ tổng<br>
+                <span style="color:#64748b;font-size:11px;">Trong đó ${totalWithParent} đã có Marker gốc.${totalEmpty ? ' ' + totalEmpty + (_mstGroupBy === 'ten' ? ' tuyến' : ' tủ') + ' trống.' : ''}</span>
                 ${tus.length <= 8 && lines.length ? '<div style="margin-top:6px;font-size:11px;line-height:1.6;">' + lines.join('<br>') + '</div>' : ''}
             `;
         }
@@ -104,6 +146,7 @@
         // Root = tủ điều khiển (type 5/6 có name = tuName).
         // KHÔNG include tủ khác (type 5/6 có name != tuName) → tránh edge tủ-tủ trong MST.
         function _mstGetNodesForTu(tuName) {
+            if (String(tuName).startsWith('ten:')) return _mstGetNodesForRoute(String(tuName).slice(4));
             const rows = (loadedData || []).slice(1);
             const inTu = rows.filter(r => String(r[7] || '').trim() === tuName);
             const nodes = [];
@@ -123,6 +166,32 @@
                     dist: parseFloat(r[15]) || 0
                 });
             }
+            return nodes;
+        }
+
+        // Theo tên tuyến: trụ cùng basename. Gốc = tủ (loại 5/6) cùng basename gần trụ nhất (≤ 500 m); không có thì
+        // trụ đầu tuyến (tên xếp tự nhiên nhỏ nhất). Tủ trùng TÊN với 1 trụ trong tuyến bị bỏ (áp dụng ghi theo tên → nhầm dòng).
+        function _mstGetNodesForRoute(nb) {
+            const rows = (loadedData || []).slice(1);
+            const hasXY = r => isFinite(parseCoord(r[2])) && isFinite(parseCoord(r[3]));
+            const poles = rows.filter(r => _mstIsPoleRow(r) && hasXY(r) && normalizeMarkerBaseName(String(r[1] || '').trim()) === nb);
+            if (!poles.length) return [];
+            const node = (r, isRoot) => ({ row: r, name: String(r[1] || '').trim(), lat: parseCoord(r[2]), lon: parseCoord(r[3]), isRoot,
+                parent: String(r[14] || '').trim(), dist: parseFloat(r[15]) || 0 });
+            const poleNames = new Set(poles.map(r => String(r[1] || '').trim()));
+            const cabs = rows.filter(r => { const t = parseInt(r[6]); return (t === 5 || t === 6) && hasXY(r) &&
+                !poleNames.has(String(r[1] || '').trim()) &&
+                (normalizeMarkerBaseName(String(r[1] || '').trim()) === nb || normalizeMarkerBaseName(String(r[7] || '').trim()) === nb); });
+            let root = null, best = 500;
+            for (const c of cabs) {
+                const cl = parseCoord(c[2]), co = parseCoord(c[3]);
+                const d = Math.min(...poles.map(p => haversineM(cl, co, parseCoord(p[2]), parseCoord(p[3]))));
+                if (d <= best) { best = d; root = c; }
+            }
+            const coll = new Intl.Collator('vi', { numeric: true });
+            const sorted = poles.slice().sort((a, b) => coll.compare(String(a[1] || ''), String(b[1] || '')));
+            const nodes = sorted.map((r, i) => node(r, !root && i === 0));
+            if (root) nodes.unshift(node(root, true));
             return nodes;
         }
 
@@ -152,7 +221,7 @@
         // P1: Diff MST vs sheet — return {same, changed, added, removed} edge lists
         function _mstDiff(mstEdges, tuName) {
             // Build sheet map: {childName: parentName} cho các row trong tủ này
-            const rowsInTu = (loadedData || []).slice(1).filter(r => String(r[7] || '').trim() === tuName);
+            const rowsInTu = _mstGetNodesForTu(tuName).map(n => n.row);
             const sheetMap = new Map();  // child → parent
             rowsInTu.forEach(r => {
                 const child = String(r[1] || '').trim();
@@ -298,7 +367,7 @@
             // P5: Trước tiên vẽ CÁP SHEET CŨ mờ để user thấy state trước MST
             for (const pt of perTu) {
                 if (pt.skipped) continue;
-                const rowsInTu = (loadedData || []).slice(1).filter(r => String(r[7]||'').trim() === pt.tu);
+                const rowsInTu = pt.nodes.map(n => n.row);
                 const nodePos = new Map(pt.nodes.map(n => [n.name, {lat: n.lat, lon: n.lon}]));
                 for (const r of rowsInTu) {
                     const child = String(r[1]||'').trim();

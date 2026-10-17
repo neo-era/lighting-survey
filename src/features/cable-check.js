@@ -332,7 +332,7 @@
             if (!tus.length) return;
             if (tus.length > LC_TU_MST_WARN) displayInfo && displayInfo(`Đang tính tuyến tối ưu cho ${tus.length} tủ — xem trước có thể mất vài giây...`);
             _closeLongCableCheck();
-            _openAutoMstModal();
+            _openAutoMstModal('tu');
             const sel = document.getElementById('mstTuSelect');
             if (sel) {
                 const want = new Set(tus);

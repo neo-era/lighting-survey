@@ -650,8 +650,13 @@
                 Tự động tính chuỗi cáp tối ưu (Minimum Spanning Tree) từ tủ đến các trụ trong cùng tủ điều khiển.
                 Điền vào cột <code>Marker gốc</code> + <code>Khoảng cách</code> cho từng trụ.
             </div>
+            <div role="radiogroup" aria-label="Gom node theo" style="display:flex;gap:6px;margin-bottom:8px;font-size:12px;">
+                <span style="align-self:center;font-weight:700;color:var(--text);">Gom theo:</span>
+                <label style="flex:1;display:flex;gap:6px;align-items:center;padding:6px 10px;border:1.5px solid var(--border);border-radius:8px;cursor:pointer;min-height:40px;margin:0;"><input type="radio" name="mstGroupBy" value="tu" checked onchange="_mstSetGroupBy('tu')"> Tủ điều khiển</label>
+                <label style="flex:1;display:flex;gap:6px;align-items:center;padding:6px 10px;border:1.5px solid var(--border);border-radius:8px;cursor:pointer;min-height:40px;margin:0;" title="Dùng khi trụ chưa ghi cột Tủ điều khiển: gom trụ cùng tên tuyến (tên bỏ số); gốc = tủ cùng tên gần nhất, không có thì trụ đầu tuyến"><input type="radio" name="mstGroupBy" value="ten" onchange="_mstSetGroupBy('ten')"> Tên tuyến</label>
+            </div>
             <label style="display:flex;justify-content:space-between;align-items:center;font-size:12px;font-weight:700;color:var(--text);margin-bottom:4px;">
-                <span>Chọn tủ điều khiển <span style="font-weight:400;color:var(--text-muted);font-size:11px;">(Ctrl/⌘+click chọn nhiều)</span></span>
+                <span><span id="mstTuLabel">Chọn tủ điều khiển</span> <span style="font-weight:400;color:var(--text-muted);font-size:11px;">(Ctrl/⌘+click chọn nhiều)</span></span>
                 <span>
                     <button type="button" onclick="_mstSelectAllTus(true)" style="padding:2px 8px;border:1px solid var(--border);border-radius:4px;background:var(--surface-solid);font-size:10px;cursor:pointer;">Tất cả</button>
                     <button type="button" onclick="_mstSelectAllTus(false)" style="padding:2px 8px;border:1px solid var(--border);border-radius:4px;background:var(--surface-solid);font-size:10px;cursor:pointer;">Bỏ chọn</button>
