@@ -10149,6 +10149,8 @@
                 if (streetEl2) { streetEl2.value = row[17] || ''; streetEl2.placeholder = 'Tên đường...'; }
                 const wardEl = document.getElementById('markerWardInput');
                 if (wardEl) { wardEl.value = row[18] || ''; wardEl.placeholder = 'Nhập tên phường hoặc xã'; }
+                // v186 — ô nào còn TRỐNG thì tra địa chỉ theo toạ độ trụ (ô đã có giá trị giữ nguyên)
+                _fillEmptyGeoFieldsForEdit(row, lat, lon);
 
                 const markerGocEl = document.getElementById('markerGocInput');
                 if (markerGocEl) markerGocEl.value = row[14] || '';
@@ -12881,6 +12883,35 @@
             } catch (e) { return null; }
         }
 
+        // Tên đường / phường từ kết quả Nominatim
+        function _geoRoadWard(addr) {
+            return {
+                road: addr ? (addr.road || addr.pedestrian || addr.footway || addr.path || addr.cycleway || '') : '',
+                ward: addr ? (addr.suburb || addr.quarter || addr.neighbourhood || addr.village || addr.hamlet || addr.town || '') : ''
+            };
+        }
+        // Sửa trụ: chỉ điền ô Đường / Phường đang TRỐNG; bỏ qua nếu người dùng đã gõ vào ô hoặc đã đóng / mở trụ khác.
+        // Gán _pendingGeocodePromise để Lưu chờ tra cứu xong (như luồng thêm mới).
+        async function _fillEmptyGeoFieldsForEdit(row, lat, lon) {
+            const streetEl = document.getElementById('markerStreetInput');
+            const wardEl = document.getElementById('markerWardInput');
+            const needStreet = !!(streetEl && !String(streetEl.value || '').trim());
+            const needWard = !!(wardEl && !String(wardEl.value || '').trim());
+            if ((!needStreet && !needWard) || !isFinite(lat) || !isFinite(lon)) return;
+            if (needStreet) streetEl.placeholder = 'Đang tra cứu...';
+            if (needWard) wardEl.placeholder = 'Đang tra cứu...';
+            const promise = reverseGeocode(lat, lon);
+            _pendingGeocodePromise = promise;
+            const addr = await promise;
+            if (_pendingGeocodePromise === promise) _pendingGeocodePromise = null;
+            if (needStreet) streetEl.placeholder = 'Tên đường...';
+            if (needWard) wardEl.placeholder = 'Nhập tên phường hoặc xã';
+            if (_editingRow !== row) return;   // đã đóng form / sửa trụ khác
+            const { road, ward } = _geoRoadWard(addr);
+            if (needStreet && road && !String(streetEl.value || '').trim()) streetEl.value = road;
+            if (needWard && ward && !String(wardEl.value || '').trim()) wardEl.value = ward;
+        }
+
         async function fillGeoFields(lat, lon) {
             const streetEl = document.getElementById('markerStreetInput');
             const wardEl = document.getElementById('markerWardInput');
@@ -12894,8 +12925,7 @@
             if (_pendingGeocodePromise !== promise) return; // bị ghi đè bởi lần gọi mới hơn
             _pendingGeocodePromise = null;
 
-            const road = addr ? (addr.road || addr.pedestrian || addr.footway || addr.path || addr.cycleway || '') : '';
-            const ward = addr ? (addr.suburb || addr.quarter || addr.neighbourhood || addr.village || addr.hamlet || addr.town || '') : '';
+            const { road, ward } = _geoRoadWard(addr);
 
             if (streetEl) { streetEl.value = road; streetEl.placeholder = 'Tên đường...'; }
             if (wardEl)   { wardEl.value   = ward; wardEl.placeholder   = 'Nhập tên phường hoặc xã'; }
