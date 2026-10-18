@@ -7,7 +7,9 @@ function load() {
     const html = require('../tools/app-source.cjs').appSource();   // index.html + src/*.js (module hoá)
     const m = html.match(/\/\/ @@CABLELEN_START([\s\S]*?)\/\/ @@CABLELEN_END/);
     if (!m) throw new Error('Chưa có block @@CABLELEN_START/END trong index.html');
-    return new Function(m[1] + '\nreturn { _clPlanLength, _clDist, _clRootOf };')();
+    // v187 — block dùng _rowIndex/_resolveParent (src/core/parent-ref.js)
+    const pr = fs.readFileSync(path.join(__dirname, '..', 'src/core/parent-ref.js'), 'utf8');
+    return new Function('const window = {};\n' + pr + '\nconst { _rowIndex, _resolveParent } = window;\n' + m[1] + '\nreturn { _clPlanLength, _clDist, _clRootOf };')();
 }
 let pass = 0, fail = 0;
 const ok = (n, c) => { c ? pass++ : fail++; console.log((c ? '✓ ' : '✗ ') + n); };
@@ -78,10 +80,18 @@ const line = () => [row('TU', 0, 0), row('P1', 21, 0.5, 'TU'), row('P2', 67, -0.
 }
 // Review v161
 {
-    // Trùng tên nhưng ở XA nhau (2 trụ khác nhau) → không dời mù, báo dup
+    // Trùng tên nhưng ở XA nhau (2 trụ khác nhau) → v187: dời đúng trụ P2 gần, trụ P2 ở xa giữ nguyên
     const rows = [row('TU', 0, 0), row('P1', 20, 0, 'TU'), row('P2', 40, 0, 'P1'), row('P2', 900, 400, 'X9')];
     const plan = H._clPlanLength(rows, 'P1', 30, null);
-    ok('trùng tên ở xa nhau (>5m) → dup, không dời', plan.error === 'dup' && plan.names.includes('P2'));
+    ok('trùng tên ở xa nhau (>5m) → dời P1 + P2 gần, P2 ở xa không đụng', !plan.error && plan.moves.length === 2 && !plan.moves.some(m => m.row === rows[3]));
+    // Cha trỏ bằng ID (tên cha bị trùng)
+    const byId = [row('TU', 0, 0), row('A', 20, 0, 'TU', 'IA'), row('A', 800, 0, 'TU', 'IB'), row('C', 40, 0, 'IB')];
+    const pi = H._clPlanLength(byId, 'C', 50, null);
+    ok('Marker gốc là ID → nối đúng trụ A ở xa (IB), chỉ C dời', !pi.error && pi.moving.join() === 'C' && pi.fixed === 'A' && (() => { const a = apply(byId, pi); return near(H._clDist(+a[2][2], +a[2][3], +a[3][2], +a[3][3]), 50); })());
+    // Bấm đúng dòng trùng tên (childRow) — dòng A thứ 2
+    const two = [row('TU', 0, 0), row('A', 20, 0, 'TU', 'IA'), row('TU2', 800, 0), row('A', 830, 0, 'TU2', 'IB')];
+    const pt = H._clPlanLength(two, 'A', 10, null, two[3]);
+    ok('childRow chọn dòng A thứ 2 → chỉ dòng đó dời, gốc TU2', !pt.error && pt.moves.length === 1 && pt.moves[0].row === two[3] && pt.fixed === 'TU2');
     // Vòng 2 chiều A↔B
     const ab = [row('A', 0, 0, 'B'), row('B', 10, 0, 'A')];
     ok('vòng 2 chiều A↔B → cycle', H._clPlanLength(ab, 'A', 15, null).error === 'cycle');

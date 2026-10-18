@@ -52,7 +52,8 @@
         function _xoaPlan(rows) {
             const del = rows.filter(r => _isXoaName(r[1]));
             const delSet = new Set(del);
-            const children = rows.filter(r => !delSet.has(r) && _isXoaName(r[14]));
+            const _xIdx = _rowIndex(rows);
+            const children = rows.filter(r => !delSet.has(r) && (_isXoaName(r[14]) || delSet.has(_resolveParent(r, _xIdx))));
             const byTu = {};
             del.forEach(r => { const t = String(r[7] || '').trim() || '(chưa gán tủ)'; byTu[t] = (byTu[t] || 0) + 1; });
             // Dòng có ID xoá trước (khớp theo ID), dòng không ID sau (GAS khớp theo tên)
@@ -383,18 +384,18 @@
             cross:      { label: '🟢 Khác tủ',        color: '#16a34a', bg: '#f0fdf4', priority: 1, actionable: true },
             fanout:     { label: '🟡 Fan-out',        color: '#d97706', bg: '#fffbeb', priority: 1, actionable: false },
             dup:        { label: '🟤 Trùng tên',      color: '#78350f', bg: '#fef3c7', priority: 3, actionable: false },
-            suboptimal: { label: '🟪 Parent xa',      color: '#7c3aed', bg: '#f5f3ff', priority: 2, actionable: false }
+            suboptimal: { label: '🟪 Parent xa',      color: '#7c3aed', bg: '#f5f3ff', priority: 2, actionable: false },
+            stack:      { label: '🟥 Trụ chồng nhau', color: '#be123c', bg: '#fff1f2', priority: 3, actionable: false }
         };
 
-        // Build reverse tree: node → Set of all downstream descendants (dùng cho suboptimal check tránh cycle)
-        function _buildDescendantsMap(rows) {
-            const children = new Map(); // parent → [children names]
+        // Build reverse tree theo DÒNG: row → Set các dòng hậu duệ (dùng cho suboptimal check tránh cycle)
+        function _buildDescendantsMap(rows, idx) {
+            const children = new Map(); // parent row → [child rows]
             rows.forEach(r => {
-                const c = String(r[1] || '').trim();
-                const p = String(r[14] || '').trim();
-                if (!c || !p) return;
+                const p = _resolveParent(r, idx);
+                if (!p) return;
                 if (!children.has(p)) children.set(p, []);
-                children.get(p).push(c);
+                children.get(p).push(r);
             });
             const cache = new Map();
             function walk(node, seen) {
@@ -402,85 +403,71 @@
                 if (seen.has(node)) return new Set(); // cycle protect
                 seen.add(node);
                 const out = new Set();
-                const kids = children.get(node) || [];
-                for (const k of kids) {
+                for (const k of children.get(node) || []) {
                     out.add(k);
-                    const sub = walk(k, seen);
-                    sub.forEach(s => out.add(s));
+                    walk(k, seen).forEach(x => out.add(x));
                 }
                 seen.delete(node);
                 cache.set(node, out);
                 return out;
             }
             const result = new Map();
-            children.forEach((_, node) => result.set(node, walk(node, new Set())));
-            // Nodes có parent nhưng không có child → chưa được touch
-            rows.forEach(r => {
-                const c = String(r[1] || '').trim();
-                if (c && !result.has(c)) result.set(c, new Set());
-            });
+            rows.forEach(r => result.set(r, walk(r, new Set())));
             return result;
         }
 
+        // v187 — Marker gốc giải theo dòng (_resolveParent: ID → tên duy nhất → tên trùng gần nhất)
         function _getCableIssues(opts) {
             const rows = (loadedData || []).slice(1);
-            const posIdx = {};
-            const nameToTu = {};
-            const rowByName = new Map();
-            const rowsByName = new Map(); // 🟤 track duplicates
-            rows.forEach(r => {
-                const name = String(r[1] || '').trim();
-                if (!name) return;
-                const lat = parseCoord(r[2]), lon = parseCoord(r[3]);
-                if (Number.isFinite(lat) && Number.isFinite(lon)) posIdx[name] = [lat, lon];
-                nameToTu[name] = String(r[7] || '').trim();
-                rowByName.set(name, r);
-                if (!rowsByName.has(name)) rowsByName.set(name, []);
-                rowsByName.get(name).push(r);
-            });
+            const idx = _rowIndex(rows);
+            const llOf = r => { const la = parseCoord(r[2]), lo = parseCoord(r[3]); return Number.isFinite(la) && Number.isFinite(lo) ? [la, lo] : undefined; };
+            const nm = r => String(r[1] || '').trim();
+            const rowsByName = idx.byName;   // 🟤 track duplicates
 
             // Detect cycle (reuse existing helper)
             const cycle = typeof _detectCableCycle === 'function' ? _detectCableCycle(rows) : null;
-            const cycleSet = new Set(cycle || []);
+            const cycleRows = (cycle && cycle.rows) || new Set();
 
-            // Children per parent (for fanout)
-            const childrenByParent = {};
+            const parentOf = new Map();
+            const childrenByParent = new Map();   // parent row → [child names] (fanout)
             rows.forEach(r => {
-                const p = String(r[14] || '').trim();
-                if (p) {
-                    if (!childrenByParent[p]) childrenByParent[p] = [];
-                    childrenByParent[p].push(String(r[1] || '').trim());
-                }
+                const p = _resolveParent(r, idx);
+                if (!p) return;
+                parentOf.set(r, p);
+                if (!childrenByParent.has(p)) childrenByParent.set(p, []);
+                childrenByParent.get(p).push(nm(r));
             });
 
             const results = [];
             rows.forEach(r => {
-                const child = String(r[1] || '').trim();
-                const parent = String(r[14] || '').trim();
-                if (!child || !parent) return;
+                const child = nm(r);
+                const parentRef = String(r[14] || '').trim();
+                if (!child || !parentRef) return;
+                const pRow = parentOf.get(r);
 
                 // 1. Self-reference
-                if (child === parent) {
+                if (parentRef === child || parentRef === String(r[0] || '').trim()) {
                     results.push({
-                        row: r, type: 'self', childName: child, parentName: parent,
+                        row: r, type: 'self', childName: child, parentName: child,
                         distance: 0, info: 'Trỏ về chính nó',
-                        from: posIdx[child], to: posIdx[child]
+                        from: llOf(r), to: llOf(r)
                     });
                     return;
                 }
 
                 // 2. Orphan (parent không tồn tại)
-                if (!rowByName.has(parent)) {
+                if (!pRow) {
                     results.push({
-                        row: r, type: 'orphan', childName: child, parentName: parent,
+                        row: r, type: 'orphan', childName: child, parentName: parentRef,
                         distance: 0, info: `Trụ cha không tồn tại trong sheet`,
-                        from: posIdx[child], to: posIdx[child]
+                        from: llOf(r), to: llOf(r)
                     });
                     return;
                 }
+                const parent = nm(pRow) || parentRef;
 
-                const fromLL = posIdx[parent];
-                const toLL = posIdx[child];
+                const fromLL = llOf(pRow);
+                const toLL = llOf(r);
                 const haveGeo = fromLL && toLL;
                 const havDist = haveGeo ? Math.round(haversineM(fromLL[0], fromLL[1], toLL[0], toLL[1])) : null;
                 let sheetDist = parseFloat(r[15]);
@@ -488,7 +475,7 @@
                 const displayDist = hasSheetDist ? Math.round(sheetDist) : (havDist || 0);
 
                 // 3. Cycle
-                if (cycleSet.has(child) && cycleSet.has(parent)) {
+                if (cycleRows.has(r) && cycleRows.has(pRow)) {
                     results.push({
                         row: r, type: 'cycle', childName: child, parentName: parent,
                         distance: displayDist, info: `Trong vòng: ${(cycle || []).join(' → ')}`.slice(0, 80),
@@ -521,8 +508,8 @@
                 }
 
                 // 6. Cross-cabinet (parent thuộc tủ khác)
-                const tuChild = nameToTu[child];
-                const tuParent = nameToTu[parent];
+                const tuChild = String(r[7] || '').trim();
+                const tuParent = String(pRow[7] || '').trim();
                 if (tuChild && tuParent && tuChild !== tuParent) {
                     results.push({
                         row: r, type: 'cross', childName: child, parentName: parent,
@@ -534,39 +521,36 @@
             });
 
             // 7. Fan-out (parent có >N children) — chỉ 1 issue per parent
-            Object.keys(childrenByParent).forEach(parent => {
-                const kids = childrenByParent[parent];
+            childrenByParent.forEach((kids, parentRow) => {
                 if (kids.length > opts.maxFanout) {
-                    const parentRow = rowByName.get(parent);
-                    if (parentRow) {
-                        results.push({
-                            row: parentRow, type: 'fanout',
-                            childName: parent, parentName: `${kids.length} cáp con`,
-                            distance: 0,
-                            info: `Tỏa: ${kids.slice(0, 5).join(', ')}${kids.length > 5 ? '...' : ''}`,
-                            from: posIdx[parent], to: posIdx[parent]
-                        });
-                    }
+                    results.push({
+                        row: parentRow, type: 'fanout',
+                        childName: nm(parentRow), parentName: `${kids.length} cáp con`,
+                        distance: 0,
+                        info: `Tỏa: ${kids.slice(0, 5).join(', ')}${kids.length > 5 ? '...' : ''}`,
+                        from: llOf(parentRow), to: llOf(parentRow)
+                    });
                 }
             });
 
             // 8. Trùng tên — nhiều rows cùng name (data corruption / multi-parent)
             rowsByName.forEach((dupRows, name) => {
                 if (dupRows.length < 2) return;
-                const parents = dupRows.map(r => String(r[14] || '').trim()).filter(Boolean);
-                const uniqParents = [...new Set(parents)];
+                // Trụ cha đã giải (ID / tên) — không đếm "A" và ID của A là 2 cha khác nhau
+                const uniqParents = [...new Set(dupRows.map(r => { const p = parentOf.get(r);
+                    return p ? (nm(p) || String(p[0] || '')) : String(r[14] || '').trim(); }).filter(Boolean))];
                 // Chỉ báo issue nếu có ≥2 parents KHÁC NHAU (=multi-parent thực sự)
                 // hoặc số dupRows > 2 (duplicate rõ ràng)
                 if (uniqParents.length >= 2 || dupRows.length >= 3) {
-                    dupRows.forEach((r, idx) => {
-                        const p = String(r[14] || '').trim();
+                    dupRows.forEach((r, i) => {
+                        const pRow = parentOf.get(r);
                         results.push({
                             row: r, type: 'dup',
-                            childName: name + ' (#' + (idx + 1) + ')',
-                            parentName: p || '(không)',
+                            childName: name + ' (#' + (i + 1) + ')',
+                            parentName: pRow ? nm(pRow) : (String(r[14] || '').trim() || '(không)'),
                             distance: parseFloat(r[15]) || 0,
                             info: `${dupRows.length} rows cùng tên "${name}" — parents: ${uniqParents.slice(0,3).join(', ')}${uniqParents.length>3?'...':''}`,
-                            from: posIdx[p], to: posIdx[name]
+                            from: pRow ? llOf(pRow) : undefined, to: llOf(r)
                         });
                     });
                 }
@@ -576,55 +560,57 @@
             // Chỉ check khi user bật filter (perf — O(N × Kcandidates_in_tủ))
             const wantSubopt = (opts.enabledTypes && opts.enabledTypes.suboptimal);
             if (wantSubopt) {
-                // Build set of DESCENDANTS per node để tránh suggest 1 node xuống child của nó (tạo cycle)
-                const descendantsOf = _buildDescendantsMap(rows);
-                // Group poles by tủ
+                // Hậu duệ theo dòng để không đề xuất 1 trụ con của chính nó (tạo cycle)
+                const descendantsOf = _buildDescendantsMap(rows, idx);
                 const polesByTu = {};
                 rows.forEach(r => {
-                    const nm = String(r[1] || '').trim();
                     const tu = String(r[7] || '').trim();
-                    if (!nm || !tu) return;
-                    if (!posIdx[nm]) return;
+                    if (!nm(r) || !tu || !llOf(r)) return;
                     if (!polesByTu[tu]) polesByTu[tu] = [];
-                    polesByTu[tu].push(nm);
+                    polesByTu[tu].push(r);
                 });
                 const suboptRatio = opts.suboptRatio || 1.5;
                 rows.forEach(r => {
-                    const child = String(r[1] || '').trim();
-                    const parent = String(r[14] || '').trim();
+                    const child = nm(r);
+                    const pRow = parentOf.get(r);
                     const tu = String(r[7] || '').trim();
-                    if (!child || !parent || !tu) return;
-                    if (child === parent) return; // self đã báo type=self
-                    const fromLL = posIdx[parent], toLL = posIdx[child];
+                    if (!child || !pRow || !tu) return;
+                    const fromLL = llOf(pRow), toLL = llOf(r);
                     if (!fromLL || !toLL) return;
                     const curDist = haversineM(fromLL[0], fromLL[1], toLL[0], toLL[1]);
                     if (curDist < 5) return; // parent gần sát, skip
-                    // Tìm candidate parent gần nhất trong cùng tủ
-                    const candidates = polesByTu[tu] || [];
-                    const descs = descendantsOf.get(child) || new Set();
+                    const descs = descendantsOf.get(r) || new Set();
                     let bestCand = null, bestDist = Infinity;
-                    for (const cand of candidates) {
-                        if (cand === child) continue;
-                        if (cand === parent) continue;
-                        if (descs.has(cand)) continue; // sẽ tạo cycle
-                        const candLL = posIdx[cand];
-                        if (!candLL) continue;
+                    for (const cand of polesByTu[tu] || []) {
+                        if (cand === r || cand === pRow || descs.has(cand)) continue;
+                        const candLL = llOf(cand);
                         const d = haversineM(candLL[0], candLL[1], toLL[0], toLL[1]);
                         if (d < bestDist) { bestDist = d; bestCand = cand; }
                     }
                     if (bestCand && bestDist > 0 && (curDist / bestDist) >= suboptRatio) {
                         results.push({
                             row: r, type: 'suboptimal',
-                            childName: child, parentName: parent,
+                            childName: child, parentName: nm(pRow),
                             distance: Math.round(curDist),
-                            info: `Parent xa ${Math.round(curDist)}m, đề xuất "${bestCand}" ${Math.round(bestDist)}m (giảm ${Math.round((1-bestDist/curDist)*100)}%)`,
+                            info: `Parent xa ${Math.round(curDist)}m, đề xuất "${nm(bestCand)}" ${Math.round(bestDist)}m (giảm ${Math.round((1-bestDist/curDist)*100)}%)`,
                             from: fromLL, to: toLL,
-                            _suggestParent: bestCand,
+                            _suggestParent: _parentRefFor(bestCand, idx),
                             _suggestDist: Math.round(bestDist)
                         });
                     }
                 });
             }
+
+            // 10. Trụ chồng nhau (< 0,5 m) — dấu vết lỗi kéo trụ trùng tên (trước v187 kéo 1 trụ dời cả các trụ
+            // cùng tên về 1 chỗ). Vị trí cũ đã mất → người dùng kéo lại tay.
+            _findStackedRows(rows, 0.5).forEach(({ a, b, dist }) => {
+                results.push({
+                    row: b, type: 'stack', childName: nm(b) || String(b[0] || ''), parentName: nm(a) || String(a[0] || ''),
+                    distance: 0,
+                    info: `Chồng lên "${nm(a)}" (cách ${dist.toFixed(2)} m) — kéo lại về đúng vị trí`,
+                    from: llOf(a), to: llOf(b)
+                });
+            });
 
             // Sort: priority desc → distance desc
             results.sort((a, b) => {

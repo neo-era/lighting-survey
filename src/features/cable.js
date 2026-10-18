@@ -6,25 +6,28 @@
 
         let _cableLayerGroup = null;
 
+        // v187 — đồ thị theo DÒNG (Marker gốc giải bằng _resolveParent: ID / tên duy nhất / tên trùng gần nhất).
+        // Trả mảng tên trụ trên vòng (phần tử cuối = đầu) + .rows = Set các dòng thuộc vòng.
         function _detectCableCycle(rows) {
-            const parent = {};
-            rows.forEach(r => {
-                const name = String(r[1] || '').trim();
-                const par  = String(r[14] || '').trim();
-                if (name && par && name !== par) parent[name] = par;
-            });
-            for (const start of Object.keys(parent)) {
-                const visited = new Set();
-                const path = [];
+            const idx = _rowIndex((loadedData || []).slice(1), rows);
+            const par = new Map();
+            rows.forEach(r => { const p = _resolveParent(r, idx); if (p) par.set(r, p); });
+            const done = new Set();
+            const nm = r => String(r[1] || '').trim() || String(r[0] || '').trim();
+            for (const start of par.keys()) {
+                if (done.has(start)) continue;
+                const path = [], pos = new Map();
                 let cur = start;
-                while (cur && parent[cur]) {
-                    if (visited.has(cur)) {
-                        // Cycle: cắt path từ chỗ cur xuất hiện lần đầu, thêm cur ở cuối để hiển thị vòng
-                        const startIdx = path.indexOf(cur);
-                        return path.slice(startIdx).concat([cur]);
+                while (cur && !done.has(cur)) {
+                    if (pos.has(cur)) {
+                        const loop = path.slice(pos.get(cur));
+                        const out = loop.concat([cur]).map(nm);
+                        out.rows = new Set(loop);
+                        return out;
                     }
-                    visited.add(cur); path.push(cur); cur = parent[cur];
+                    pos.set(cur, path.length); path.push(cur); cur = par.get(cur);
                 }
+                path.forEach(r => done.add(r));
             }
             return null;
         }
@@ -50,39 +53,43 @@
             return { lat: p3 / r, lon: l3 / r };
         }
 
-        function _clRootOf(name, rows) {
-            const parentOf = new Map();
-            rows.forEach(r => { const n = String(r[1] || '').trim(); if (n && !parentOf.has(n)) parentOf.set(n, String(r[14] || '').trim()); });
+        // v187 — đồ thị theo DÒNG: Marker gốc giải bằng _resolveParent (ID / tên duy nhất / tên trùng gần nhất)
+        function _clRootRow(row, idx) {
             const seen = new Set();
-            let cur = name;
-            // Dừng ở trụ cuối CÓ THẬT — Marker gốc gõ sai / là ID thì không trả về tên không tồn tại
+            let cur = row;
+            // Dừng ở trụ cuối CÓ THẬT — Marker gốc gõ sai thì không trả về tên không tồn tại
             while (!seen.has(cur)) {
                 seen.add(cur);
-                const p = parentOf.get(cur);
-                if (!p || !parentOf.has(p)) break;
+                const p = _resolveParent(cur, idx);
+                if (!p) break;
                 cur = p;
             }
             return cur;
         }
 
-        function _clPlanLength(rows, childName, newLen, anchorName) {
+        function _clRootOf(name, rows) {
+            const idx = _rowIndex(rows);
+            const r = (idx.byName.get(name) || [])[0];
+            return r ? String(_clRootRow(r, idx)[1] || '').trim() : name;
+        }
+
+        // childRow: dòng của đoạn cáp được bấm (tên có thể trùng); bỏ trống → dòng đầu có tên childName
+        function _clPlanLength(rows, childName, newLen, anchorName, childRow) {
             // Làm tròn 0.1m TRƯỚC khi dời để vị trí khớp đúng số ghi vào sheet
             const L = Math.round(Number(newLen) * 10) / 10;
             if (!isFinite(L) || L <= 0 || L > CL_MAX_LEN) return { error: 'len' };
-            const byName = new Map();
-            rows.forEach(r => { const n = String(r[1] || '').trim(); if (!n) return; if (!byName.has(n)) byName.set(n, []); byName.get(n).push(r); });
-            if (!byName.has(childName)) return { error: 'no_row' };
-            const parentName = String(byName.get(childName)[0][14] || '').trim();
-            if (!parentName || !byName.has(parentName) || parentName === childName) return { error: 'no_parent' };
+            const idx = _rowIndex(rows);
+            const nm = r => String(r[1] || '').trim();
+            const child = (childRow && rows.includes(childRow)) ? childRow : (idx.byName.get(childName) || [])[0];
+            if (!child) return { error: 'no_row' };
+            const parent = _resolveParent(child, idx);
+            if (!parent || nm(parent) === nm(child)) return { error: 'no_parent' };
             // A ← B và B ← A: 2 cạnh gộp thành 1 trong đồ thị vô hướng → kiểm riêng
-            if (byName.get(parentName).some(r => String(r[14] || '').trim() === childName)) return { error: 'cycle' };
-            // Đồ thị vô hướng theo tên (cáp = cạnh child–parent)
+            if (_resolveParent(parent, idx) === child) return { error: 'cycle' };
+            // Đồ thị vô hướng theo dòng (cáp = cạnh child–parent)
             const adj = new Map();
             const link = (a, b) => { if (!adj.has(a)) adj.set(a, new Set()); adj.get(a).add(b); };
-            byName.forEach((list, n) => list.forEach(r => {
-                const p = String(r[14] || '').trim();
-                if (p && p !== n && byName.has(p)) { link(n, p); link(p, n); }
-            }));
+            rows.forEach(r => { const p = _resolveParent(r, idx); if (p) { link(r, p); link(p, r); } });
             const component = (start, cutA, cutB) => {
                 const seen = new Set([start]), q = [start];
                 while (q.length) {
@@ -94,39 +101,37 @@
                 }
                 return seen;
             };
-            const childSide = component(childName, childName, parentName);
-            if (childSide.has(parentName)) return { error: 'cycle' };
-            const anchor = (anchorName && byName.has(anchorName)) ? anchorName : _clRootOf(childName, rows);
-            const anchorOnChildSide = childSide.has(anchor) && anchor !== parentName;
-            const fixed = anchorOnChildSide ? childName : parentName;
-            const head = anchorOnChildSide ? parentName : childName;
-            const moving = anchorOnChildSide ? component(parentName, childName, parentName) : childSide;
-            // Đồ thị theo TÊN: dòng trùng tên chỉ an toàn khi là bản sao cùng 1 trụ (cách nhau ≤ 5m).
-            // Trùng tên nhưng ở xa → là 2 trụ khác nhau, dời theo tên sẽ kéo nhầm trụ kia.
-            const dup = [...moving, fixed].filter(n => {
-                const list = byName.get(n);
-                if (list.length < 2) return false;
-                const la0 = _clNum(list[0][2]), lo0 = _clNum(list[0][3]);
-                return list.some(r => !(_clDist(la0, lo0, _clNum(r[2]), _clNum(r[3])) <= 5));
+            const childSide = component(child, child, parent);
+            if (childSide.has(parent)) return { error: 'cycle' };
+            const parentSide = component(parent, child, parent);
+            const anchorCands = anchorName ? (idx.byName.get(anchorName) || []) : [];
+            const anchor = anchorCands.find(r => childSide.has(r) || parentSide.has(r)) || _clRootRow(child, idx);
+            const anchorOnChildSide = childSide.has(anchor) && anchor !== parent;
+            const fixed = anchorOnChildSide ? child : parent;
+            const head = anchorOnChildSide ? parent : child;
+            const moving = new Set(anchorOnChildSide ? parentSide : childSide);
+            // Dòng trùng tên nằm sát (≤ 5 m) = bản sao cùng 1 trụ → dời kèm
+            [...moving].forEach(m => {
+                const la0 = _clNum(m[2]), lo0 = _clNum(m[3]);
+                (idx.byName.get(nm(m)) || []).forEach(r => {
+                    if (moving.has(r) || r === fixed || r === anchor) return;
+                    if (_clDist(la0, lo0, _clNum(r[2]), _clNum(r[3])) <= 5) moving.add(r);
+                });
             });
-            if (dup.length) return { error: 'dup', names: dup };
-            const A = byName.get(fixed)[0], B = byName.get(head)[0];
-            const la = _clNum(A[2]), loa = _clNum(A[3]), lb = _clNum(B[2]), lob = _clNum(B[3]);
+            const la = _clNum(fixed[2]), loa = _clNum(fixed[3]), lb = _clNum(head[2]), lob = _clNum(head[3]);
             if (![la, loa, lb, lob].every(isFinite)) return { error: 'bad_coord' };
             if (_clDist(la, loa, lb, lob) < 0.01) return { error: 'same' };
             const nb = _clToward(la, loa, lb, lob, L);
             const dLat = nb.lat - lb, dLon = nb.lon - lob;
             const moves = [];
-            for (const n of moving) {
-                for (const r of byName.get(n)) {
-                    const rl = _clNum(r[2]), ro = _clNum(r[3]);
-                    if (!isFinite(rl) || !isFinite(ro)) return { error: 'bad_coord' };
-                    moves.push({ row: r, lat: rl + dLat, lon: ro + dLon });
-                }
+            for (const r of moving) {
+                const rl = _clNum(r[2]), ro = _clNum(r[3]);
+                if (!isFinite(rl) || !isFinite(ro)) return { error: 'bad_coord' };
+                moves.push({ row: r, lat: rl + dLat, lon: ro + dLon });
             }
-            // Dòng của đoạn cáp vừa sửa (cột Khoảng cách ghi L) — chỉ dòng child có ĐÚNG Marker gốc này
-            const edgeRows = byName.get(childName).filter(r => String(r[14] || '').trim() === parentName);
-            return { fixed, head, moving: [...moving], moves, length: L, edgeRows };
+            // Dòng của đoạn cáp vừa sửa (cột Khoảng cách ghi L) + bản sao sát bên có cùng trụ cha
+            const edgeRows = [child, ...(idx.byName.get(nm(child)) || []).filter(r => r !== child && moving.has(r) && _resolveParent(r, idx) === parent)];
+            return { fixed: nm(fixed), head: nm(head), moving: [...moving].map(nm), moves, length: L, edgeRows };
         }
 
         // @@CABLELEN_END
@@ -134,9 +139,8 @@
         function _buildCableLines(rows) {
             const cycle = _detectCableCycle(rows);
             // Build set tên node thuộc vòng lặp (bỏ phần tử cuối trùng đầu)
-            const cycleSet = new Set();
+            const cycleSet = cycle ? cycle.rows : new Set();
             if (cycle) {
-                cycle.slice(0, -1).forEach(n => cycleSet.add(n));
                 const chain = cycle.join(' → ');
                 const _cycleFirstNode = cycle[0];
                 console.error('[cable] Vòng lặp Marker gốc:', chain);
@@ -180,15 +184,19 @@
                 if (name && Number.isFinite(lat) && Number.isFinite(lon)) posIdx[name] = [lat, lon];
             });
             let cableCount = 0;
+            const _idx = _rowIndex((loadedData || []).slice(1), rows);
+            const _ll = r => { const la = parseCoord(r[2]), lo = parseCoord(r[3]); return Number.isFinite(la) && Number.isFinite(lo) ? [la, lo] : null; };
             rows.forEach(r => {
                 const parent = String(r[14] || '').trim();
                 if (!parent) return;
-                if (!posIdx[parent]) { console.warn('[cable] Không tìm thấy vị trí trụ cha:', parent); return; }
+                const pRow = _resolveParent(r, _idx);
+                const from = pRow && _ll(pRow);
+                if (!from) { console.warn('[cable] Không tìm thấy vị trí trụ cha:', parent); return; }
                 const child = String(r[1] || '').trim();
-                if (!child || !posIdx[child] || child === parent) return;
-                const from = posIdx[parent], to = posIdx[child];
-                // Segment thuộc cycle khi cả child lẫn parent đều trong cycleSet
-                const isCycle = cycleSet.size > 0 && cycleSet.has(child) && cycleSet.has(parent);
+                const to = _ll(r);
+                if (!child || !to) return;
+                // Segment thuộc cycle khi cả child lẫn parent đều trong vòng
+                const isCycle = cycleSet.size > 0 && cycleSet.has(r) && cycleSet.has(pRow);
                 let lineColor, lineDash, lineWeight;
                 if (isCycle) {
                     lineColor = '#ef4444'; lineDash = '6 4'; lineWeight = 3.5;
@@ -213,7 +221,7 @@
                     icon: L.divIcon({ className: 'cable-label' + (editable ? ' cable-label-edit' : ''), html:`<span>${_esc(distLabel)}m</span>`, iconSize:null, iconAnchor:[20,10] }),
                     interactive: editable, keyboard: false, title: editable ? 'Bấm để sửa số mét — trụ sẽ dời theo' : ''
                 }).addTo(_cableLayerGroup);
-                if (editable) lbl.on('click', e => { L.DomEvent.stopPropagation(e); _openCableLengthEditor(child, mid); });
+                if (editable) lbl.on('click', e => { L.DomEvent.stopPropagation(e); _openCableLengthEditor(child, mid, r); });
             });
             // Ghim trụ gốc đang chọn (đứng yên khi sửa số mét)
             if (_cableAnchor && posIdx[_cableAnchor]) {
@@ -242,7 +250,7 @@
 
         function _showCableContextMenu(latlng, row, isCycle) {
             const childName  = String(row[1]  || '').trim();
-            const parentName = String(row[14] || '').trim();
+            const parentName = _parentNameOf(row, _rowIndex((loadedData || []).slice(1), newMarkerRows));
             const dist       = String(row[15] || '').trim();
             L.popup({ closeButton: true, className: 'cable-ctx-popup' })
                 .setLatLng(latlng)
@@ -275,17 +283,17 @@
                 const btnXoa = document.getElementById('_cableCtxXoa');
                 if (btnXoa) btnXoa.addEventListener('click', () => {
                     map.closePopup();
-                    _deleteCableSegment(childName);
+                    _deleteCableSegment(row);
                 });
                 const btnDoi = document.getElementById('_cableCtxDoi');
                 if (btnDoi) btnDoi.addEventListener('click', () => {
                     map.closePopup();
-                    _pickParentMode(childName);
+                    _pickParentMode(row);
                 });
                 const btnLen = document.getElementById('_cableCtxLen');
                 if (btnLen) btnLen.addEventListener('click', () => {
                     map.closePopup();
-                    _openCableLengthEditor(childName, latlng);
+                    _openCableLengthEditor(childName, latlng, row);
                 });
             }, 0);
         }
@@ -344,18 +352,20 @@
             document.addEventListener('keydown', onEsc);
         }
 
-        function _openCableLengthEditor(childName, latlng) {
+        // rowHint: dòng của đoạn cáp được bấm (tên có thể trùng)
+        function _openCableLengthEditor(childName, latlng, rowHint) {
             if (!canDrag()) { displayError('Tài khoản hiện tại không có quyền dời marker.'); return; }
             const rows = _raAllRows();
-            const row = rows.find(r => String(r[1] || '').trim() === childName);
+            const row = (rowHint && rows.includes(rowHint)) ? rowHint : rows.find(r => String(r[1] || '').trim() === childName);
             if (!row) return;
-            const parentName = String(row[14] || '').trim();
-            const p = rows.find(r => String(r[1] || '').trim() === parentName);
+            const _idx = _rowIndex(rows);
+            const p = _resolveParent(row, _idx);
+            const parentName = _parentNameOf(row, _idx);
             const geo = p ? _clDist(parseCoord(row[2]), parseCoord(row[3]), parseCoord(p[2]), parseCoord(p[3])) : NaN;
             // Sheet locale VN có thể lưu "21,5" — input type=number chỉ nhận dấu chấm
             const cur = String(row[15] || '').trim().replace(',', '.') || (isFinite(geo) ? geo.toFixed(1) : '');
             // Trụ đứng yên tính đúng như lúc áp dụng (trụ gốc đã chọn không thuộc cây này → về gốc mặc định)
-            const preview = _clPlanLength(rows, childName, isFinite(geo) && geo > 0 ? Math.min(geo, CL_MAX_LEN) : 1, _cableAnchor);
+            const preview = _clPlanLength(rows, childName, isFinite(geo) && geo > 0 ? Math.min(geo, CL_MAX_LEN) : 1, _cableAnchor, row);
             const anchor = preview.fixed || _clRootOf(childName, rows);
             L.popup({ closeButton: true, className: 'cable-ctx-popup', minWidth: 220 })
                 .setLatLng(latlng)
@@ -373,17 +383,17 @@
             setTimeout(() => {
                 const inp = document.getElementById('_cableLenInput');
                 const btn = document.getElementById('_cableLenApply');
-                const go = () => _applyCableLength(childName, inp ? inp.value : '');
+                const go = () => _applyCableLength(childName, inp ? inp.value : '', row);
                 if (inp) { inp.focus(); inp.select(); inp.addEventListener('keydown', e => { if (e.key === 'Enter') go(); }); }
                 if (btn) btn.addEventListener('click', go);
             }, 0);
         }
 
-        async function _applyCableLength(childName, value) {
+        async function _applyCableLength(childName, value, childRow) {
             if (!canDrag()) return;
             const L_ = parseFloat(String(value).replace(',', '.'));
             const rows = _raAllRows();
-            const plan = _clPlanLength(rows, childName, L_, _cableAnchor);
+            const plan = _clPlanLength(rows, childName, L_, _cableAnchor, childRow);
             const msg = {
                 len: `Số mét phải lớn hơn 0 và không quá ${CL_MAX_LEN} m.`,
                 no_row: 'Không tìm thấy trụ ' + childName + '.',
@@ -400,9 +410,13 @@
             const L_r = plan.length;   // đã làm tròn 0.1m
             // Snapshot nguyên văn để hoàn tác: các dòng bị dời + dòng của đoạn cáp vừa sửa
             const edgeRows = plan.edgeRows;
-            const affected = new Set([...plan.moves.map(m => m.row), ...edgeRows]);
+            const affected = new Set([..._rowsAffectedByMove(plan.moves.map(m => m.row)), ...edgeRows]);
             const snaps = [...affected].map(r => ({ row: r, vals: _RA_SNAP_COLS.map(c => r[c]) }));
             const tsNow = new Date().toLocaleString('vi-VN');
+            // Nhánh tịnh tiến nguyên khối — chốt ID các Marker gốc mơ hồ trước khi dời để không trụ nào "đổi cha" ngầm
+            const _all = _moveAllRows(), _fIdx = _rowIndex(_all);
+            _freezeAmbiguousRefs(plan.moves.map(m => m.row), _all, _fIdx, tsNow)
+                .forEach(r => { dirtyMovedRows.add(r); _invalidatePopupCacheForRow(r); });
             plan.moves.forEach(m => {
                 const r = m.row;
                 r[2] = m.lat; r[3] = m.lon; r[13] = tsNow;
@@ -424,18 +438,22 @@
                 : `Cáp ${childName} = ${L_r} m — đã dời ${plan.moving.length} trụ (${plan.fixed} đứng yên).`, !!failed);
         }
 
-        function _deleteCableSegment(childName) {
+        // childRef: dòng (ưu tiên — tên có thể trùng) hoặc tên
+        function _deleteCableSegment(childRef) {
             if (!Array.isArray(loadedData)) return;
-            const row = loadedData.slice(1).find(r => String(r[1] || '').trim() === childName);
+            const row = Array.isArray(childRef) ? childRef : loadedData.slice(1).find(r => String(r[1] || '').trim() === childRef);
             if (!row) return;
+            const childName = String(row[1] || '').trim();
             row[14] = ''; row[15] = '';
             syncRowToGAS(row, { silent: true });
             _rebuildCableLines();
             displaySuccess('Đã xóa đoạn cáp: ' + childName);
         }
 
-        function _pickParentMode(childName) {
+        function _pickParentMode(childRef) {
             if (_pickParentActive) return;
+            const childRow = Array.isArray(childRef) ? childRef : (loadedData || []).slice(1).find(r => String(r[1] || '').trim() === childRef);
+            const childName = childRow ? String(childRow[1] || '').trim() : String(childRef || '');
             _pickParentActive = true;
             displayInfo('Click vào trụ/tủ để đặt làm điểm gốc cáp cho ' + childName + '. Nhấn ESC để hủy.');
             map.getContainer().style.cursor = 'crosshair';
@@ -455,13 +473,13 @@
                 _pickParentActive = false;
                 map.getContainer().style.cursor = '';
                 if (!nearest) { displayError('Không tìm thấy trụ/tủ tại vị trí đó.'); return; }
-                const newParentName = String(nearest._rowRef[1] || '').trim();
-                if (!newParentName || newParentName === childName) return;
-                const row = (loadedData || []).slice(1).find(r => String(r[1] || '').trim() === childName);
-                if (!row) return;
-                const pLat = parseCoord(nearest._rowRef[2]), pLon = parseCoord(nearest._rowRef[3]);
+                const pRow = nearest._rowRef;
+                const newParentName = String(pRow[1] || '').trim();
+                const row = childRow;
+                if (!row || !newParentName || pRow === row) return;
+                const pLat = parseCoord(pRow[2]), pLon = parseCoord(pRow[3]);
                 const cLat = parseCoord(row[2]), cLon = parseCoord(row[3]);
-                row[14] = newParentName;
+                row[14] = _parentRefFor(pRow, _rowIndex((loadedData || []).slice(1), newMarkerRows));
                 row[15] = (Number.isFinite(pLat) && Number.isFinite(cLat))
                     ? haversineM(cLat, cLon, pLat, pLon) : '';
                 syncRowToGAS(row, { silent: true });
@@ -524,11 +542,11 @@
             const row = _currentPopupRow;
             if (!row) return;
             const parentName = String(row[1] || '');
-            if (parentName === _cableDrawChild.name) { displayError('Không thể nối trụ vào chính nó.'); return; }
+            if (row === _cableDrawChild.row) { displayError('Không thể nối trụ vào chính nó.'); return; }
             const parentLat = parseCoord(row[2]), parentLon = parseCoord(row[3]);
             const dist = haversineM(_cableDrawChild.lat, _cableDrawChild.lon, parentLat, parentLon);
             const childRow = _cableDrawChild.row;
-            childRow[14] = parentName;
+            childRow[14] = _parentRefFor(row, _rowIndex((loadedData || []).slice(1), newMarkerRows));
             childRow[15] = String(dist);
             map.closePopup();
             const ok = await syncRowToGAS(childRow, { silent: false });

@@ -149,6 +149,7 @@
             if (String(tuName).startsWith('ten:')) return _mstGetNodesForRoute(String(tuName).slice(4));
             const rows = (loadedData || []).slice(1);
             const inTu = rows.filter(r => String(r[7] || '').trim() === tuName);
+            const idx = _rowIndex(rows);
             const nodes = [];
             for (const r of inTu) {
                 const lat = parseCoord(r[2]);
@@ -160,11 +161,31 @@
                 const isRoot = isCabinet && name === tuName;
                 // Skip tủ khác (không phải root của tủ này) → không nối tủ-tủ
                 if (isCabinet && !isRoot) continue;
-                nodes.push({
-                    row: r, name, lat, lon, isRoot,
-                    parent: String(r[14] || '').trim(),
-                    dist: parseFloat(r[15]) || 0
-                });
+                nodes.push(_mstNode(r, idx, { lat, lon, isRoot }));
+            }
+            return _mstFinalize(nodes);
+        }
+
+        // v187 — node.name = KHOÁ duy nhất của dòng (tên nếu không trùng, ID nếu trùng — đúng giá trị sẽ ghi vào
+        // Marker gốc, xem _parentRefFor); node.label = tên hiển thị; node.parent = khoá của trụ cha hiện tại.
+        function _mstNode(r, idx, o) {
+            return { row: r, name: _parentRefFor(r, idx), label: String(r[1] || '').trim(),
+                lat: o.lat, lon: o.lon, isRoot: o.isRoot, _p: _resolveParent(r, idx),
+                parent: '', dist: parseFloat(r[15]) || 0 };
+        }
+        // Khoá trùng (dòng trùng tên chưa có ID — vừa thêm, chưa tải lại) → thêm hậu tố để Prim/diff không gộp node;
+        // khi áp dụng ghi _parentRefFor của DÒNG, không ghi khoá. parent = khoá node của trụ cha (ngoài tập → giá trị thô)
+        function _mstFinalize(nodes) {
+            const used = new Map(), keyOf = new Map();
+            for (const n of nodes) {
+                const k = n.name, c = used.get(k) || 0;
+                used.set(k, c + 1);
+                if (c) n.name = k + '#' + (c + 1);
+                keyOf.set(n.row, n.name);
+            }
+            for (const n of nodes) {
+                n.parent = n._p ? (keyOf.get(n._p) || _parentRefFor(n._p, null) || '') : String(n.row[14] || '').trim();
+                delete n._p;
             }
             return nodes;
         }
@@ -176,8 +197,8 @@
             const hasXY = r => isFinite(parseCoord(r[2])) && isFinite(parseCoord(r[3]));
             const poles = rows.filter(r => _mstIsPoleRow(r) && hasXY(r) && normalizeMarkerBaseName(String(r[1] || '').trim()) === nb);
             if (!poles.length) return [];
-            const node = (r, isRoot) => ({ row: r, name: String(r[1] || '').trim(), lat: parseCoord(r[2]), lon: parseCoord(r[3]), isRoot,
-                parent: String(r[14] || '').trim(), dist: parseFloat(r[15]) || 0 });
+            const idx = _rowIndex(rows);
+            const node = (r, isRoot) => _mstNode(r, idx, { lat: parseCoord(r[2]), lon: parseCoord(r[3]), isRoot });
             const poleNames = new Set(poles.map(r => String(r[1] || '').trim()));
             const cabs = rows.filter(r => { const t = parseInt(r[6]); return (t === 5 || t === 6) && hasXY(r) &&
                 !poleNames.has(String(r[1] || '').trim()) &&
@@ -192,7 +213,7 @@
             const sorted = poles.slice().sort((a, b) => coll.compare(String(a[1] || ''), String(b[1] || '')));
             const nodes = sorted.map((r, i) => node(r, !root && i === 0));
             if (root) nodes.unshift(node(root, true));
-            return nodes;
+            return _mstFinalize(nodes);
         }
 
         // _mstPrim, _mstNearestChain → src/core/mst.js
@@ -221,13 +242,8 @@
         // P1: Diff MST vs sheet — return {same, changed, added, removed} edge lists
         function _mstDiff(mstEdges, tuName) {
             // Build sheet map: {childName: parentName} cho các row trong tủ này
-            const rowsInTu = _mstGetNodesForTu(tuName).map(n => n.row);
-            const sheetMap = new Map();  // child → parent
-            rowsInTu.forEach(r => {
-                const child = String(r[1] || '').trim();
-                const parent = String(r[14] || '').trim();
-                if (child && parent) sheetMap.set(child, parent);
-            });
+            const sheetMap = new Map();  // child key → parent key
+            _mstGetNodesForTu(tuName).forEach(n => { if (n.name && n.parent) sheetMap.set(n.name, n.parent); });
             const mstMap = new Map();
             mstEdges.forEach(e => mstMap.set(e.to, e.from));
 
@@ -367,13 +383,10 @@
             // P5: Trước tiên vẽ CÁP SHEET CŨ mờ để user thấy state trước MST
             for (const pt of perTu) {
                 if (pt.skipped) continue;
-                const rowsInTu = pt.nodes.map(n => n.row);
                 const nodePos = new Map(pt.nodes.map(n => [n.name, {lat: n.lat, lon: n.lon}]));
-                for (const r of rowsInTu) {
-                    const child = String(r[1]||'').trim();
-                    const parent = String(r[14]||'').trim();
-                    if (!child || !parent) continue;
-                    const c = nodePos.get(child), p = nodePos.get(parent);
+                for (const n of pt.nodes) {
+                    if (!n.name || !n.parent) continue;
+                    const c = nodePos.get(n.name), p = nodePos.get(n.parent);
                     if (!c || !p) continue;
                     L.polyline([[c.lat, c.lon], [p.lat, p.lon]], {
                         color: '#6b7280', weight: 1.5, opacity: 0.25   // Xám rất mờ = cáp cũ sheet
@@ -476,8 +489,8 @@
             [btnDiff, btnAll].forEach(b => b && (b.disabled = true));
             if (activeBtn) activeBtn.textContent = '⏳ Đang sync...';
 
-            // v168 — trùng tên: lấy dòng CÓ toạ độ (trước đây lấy dòng cuối = dòng import trống toạ độ)
-            const rowByName = _rowMapByNamePreferCoord((loadedData || []).slice(1));
+            // v187 — dòng đích lấy theo khoá node (tên duy nhất / ID), không tra theo tên
+            const nodeRow = new Map((_mstResult.nodes || []).map(n => [`${n._tu}|${n.name}`, n]));
 
             // P3: Collect target edges từ all tủ (multi-select)
             // P1: Nếu diffOnly → chỉ include edges thuộc diff.changed + diff.added của TỪNG tủ
@@ -505,20 +518,24 @@
             const undoSnapshot = [];
 
             for (const e of targetEdges) {
-                const targetRow = rowByName.get(e.to);
+                const tn = nodeRow.get(`${e._tu}|${e.to}`);
+                const targetRow = tn && tn.row;
                 if (!targetRow) continue;
-                const oldParent = String(targetRow[14] || '').trim();
                 const oldDist = parseFloat(targetRow[15]) || 0;
                 const newDist = Math.round(e.dist);
-                if (oldParent === e.from && Math.abs(oldDist - newDist) < 1) continue;
-                // Snapshot old values (chỉ tên trụ + parent + dist, không lưu ref → survive reload)
+                const fn = nodeRow.get(`${e._tu}|${e.from}`);
+                if (!fn) continue;
+                const newRef = _parentRefFor(fn.row, _rowIndex((loadedData || []).slice(1), newMarkerRows));
+                if (tn.parent === e.from && String(targetRow[14] || '').trim() === newRef && Math.abs(oldDist - newDist) < 1) continue;
+                // Snapshot old values (ID + tên trụ + parent + dist, không lưu ref → survive reload)
                 undoSnapshot.push({
+                    id: String(targetRow[0] || '').trim(),
                     tenTru: String(targetRow[1] || '').trim(),
                     oldParent: String(targetRow[14] || ''),
                     oldDist: String(targetRow[15] || ''),
                     oldCapNhat: String(targetRow[13] || '')
                 });
-                targetRow[14] = e.from;
+                targetRow[14] = newRef;
                 targetRow[15] = newDist;
                 targetRow[13] = new Date().toISOString();
                 updated++;
@@ -653,15 +670,17 @@
             const bar = document.getElementById('mstRollbackBar');
             if (bar) bar.innerHTML = '<span id="rollbackProgress">⏳ Rollback 0/' + undo.snapshot.length + '...</span>';
 
-            // v168 — trùng tên: lấy dòng CÓ toạ độ (trước đây lấy dòng cuối = dòng import trống toạ độ)
-            const rowByName = _rowMapByNamePreferCoord((loadedData || []).slice(1));
+            // v187 — khớp theo ID trước; snapshot cũ không có ID → tên (trùng tên: lấy dòng CÓ toạ độ)
+            const _rbRows = (loadedData || []).slice(1);
+            const rowByName = _rowMapByNamePreferCoord(_rbRows);
+            const rowById = _rowIndex(_rbRows).byId;
 
             let restored = 0, synced = 0, failed = 0;
             const total = undo.snapshot.length;
             // Trước tiên restore in-memory
             const toSync = [];
             for (const snap of undo.snapshot) {
-                const row = rowByName.get(snap.tenTru);
+                const row = (snap.id && rowById.get(snap.id)) || rowByName.get(snap.tenTru);
                 if (!row) continue;
                 row[14] = snap.oldParent;
                 row[15] = snap.oldDist;

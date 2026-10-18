@@ -91,12 +91,12 @@ function _rsOrder(poles, frame, cabXY) {
 
 // Chiều dài tuyến: tổng mét cáp nếu cáp phủ đủ (≥ n−1 đoạn trong tuyến), không thì khoảng cách 2 đầu theo trục tuyến
 function _rsLength(ordered, allRows, tuName) {
-    const names = new Set(ordered.map(p => String(p.r[1] || '').trim()));
-    if (tuName) names.add(tuName);
+    const inRoute = new Set(ordered.map(p => p.r));
+    const idx = _rowIndex(allRows, ordered.map(p => p.r));
     let sum = 0, n = 0;
     for (const p of ordered) {
-        const par = String(p.r[14] || '').trim(), m = _rsNum(p.r[15]);
-        if (par && names.has(par) && m > 0) { sum += m; n++; }
+        const par = _resolveParent(p.r, idx), m = _rsNum(p.r[15]);
+        if (par && (inRoute.has(par) || (tuName && String(par[1] || '').trim() === tuName)) && m > 0) { sum += m; n++; }
     }
     if (ordered.length > 1 && n >= ordered.length - 1) return { length: Math.round(sum), src: 'cap' };
     // Đo theo trục tuyến (không đi zig-zag qua lại 2 bên đường)

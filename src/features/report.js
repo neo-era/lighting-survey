@@ -228,6 +228,7 @@
                     detailHeader.getCell(i+1).font = { bold:true, color:{ argb:'FFFFFFFF' } };
                 });
 
+                const _rpIdx = _rowIndex((loadedData || []).slice(1));   // Marker gốc hiển thị tên (sheet có thể lưu ID)
                 rows.forEach((r, i) => {
                     wsDetail.addRow([
                         i+1, r[1]||'',
@@ -235,7 +236,7 @@
                         r[4]||'', r[5]||'', MARKER_TYPE_LABEL[String(r[6])]||'Không xác định',
                         r[7]||'', r[8]||'', r[9]||'', r[10]||'', r[11]||'',
                         r[12]&&r[12].startsWith('data:')?'(base64)':r[12]||'',
-                        r[13]||'', r[14]||'', r[15]||'', r[16]||'', r[17]||'', r[18]||''
+                        r[13]||'', _parentNameOf(r, _rpIdx), r[15]||'', r[16]||'', r[17]||'', r[18]||''
                     ]);
                 });
 
@@ -251,13 +252,14 @@
             } else {
                 // Fallback: XLSX đơn giản
                 const header = ['STT','Tên trụ','Lat','Lon','Ghi chú','Người KS','Loại','Tủ điều khiển','Loại trụ','Loại cần','Loại đèn','Công suất','URL Ảnh','Ngày khảo sát','Marker gốc','Khoảng cách (m)','Mã PE','Đường','Phường/Xã'];
+                const _rpIdx = _rowIndex((loadedData || []).slice(1));
                 const dataRows = rows.map((r,i) => [
                     i+1, r[1]||'',
                     parseCoord(r[2])||0, parseCoord(r[3])||0,
                     r[4]||'', r[5]||'', MARKER_TYPE_LABEL[String(r[6])]||'Không xác định',
                     r[7]||'', r[8]||'', r[9]||'', r[10]||'', r[11]||'',
                     r[12]&&r[12].startsWith('data:')?'(base64)':r[12]||'',
-                    r[13]||'', r[14]||'', r[15]||'', r[16]||'', r[17]||'', r[18]||''
+                    r[13]||'', _parentNameOf(r, _rpIdx), r[15]||'', r[16]||'', r[17]||'', r[18]||''
                 ]);
                 const ws = XLSX.utils.aoa_to_sheet([header,...dataRows]);
                 const wbx = XLSX.utils.book_new();

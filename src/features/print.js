@@ -80,32 +80,26 @@
                 return { x: cx + dx * cosθ - dy * sinθ, y: cy + dx * sinθ + dy * cosθ };
             }
 
-            const posIdx = {};
-            ((loadedData || []).slice(1)).forEach(r => {
-                const name = String(r[1] || '').trim();
-                const lat = parseCoord(r[2]), lon = parseCoord(r[3]);
-                if (name && Number.isFinite(lat) && Number.isFinite(lon)) posIdx[name] = [lat, lon];
-            });
-
             // Detect cycle để tô đỏ đoạn lỗi trong SVG
             const _svgCycle = _detectCableCycle(rows);
-            const _svgCycleSet = new Set();
-            if (_svgCycle) _svgCycle.slice(0, -1).forEach(n => _svgCycleSet.add(n));
+            const _svgCycleSet = (_svgCycle && _svgCycle.rows) || new Set();
+            const _svgIdx = _rowIndex((loadedData || []).slice(1), rows);
+            const _svgLL = r => { const la = parseCoord(r[2]), lo = parseCoord(r[3]); return Number.isFinite(la) && Number.isFinite(lo) ? [la, lo] : null; };
 
             let markup = '';
             rows.forEach(r => {
-                const parentName = String(r[14] || '').trim();
-                if (!parentName) return;
-                const childName = String(r[1] || '').trim();
-                if (!childName || childName === parentName || !posIdx[childName] || !posIdx[parentName]) return;
+                if (!String(r[14] || '').trim()) return;
+                const pRow = _resolveParent(r, _svgIdx);
+                const pLL = pRow && _svgLL(pRow), cLL = _svgLL(r);
+                if (!pLL || !cLL) return;
 
-                const from = rotPt(map.latLngToContainerPoint(posIdx[parentName]));
-                const to   = rotPt(map.latLngToContainerPoint(posIdx[childName]));
+                const from = rotPt(map.latLngToContainerPoint(pLL));
+                const to   = rotPt(map.latLngToContainerPoint(cLL));
                 const distVal = String(r[15] || '').trim() ||
-                    String(haversineM(posIdx[childName][0], posIdx[childName][1], posIdx[parentName][0], posIdx[parentName][1]));
+                    String(haversineM(cLL[0], cLL[1], pLL[0], pLL[1]));
                 const mx = ((from.x + to.x) / 2).toFixed(1);
                 const my = ((from.y + to.y) / 2).toFixed(1);
-                const isCycle = _svgCycleSet.size > 0 && _svgCycleSet.has(childName) && _svgCycleSet.has(parentName);
+                const isCycle = _svgCycleSet.size > 0 && _svgCycleSet.has(r) && _svgCycleSet.has(pRow);
                 const strokeColor = isCycle ? '#ef4444' : (CABLE_STYLE[String(r[22] || 'noi')] || CABLE_STYLE.noi).color;
                 const strokeDash  = isCycle ? '6 4'     : (CABLE_STYLE[String(r[22] || 'noi')] || CABLE_STYLE.noi).dashArray;
                 const strokeW     = isCycle ? 3.5        : 2.5;
@@ -264,25 +258,20 @@
                 </tr>`;
             }).join('');
             // Tổng cáp: cùng logic _buildCableLines — chỉ đếm row có Marker gốc (r[14]),
-            // dùng r[15] (Khoảng cách) nếu hợp lệ, fallback Haversine từ posIdx tất cả marker.
-            const posIdx = {};
-            ((loadedData || []).slice(1)).forEach(r => {
-                const name = String(r[1] || '').trim();
-                const lat = parseCoord(r[2]), lon = parseCoord(r[3]);
-                if (name && Number.isFinite(lat) && Number.isFinite(lon)) posIdx[name] = [lat, lon];
-            });
+            // dùng r[15] (Khoảng cách) nếu hợp lệ, fallback Haversine tới trụ cha (_resolveParent, tra trong toàn bộ marker).
             // Tách tổng cáp theo loại (noi/ngam) — dùng cho legend hiển thị 2 dòng riêng
             const capByType = { noi: 0, ngam: 0 };
+            const _capIdx = _rowIndex((loadedData || []).slice(1), rows);
+            const _capLL = r => { const la = parseCoord(r[2]), lo = parseCoord(r[3]); return Number.isFinite(la) && Number.isFinite(lo) ? [la, lo] : null; };
             rows.forEach(r => {
-                const parent = String(r[14] || '').trim();
-                if (!parent) return;
-                const child = String(r[1] || '').trim();
-                if (!posIdx[parent] || !posIdx[child] || child === parent) return;
+                const pRow = _resolveParent(r, _capIdx);
+                const pp = pRow && _capLL(pRow), cc = _capLL(r);
+                if (!pp || !cc) return;
                 const type = String(r[22] || 'noi') === 'ngam' ? 'ngam' : 'noi';
                 const v = parseFloat(String(r[15] || '').replace(',', '.'));
                 const len = (Number.isFinite(v) && v > 0)
                     ? v
-                    : haversineM(posIdx[parent][0], posIdx[parent][1], posIdx[child][0], posIdx[child][1]);
+                    : haversineM(pp[0], pp[1], cc[0], cc[1]);
                 capByType[type] += len;
             });
 

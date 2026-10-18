@@ -747,6 +747,7 @@
                     <label style="cursor:pointer;user-select:none;"><input type="checkbox" class="lcTypeFilter" data-type="fanout" onchange="_lcRefreshList()"> 🟡 Fan-out cao</label>
                     <label style="cursor:pointer;user-select:none;" title="Trụ có nhiều rows với cùng tên nhưng khác parent — data corruption, có thể do nhập trùng"><input type="checkbox" class="lcTypeFilter" data-type="dup" checked onchange="_lcRefreshList()"> 🟤 Trùng tên</label>
                     <label style="cursor:pointer;user-select:none;" title="Có trụ khác gần hơn (cùng tủ) mà chưa được dùng làm parent — nên re-run Auto MST"><input type="checkbox" class="lcTypeFilter" data-type="suboptimal" onchange="_lcRefreshList()"> 🟪 Parent xa (≥1.5×)</label>
+                    <label style="cursor:pointer;user-select:none;" title="Hai trụ nằm chồng lên nhau (cách &lt; 0,5 m) — thường do kéo trụ trùng tên ở bản cũ; kéo lại về đúng vị trí"><input type="checkbox" class="lcTypeFilter" data-type="stack" checked onchange="_lcRefreshList()"> 🟥 Trụ chồng nhau</label>
                 </div>
                 <div style="display:flex;justify-content:space-between;align-items:center;font-size:11px;">
                     <div id="lcSummary" style="color:var(--text-muted);">—</div>
@@ -2904,6 +2905,7 @@
     <!-- Load thứ tự phụ thuộc: text → utils → vn2000 → dxf-utils → cad-drawing → mst -->
     <script src="src/core/text.js"></script>
     <script src="src/core/utils.js"></script>
+    <script src="src/core/parent-ref.js"></script>
     <script src="src/core/vn2000.js"></script>
     <script src="src/core/dxf-utils.js"></script>
     <script src="src/core/cad-drawing.js"></script>
@@ -4508,6 +4510,20 @@
         let githubToken = '';
         let _currentPopupRow = null;
         let _editingRow = null; // row đang sửa (null = thêm mới)
+        // v187 — dòng trụ cha đang chọn trong form (dropdown Marker gốc / mở sửa) — tên có thể trùng nên giữ tham chiếu dòng
+        let _gocPickedRow = null;
+        // Giá trị ghi vào cột Marker gốc từ ô nhập: dòng đã chọn (nếu ô vẫn đúng tên đó) → ID khớp → tên (trùng thì
+        // trụ cùng tên gần vị trí mới nhất). Trả { ref, row } — ref = tên nếu duy nhất, ID nếu trùng (_parentRefFor).
+        function _gocRefFromForm(val, lat, lon, selfRow) {
+            const v = String(val || '').trim();
+            if (!v) return { ref: '', row: null };
+            const idx = _rowIndex((loadedData || []).slice(1), newMarkerRows);
+            let p = null;
+            if (_gocPickedRow && _gocPickedRow !== selfRow && String(_gocPickedRow[1] || '').trim() === v) p = _gocPickedRow;
+            if (!p) p = _resolveParent(selfRow || ['', '', lat, lon], idx, v);
+            if (p === selfRow) p = null;
+            return p ? { ref: _parentRefFor(p, idx), row: p } : { ref: v, row: null };
+        }
         // Cạnh dài nhất của ảnh khảo sát sau khi resize (px).
         // 1600 chọn theo 4 ràng buộc:
         //  - Đọc nhãn thiết bị: chụp cận cảnh 30cm → chữ 8mm cao ~43px, dư gấp đôi ngưỡng 20px.
@@ -6187,80 +6203,93 @@
             </div>`;
         }
 
-        function updateMarkerCoordinatesInData(markerName, newLat, newLon) {
-            // Haversine inline (không phụ thuộc scope ngoài)
-            const _hv = (la1, lo1, la2, lo2) => {
-                const R = 6371000, toRad = x => x * Math.PI / 180;
-                const dLat = toRad(la2 - la1), dLon = toRad(lo2 - lo1);
-                const a = Math.sin(dLat/2)**2 + Math.cos(toRad(la1))*Math.cos(toRad(la2))*Math.sin(dLon/2)**2;
-                return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-            };
-            // Tìm 1 row theo tên/ID trong cả 2 array (loadedData + newMarkerRows)
-            const findRowByName = (nm) => {
-                if (nm == null || nm === '') return null;
-                const key = String(nm).trim();
-                for (const arr of [loadedData, newMarkerRows]) {
-                    if (!Array.isArray(arr)) continue;
-                    for (const r of arr) {
-                        if (Array.isArray(r) && (String(r[1] || '').trim() === key || String(r[0] || '').trim() === key)) return r;
-                    }
-                }
-                return null;
-            };
-
-            const tsNow = new Date().toLocaleString('vi-VN');
-            let movedRow = null;
-
-            // 1) Update lat/lon/vn2000/capNhat của marker M
-            [loadedData, newMarkerRows].forEach(arr => {
-                if (Array.isArray(arr)) arr.forEach(row => {
-                    if (Array.isArray(row) && (row[1]===markerName||row[0]===markerName)) {
-                        row[2]=newLat; row[3]=newLon;
-                        row[13] = tsNow;
-                        const _vn = convertLatLonToVn2000(newLat, newLon);
-                        row[19] = Math.round(_vn.x);
-                        row[20] = Math.round(_vn.y);
-                        dirtyMovedRows.add(row);
-                        movedRow = row;
-
-                        // 2) Nếu M có parent → cập nhật row[15] = haversine(M, parent)
-                        const parentName = String(row[14] || '').trim();
-                        if (parentName) {
-                            const parent = findRowByName(parentName);
-                            if (parent) {
-                                const pLat = parseFloat(parent[2]);
-                                const pLon = parseFloat(parent[3]);
-                                if (isFinite(pLat) && isFinite(pLon)) {
-                                    row[15] = Math.round(_hv(newLat, newLon, pLat, pLon));
-                                }
-                            }
-                        }
-                    }
-                });
-            });
-
-            // 3) Tìm children có parent = M → cập nhật row[15] = haversine(child, M)
-            if (movedRow) {
-                const myName = String(movedRow[1] || '').trim();
-                const myId   = String(movedRow[0] || '').trim();
-                if (myName || myId) {
-                    [loadedData, newMarkerRows].forEach(arr => {
-                        if (!Array.isArray(arr)) return;
-                        arr.forEach(row => {
-                            if (!Array.isArray(row) || row === movedRow) return;
-                            const p = String(row[14] || '').trim();
-                            if (!p || (p !== myName && p !== myId)) return;
-                            const cLat = parseFloat(row[2]);
-                            const cLon = parseFloat(row[3]);
-                            if (!isFinite(cLat) || !isFinite(cLon)) return;
-                            row[15] = Math.round(_hv(cLat, cLon, newLat, newLon));
-                            row[13] = tsNow;
-                            dirtyMovedRows.add(row);
-                        });
-                    });
-                }
+        // v187 — Dời ĐÚNG các dòng được truyền (tham chiếu dòng, không tìm theo tên): trước đây tìm theo tên → kéo 1 trụ
+        // trùng tên dời luôn mọi trụ cùng tên về 1 chỗ (Bàu Bàng: 13 cặp trụ chồng nhau).
+        // Marker gốc ghi bằng tên trùng được giải theo trụ cùng tên GẦN NHẤT → dời 1 trụ có thể làm trụ khác "đổi cha"
+        // ngầm. Nên TRƯỚC khi dời: chốt sang ID mọi tham chiếu mơ hồ có thể bị ảnh hưởng (trỏ tới tên trùng của trụ được
+        // dời, hoặc chính trụ được dời trỏ tới tên trùng). Sau đó cập nhật khoảng cách cáp tới cha + của các trụ con.
+        // moves: [{ row, lat, lon }]. Trả Set các dòng bị đổi (để snapshot/hoàn tác thì gọi _rowsAffectedByMove trước).
+        function _moveAllRows() {
+            const seen = new Set();
+            return [...(loadedData || []).slice(1), ...(newMarkerRows || [])]
+                .filter(r => Array.isArray(r) && !seen.has(r) && seen.add(r));
+        }
+        function _freezeAmbiguousRefs(movedRows, all, idx, tsNow) {
+            const moved = new Set(movedRows);
+            const dupNames = new Set(movedRows.map(r => String(r[1] || '').trim())
+                .filter(n => n && (idx.byName.get(n) || []).length > 1));
+            const changed = [];
+            for (const c of all) {
+                const k = String(c[14] || '').trim();
+                if (!k || idx.byId.has(k)) continue;
+                if ((idx.byName.get(k) || []).length < 2) continue;          // tên cha duy nhất → không mơ hồ
+                if (!dupNames.has(k) && !moved.has(c)) continue;
+                const p = _resolveParent(c, idx);
+                if (!p) continue;
+                const ref = _parentRefFor(p, idx);
+                if (ref !== k) { c[14] = ref; c[13] = tsNow; changed.push(c); }
             }
+            return changed;
+        }
+        // Các dòng sẽ bị đổi khi dời moves (dòng dời + con + dòng chốt ID) — dùng cho snapshot hoàn tác
+        function _rowsAffectedByMove(movedRows) {
+            const all = _moveAllRows(), idx = _rowIndex(all), moved = new Set(movedRows);
+            const dupNames = new Set(movedRows.map(r => String(r[1] || '').trim()).filter(n => n && (idx.byName.get(n) || []).length > 1));
+            const out = new Set(movedRows);
+            for (const c of all) {
+                if (moved.has(_resolveParent(c, idx))) out.add(c);
+                else if (dupNames.has(String(c[14] || '').trim())) out.add(c);
+            }
+            return out;
+        }
+        function _moveRowsAndCables(moves) {
+            const list = (moves || []).filter(m => m && Array.isArray(m.row));
+            if (!list.length) return;
+            const all = _moveAllRows();
+            const idx = _rowIndex(all);
+            const tsNow = new Date().toLocaleString('vi-VN');
+            const movedRows = list.map(m => m.row);
+            const moved = new Set(movedRows);
+            const touched = new Set(_freezeAmbiguousRefs(movedRows, all, idx, tsNow));
+            // Quan hệ chốt TRƯỚC khi đổi toạ độ (sau bước chốt ID → không còn phụ thuộc vị trí)
+            const parentOf = new Map(movedRows.map(r => [r, _resolveParent(r, idx)]));
+            const children = all.filter(c => !moved.has(c) && moved.has(_resolveParent(c, idx)));
+            const childParent = new Map(children.map(c => [c, _resolveParent(c, idx)]));
+            for (const m of list) {
+                const row = m.row;
+                row[2] = m.lat; row[3] = m.lon; row[13] = tsNow;
+                const _vn = convertLatLonToVn2000(m.lat, m.lon);
+                row[19] = Math.round(_vn.x);
+                row[20] = Math.round(_vn.y);
+                touched.add(row);
+            }
+            const dist = (a, b) => {
+                const la = parseCoord(a[2]), lo = parseCoord(a[3]), pl = parseCoord(b[2]), po = parseCoord(b[3]);
+                return [la, lo, pl, po].every(isFinite) ? Math.round(getDistanceMeters(la, lo, pl, po)) : null;
+            };
+            for (const row of movedRows) {
+                const p = parentOf.get(row);
+                if (!p) continue;
+                const d = dist(row, p);
+                if (d != null) row[15] = d;
+            }
+            for (const c of children) {
+                const d = dist(c, childParent.get(c));
+                if (d == null) continue;
+                c[15] = d; c[13] = tsNow;
+                touched.add(c);
+            }
+            touched.forEach(r => {
+                dirtyMovedRows.add(r);
+                if (typeof _invalidatePopupCacheForRow === 'function') _invalidatePopupCacheForRow(r);
+            });
+        }
+        function _setRowCoordsAndCables(row, newLat, newLon) {
+            _moveRowsAndCables([{ row, lat: newLat, lon: newLon }]);
+        }
 
+        function updateMarkerCoordinatesInData(row, newLat, newLon) {
+            _setRowCoordsAndCables(row, newLat, newLon);
             updateDirtyMovedBadge();
         }
 
@@ -6348,7 +6377,7 @@
             if (named.length) {
                 const result = await _batchSyncRowsToGAS(
                     named,
-                    ['lat', 'lon', 'vn2000x', 'vn2000y', 'khoangCach', 'capNhat'],
+                    ['lat', 'lon', 'vn2000x', 'vn2000y', 'markerGoc', 'khoangCach', 'capNhat'],
                     (done, total, chunk, chunkTot) => {
                         if (btnLabel && chunkTot > 1) btnLabel.textContent = `Đang cập nhật ${done}/${total}...`;
                     }
@@ -6480,7 +6509,7 @@
                 const newLat = ll.lat, newLon = ll.lng;
                 const md = markers.find(m => m.marker === marker);
                 if (md) { md.lat = newLat; md.lon = newLon; }
-                updateMarkerCoordinatesInData(name, newLat, newLon);
+                updateMarkerCoordinatesInData(row, newLat, newLon);
                 // v147 — invalidate popup cache (coord change → HTML mới)
                 _invalidatePopupCacheForRow(row);
                 marker.setPopupContent(createMarkerPopupContent(row));
@@ -8317,12 +8346,14 @@
                     if (baseSelect.value !== '') {
                         const bm = markers[parseInt(baseSelect.value, 10)];
                         if (bm) {
+                            _gocPickedRow = (bm.marker && bm.marker._rowRef) || null;
                             gocEl.value = String(bm.name || '');
                             if (kEl && markerPopupLocation) {
                                 kEl.value = Math.round(getDistanceMeters(bm.lat, bm.lon, markerPopupLocation[0], markerPopupLocation[1]));
                             }
                         }
                     } else {
+                        _gocPickedRow = null;
                         gocEl.value = '';
                         if (kEl) kEl.value = '';
                     }
@@ -8354,6 +8385,7 @@
             if (tempMarker) { map.removeLayer(tempMarker); tempMarker = null; }
             markerPopupLocation = null; markerImageDataUrls = ['', '', ''];
             _editingRow = null;
+            _gocPickedRow = null;
             const fi = document.getElementById('markerImageInput');
             if (fi) fi.value = null;
             _refreshPillTappable();
@@ -8856,12 +8888,16 @@
                 const trangThaiVal     = (document.getElementById('markerTrangThaiSelect') || {}).value || '';
                 let baseMarkerName = '', distanceToBase = '';
                 if (markerGocVal) {
-                    baseMarkerName  = markerGocVal;
-                    distanceToBase  = khoangCachVal || haversineM(lat, lon,
-                        ...(()=>{ const p = (loadedData||[]).slice(1).find(r=>String(r[1]).trim()===markerGocVal); return p ? [parseCoord(p[2]),parseCoord(p[3])] : [lat,lon]; })());
+                    const goc = _gocRefFromForm(markerGocVal, lat, lon, _capturedEditingRow);
+                    baseMarkerName  = goc.ref;
+                    distanceToBase  = khoangCachVal || (goc.row ? haversineM(lat, lon, parseCoord(goc.row[2]), parseCoord(goc.row[3])) : 0);
                 } else if (baseSelect && baseSelect.value !== '') {
                     const bm = markers[parseInt(baseSelect.value, 10)];
-                    if (bm) { baseMarkerName = bm.name||''; distanceToBase = Math.round(getDistanceMeters(bm.lat,bm.lon,lat,lon)); }
+                    if (bm) {
+                        const bRow = bm.marker && bm.marker._rowRef;
+                        baseMarkerName = bRow ? _parentRefFor(bRow, _rowIndex((loadedData || []).slice(1), newMarkerRows)) : (bm.name || '');
+                        distanceToBase = Math.round(getDistanceMeters(bm.lat,bm.lon,lat,lon));
+                    }
                 }
                 if (!Array.isArray(loadedData)) loadedData = [];
                 if (!Array.isArray(newMarkerRows)) newMarkerRows = [];
@@ -10153,7 +10189,9 @@
                 _fillEmptyGeoFieldsForEdit(row, lat, lon);
 
                 const markerGocEl = document.getElementById('markerGocInput');
-                if (markerGocEl) markerGocEl.value = row[14] || '';
+                const _gIdx = _rowIndex((loadedData || []).slice(1), newMarkerRows);
+                const _gRow = _resolveParent(row, _gIdx);
+                if (markerGocEl) markerGocEl.value = _parentNameOf(row, _gIdx);   // hiển thị tên, kể cả khi sheet lưu ID
                 const khoangCachEl = document.getElementById('markerKhoangCachInput');
                 if (khoangCachEl) khoangCachEl.value = row[15] || '';
                 const loaiCapEl = document.getElementById('markerLoaiCapInput');
@@ -10193,17 +10231,17 @@
                 _renderImageSlots();
 
                 // Pre-select baseSelect khớp với Marker gốc từ Sheet
-                const linkedGoc = String(row[14] || '').trim();
+                const linkedGoc = _parentNameOf(row, _gIdx);
                 if (linkedGoc) {
                     const bsel = document.getElementById('markerBaseSelect');
                     if (bsel) {
-                        const matchOpt = Array.from(bsel.options).find(o => {
-                            const m = markers[parseInt(o.value, 10)];
-                            return m && String(m.name||'').trim() === linkedGoc;
-                        });
+                        const opts = Array.from(bsel.options);
+                        const matchOpt = (_gRow && opts.find(o => { const m = markers[parseInt(o.value, 10)]; return m && m.marker && m.marker._rowRef === _gRow; }))
+                            || opts.find(o => { const m = markers[parseInt(o.value, 10)]; return m && String(m.name||'').trim() === linkedGoc; });
                         if (matchOpt) { bsel.value = matchOpt.value; bsel.dispatchEvent(new Event('change')); }
                     }
                 }
+                _gocPickedRow = _gRow;
 
                 const coordsEl = document.getElementById('markerCoordsText');
                 if (coordsEl && Number.isFinite(lat) && Number.isFinite(lon))

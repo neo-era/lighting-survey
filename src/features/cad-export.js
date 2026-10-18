@@ -1223,20 +1223,21 @@
         // Tổng mét cáp theo loại (row[22], mặc định 'noi') — chỉ đoạn có trụ gốc nằm trong tập xuất.
         // Ưu tiên số mét đã ghi (row[15], chấp nhận dấu phẩy thập phân); chưa ghi → đo Haversine.
         function _legendCableMeters(rows) {
-            const pos = new Map();
+            const pos = new Map();   // row → [lat, lon]
             for (const r of rows) {
                 const lat = parseCoord(r[2]), lon = parseCoord(r[3]);
-                if (isFinite(lat) && isFinite(lon)) pos.set(String(r[1] || '').trim(), [lat, lon]);
+                if (isFinite(lat) && isFinite(lon)) pos.set(r, [lat, lon]);
             }
+            const idx = _rowIndex((loadedData || []).slice(1), rows);   // cùng cách giải như khi vẽ cáp (_cadIdx)
             const out = new Map();
             for (const r of rows) {
-                const parent = String(r[14] || '').trim();
-                if (!parent || !pos.has(parent)) continue;
+                const pRow = _resolveParent(r, idx);
+                if (!pRow || !pos.has(pRow)) continue;
                 let m = parseFloat(String(r[15] || '').replace(',', '.'));
                 if (!(m > 0)) {
-                    const me = pos.get(String(r[1] || '').trim());
+                    const me = pos.get(r);
                     if (!me) continue;
-                    const pp = pos.get(parent);
+                    const pp = pos.get(pRow);
                     m = haversineM(me[0], me[1], pp[0], pp[1]);
                 }
                 const st = String(r[22] || 'noi').trim() || 'noi';
@@ -2092,12 +2093,12 @@
             const COORD_H = CAB_HW * 0.3;
 
             // Vẽ đường nối giữa tủ (nếu có Marker gốc chỉ tủ khác)
-            const cabByName = new Map();
-            cabPositions.forEach(c => cabByName.set(c.name, c));
+            const cabByRow = new Map();
+            cabPositions.forEach(c => cabByRow.set(c.row, c));
+            const _cabIdx = _rowIndex((loadedData || []).slice(1));
             for (const c of cabPositions) {
-                const parent = String(c.row[14] || '').trim();
-                if (!parent || !cabByName.has(parent)) continue;
-                const p = cabByName.get(parent);
+                const p = cabByRow.get(_resolveParent(c.row, _cabIdx));
+                if (!p) continue;
                 // Dashed line
                 _drawCableSymbol(push, c.x, c.y, p.x, p.y, 'ngam');   // dash-dot pattern
             }
@@ -2374,9 +2375,10 @@
             const _entitiesStartIdx = L.length;
             push('0', 'SECTION', '2', 'ENTITIES');
 
-            const filteredNames = new Set(rows.map(r => String(r[1] || '').trim()));
+            // Marker gốc giải theo dòng (ID / tên duy nhất / tên trùng gần nhất) — cha có thể ngoài bộ lọc
+            const _cadIdx = _rowIndex((loadedData || []).slice(1), rows);
             let bounds = { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity };
-            const posMap = new Map();  // name → {x, y}
+            const posMap = new Map();  // row → {x, y}
 
             // Track states used (cho auto-legend Phase C)
             const _usedStates = new Set();
@@ -2451,12 +2453,11 @@
                 const segs = _rlRoadSegments(_osmData, cm, k0, outDE, outDN);
                 _roadIdx = segs.length ? _rlBuildIndex(segs, 50) : null;
                 // Vị trí trụ cha cho fallback — tra trong toàn bộ dữ liệu (cha có thể nằm ngoài bộ lọc)
-                _parentLL = new Map();
-                (loadedData || []).slice(1).forEach(r => {
-                    const nm = String(r[1] || '').trim();
-                    const la = parseCoord(r[2]), lo = parseCoord(r[3]);
-                    if (nm && isFinite(la) && isFinite(lo) && !_parentLL.has(nm)) _parentLL.set(nm, [la, lo]);
-                });
+                _parentLL = r => {
+                    const p = _resolveParent(r, _cadIdx);
+                    const la = p ? parseCoord(p[2]) : NaN, lo = p ? parseCoord(p[3]) : NaN;
+                    return isFinite(la) && isFinite(lo) ? [la, lo] : null;
+                };
                 if (_osmErr && _osmErr.name === 'AbortError') _cgNotifyOsmSkipped();
                 else if (_osmErr && typeof displayWarning === 'function') {
                     displayWarning('⚠ Không lấy được đường OSM (' + _osmErr.message + ') — block xoay theo tuyến cáp.');
@@ -2470,7 +2471,7 @@
                 const vn = convertLatLonToVn2000(lat, lon, cm, k0);
                 const x = vn.x + outDE, y = vn.y + outDN;
                 const name = String(r[1] || '').trim();
-                posMap.set(name, { x, y });
+                posMap.set(r, { x, y });
 
                 const type = parseInt(r[6]);
                 const state = String(r[29] || '').trim() || 'giu';  // default = giữ nguyên
@@ -2485,8 +2486,8 @@
                     const near = _roadIdx ? _rlNearest(x, y, _roadIdx, 40) : null;
                     let parentXY = null;
                     if (!near) {
-                        const pll = _parentLL.get(String(r[14] || '').trim());
-                        if (pll && String(r[14]).trim() !== name) {
+                        const pll = _parentLL(r);
+                        if (pll) {
                             const pv = convertLatLonToVn2000(pll[0], pll[1], cm, k0);
                             parentXY = { x: pv.x + outDE, y: pv.y + outDN };
                         }
@@ -2529,10 +2530,8 @@
             const _includeCable = opts.includeCable !== false;
             for (const r of rows) {
                 if (!_includeCable) break;
-                const parentName = String(r[14] || '').trim();
-                if (!parentName || !filteredNames.has(parentName)) continue;
-                const p1 = posMap.get(String(r[1] || '').trim());
-                const p2 = posMap.get(parentName);
+                const p1 = posMap.get(r);
+                const p2 = posMap.get(_resolveParent(r, _cadIdx));   // chỉ vẽ khi cả cha nằm trong bộ lọc
                 if (!p1 || !p2) continue;
 
                 const cableState = String(r[22] || 'noi').trim();  // noi/ngam/noi_thu/ngam_thu/noi_moi/ngam_moi
@@ -3588,15 +3587,15 @@
             // Count per type + total công suất
             const byType = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0 };
             let totalPower = 0, cableCount = 0;
-            const nameSet = new Set(rows.map(r => String(r[1] || '').trim()));
+            const rowSet = new Set(rows);
+            const _lgIdx = _rowIndex((loadedData || []).slice(1), rows);
             for (const r of rows) {
                 const t = parseInt(r[6]);
                 if (byType[t] !== undefined) byType[t]++;
                 const p = parseFloat(r[11]);
                 const n = parseInt(r[21]) || 1;
                 if (isFinite(p)) totalPower += p * n;
-                const parent = String(r[14] || '').trim();
-                if (parent && nameSet.has(parent)) cableCount++;
+                if (rowSet.has(_resolveParent(r, _lgIdx))) cableCount++;
             }
             let totalCable = 0;
             for (const r of rows) {
@@ -3930,10 +3929,8 @@
             const el = document.getElementById('cgLiveCounter');
             const total = (loadedData || []).length - 1;
             const tuCount = new Set(rows.map(r => String(r[7] || '').trim()).filter(Boolean)).size;
-            const cableCount = rows.filter(r => {
-                const parent = String(r[14] || '').trim();
-                return parent && rows.some(x => String(x[1] || '').trim() === parent);
-            }).length;
+            const _rowSet = new Set(rows), _lcIdx = _rowIndex((loadedData || []).slice(1), rows);
+            const cableCount = rows.filter(r => _rowSet.has(_resolveParent(r, _lcIdx))).length;
             if (rows.length === 0) {
                 el.style.background = '#fee2e2';
                 el.style.color = '#dc2626';

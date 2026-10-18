@@ -106,22 +106,19 @@
             }
             const rows = loadedData.slice(1);
 
-            // Build position index: tên trụ → [lat, lon]
-            const posIdx = {};
-            rows.forEach(r => {
-                const name = String(r[1] || '').trim();
-                const lat = parseCoord(r[2]), lon = parseCoord(r[3]);
-                if (name && isFinite(lat) && isFinite(lon)) posIdx[name] = [lat, lon];
-            });
-
             // Tìm các row có Marker gốc hợp lệ
             const toCalc = [], notFound = [];
+            const _pIdx = _rowIndex(rows);
+            const _pLL = new Map();   // child row → [lat, lon] của trụ cha (ID / tên duy nhất / tên trùng gần nhất)
             rows.forEach(r => {
                 const parentName = String(r[14] || '').trim();
                 if (!parentName) return;
                 const cLat = parseCoord(r[2]), cLon = parseCoord(r[3]);
                 if (!isFinite(cLat) || !isFinite(cLon)) return;
-                if (!posIdx[parentName]) { notFound.push(String(r[1] || '')); return; }
+                const p = _resolveParent(r, _pIdx);
+                const pLat = p ? parseCoord(p[2]) : NaN, pLon = p ? parseCoord(p[3]) : NaN;
+                if (!isFinite(pLat) || !isFinite(pLon)) { notFound.push(String(r[1] || '')); return; }
+                _pLL.set(r, [pLat, pLon, String(p[1] || '').trim()]);
                 toCalc.push(r);
             });
 
@@ -143,8 +140,7 @@
             let ok = 0, fail = 0;
             for (let i = 0; i < toCalc.length; i++) {
                 const r = toCalc[i];
-                const parentName = String(r[14] || '').trim();
-                const [pLat, pLon] = posIdx[parentName];
+                const [pLat, pLon, parentName] = _pLL.get(r);
                 const cLat = parseCoord(r[2]), cLon = parseCoord(r[3]);
                 const dist = haversineM(cLat, cLon, pLat, pLon);
                 r[15] = dist;

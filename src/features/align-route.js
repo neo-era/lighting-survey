@@ -8,7 +8,7 @@
         let _raState = null;   // { rows, poles, lines, frame, order, base, offsets, manual, layer, groups, entries }
         let _raUndo = null;    // { snaps: [{row, vals}], applied: Map(row → [lat, lon]) } — 1 mức hoàn tác
         let _raToken = 0;      // lần mở mới nhất — chống 2 lần mở chồng nhau khi tải OSM chậm
-        const _RA_SNAP_COLS = [2, 3, 13, 15, 19, 20];   // lat, lon, cập nhật, khoảng cách cáp, VN2000 X/Y
+        const _RA_SNAP_COLS = [2, 3, 13, 14, 15, 19, 20];   // lat, lon, cập nhật, Marker gốc, khoảng cách cáp, VN2000 X/Y
 
         const _raKeyOf = r => [String(r[0] || '').trim(), String(r[1] || '').trim()].filter(Boolean);
         function _raAllRows() {
@@ -460,34 +460,11 @@
             }
         }
 
-        // Như updateMarkerCoordinatesInData nhưng thao tác ĐÚNG dòng được truyền vào (không tìm theo tên/ID —
-        // sheet có thể có dòng trùng tên): toạ độ, VN2000, khoảng cách cáp tới trụ cha + của các trụ con.
-        function _raSetRowCoords(row, lat, lon) {
-            const tsNow = new Date().toLocaleString('vi-VN');
-            row[2] = lat; row[3] = lon; row[13] = tsNow;
-            const vn = convertLatLonToVn2000(lat, lon);
-            row[19] = Math.round(vn.x); row[20] = Math.round(vn.y);
-            dirtyMovedRows.add(row);
-            const all = _raAllRows();
-            const pName = String(row[14] || '').trim();
-            if (pName) {
-                const p = all.find(r => r !== row && _raKeyOf(r).includes(pName));
-                if (p && isFinite(parseCoord(p[2])) && isFinite(parseCoord(p[3]))) {
-                    row[15] = Math.round(getDistanceMeters(lat, lon, parseCoord(p[2]), parseCoord(p[3])));
-                }
-            }
-            const keys = _raKeyOf(row);
-            all.forEach(c => {
-                if (c === row || !keys.includes(String(c[14] || '').trim())) return;
-                const cl = parseCoord(c[2]), co = parseCoord(c[3]);
-                if (!isFinite(cl) || !isFinite(co)) return;
-                c[15] = Math.round(getDistanceMeters(cl, co, lat, lon));
-                c[13] = tsNow;
-                dirtyMovedRows.add(c);
-                _invalidatePopupCacheForRow(c);
-            });
-            _invalidatePopupCacheForRow(row);
-            _raMoveMarker(row, lat, lon);
+        // Dời đúng các dòng được truyền vào + khoảng cách cáp (xem _moveRowsAndCables) + vị trí marker/nhãn — 1 lượt
+        // (chốt tham chiếu mơ hồ 1 lần trước khi dời, không dời từng dòng làm trụ sau bị "đổi cha" theo trụ đã dời)
+        function _raSetRowsCoords(moves) {
+            _moveRowsAndCables(moves);
+            moves.forEach(m => _raMoveMarker(m.row, m.lat, m.lon));
         }
 
         async function _raApply() {
@@ -496,11 +473,9 @@
             const sel = _raState.entries.filter(e => e.item.checked && e.item.flag !== 'far' && e.item.flag !== 'end');
             if (!sel.length) return;
             // Snapshot nguyên văn trụ được dời + trụ con (khoảng cách cáp đổi theo) để hoàn tác chính xác
-            const selKeys = new Set(sel.flatMap(e => _raKeyOf(e.row)));
-            const affected = new Set(sel.map(e => e.row));
-            _raAllRows().forEach(r => { if (selKeys.has(String(r[14] || '').trim())) affected.add(r); });
+            const affected = _rowsAffectedByMove(sel.map(e => e.row));
             const snaps = [...affected].map(r => ({ row: r, vals: _RA_SNAP_COLS.map(c => r[c]) }));
-            sel.forEach(e => _raSetRowCoords(e.row, e.ll.lat, e.ll.lon));
+            _raSetRowsCoords(sel.map(e => ({ row: e.row, lat: e.ll.lat, lon: e.ll.lon })));
             updateDirtyMovedBadge();
             _raUndo = { snaps, applied: new Map(sel.map(e => [e.row, [e.row[2], e.row[3]]])) };
             const base = _raState.base;
