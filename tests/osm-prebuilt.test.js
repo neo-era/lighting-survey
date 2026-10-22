@@ -4,7 +4,7 @@ function load() {
     const src = require('../tools/app-source.cjs').appSource();   // index.html + src/*.js
     const m = src.match(/\/\/ @@OSMPREBUILT_START([\s\S]*?)\/\/ @@OSMPREBUILT_END/);
     if (!m) throw new Error('Chưa có block @@OSMPREBUILT_START/END');
-    return new Function(m[1] + '\nreturn { PB_TAG_MAP, _pbRecordToRoad, _pbTileKeysForBounds };')();
+    return new Function(m[1] + '\nreturn { PB_TAG_MAP, _pbRecordToRoad, _pbTileKeysForBounds, _pbRoadNearBounds };')();
 }
 let pass = 0, fail = 0;
 const ok = (n, c) => { c ? pass++ : fail++; console.log((c ? '✓ ' : '✗ ') + n); };
@@ -53,6 +53,15 @@ ok('ngoài vùng → rỗng', H._pbTileKeysForBounds(index, far, 1).length === 0
 // guard đầu vào
 ok('index null → []', H._pbTileKeysForBounds(null, q1, 1).length === 0);
 ok('bounds null → []', H._pbTileKeysForBounds(index, null, 1).length === 0);
+
+// === _pbRoadNearBounds (clip đường về quanh bounds) ===
+const bnd = { minLat: 10.77, minLon: 106.70, maxLat: 10.78, maxLon: 106.71 };
+ok('đỉnh trong bounds → giữ', H._pbRoadNearBounds([[106.705, 10.775], [106.80, 10.90]], bnd, 0) === true);
+ok('đường xa hẳn (ngoài margin) → bỏ', H._pbRoadNearBounds([[106.90, 10.90], [106.95, 10.95]], bnd, 0.0015) === false);
+ok('đỉnh nằm trong dải margin → giữ', H._pbRoadNearBounds([[106.7108, 10.775]], bnd, 0.0015) === true);
+ok('đỉnh ngay ngoài margin → bỏ', H._pbRoadNearBounds([[106.7200, 10.775]], bnd, 0.0015) === false);
+ok('coords rỗng → bỏ', H._pbRoadNearBounds([], bnd, 0.0015) === false);
+ok('bounds null → bỏ', H._pbRoadNearBounds([[106.705, 10.775]], null, 0.0015) === false);
 
 console.log('\n=== ' + pass + ' pass / ' + fail + ' fail ===');
 process.exit(fail ? 1 : 0);

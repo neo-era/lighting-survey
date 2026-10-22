@@ -39,6 +39,21 @@
                 }
             return keys;
         }
+
+        // Giữ đường nếu CÓ đỉnh nằm trong bounds mở rộng margin (độ). Ô prebuilt thô 0.1° chứa cả nghìn
+        // đường; hàm này cắt về quanh vùng hỏi (giống Overpass way[highway](bbox) chỉ trả đường cắt bbox),
+        // tránh trả vài chục nghìn đường làm nghẽn align/overlay. coords dạng [[lon,lat],...].
+        function _pbRoadNearBounds(coords, bounds, margin) {
+            if (!coords || !bounds) return false;
+            const m = margin || 0;
+            const minLat = bounds.minLat - m, maxLat = bounds.maxLat + m;
+            const minLon = bounds.minLon - m, maxLon = bounds.maxLon + m;
+            for (let i = 0; i < coords.length; i++) {
+                const c = coords[i];
+                if (c[1] >= minLat && c[1] <= maxLat && c[0] >= minLon && c[0] <= maxLon) return true;
+            }
+            return false;
+        }
         // @@OSMPREBUILT_END
 
         // ─────────────────────────────────────────────────────────────
@@ -93,8 +108,10 @@
             const keys = _pbTileKeysForBounds(index, bounds, pad);
             if (!keys.length) return { roads: [], buildings: [], water: [], admin: [], _prebuilt: true, _empty: true };
             const parts = await Promise.all(keys.map(k => _pbFetchTile(k).catch(() => [])));
+            // Cắt về quanh bounds + lề (mặc định ~165m) — không trả cả vạn đường của 9 ô (nghẽn main thread).
+            const margin = (opts && opts.marginDeg != null) ? opts.marginDeg : 0.0015;
             const roads = [];
-            for (const arr of parts) for (const r of arr) roads.push(r);
+            for (const arr of parts) for (const r of arr) if (_pbRoadNearBounds(r.coords, bounds, margin)) roads.push(r);
             return { roads, buildings: [], water: [], admin: [], _prebuilt: true };
         }
         window._pbGetRoads = _pbGetRoads;
