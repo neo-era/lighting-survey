@@ -17,8 +17,15 @@
                 .filter(r => Array.isArray(r) && !seen.has(r) && seen.add(r));
         }
 
+        // Ưu tiên nền đường DỰNG SẴN (offline, không gọi Overpass); ngoài vùng TP.HCM / không hỗ trợ → Overpass.
         // Overpass chặn 2 request cách nhau < 5s (dùng chung với xuất CAD) → tự chờ rồi thử lại 1 lần
         async function _raFetchRoads(bounds) {
+            if (typeof window._pbGetRoads === 'function') {
+                try {
+                    const pb = await window._pbGetRoads(bounds, { pad: 1 });
+                    if (pb && !pb._empty && pb.roads && pb.roads.length) return pb;
+                } catch (e) { /* prebuilt lỗi/không hỗ trợ → rơi xuống Overpass */ }
+            }
             try {
                 return await _fetchOsmBasemap(bounds, { roads: true, buildings: false });
             } catch (e) {
