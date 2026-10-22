@@ -1,4 +1,4 @@
-const CACHE = 'lighting-survey-v189';
+const CACHE = 'lighting-survey-v190';
 
 // Assets tĩnh pre-cache khi install (icon + ảnh mẫu + CAD blocks + title templates T21 + core modules)
 const STATIC_ASSETS = [
@@ -66,7 +66,10 @@ const CDN_CACHE = 'cdn-libs-v2';
 
 self.addEventListener('install', e => {
   e.waitUntil(
-    caches.open(CACHE).then(c => Promise.allSettled(STATIC_ASSETS.map(u => c.add(u))))
+    // cache:'reload' — precache bỏ qua cache HTTP của trình duyệt → bản offline luôn là file mới nhất
+    caches.open(CACHE).then(c => Promise.allSettled(
+      STATIC_ASSETS.map(u => c.add(new Request(u, { cache: 'reload' })))
+    ))
   );
   self.skipWaiting();
 });
@@ -110,6 +113,24 @@ self.addEventListener('fetch', e => {
     );
     return;
   }
+
+  // App shell JS/CSS same-origin: network-first + revalidate (cache:'no-cache') — luôn chạy code mới
+  // sau deploy (304 khi không đổi, rất nhẹ), KHÔNG để cache HTTP/SW giữ file cũ. Offline → fallback cache.
+  // (Không áp cho data/*.json.gz — nền OSM lớn, bất biến tới khi rebuild → vẫn cache-first ở nhánh cuối.)
+  try {
+    const u2 = new URL(url);
+    if (u2.origin === self.location.origin && /\.(js|css)$/.test(u2.pathname)) {
+      e.respondWith(
+        fetch(new Request(e.request, { cache: 'no-cache' }))
+          .then(res => {
+            if (res && res.ok) { const clone = res.clone(); caches.open(CACHE).then(c => c.put(e.request, clone)); }
+            return res;
+          })
+          .catch(() => caches.match(e.request))
+      );
+      return;
+    }
+  } catch (_) {}
 
   // Map tiles: cache-first, tối đa 300 tile
   if (url.includes('tile.openstreetmap.org') ||
