@@ -1,4 +1,4 @@
-const CACHE = 'lighting-survey-v187';
+const CACHE = 'lighting-survey-v188';
 
 // Assets tĩnh pre-cache khi install (icon + ảnh mẫu + CAD blocks + title templates T21 + core modules)
 const STATIC_ASSETS = [
@@ -23,6 +23,7 @@ const STATIC_ASSETS = [
   'assets/templates/mau-webdialux.xlsx',
   'src/features/cad-export.js',
   'src/features/osm.js',
+  'src/features/osm-prebuilt.js',
   'src/features/mst-ui.js',
   'src/features/data-tools.js',
   'src/features/cad-overlay.js',
@@ -47,6 +48,8 @@ const STATIC_ASSETS = [
   'data/ranh/index.json',
   'data/ranh/hcm.json',
   'data/ranh/tayninh.json',
+  // Nền OSM đường dựng sẵn — chỉ pre-cache index (nhỏ); tile tải theo nhu cầu rồi cache-first qua handler same-origin
+  'data/osm-roads/index.json.gz',
 ];
 
 // CDN libraries cache riêng — cache-first, không pre-install (tải lần đầu rồi cache)

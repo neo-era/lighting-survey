@@ -410,6 +410,7 @@
                             <label><input type="checkbox" id="cgOsmWater"> 💧 Sông ngòi</label>
                             <label><input type="checkbox" id="cgOsmAdmin"> 🏛 Ranh phường</label>
                             <label style="grid-column:span 3;" title="Lớp OSM_DUONG_KHAC — 1 nét xám"><input type="checkbox" id="cgOsmRoadOther" onchange="_cgSaveRoadWidths()"> Đường khác (đi bộ, bãi xe)</label>
+                            <label style="grid-column:span 3;font-weight:700;color:var(--success-ink,#15803d);" title="Dùng dữ liệu đường TP.HCM dựng sẵn trong app — không gọi Overpass, chạy được cả khi mất mạng. Khu ngoài TP.HCM tự quay lại Overpass."><input type="checkbox" id="cgOsmPrebuilt" checked> ⚡ Nền đường dựng sẵn (offline, không cần Overpass)</label>
                         </div>
                         <div style="margin-top:8px;font-size:11px;color:var(--text);">
                             <div style="font-weight:700;margin-bottom:4px;" title="Dùng khi OSM không ghi width/lanes">Bề rộng mặt đường mặc định (m)</div>
@@ -4179,6 +4180,8 @@
         // Sinh bằng scripts/build-ranh.py (OSM admin_level=6, đã đơn giản hóa 5m).
         // KHÔNG gọi Overpass lúc chạy → hoạt động offline hoàn toàn sau lần tải đầu.
         let _adminBoundaryLayer = null;
+        let _osmRoadsLayer = null;      // overlay đường OSM dựng sẵn (bật/tắt qua layers control)
+        let _osmRoadsOn    = false;
         let _adminBoundaryOn    = false;
         let _adminProvince      = localStorage.getItem('ranh_province') || 'hcm';
         let _adminProvinceList  = null;   // index.json đã tải
@@ -6838,6 +6841,7 @@
 
     </script>
     <script src="src/features/osm.js"></script>
+    <script src="src/features/osm-prebuilt.js"></script>
     <script>
 
         // ─────────────────────────────────────────────────────────────
@@ -8005,6 +8009,7 @@
             });
 
             _adminBoundaryLayer = L.layerGroup();
+            _osmRoadsLayer = L.layerGroup();
 
             L.control.layers(
                 {
@@ -8023,7 +8028,8 @@
                 },
                 {
                     '🏷 Nhãn tên đường': streetLabels,
-                    '🏛 Ranh phường/xã (OSM)': _adminBoundaryLayer
+                    '🏛 Ranh phường/xã (OSM)': _adminBoundaryLayer,
+                    '🛣 Đường OSM (dựng sẵn)': _osmRoadsLayer
                 },
                 { position: 'topright' }
             ).addTo(map);
@@ -8041,8 +8047,22 @@
                     _adminBoundaryLayer.clearLayers();
                 }
             });
+            // Đường OSM dựng sẵn: bật/tắt theo layer control + auto-refresh khi pan/zoom
+            map.on('overlayadd', function(e) {
+                if (e.layer === _osmRoadsLayer) {
+                    _osmRoadsOn = true;
+                    if (typeof _refreshOsmRoadsOverlay === 'function') _refreshOsmRoadsOverlay(true);
+                }
+            });
+            map.on('overlayremove', function(e) {
+                if (e.layer === _osmRoadsLayer) {
+                    _osmRoadsOn = false;
+                    _osmRoadsLayer.clearLayers();
+                }
+            });
             map.on('moveend', debounce(function() {
                 if (_adminBoundaryOn) _refreshAdminBoundaries();
+                if (_osmRoadsOn && typeof _refreshOsmRoadsOverlay === 'function') _refreshOsmRoadsOverlay();
             }, 800));
 
             createMapControls();

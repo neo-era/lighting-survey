@@ -4310,9 +4310,36 @@
         let _cgOsmFetching = false;    // đang chờ Overpass — chỉ lúc này bấm nút bận mới có tác dụng
         let _cgOsmSkipNotified = false; // đã báo "bỏ qua nền OSM" trong lần xuất này chưa (nhiều tờ → chỉ báo 1 lần)
         // Bọc lời gọi Overpass của luồng xuất: bật/tắt cờ để nút bận biết khi nào cho bỏ qua
+        // Nền đường DỰNG SẴN bật khi: checkbox cgOsmPrebuilt tích (mặc định tích nếu chưa có) + có _pbGetRoads.
+        function _cgUsePrebuilt() {
+            if (typeof window._pbGetRoads !== 'function') return false;
+            const cb = document.getElementById('cgOsmPrebuilt');
+            return cb ? !!cb.checked : true;
+        }
         async function _cgFetchOsm(bbox, fetchOpts, signal) {
             _cgOsmFetching = true;
-            try { return await _fetchOsmBasemap(bbox, fetchOpts, signal); }
+            try {
+                const wantRoads = !fetchOpts || fetchOpts.roads !== false;
+                const needOverpass = fetchOpts && (fetchOpts.buildings || fetchOpts.water || fetchOpts.admin);
+                if (wantRoads && _cgUsePrebuilt()) {
+                    let pb = null;
+                    try { pb = await window._pbGetRoads(bbox, { pad: 1 }); } catch (e) { pb = null; }
+                    if (pb && !pb._empty && pb.roads && pb.roads.length) {
+                        if (!needOverpass) return pb;                       // chỉ cần đường → khỏi gọi Overpass
+                        // cần thêm nhà/sông/ranh → lấy riêng các lớp đó từ Overpass rồi gộp đường dựng sẵn.
+                        // Overpass lỗi → vẫn giữ đường dựng sẵn (không để mất nền đường vì server chết).
+                        try {
+                            const op = await _fetchOsmBasemap(bbox, Object.assign({}, fetchOpts, { roads: false }), signal);
+                            return { roads: pb.roads, buildings: op.buildings || [], water: op.water || [], admin: op.admin || [] };
+                        } catch (e2) {
+                            if (typeof displayInfo === 'function') displayInfo('⚠ Không tải được nhà/sông/ranh từ Overpass — vẫn giữ nền đường dựng sẵn.');
+                            return pb;
+                        }
+                    }
+                    // prebuilt rỗng (bbox ngoài vùng TP.HCM) → rơi xuống Overpass như cũ
+                }
+                return await _fetchOsmBasemap(bbox, fetchOpts, signal);
+            }
             finally { _cgOsmFetching = false; }
         }
         function _cgNotifyOsmSkipped() {
