@@ -91,6 +91,54 @@
         </button>
     </div>
 
+    <!-- Chế độ xem công khai (?view=) — header mảnh + overlay lỗi -->
+    <style>
+      #publicHeader{display:none;position:fixed;top:0;left:0;right:0;height:44px;z-index:3000;
+        align-items:center;gap:10px;padding:0 14px;background:var(--primary,#2563eb);color:#fff;
+        box-shadow:0 2px 8px rgba(0,0,0,.18);font-size:14px;}
+      #publicHeader .ph-title{font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+      #publicHeader .ph-count{font-size:12px;opacity:.9;white-space:nowrap;}
+      #publicHeader .ph-spacer{flex:1 1 auto;}
+      #publicHeader #phInstall{display:none;background:rgba(255,255,255,.18);color:#fff;border:1px solid rgba(255,255,255,.5);
+        border-radius:8px;padding:6px 10px;font-size:12px;font-weight:700;cursor:pointer;min-height:32px;white-space:nowrap;}
+      #publicHeader #phInstall:hover{background:rgba(255,255,255,.3);}
+      body.public-view #topBar,
+      body.public-view #topbarUser,
+      body.public-view #loginOverlay,
+      body.public-view #searchResultsWrapper{display:none !important;}
+      body.public-view #map{top:44px !important;}
+      #publicError{display:none;position:fixed;inset:0;z-index:4000;align-items:center;justify-content:center;
+        flex-direction:column;gap:10px;padding:24px;text-align:center;background:var(--bg,#fff);color:var(--text,#111);
+        font-size:16px;font-weight:600;}
+      @media (max-width:480px){ #publicHeader .ph-count{display:none;} }
+    </style>
+    <div id="publicHeader" role="banner">
+      <span class="ph-title">💡 Chiếu sáng — <span id="phDistrict">—</span></span>
+      <span class="ph-count">· <span id="phCount">—</span></span>
+      <span class="ph-spacer"></span>
+      <button id="phInstall" onclick="_publicInstallApp()">⬇ Cài ứng dụng</button>
+    </div>
+    <div id="publicError"></div>
+
+    <!-- Modal: link chia sẻ địa bàn (admin) -->
+    <div id="shareDistrictModal" style="display:none;position:fixed;inset:0;z-index:4200;align-items:center;justify-content:center;background:rgba(0,0,0,.45);padding:16px;">
+      <div style="background:var(--bg,#fff);color:var(--text,#111);border-radius:16px;max-width:460px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3);overflow:hidden;">
+        <div style="padding:16px 18px;border-bottom:1px solid var(--border,#e5e7eb);display:flex;align-items:center;gap:8px;">
+          <span style="font-size:18px;">🔗</span>
+          <strong style="font-size:15px;">Chia sẻ địa bàn: <span id="shareDistrictLabel">—</span></strong>
+        </div>
+        <div style="padding:18px;">
+          <p style="margin:0 0 10px;font-size:13px;color:var(--text-muted,#6b7280);">Ai có link này đều xem được bản đồ trụ đèn của địa bàn (chỉ xem, không cần đăng nhập, không có bảng điều khiển).</p>
+          <input id="shareLinkInput" type="text" readonly onclick="this.select()" style="width:100%;padding:10px 12px;border:1.5px solid var(--border,#cbd5e1);border-radius:10px;font-size:13px;background:var(--primary-light,#eff6ff);color:var(--text,#111);">
+          <div style="display:flex;gap:8px;margin-top:14px;">
+            <button onclick="_copyShareLink()" style="flex:1;min-height:44px;border:0;border-radius:10px;background:var(--primary,#2563eb);color:#fff;font-size:14px;font-weight:700;cursor:pointer;">📋 Copy link</button>
+            <a id="shareOpenLink" href="#" target="_blank" rel="noopener" onclick="this.href=document.getElementById('shareLinkInput').value" style="flex:1;min-height:44px;display:flex;align-items:center;justify-content:center;border:1.5px solid var(--primary,#2563eb);border-radius:10px;background:var(--primary-light,#eff6ff);color:var(--primary,#2563eb);font-size:14px;font-weight:700;text-decoration:none;cursor:pointer;">↗ Mở thử</a>
+          </div>
+          <button onclick="_closeShareModal()" style="width:100%;margin-top:10px;min-height:40px;border:0;border-radius:10px;background:transparent;color:var(--text-muted,#6b7280);font-size:13px;font-weight:600;cursor:pointer;">Đóng</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Dropdown kết quả tìm kiếm -->
     <div id="searchResultsWrapper">
         <div id="searchResults"></div>
@@ -1102,6 +1150,13 @@
                             <button id="btnManageDiaBan" onclick="_openManageDiaBan()" class="ctrl-btn outline"
                                     style="padding:7px;font-size:12px;color:var(--text-muted);border-color:var(--border);background:var(--surface-2);margin-bottom:0;width:44px;" title="Quản lý địa bàn (archive/xóa)">
                                 ⚙
+                            </button>
+                        </div>
+                        <div id="btnShareDistrictWrap" style="display:none;margin-top:6px;">
+                            <button id="btnShareDistrict" onclick="_openShareModal()" class="ctrl-btn outline"
+                                    style="padding:7px;font-size:12px;color:var(--primary);border-color:var(--primary);background:var(--primary-light);width:100%;margin-bottom:0;"
+                                    title="Tạo link công khai cho địa bàn đang xem — ai cũng xem được, chỉ xem">
+                                🔗 Chia sẻ địa bàn (link công khai)
                             </button>
                         </div>
                     </div>
@@ -3357,8 +3412,131 @@
 
         // ─── Auth ───
         let currentUser = null;
+        let _publicView = false;   // chế độ xem công khai (?view=<sheet>) — read-only, không ☰/login
+
+        // hàm thuần (test trích)
+        // @@PUBLICVIEW_START
+        function _parsePublicView(search) {
+            try { return (new URLSearchParams(search || '').get('view') || '').trim(); }
+            catch (e) { return ''; }
+        }
+        function _resolvePublicPage(sheet, pages) {
+            if (!sheet || !Array.isArray(pages)) return null;
+            return pages.find(p => p && p.sheet === sheet && p.csvUrl) || null;
+        }
+        function _shareLinkFor(origin, pathname, sheet) {
+            return origin + pathname + '?view=' + encodeURIComponent(sheet || '');
+        }
+        // @@PUBLICVIEW_END
+        window._shareLinkFor = _shareLinkFor;
+
+        function _publicError(msg) {
+            document.body.classList.add('public-view');
+            const el = document.getElementById('publicError');
+            if (el) { el.textContent = msg; el.style.display = 'flex'; }
+            const h = document.getElementById('publicHeader'); if (h) h.style.display = 'none';
+        }
+        function _buildPublicHeader(label) {
+            const nameEl = document.getElementById('phDistrict');
+            if (nameEl) nameEl.textContent = label;
+            const h = document.getElementById('publicHeader');
+            if (h) h.style.display = 'flex';
+        }
+        function _updatePublicCount() {
+            const el = document.getElementById('phCount');
+            if (!el) return;
+            const n = Array.isArray(loadedData) ? Math.max(0, loadedData.length - 1) : 0;
+            el.textContent = n + ' trụ/tủ';
+        }
+        async function _startPublicView(sheet) {
+            _publicView = true;
+            document.body.classList.add('public-view');
+            const lo = document.getElementById('loginOverlay'); if (lo) lo.classList.remove('visible');
+            try { await _loadDynamicDistricts(); } catch (e) { _swallow(e); }
+            const page = _resolvePublicPage(sheet, DISTRICT_PAGES);
+            if (!page) { _publicError('Địa bàn không hợp lệ hoặc chưa publish: ' + sheet); return; }
+            currentUser = { username: 'public', displayName: '', role: 'public', vung: [sheet] };
+            currentSheet = sheet;
+            _buildPublicHeader(page.label || sheet);
+            _maybeShowInstallBtn();
+            try { if (map) map.invalidateSize(); } catch (e) {}
+            try {
+                await loadFromCSVWithCache(sheet, page.csvUrl);
+            } catch (e) {
+                _publicError('Không tải được dữ liệu địa bàn. Thử lại sau.');
+                return;
+            }
+            if (typeof _loadCachedCad === 'function') _loadCachedCad(sheet);
+            _updatePublicCount();
+        }
+        window._startPublicView = _startPublicView;
+
+        // ── PWA install cho nút "Cài ứng dụng" trên header công khai ──
+        let _deferredInstallPrompt = null;
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            _deferredInstallPrompt = e;
+            const b = document.getElementById('phInstall');
+            if (b && _publicView) b.style.display = 'inline-block';
+        });
+        function _isIOS() { return /iPad|iPhone|iPod/.test(navigator.userAgent || ''); }
+        function _isStandalone() {
+            return (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true;
+        }
+        function _maybeShowInstallBtn() {
+            const b = document.getElementById('phInstall');
+            if (!b) return;
+            if (_isStandalone()) { b.style.display = 'none'; return; }
+            if (_deferredInstallPrompt || _isIOS()) b.style.display = 'inline-block';
+        }
+        function _publicInstallApp() {
+            if (_deferredInstallPrompt) {
+                _deferredInstallPrompt.prompt();
+                _deferredInstallPrompt.userChoice.finally(() => {
+                    _deferredInstallPrompt = null;
+                    const b = document.getElementById('phInstall'); if (b) b.style.display = 'none';
+                });
+            } else {
+                alert('Trên iPhone/iPad: bấm nút Chia sẻ của Safari → "Thêm vào Màn hình chính" để cài ứng dụng.');
+            }
+        }
+        window._publicInstallApp = _publicInstallApp;
+
+        // ── Admin: modal link chia sẻ địa bàn ──
+        function _openShareModal() {
+            if (!currentUser || currentUser.role !== 'admin') { displayError('Chỉ admin được tạo link chia sẻ.'); return; }
+            if (!currentSheet) { displayError('Chưa chọn địa bàn để chia sẻ.'); return; }
+            const link = _shareLinkFor(location.origin, location.pathname, currentSheet);
+            const inp = document.getElementById('shareLinkInput');
+            const lbl = document.getElementById('shareDistrictLabel');
+            if (inp) inp.value = link;
+            if (lbl) {
+                const page = (DISTRICT_PAGES || []).find(p => p.sheet === currentSheet);
+                lbl.textContent = (page && page.label) ? page.label : currentSheet;
+            }
+            const m = document.getElementById('shareDistrictModal');
+            if (m) m.style.display = 'flex';
+            if (typeof closeControlsModal === 'function') closeControlsModal();
+        }
+        function _closeShareModal() { const m = document.getElementById('shareDistrictModal'); if (m) m.style.display = 'none'; }
+        async function _copyShareLink() {
+            const inp = document.getElementById('shareLinkInput');
+            if (!inp) return;
+            try {
+                await navigator.clipboard.writeText(inp.value);
+                if (typeof displayInfo === 'function') displayInfo('✅ Đã copy link chia sẻ.');
+            } catch (e) {
+                inp.select(); try { document.execCommand('copy'); } catch (_) {}
+                if (typeof displayInfo === 'function') displayInfo('Đã chọn link — nhấn Ctrl/⌘+C để copy.');
+            }
+        }
+        window._openShareModal = _openShareModal;
+        window._closeShareModal = _closeShareModal;
+        window._copyShareLink = _copyShareLink;
 
         function checkAuth() {
+            const pv = _parsePublicView(location.search);
+            if (pv) { _startPublicView(pv); return; }
             try { currentUser = JSON.parse(localStorage.getItem('ks_user') || 'null'); } catch(e) { currentUser = null; }
             if (currentUser && currentUser.username) {
                 _showApp();
@@ -3712,6 +3890,8 @@
             // v150+v151 — nút admin địa bàn (tạo + quản lý)
             const btnDBWrap = document.getElementById('btnDiaBanAdminWrap');
             if (btnDBWrap) btnDBWrap.style.display = isAdmin ? 'flex' : 'none';
+            const btnShareWrap = document.getElementById('btnShareDistrictWrap');
+            if (btnShareWrap) btnShareWrap.style.display = isAdmin ? 'block' : 'none';
             _buildDistrictOptions();
             // v150 — fetch dynamic districts từ GAS (background, không block UI)
             _loadDynamicDistricts();
@@ -6074,7 +6254,7 @@
             if (maPE)        pcRows.push(`<div class="pc-row"><span class="pi">🔑</span><span class="pk">Mã PE</span><span class="pv">${maPE}</span></div>`);
             if (duong)       pcRows.push(`<div class="pc-row"><span class="pi">🛣</span><span class="pk">Đường</span><span class="pv">${duong}</span></div>`);
             if (phuongXa)    pcRows.push(`<div class="pc-row"><span class="pi">📍</span><span class="pk">Phường/Xã</span><span class="pv">${phuongXa}</span></div>`);
-            if (nguoiKS)     pcRows.push(`<div class="pc-row"><span class="pi">👤</span><span class="pk">Người KS</span><span class="pv">${nguoiKS}</span></div>`);
+            if (nguoiKS && !_publicView) pcRows.push(`<div class="pc-row"><span class="pi">👤</span><span class="pk">Người KS</span><span class="pv">${nguoiKS}</span></div>`);
             if (note)        pcRows.push(`<div class="pc-row"><span class="pi">📝</span><span class="pk">Ghi chú</span><span class="pv">${note}</span></div>`);
             if (updatedAt)   pcRows.push(`<div class="pc-row"><span class="pi">🕐</span><span class="pk">Cập nhật</span><span class="pv">${updatedAt}</span></div>`);
 
