@@ -3525,16 +3525,17 @@
         }
         function _closeShareModal() { const m = document.getElementById('shareDistrictModal'); if (m) m.style.display = 'none'; }
 
-        // Lazy-load thư viện QR (qrcodejs) — chỉ tải khi mở modal chia sẻ
-        let _qrLibPromise = null;
-        function _loadQrLib() {
+        // Lazy-load thư viện QR (qrcodejs) — chỉ tải khi mở modal chia sẻ.
+        // ⚠ Tên RIÊNG (_shareQr…) để KHÔNG trùng _qrLibPromise/_loadQrLib của media.js (html5-qrcode quét QR).
+        let _shareQrLibPromise = null;
+        function _loadShareQrLib() {
             if (typeof QRCode !== 'undefined') return Promise.resolve();
-            if (_qrLibPromise) return _qrLibPromise;
+            if (_shareQrLibPromise) return _shareQrLibPromise;
             const cdns = [
                 'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js',
                 'https://cdn.jsdelivr.net/gh/davidshimjs/qrcodejs/qrcode.min.js'
             ];
-            _qrLibPromise = (async () => {
+            _shareQrLibPromise = (async () => {
                 let lastErr = null;
                 for (const url of cdns) {
                     try {
@@ -3549,10 +3550,10 @@
                         if (typeof QRCode !== 'undefined') return;
                     } catch (err) { lastErr = err; }
                 }
-                _qrLibPromise = null;
+                _shareQrLibPromise = null;
                 throw new Error('Không tải được thư viện QR: ' + (lastErr && lastErr.message || 'unknown'));
             })();
-            return _qrLibPromise;
+            return _shareQrLibPromise;
         }
         async function _renderShareQr(link) {
             const box = document.getElementById('shareQr');
@@ -3561,7 +3562,7 @@
             box.innerHTML = 'Đang tạo QR…';
             if (dl) dl.style.display = 'none';
             try {
-                await _loadQrLib();
+                await _loadShareQrLib();
                 box.innerHTML = '';
                 // eslint-disable-next-line no-new
                 new QRCode(box, { text: link, width: 168, height: 168, correctLevel: QRCode.CorrectLevel.M });
