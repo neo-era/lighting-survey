@@ -1,4 +1,4 @@
-const CACHE = 'lighting-survey-v193';
+const CACHE = 'lighting-survey-v194';
 
 // Assets tĩnh pre-cache khi install (icon + ảnh mẫu + CAD blocks + title templates T21 + core modules)
 const STATIC_ASSETS = [
@@ -97,13 +97,15 @@ self.addEventListener('fetch', e => {
     return;
   }
 
-  // Network-first cho HTML — luôn lấy code mới, fallback cache khi offline
+  // Network-first cho HTML — luôn lấy code mới, fallback cache khi offline.
+  // cache:'no-store' để BỎ QUA cả cache HTTP trình duyệt lẫn edge-cache (GitHub Pages/Fastly),
+  // tránh chạy HTML cũ sau deploy (chỉ no-store mới ép edge revalidate về origin).
   if (e.request.mode === 'navigate' ||
       url.endsWith('.html') ||
       url.endsWith('/lighting-survey/') ||
       url.endsWith('/lighting-survey')) {
     e.respondWith(
-      fetch(e.request)
+      fetch(e.request.url, { cache: 'no-store' })
         .then(res => {
           const clone = res.clone();
           caches.open(CACHE).then(c => c.put(e.request, clone));
