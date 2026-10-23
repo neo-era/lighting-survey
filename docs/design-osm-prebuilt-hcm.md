@@ -23,7 +23,10 @@ lớp nền này cả khi xem bản đồ lẫn khi xuất CAD.
 
 ## Nguồn & build dữ liệu (offline, một lần)
 1. Geofabrik **Vietnam** `.osm.pbf` (~250MB) — tải bằng Chrome về máy anh.
-2. Stage vào workspace → `pyrosm` đọc, lấy `network_type="driving"`, clip bbox TP.HCM mới.
+2. Stage vào workspace → `pyrosm` đọc, lấy `network_type="all"` (GỒM hẻm: service/footway/path/pedestrian —
+   `driving` bỏ sót `service` vốn là phần lớn hẻm VN), loại steps/cycleway/busway/track…, clip bbox TP.HCM mới.
+   Thực tế (v1.0.139): 464.718 đoạn, 203 ô, ~21MB gz. Ô trung tâm ~35k bản ghi/1.2MB gz — parse 9 ô pad=1 ~0.9s
+   (một lần, cache sau), clip quanh bbox giữ align/overlay nhẹ (vài trăm đường).
 3. **bbox TP.HCM mới** (union 3 tỉnh cũ, có đệm): lat `10.15–11.50`, lon `106.25–107.65`.
 4. Trim tag về đúng thứ CAD cần: `highway, name, width, lanes, layer, bridge, tunnel, oneway, construction, service`.
 5. Xuất ra **lưới ô 0.1°** (~11km), gzip sẵn: `data/osm-roads/index.json.gz` + `tile_<col>_<row>.json.gz`.

@@ -21,15 +21,23 @@ BBOX = [106.25, 10.15, 107.65, 11.50]
 TILE_DEG = 0.1
 OUT = os.path.join(os.path.dirname(__file__), '..', 'data', 'osm-roads')
 
+# Loại các loại highway KHÔNG phải hẻm/đường (bậc thang, làn xe đạp/bus, đường mòn...).
+# Giữ lại: motorway…residential, living_street, service (hẻm), footway/path/pedestrian (hẻm đi bộ).
+EXCLUDE_HW = {'steps', 'cycleway', 'bridleway', 'raceway', 'busway', 'track',
+              'corridor', 'elevator', 'platform', 'proposed', 'construction', 'bus_stop', 'escape'}
+
 def main(pbf):
     os.makedirs(OUT, exist_ok=True)
     t0 = time.time()
-    print('[build] đọc + trích mạng đường xe chạy, bbox', BBOX, flush=True)
+    print('[build] đọc + trích mạng đường (all: gồm hẻm), bbox', BBOX, flush=True)
     osm = OSM(pbf, bounding_box=BBOX)
-    roads = osm.get_network(network_type='driving',
+    # network_type='all' để GỒM cả hẻm (service/footway/path/pedestrian) — 'driving' bỏ sót service+footway
+    roads = osm.get_network(network_type='all',
         extra_attributes=['width', 'bridge', 'tunnel', 'layer', 'construction', 'service', 'ref'])
     if roads is None or len(roads) == 0:
         raise SystemExit('Không có đường trong bbox — kiểm tra lại file pbf.')
+    if 'highway' in roads.columns:
+        roads = roads[~roads['highway'].isin(EXCLUDE_HW)]
     cols = set(roads.columns)
     print('[build] rows=%d (%.1fs)' % (len(roads), time.time() - t0), flush=True)
 
@@ -83,7 +91,7 @@ def main(pbf):
             n_feat += 1
 
     index = {'version': 1, 'builtAt': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
-             'source': os.path.basename(pbf), 'network': 'driving',
+             'source': os.path.basename(pbf), 'network': 'all',
              'bbox': {'minLon': BBOX[0], 'minLat': BBOX[1], 'maxLon': BBOX[2], 'maxLat': BBOX[3]},
              'tileDeg': TILE_DEG, 'tiles': {}}
     total = 0
