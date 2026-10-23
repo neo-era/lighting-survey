@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Vẽ đường — 3 phương án UI</title>
+<style>
+  :root{
+    --bg:#f1f5f9; --panel:#ffffff; --ink:#0f172a; --muted:#64748b; --line:#e2e8f0;
+    --brand:#2563eb; --brand-ink:#ffffff; --accent:#10b981; --danger:#dc2626;
+    --radius:14px; --shadow:0 6px 24px rgba(15,23,42,.10); --shadow-sm:0 2px 8px rgba(15,23,42,.08);
+    --map1:#cfe3cf; --map2:#e8efe6; --road:#ffffff; --roadline:#c7cdd4;
+  }
+  :root[data-theme="dark"]{
+    --bg:#0b1220; --panel:#131c2b; --ink:#e7edf5; --muted:#93a1b5; --line:#24324a;
+    --brand:#3b82f6; --accent:#34d399; --danger:#f87171;
+    --shadow:0 6px 24px rgba(0,0,0,.45); --shadow-sm:0 2px 10px rgba(0,0,0,.4);
+    --map1:#20302a; --map2:#1a2620; --road:#39465c; --roadline:#4b5a72;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:'Be Vietnam Pro',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+    background:var(--bg);color:var(--ink);-webkit-font-smoothing:antialiased;line-height:1.5}
+  header{position:sticky;top:0;z-index:30;display:flex;align-items:center;gap:12px;
+    padding:14px 18px;background:color-mix(in srgb,var(--panel) 88%,transparent);
+    backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+  header h1{font-size:16px;margin:0;font-weight:700;letter-spacing:-.01em}
+  header .sub{color:var(--muted);font-size:12.5px;margin-left:2px}
+  .spacer{flex:1}
+  .tbtn{border:1px solid var(--line);background:var(--panel);color:var(--ink);
+    padding:7px 12px;border-radius:10px;font-size:13px;cursor:pointer;display:inline-flex;gap:6px;align-items:center}
+  .tbtn:hover{border-color:var(--brand)}
+  .wrap{max-width:1180px;margin:0 auto;padding:18px}
+  .intro{color:var(--muted);font-size:13.5px;margin:2px 0 18px;max-width:70ch}
+  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+  @media (max-width:900px){.grid{grid-template-columns:1fr}}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+    overflow:hidden;box-shadow:var(--shadow-sm);display:flex;flex-direction:column}
+  .card h2{font-size:14.5px;margin:0;padding:13px 15px 0;display:flex;align-items:center;gap:8px}
+  .badge{font-size:11px;font-weight:700;color:var(--brand-ink);background:var(--brand);
+    padding:2px 8px;border-radius:999px}
+  .desc{color:var(--muted);font-size:12.5px;padding:6px 15px 12px;min-height:52px}
+  /* mini map */
+  .map{position:relative;height:300px;margin:0 12px 12px;border-radius:12px;overflow:hidden;
+    background:
+      radial-gradient(120% 90% at 20% 10%,var(--map2),transparent 60%),
+      linear-gradient(135deg,var(--map1),var(--map2));
+    border:1px solid var(--line)}
+  .road{position:absolute;background:var(--road);box-shadow:0 0 0 1px var(--roadline) inset}
+  .r-h{height:16px;left:-4%;right:-4%}
+  .r-v{width:14px;top:-4%;bottom:-4%}
+  .poleIco{position:absolute;width:10px;height:10px;border-radius:50%;background:var(--brand);
+    box-shadow:0 0 0 3px color-mix(in srgb,var(--brand) 25%,transparent)}
+  /* drawn line */
+  svg.draw{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+  .vtx{position:absolute;width:12px;height:12px;border-radius:50%;background:#fff;
+    border:2.5px solid var(--brand);transform:translate(-50%,-50%);box-shadow:var(--shadow-sm)}
+  .vtx.last{background:var(--brand)}
+  .hint{position:absolute;top:10px;left:50%;transform:translateX(-50%);font-size:11.5px;
+    background:color-mix(in srgb,var(--ink) 86%,transparent);color:var(--bg);
+    padding:5px 11px;border-radius:999px;white-space:nowrap}
+  /* A — floating toolbar */
+  .fab-toolbar{position:absolute;left:50%;bottom:12px;transform:translateX(-50%);
+    display:flex;gap:6px;align-items:center;background:var(--panel);border:1px solid var(--line);
+    padding:7px;border-radius:999px;box-shadow:var(--shadow)}
+  .fab-toolbar .cnt{font-size:12px;color:var(--muted);padding:0 6px;font-variant-numeric:tabular-nums}
+  .pill{border:none;border-radius:999px;padding:8px 13px;font-size:12.5px;font-weight:600;cursor:pointer;
+    display:inline-flex;gap:5px;align-items:center;min-height:36px}
+  .pill.ghost{background:transparent;color:var(--ink);border:1px solid var(--line)}
+  .pill.go{background:var(--brand);color:#fff}
+  .pill.danger{background:transparent;color:var(--danger);border:1px solid var(--line)}
+  /* save popup (A) */
+  .popup{position:absolute;left:50%;bottom:60px;transform:translateX(-50%);width:210px;
+    background:var(--panel);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);
+    padding:11px;font-size:12.5px}
+  .popup label{display:block;color:var(--muted);font-size:11px;margin:0 0 3px}
+  .popup input,.popup select{width:100%;padding:7px 8px;border:1px solid var(--line);border-radius:8px;
+    background:var(--bg);color:var(--ink);font-size:13px;margin-bottom:8px}
+  .popup .row{display:flex;gap:6px}
+  /* B — ☰ panel section */
+  .sheet-panel{position:absolute;top:10px;right:10px;width:200px;background:var(--panel);
+    border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);overflow:hidden}
+  .sp-head{padding:9px 11px;font-size:12.5px;font-weight:700;border-bottom:1px solid var(--line);
+    display:flex;align-items:center;gap:7px}
+  .sp-body{padding:9px 11px}
+  .switch{display:flex;align-items:center;justify-content:space-between;font-size:12px;margin-bottom:9px}
+  .tog{width:38px;height:22px;border-radius:999px;background:var(--brand);position:relative;flex:none}
+  .tog::after{content:"";position:absolute;width:16px;height:16px;border-radius:50%;background:#fff;
+    top:3px;right:3px}
+  .listrow{display:flex;align-items:center;gap:7px;font-size:12px;padding:6px 0;border-top:1px dashed var(--line)}
+  .listrow .nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .mini{border:none;background:transparent;cursor:pointer;color:var(--muted);font-size:13px;padding:2px}
+  .mini.del:hover{color:var(--danger)}
+  /* C — FAB + bottom sheet */
+  .fab{position:absolute;right:12px;bottom:12px;width:52px;height:52px;border-radius:50%;
+    background:var(--brand);color:#fff;border:none;font-size:22px;cursor:pointer;box-shadow:var(--shadow);
+    display:flex;align-items:center;justify-content:center}
+  .bsheet{position:absolute;left:8px;right:8px;bottom:8px;background:var(--panel);
+    border:1px solid var(--line);border-radius:16px 16px 12px 12px;box-shadow:var(--shadow);padding:10px 12px 12px}
+  .grip{width:38px;height:4px;border-radius:999px;background:var(--line);margin:0 auto 9px}
+  .bs-title{font-size:13px;font-weight:700;margin:0 0 8px;display:flex;align-items:center;gap:7px}
+  .seg{display:flex;gap:6px;margin-bottom:9px}
+  .seg button{flex:1;border:1px solid var(--line);background:var(--bg);color:var(--ink);
+    border-radius:9px;padding:7px;font-size:12px;cursor:pointer}
+  .seg button.on{background:var(--brand);color:#fff;border-color:var(--brand)}
+  .bs-actions{display:flex;gap:7px}
+  .bs-actions .pill{flex:1;justify-content:center}
+  .foot{margin-top:14px;color:var(--muted);font-size:12px;text-align:center}
+  .sync{display:inline-flex;gap:6px;align-items:center;font-size:11.5px;color:var(--accent);
+    background:color-mix(in srgb,var(--accent) 12%,transparent);padding:3px 9px;border-radius:999px}
+</style>
+</head>
+<body>
+<header>
+  <h1>🛣 Vẽ đường tự thêm <span class="sub">— 3 phương án giao diện</span></h1>
+  <div class="spacer"></div>
+  <span class="sync">● offline-first + sync</span>
+  <button class="tbtn" id="themeBtn">🌓 Sáng/Tối</button>
+</header>
+
+<div class="wrap">
+  <p class="intro">Cùng một tính năng (chạm các điểm dọc hẻm → tạo đường → lưu offline + đồng bộ), khác nhau ở <b>cách bố trí điều khiển</b>. Anh xem và chọn 1 (hoặc ghép ý), em build theo phương án đó.</p>
+
+  <div class="grid">
+    <!-- A -->
+    <div class="card">
+      <h2><span class="badge">A</span> Thanh công cụ nổi đáy map</h2>
+      <div class="desc">Bấm “Vẽ đường” → thanh nổi giữa đáy: Hoàn tác điểm · Xong · Hủy + đếm điểm. “Xong” hiện popup nhập tên/loại. Trực quan, hợp cả desktop lẫn mobile.</div>
+      <div class="map" id="mapA">
+        <div class="road r-h" style="top:38%"></div>
+        <div class="road r-v" style="left:30%"></div>
+        <div class="poleIco" style="top:34%;left:62%"></div>
+        <div class="poleIco" style="top:34%;left:74%"></div>
+        <svg class="draw" viewBox="0 0 100 100" preserveAspectRatio="none">
+          <polyline points="30,46 44,52 60,58 72,70" fill="none" stroke="var(--brand)" stroke-width="1.4"
+            stroke-dasharray="3 2" stroke-linecap="round" vector-effect="non-scaling-stroke"/>
+        </svg>
+        <div class="vtx" style="left:30%;top:46%"></div>
+        <div class="vtx" style="left:44%;top:52%"></div>
+        <div class="vtx" style="left:60%;top:58%"></div>
+        <div class="vtx last" style="left:72%;top:70%"></div>
+        <div class="hint">Chạm điểm tiếp theo dọc hẻm…</div>
+        <div class="fab-toolbar">
+          <button class="pill ghost">↶ Hoàn tác</button>
+          <span class="cnt">4 điểm</span>
+          <button class="pill go">✓ Xong</button>
+          <button class="pill danger">✕</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- B -->
+    <div class="card">
+      <h2><span class="badge">B</span> Mục trong ☰ panel</h2>
+      <div class="desc">Thêm mục “Đường tự vẽ” trong ☰: bật chế độ vẽ, danh sách đường đã vẽ (sửa/xóa), trạng thái đồng bộ. Gọn, đồng bộ với các mục điều khiển sẵn có.</div>
+      <div class="map" id="mapB">
+        <div class="road r-h" style="top:60%"></div>
+        <div class="road r-v" style="left:22%"></div>
+        <div class="poleIco" style="top:56%;left:40%"></div>
+        <svg class="draw" viewBox="0 0 100 100" preserveAspectRatio="none">
+          <polyline points="22,64 34,58 46,52 56,46" fill="none" stroke="var(--brand)" stroke-width="1.4"
+            stroke-dasharray="3 2" stroke-linecap="round" vector-effect="non-scaling-stroke"/>
+        </svg>
+        <div class="vtx" style="left:22%;top:64%"></div>
+        <div class="vtx" style="left:34%;top:58%"></div>
+        <div class="vtx last" style="left:56%;top:46%"></div>
+        <div class="sheet-panel">
+          <div class="sp-head">🛣 Đường tự vẽ</div>
+          <div class="sp-body">
+            <div class="switch"><span>Chế độ vẽ</span><span class="tog"></span></div>
+            <div class="listrow"><span class="nm">Hẻm 124 Tân Khai</span><button class="mini">✎</button><button class="mini del">🗑</button></div>
+            <div class="listrow"><span class="nm">Hẻm 30/4 (nội bộ)</span><button class="mini">✎</button><button class="mini del">🗑</button></div>
+            <div class="listrow" style="border-top:1px solid var(--line);margin-top:4px;padding-top:8px">
+              <span class="sync">● đã đồng bộ 2/2</span>
+            </div>
+          </div>
+        </div>
+        <div class="hint">Đang vẽ — chạm để thêm điểm</div>
+      </div>
+    </div>
+
+    <!-- C -->
+    <div class="card">
+      <h2><span class="badge">C</span> Nút tròn + bảng kéo (mobile)</h2>
+      <div class="desc">Nút tròn góc phải-dưới → bảng kéo lên: Vẽ / Danh sách / Đồng bộ. Tối ưu thao tác 1 tay ngoài hiện trường, vùng chạm lớn.</div>
+      <div class="map" id="mapC">
+        <div class="road r-h" style="top:30%"></div>
+        <div class="road r-v" style="left:68%"></div>
+        <div class="poleIco" style="top:26%;left:30%"></div>
+        <svg class="draw" viewBox="0 0 100 100" preserveAspectRatio="none">
+          <polyline points="18,40 32,44 46,46 58,42" fill="none" stroke="var(--brand)" stroke-width="1.4"
+            stroke-dasharray="3 2" stroke-linecap="round" vector-effect="non-scaling-stroke"/>
+        </svg>
+        <div class="vtx" style="left:18%;top:40%"></div>
+        <div class="vtx" style="left:32%;top:44%"></div>
+        <div class="vtx last" style="left:58%;top:42%"></div>
+        <button class="fab">✏️</button>
+        <div class="bsheet">
+          <div class="grip"></div>
+          <div class="bs-title">🛣 Đường tự vẽ</div>
+          <div class="seg"><button class="on">Vẽ</button><button>Danh sách</button><button>Đồng bộ</button></div>
+          <div class="bs-actions">
+            <button class="pill ghost">↶ Hoàn tác</button>
+            <button class="pill go">✓ Xong (3 điểm)</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <p class="foot">Cả 3 phương án: offline-first (IndexedDB) + đồng bộ Google Sheet · đường tự vẽ được căn-tuyến / overlay / xuất CAD / MST nhận · có thể xuất <code>.osc</code>/GeoJSON để tự upload OSM thật (tùy chọn).</p>
+</div>
+
+<script>
+  var b=document.getElementById('themeBtn'), r=document.documentElement;
+  function sysDark(){try{return matchMedia('(prefers-color-scheme:dark)').matches}catch(e){return false}}
+  if(sysDark()) r.setAttribute('data-theme','dark');
+  b.addEventListener('click',function(){
+    var cur=r.getAttribute('data-theme')||(sysDark()?'dark':'light');
+    r.setAttribute('data-theme', cur==='dark'?'light':'dark');
+  });
+</script>
+</body>
+</html>

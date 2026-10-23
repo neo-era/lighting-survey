@@ -1052,6 +1052,11 @@ function doPost(e) {
     if (data.action === 'save_preset')      return handleSavePreset(data);
     if (data.action === 'delete_preset')    return handleDeletePreset(data);
 
+    // Đường tự vẽ (custom roads) — sheet DuongVe
+    if (data.action === 'list_roads')       return handleListRoads(data);
+    if (data.action === 'save_road')        return _withScriptLock(function() { return handleSaveRoad(data); });
+    if (data.action === 'delete_road')      return _withScriptLock(function() { return handleDeleteRoad(data); });
+
     // P57: Auto phase assignment (round-robin A/B/C) cho toàn tủ
     if (data.action === 'assign_phases')    return _withScriptLock(function() { return handleAssignPhases(data); });
 
@@ -1330,6 +1335,95 @@ function handleDeletePreset(data) {
       }
     }
     return jsonResponse({ status: 'error', message: 'Không tìm thấy preset id=' + id });
+  } catch (err) {
+    return jsonResponse({ status: 'error', message: err.message });
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// Đường tự vẽ (custom roads) — sheet "DuongVe". Offline-first bên client; đây là bản chia sẻ team.
+// Cột: ID | Sheet | Highway | Tên | Hình học(JSON) | Người vẽ | Thời gian | Trạng thái
+// ─────────────────────────────────────────────────────────────
+function _getOrCreateRoadSheet() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('DuongVe');
+  if (!sheet) {
+    sheet = ss.insertSheet('DuongVe');
+    sheet.getRange(1, 1, 1, 8).setValues([[
+      'ID', 'Sheet', 'Highway', 'Tên', 'Hình học', 'Người vẽ', 'Thời gian', 'Trạng thái'
+    ]]);
+    sheet.setFrozenRows(1);
+  }
+  return sheet;
+}
+
+// LIST — public (mọi user cần đọc để thấy đường team vẽ). Lọc theo sheet nếu có.
+function handleListRoads(data) {
+  try {
+    var sheet = _getOrCreateRoadSheet();
+    var lastRow = sheet.getLastRow();
+    if (lastRow < 2) return jsonResponse({ status: 'ok', roads: [] });
+    var rows = sheet.getRange(2, 1, lastRow - 1, 8).getValues();
+    var want = data && data.sheet ? String(data.sheet) : '';
+    var roads = rows.map(function (r) {
+      return {
+        id: String(r[0] || ''), sheet: String(r[1] || ''), highway: String(r[2] || 'service'),
+        name: String(r[3] || ''), geom: String(r[4] || ''), author: String(r[5] || ''),
+        ts: String(r[6] || ''), status: String(r[7] || '')
+      };
+    }).filter(function (p) { return p.id && (!want || p.sheet === want); });
+    return jsonResponse({ status: 'ok', roads: roads });
+  } catch (err) {
+    return jsonResponse({ status: 'error', message: err.message });
+  }
+}
+
+// SAVE (upsert theo ID) — mọi user đăng nhập (như full_update marker, không cần admin).
+function handleSaveRoad(data) {
+  try {
+    var id = String(data.id || '');
+    if (!id) return jsonResponse({ status: 'error', message: 'Thiếu id' });
+    var sheet = _getOrCreateRoadSheet();
+    var lastRow = sheet.getLastRow();
+    var rowNum = -1;
+    if (lastRow >= 2) {
+      var ids = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
+      for (var i = 0; i < ids.length; i++) if (String(ids[i][0]) === id) { rowNum = i + 2; break; }
+    }
+    var values = [
+      id, String(data.sheet || ''), String(data.highway || 'service'), String(data.name || ''),
+      String(data.geom || ''), String(data.author || ''),
+      String(data.ts || new Date().toISOString()), String(data.status || '')
+    ];
+    if (rowNum > 0) sheet.getRange(rowNum, 1, 1, 8).setValues([values]);
+    else sheet.appendRow(values);
+    _logToHistory({ loaiThaoTac: rowNum > 0 ? 'road_update' : 'road_create', id: id,
+      tenTru: String(data.name || ''), nguoiThucHien: String(data.author || ''),
+      chiTiet: JSON.stringify({ sheet: data.sheet, highway: data.highway }) });
+    return jsonResponse({ status: 'ok', id: id });
+  } catch (err) {
+    return jsonResponse({ status: 'error', message: err.message });
+  }
+}
+
+// DELETE mềm — set cột Trạng thái = 'xoa' (để các máy khác sync biết mà bỏ, không "sống lại").
+function handleDeleteRoad(data) {
+  try {
+    var id = String(data.id || '');
+    if (!id) return jsonResponse({ status: 'error', message: 'Thiếu id' });
+    var sheet = _getOrCreateRoadSheet();
+    var lastRow = sheet.getLastRow();
+    if (lastRow < 2) return jsonResponse({ status: 'ok', id: id });
+    var ids = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
+    for (var i = 0; i < ids.length; i++) {
+      if (String(ids[i][0]) === id) {
+        sheet.getRange(i + 2, 7, 1, 2).setValues([[String(data.ts || new Date().toISOString()), 'xoa']]);
+        _logToHistory({ loaiThaoTac: 'road_delete', id: id, tenTru: '',
+          nguoiThucHien: String(data.author || ''), chiTiet: '' });
+        return jsonResponse({ status: 'ok', id: id });
+      }
+    }
+    return jsonResponse({ status: 'ok', id: id });  // không thấy → coi như đã xoá
   } catch (err) {
     return jsonResponse({ status: 'error', message: err.message });
   }

@@ -23,6 +23,7 @@ const MODULES = {
     'src/features/media.js': { place: 'before', fns: ['_startVoiceRecord','_stopVoiceRecord','_clearVoice','_updateVoiceUI','_renderVoicePreview','_loadQrLib','_openQrScanner','_closeQrScanner','_loadChartJs','_loadMapillaryJS','_setMapillaryStatus','_openMapillaryViewer','_cleanupMapillary'] },
     'src/features/cad-export.js': { place: 'inline', fns: ['_generateCadDrawing', '_generateSingleLineDrawing', '_generateOverviewDrawing', '_drawAutoLegend', '_drawCabinetSymbol', '_drawTitleBlockStateFull', '_openCadGenerator', '_onCgExport', '_onCgExportRun', '_onCgBatchExport', '_onCgCompileFullDossier', '_raPlanAlign', '_rlDrawLampBlock', '_dxfEscape', '_saveBlob'] },
     'src/features/osm.js': { place: 'inline', fns: ['_fetchOsmBasemap', '_overpassFetch', '_osmBoundsKey', '_drawOsmBasemapInDxf', '_filletCorners', '_osmRoadWidth', '_mergeRoadChains'] },
+    'src/features/custom-roads.js': { place: 'inline', fns: ['_crCoordValid', '_crRecordValid', '_crEncodeGeom', '_crDecodeGeom', '_crToRoad', '_crNearBounds', '_crActive', '_crNextId', '_crRoadsForBounds', '_crMergeInto', '_customRoadsForBounds', '_withCustomRoads', '_crBoot', '_crSyncPull', '_crOnDistrictChange'] },
     'src/features/mst-ui.js': { place: 'inline', fns: ['_openAutoMstModal', '_onMstTuChange', '_mstDoPreview', '_mstApplyToData', '_mstRollback', '_mstGetNodesForTu'] },
     'src/features/data-tools.js': { place: 'inline', fns: ['_batchReverseGeocode', '_confirmEditExcelUpdate'] },
     'src/features/cad-overlay.js': { place: 'inline', fns: ['_handleCadUpload', '_openCadUpload', '_validateDxf', '_applyDxfFix', '_loadCachedCad', '_openCadAdjust', '_startStakeout', '_onCadTextDragEnd'] },
@@ -39,8 +40,14 @@ for (const [file, { place, fns }] of Object.entries(MODULES)) {
     ok(`${file}: được nạp bằng <script src>`, at > 0);
     if (place === 'before') ok(`${file}: nạp sau src/core/mst.js và TRƯỚC khối <script> chính`, at > html.indexOf('src/core/mst.js') && at < firstInline);
     else if (place === 'tail') ok(`${file}: nạp sau khối <script> chính (thay khối script cuối)`, at > html.lastIndexOf('src/features/osm.js'));
-    else ok(`${file}: ngắt khối script tại chỗ (</script> ↵ <script src> ↵ <script>)`,
-        html.replace(/\r\n/g, '\n').includes(`</script>\n    <script src="${file}"></script>\n    <script>`));
+    else {
+        // inline: module ngắt khối script tại chỗ. Cho phép NHIỀU <script src> inline nối nhau trong cùng
+        // một dãy bọc bởi </script> … <script> (vd osm.js → osm-prebuilt.js → custom-roads.js).
+        const norm = html.replace(/\r\n/g, '\n');
+        const runs = norm.match(/<\/script>\n(?:[ \t]*<script src="[^"]+"><\/script>\n)+[ \t]*<script>/g) || [];
+        ok(`${file}: nằm trong dãy <script src> ngắt khối (</script> … <script>)`,
+            runs.some(b => b.includes(`<script src="${file}"></script>`)));
+    }
     ok(`${file}: có trong precache sw.js`, sw.includes(`'${file}'`));
     for (const fn of fns) {
         const re = new RegExp(`(?:async\\s+)?function\\s+${fn}\\s*\\(`);

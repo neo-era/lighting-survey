@@ -5246,11 +5246,12 @@
         // DB v1 = csv-cache only; DB v2 thêm cad-drawings (P17 — CAD overlay)
         function _idbOpen() {
             return new Promise((res, rej) => {
-                const r = indexedDB.open('lighting-survey-db', 2);
+                const r = indexedDB.open('lighting-survey-db', 3);
                 r.onupgradeneeded = e => {
                     const db = e.target.result;
                     if (!db.objectStoreNames.contains('csv-cache')) db.createObjectStore('csv-cache');
                     if (!db.objectStoreNames.contains('cad-drawings')) db.createObjectStore('cad-drawings');
+                    if (!db.objectStoreNames.contains('custom-roads')) db.createObjectStore('custom-roads'); // T: đường tự vẽ
                 };
                 r.onsuccess = e => res(e.target.result);
                 r.onerror = rej;
@@ -7130,6 +7131,7 @@
     </script>
     <script src="src/features/osm.js"></script>
     <script src="src/features/osm-prebuilt.js"></script>
+    <script src="src/features/custom-roads.js"></script>
     <script>
 
         // ─────────────────────────────────────────────────────────────
@@ -9864,6 +9866,8 @@
             }
             // Load CAD overlay cache theo địa bàn (P17)
             if (typeof _loadCachedCad === 'function') await _loadCachedCad(sheetName);
+            // Đường tự vẽ: vẽ lại theo địa bàn mới + kéo dữ liệu sheet đó
+            if (typeof _crOnDistrictChange === 'function') _crOnDistrictChange();
             // Cập nhật label địa bàn
             const lbl = document.getElementById('currentDistrictLabel');
             if (lbl) {

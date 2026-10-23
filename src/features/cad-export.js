@@ -4318,6 +4318,11 @@
             return cb ? !!cb.checked : true;
         }
         async function _cgFetchOsm(bbox, fetchOpts, signal) {
+            const result = await _cgFetchOsmRaw(bbox, fetchOpts, signal);
+            // Hợp nhất đường tự vẽ (custom roads) vào nền xuất CAD.
+            return (typeof window._withCustomRoads === 'function') ? window._withCustomRoads(result, bbox) : result;
+        }
+        async function _cgFetchOsmRaw(bbox, fetchOpts, signal) {
             _cgOsmFetching = true;
             try {
                 const wantRoads = !fetchOpts || fetchOpts.roads !== false;

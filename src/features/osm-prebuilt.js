@@ -125,10 +125,14 @@
 
         // Lấy đường cho 1 bbox theo chế độ hiện hành: live (Overpass) hay prebuilt. Trả {roads:[...]}.
         async function _osmRoadsForBounds(bounds, opts) {
+            let result;
             if (_osmPreferLive() && typeof _fetchOsmBasemap === 'function') {
-                return await _fetchOsmBasemap(bounds, { roads: true, buildings: false });
+                result = await _fetchOsmBasemap(bounds, { roads: true, buildings: false });
+            } else {
+                result = await _pbGetRoads(bounds, opts || { pad: 1 });
             }
-            return await _pbGetRoads(bounds, opts || { pad: 1 });
+            // Hợp nhất đường tự vẽ (custom roads) để overlay thấy đường user thêm.
+            return (typeof window._withCustomRoads === 'function') ? window._withCustomRoads(result, bounds) : result;
         }
         window._osmRoadsForBounds = _osmRoadsForBounds;
 

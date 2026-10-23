@@ -20,6 +20,11 @@
         // Ưu tiên nền đường DỰNG SẴN (offline, không gọi Overpass); ngoài vùng TP.HCM / không hỗ trợ → Overpass.
         // Overpass chặn 2 request cách nhau < 5s (dùng chung với xuất CAD) → tự chờ rồi thử lại 1 lần
         async function _raFetchRoads(bounds) {
+            const result = await _raFetchRoadsRaw(bounds);
+            // Hợp nhất đường tự vẽ (custom roads) để căn tuyến / MST / tóm tắt bắt được lề từ đường user thêm.
+            return (typeof window._withCustomRoads === 'function') ? window._withCustomRoads(result, bounds) : result;
+        }
+        async function _raFetchRoadsRaw(bounds) {
             // Chế độ OSM live (vừa vẽ hẻm mới) → bỏ prebuilt, lấy thẳng Overpass
             const _live = typeof window._osmPreferLive === 'function' && window._osmPreferLive();
             if (!_live && typeof window._pbGetRoads === 'function') {
