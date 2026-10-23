@@ -1,4 +1,4 @@
-const CACHE = 'lighting-survey-v192';
+const CACHE = 'lighting-survey-v193';
 
 // Assets tĩnh pre-cache khi install (icon + ảnh mẫu + CAD blocks + title templates T21 + core modules)
 const STATIC_ASSETS = [

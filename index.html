@@ -128,7 +128,11 @@
           <strong style="font-size:15px;">Chia sẻ địa bàn: <span id="shareDistrictLabel">—</span></strong>
         </div>
         <div style="padding:18px;">
-          <p style="margin:0 0 10px;font-size:13px;color:var(--text-muted,#6b7280);">Ai có link này đều xem được bản đồ trụ đèn của địa bàn (chỉ xem, không cần đăng nhập, không có bảng điều khiển).</p>
+          <p style="margin:0 0 10px;font-size:13px;color:var(--text-muted,#6b7280);">Ai có link này đều xem được bản đồ trụ đèn của địa bàn (chỉ xem, không cần đăng nhập, không có bảng điều khiển). Quét QR bên dưới để mở nhanh.</p>
+          <div id="shareQrWrap" style="display:flex;flex-direction:column;align-items:center;gap:6px;margin:2px 0 14px;">
+            <div id="shareQr" style="width:184px;height:184px;display:flex;align-items:center;justify-content:center;background:#fff;border:1px solid var(--border,#e5e7eb);border-radius:12px;padding:8px;color:var(--text-muted,#6b7280);font-size:12px;">Đang tạo QR…</div>
+            <button id="shareQrDl" onclick="_downloadShareQr()" style="display:none;background:transparent;border:0;color:var(--primary,#2563eb);font-size:12px;font-weight:700;cursor:pointer;">⬇ Tải QR (PNG)</button>
+          </div>
           <input id="shareLinkInput" type="text" readonly onclick="this.select()" style="width:100%;padding:10px 12px;border:1.5px solid var(--border,#cbd5e1);border-radius:10px;font-size:13px;background:var(--primary-light,#eff6ff);color:var(--text,#111);">
           <div style="display:flex;gap:8px;margin-top:14px;">
             <button onclick="_copyShareLink()" style="flex:1;min-height:44px;border:0;border-radius:10px;background:var(--primary,#2563eb);color:#fff;font-size:14px;font-weight:700;cursor:pointer;">📋 Copy link</button>
@@ -3516,9 +3520,68 @@
             }
             const m = document.getElementById('shareDistrictModal');
             if (m) m.style.display = 'flex';
+            _renderShareQr(link);
             if (typeof closeControlsModal === 'function') closeControlsModal();
         }
         function _closeShareModal() { const m = document.getElementById('shareDistrictModal'); if (m) m.style.display = 'none'; }
+
+        // Lazy-load thư viện QR (qrcodejs) — chỉ tải khi mở modal chia sẻ
+        let _qrLibPromise = null;
+        function _loadQrLib() {
+            if (typeof QRCode !== 'undefined') return Promise.resolve();
+            if (_qrLibPromise) return _qrLibPromise;
+            const cdns = [
+                'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js',
+                'https://cdn.jsdelivr.net/gh/davidshimjs/qrcodejs/qrcode.min.js'
+            ];
+            _qrLibPromise = (async () => {
+                let lastErr = null;
+                for (const url of cdns) {
+                    try {
+                        await new Promise((resolve, reject) => {
+                            const s = document.createElement('script');
+                            s.src = url;
+                            s.onload = resolve;
+                            s.onerror = () => { s.remove(); reject(new Error('CDN failed: ' + url)); };
+                            setTimeout(() => reject(new Error('Timeout: ' + url)), 12000);
+                            document.head.appendChild(s);
+                        });
+                        if (typeof QRCode !== 'undefined') return;
+                    } catch (err) { lastErr = err; }
+                }
+                _qrLibPromise = null;
+                throw new Error('Không tải được thư viện QR: ' + (lastErr && lastErr.message || 'unknown'));
+            })();
+            return _qrLibPromise;
+        }
+        async function _renderShareQr(link) {
+            const box = document.getElementById('shareQr');
+            const dl = document.getElementById('shareQrDl');
+            if (!box) return;
+            box.innerHTML = 'Đang tạo QR…';
+            if (dl) dl.style.display = 'none';
+            try {
+                await _loadQrLib();
+                box.innerHTML = '';
+                // eslint-disable-next-line no-new
+                new QRCode(box, { text: link, width: 168, height: 168, correctLevel: QRCode.CorrectLevel.M });
+                if (dl) dl.style.display = 'inline-block';
+            } catch (e) {
+                box.innerHTML = '<span style="color:var(--danger,#dc2626);">Không tạo được QR (cần mạng). Vẫn copy được link bên dưới.</span>';
+            }
+        }
+        function _downloadShareQr() {
+            const cv = document.querySelector('#shareQr canvas');
+            let url = '';
+            if (cv) { try { url = cv.toDataURL('image/png'); } catch (e) {} }
+            if (!url) { const img = document.querySelector('#shareQr img'); if (img) url = img.src; }
+            if (!url) { if (typeof displayError === 'function') displayError('Chưa có QR để tải.'); return; }
+            const a = document.createElement('a');
+            a.href = url; a.download = 'qr-chia-se-' + (currentSheet || 'dia-ban') + '.png';
+            document.body.appendChild(a); a.click(); a.remove();
+        }
+        window._renderShareQr = _renderShareQr;
+        window._downloadShareQr = _downloadShareQr;
         async function _copyShareLink() {
             const inp = document.getElementById('shareLinkInput');
             if (!inp) return;
