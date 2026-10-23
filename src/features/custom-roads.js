@@ -359,7 +359,7 @@
             if (document.getElementById('crFab')) return;
             const css = document.createElement('style');
             css.textContent = `
-              #crFab{position:fixed;right:14px;bottom:calc(14px + env(safe-area-inset-bottom));z-index:900;
+              #crFab{position:fixed;right:14px;bottom:calc(32px + env(safe-area-inset-bottom));z-index:900;
                 width:52px;height:52px;border-radius:50%;border:none;cursor:pointer;color:#fff;font-size:22px;
                 background:#7c3aed;box-shadow:0 6px 20px rgba(124,58,237,.45);display:flex;align-items:center;justify-content:center}
               #crFab.off{background:#64748b;box-shadow:0 4px 14px rgba(0,0,0,.3)}
@@ -373,7 +373,7 @@
               #crSheet .hd .x{margin-left:auto;border:none;background:transparent;font-size:18px;cursor:pointer;color:var(--muted,#64748b)}
               #crSeg{display:flex;gap:6px;margin-bottom:10px}
               #crSeg button{flex:1;border:1px solid var(--line,#e2e8f0);background:var(--bg,#f1f5f9);color:inherit;
-                border-radius:9px;padding:8px;font-size:12.5px;cursor:pointer;min-height:40px}
+                border-radius:9px;padding:8px;font-size:12.5px;cursor:pointer;min-height:44px}
               #crSeg button.on{background:#7c3aed;color:#fff;border-color:#7c3aed}
               #crSheet .pane{font-size:13px}
               #crSheet .row{display:flex;gap:8px}
@@ -435,6 +435,9 @@
             if (!pane) return;
             const fab = document.getElementById('crFab');
             if (fab && fab.classList) fab.classList.toggle('off', !_crVisible);
+            // đồng bộ highlight tab đang chọn (trước đây kẹt ở "Vẽ")
+            const seg = document.getElementById('crSeg');
+            if (seg) seg.querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.t === _crTab));
             if (_crTab === 'draw') {
                 pane.innerHTML =
                     '<div class="cnt">' + (_crDrawing ? ('Đang vẽ — ' + _crPts.length + ' điểm') : 'Bấm “Bắt đầu vẽ”, rồi chạm các điểm dọc hẻm.') + '</div>' +
