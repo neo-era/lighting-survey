@@ -4313,6 +4313,7 @@
         // Nền đường DỰNG SẴN bật khi: checkbox cgOsmPrebuilt tích (mặc định tích nếu chưa có) + có _pbGetRoads.
         function _cgUsePrebuilt() {
             if (typeof window._pbGetRoads !== 'function') return false;
+            if (typeof window._osmPreferLive === 'function' && window._osmPreferLive()) return false;  // chế độ OSM live
             const cb = document.getElementById('cgOsmPrebuilt');
             return cb ? !!cb.checked : true;
         }

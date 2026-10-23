@@ -116,6 +116,22 @@
         }
         window._pbGetRoads = _pbGetRoads;
 
+        // Chế độ "dùng OSM trực tiếp (live)" — khi bật, align/overlay/xuất CAD lấy đường từ Overpass
+        // (OSM mới nhất, thấy hẻm vừa vẽ) thay vì nền dựng sẵn. Lưu localStorage, bật/tắt từ ☰.
+        function _osmPreferLive() {
+            try { return localStorage.getItem('osm_live_mode') === '1'; } catch (e) { return false; }
+        }
+        window._osmPreferLive = _osmPreferLive;
+
+        // Lấy đường cho 1 bbox theo chế độ hiện hành: live (Overpass) hay prebuilt. Trả {roads:[...]}.
+        async function _osmRoadsForBounds(bounds, opts) {
+            if (_osmPreferLive() && typeof _fetchOsmBasemap === 'function') {
+                return await _fetchOsmBasemap(bounds, { roads: true, buildings: false });
+            }
+            return await _pbGetRoads(bounds, opts || { pad: 1 });
+        }
+        window._osmRoadsForBounds = _osmRoadsForBounds;
+
         // ── Overlay đường OSM dựng sẵn trên bản đồ live (toggle qua Leaflet layers control) ──
         const PB_OVERLAY_MIN_ZOOM = 14;   // dưới ngưỡng này không vẽ (tránh ôm cả thành phố)
         const PB_OVERLAY_MAX_LINES = 9000;
@@ -135,8 +151,8 @@
             const b = map.getBounds();
             const bounds = { minLat: b.getSouth(), minLon: b.getWest(), maxLat: b.getNorth(), maxLon: b.getEast() };
             let data;
-            try { data = await _pbGetRoads(bounds, { pad: 1 }); }
-            catch (e) { if (typeof displayError === 'function') displayError('🛣 Lỗi nền OSM dựng sẵn: ' + e.message); return; }
+            try { data = await _osmRoadsForBounds(bounds, { pad: 1 }); }
+            catch (e) { if (typeof displayError === 'function') displayError('🛣 Lỗi nền OSM: ' + e.message); return; }
             if (token !== _pbOverlayToken) return;   // đã có lần refresh mới hơn
             layer.clearLayers();
             let n = 0;

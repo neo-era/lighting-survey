@@ -1167,6 +1167,20 @@
 
                     <div class="ctrl-divider"></div>
 
+                    <!-- Nền OSM / Bổ sung hẻm (admin/editor) -->
+                    <div class="ctrl-section" id="sec-osm-hem" style="display:none;">
+                        <div class="ctrl-title">🛣 Nền OSM / Hẻm</div>
+                        <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text);cursor:pointer;user-select:none;margin-bottom:6px;"
+                               title="Bật: căn thẳng tuyến / overlay / xuất CAD lấy đường từ OSM mới nhất (Overpass) cho khu đang xem — thấy hẻm vừa vẽ, cần mạng. Tắt: dùng nền dựng sẵn (offline, nhanh).">
+                            <input type="checkbox" id="osmLiveToggle" onchange="_toggleOsmLive()" style="width:16px;height:16px;cursor:pointer;">
+                            🛰 Dùng OSM trực tiếp (live)
+                        </label>
+                        <button onclick="_openOsmEditor()" class="ctrl-btn outline" style="padding:7px;font-size:12px;width:100%;margin-bottom:0;color:var(--success);border-color:var(--ok-bd);background:var(--ok-bg);"
+                                title="Mở trình vẽ OpenStreetMap (iD) tại vị trí bản đồ đang xem để vẽ bổ sung hẻm còn thiếu">
+                            ✏️ Vẽ hẻm trên OSM (tại đây)
+                        </button>
+                    </div>
+
                     <!-- Tỷ lệ bản đồ -->
                     <div class="ctrl-section" id="sec-scale">
                         <div class="ctrl-title" style="display:flex;align-items:center;justify-content:space-between;">
@@ -3598,6 +3612,32 @@
         window._closeShareModal = _closeShareModal;
         window._copyShareLink = _copyShareLink;
 
+        // ── Nền OSM / Bổ sung hẻm ──
+        function _toggleOsmLive() {
+            const cb = document.getElementById('osmLiveToggle');
+            const on = !!(cb && cb.checked);
+            try { localStorage.setItem('osm_live_mode', on ? '1' : '0'); } catch (e) {}
+            if (typeof displayInfo === 'function') {
+                displayInfo(on ? '🛰 Dùng OSM trực tiếp (live) — thấy hẻm mới, cần mạng.'
+                               : '💾 Về nền OSM dựng sẵn (offline, nhanh).');
+            }
+            if (typeof _osmRoadsOn !== 'undefined' && _osmRoadsOn && typeof _refreshOsmRoadsOverlay === 'function') _refreshOsmRoadsOverlay();
+        }
+        function _syncOsmLiveToggle() {
+            const cb = document.getElementById('osmLiveToggle');
+            if (cb) { try { cb.checked = localStorage.getItem('osm_live_mode') === '1'; } catch (e) {} }
+        }
+        function _openOsmEditor() {
+            if (typeof map === 'undefined' || !map) { if (typeof displayError === 'function') displayError('Bản đồ chưa sẵn sàng.'); return; }
+            const c = map.getCenter();
+            const z = Math.max(18, Math.min(21, Math.round(map.getZoom() || 18)));
+            const url = 'https://www.openstreetmap.org/edit?editor=id#map=' + z + '/' + c.lat.toFixed(5) + '/' + c.lng.toFixed(5);
+            window.open(url, '_blank', 'noopener');
+            if (typeof displayInfo === 'function') displayInfo('✏️ Mở OSM iD để vẽ hẻm. Vẽ xong, bật "Dùng OSM trực tiếp" để thấy ngay (sau vài phút).');
+        }
+        window._toggleOsmLive = _toggleOsmLive;
+        window._openOsmEditor = _openOsmEditor;
+
         function checkAuth() {
             const pv = _parsePublicView(location.search);
             if (pv) { _startPublicView(pv); return; }
@@ -3956,6 +3996,10 @@
             if (btnDBWrap) btnDBWrap.style.display = isAdmin ? 'flex' : 'none';
             const btnShareWrap = document.getElementById('btnShareDistrictWrap');
             if (btnShareWrap) btnShareWrap.style.display = isAdmin ? 'block' : 'none';
+            // Nền OSM / Hẻm — cho người có quyền sửa (admin/user/user1), không cho demo
+            const osmSec = document.getElementById('sec-osm-hem');
+            if (osmSec) osmSec.style.display = edit ? '' : 'none';
+            _syncOsmLiveToggle();
             _buildDistrictOptions();
             // v150 — fetch dynamic districts từ GAS (background, không block UI)
             _loadDynamicDistricts();
