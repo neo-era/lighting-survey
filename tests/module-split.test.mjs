@@ -24,6 +24,7 @@ const MODULES = {
     'src/features/cad-export.js': { place: 'inline', fns: ['_generateCadDrawing', '_generateSingleLineDrawing', '_generateOverviewDrawing', '_drawAutoLegend', '_drawCabinetSymbol', '_drawTitleBlockStateFull', '_openCadGenerator', '_onCgExport', '_onCgExportRun', '_onCgBatchExport', '_onCgCompileFullDossier', '_raPlanAlign', '_rlDrawLampBlock', '_dxfEscape', '_saveBlob'] },
     'src/features/osm.js': { place: 'inline', fns: ['_fetchOsmBasemap', '_overpassFetch', '_osmBoundsKey', '_drawOsmBasemapInDxf', '_filletCorners', '_osmRoadWidth', '_mergeRoadChains'] },
     'src/features/custom-roads.js': { place: 'inline', fns: ['_crCoordValid', '_crRecordValid', '_crEncodeGeom', '_crDecodeGeom', '_crToRoad', '_crNearBounds', '_crActive', '_crNextId', '_crRoadsForBounds', '_crMergeInto', '_customRoadsForBounds', '_withCustomRoads', '_crBoot', '_crSyncPull', '_crOnDistrictChange'] },
+    'src/features/marker-qr.js': { place: 'inline', fns: ['_mqShareLink', '_mqCaption', '_mqFilename', '_mqParseMarker', '_mqSummaryOpts', '_mqOpen', '_mqFocusFromUrl'] },
     'src/features/mst-ui.js': { place: 'inline', fns: ['_openAutoMstModal', '_onMstTuChange', '_mstDoPreview', '_mstApplyToData', '_mstRollback', '_mstGetNodesForTu'] },
     'src/features/data-tools.js': { place: 'inline', fns: ['_batchReverseGeocode', '_confirmEditExcelUpdate'] },
     'src/features/cad-overlay.js': { place: 'inline', fns: ['_handleCadUpload', '_openCadUpload', '_validateDxf', '_applyDxfFix', '_loadCachedCad', '_openCadAdjust', '_startStakeout', '_onCadTextDragEnd'] },

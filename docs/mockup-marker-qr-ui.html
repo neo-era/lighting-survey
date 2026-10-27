@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Mã QR trụ/tủ — 3 phương án</title>
+<style>
+  :root{
+    --bg:#f1f5f9;--panel:#fff;--ink:#0f172a;--muted:#64748b;--line:#e2e8f0;
+    --brand:#2563eb;--accent:#10b981;--danger:#dc2626;--qr:#0f172a;
+    --radius:14px;--shadow:0 10px 34px rgba(15,23,42,.16);--shadow-sm:0 2px 8px rgba(15,23,42,.08);
+  }
+  :root[data-theme="dark"]{
+    --bg:#0b1220;--panel:#131c2b;--ink:#e7edf5;--muted:#93a1b5;--line:#24324a;
+    --brand:#3b82f6;--accent:#34d399;--qr:#e7edf5;--shadow:0 10px 34px rgba(0,0,0,.5);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:'Be Vietnam Pro',system-ui,-apple-system,'Segoe UI',sans-serif;
+    background:var(--bg);color:var(--ink);line-height:1.5;-webkit-font-smoothing:antialiased}
+  header{position:sticky;top:0;z-index:20;display:flex;gap:10px;align-items:center;
+    padding:12px 16px;background:color-mix(in srgb,var(--panel) 90%,transparent);
+    backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+  header h1{font-size:15px;margin:0;font-weight:700}
+  .spacer{flex:1}
+  .tbtn{border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:6px 11px;
+    border-radius:9px;font-size:12.5px;cursor:pointer}
+  .wrap{max-width:1150px;margin:0 auto;padding:16px}
+  .intro{color:var(--muted);font-size:13px;margin:0 0 16px;max-width:72ch}
+  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+  @media (max-width:880px){.grid{grid-template-columns:1fr}}
+  .col h2{font-size:14px;margin:0 0 4px;display:flex;align-items:center;gap:8px}
+  .badge{font-size:11px;font-weight:700;color:#fff;background:var(--brand);padding:2px 8px;border-radius:999px}
+  .col .d{color:var(--muted);font-size:12px;margin:0 0 10px;min-height:48px}
+  /* modal card (nổi trên "map") */
+  .stage{position:relative;height:430px;border-radius:12px;overflow:hidden;border:1px solid var(--line);
+    background:linear-gradient(135deg,#cfe3cf,#e8efe6)}
+  :root[data-theme="dark"] .stage{background:linear-gradient(135deg,#20302a,#1a2620)}
+  .modal{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:88%;
+    background:var(--panel);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow);
+    padding:16px;max-width:300px}
+  .mh{display:flex;align-items:center;gap:8px;font-weight:700;font-size:14.5px;margin-bottom:10px}
+  .mh .x{margin-left:auto;border:none;background:transparent;font-size:18px;color:var(--muted);cursor:pointer}
+  .qr{display:block;margin:0 auto;border-radius:8px;background:#fff;padding:8px}
+  .cap{text-align:center;margin:10px 0 12px}
+  .cap .nm{font-weight:700;font-size:14px}
+  .cap .sub{color:var(--muted);font-size:12px}
+  .cap .id{font-family:ui-monospace,monospace;font-size:11.5px;color:var(--brand);margin-top:2px}
+  .acts{display:flex;gap:7px}
+  .acts.col2{flex-wrap:wrap}
+  .pill{flex:1;border:none;border-radius:10px;padding:10px 8px;font-size:12px;font-weight:600;cursor:pointer;
+    display:inline-flex;gap:5px;align-items:center;justify-content:center;min-height:44px}
+  .pill.go{background:var(--brand);color:#fff}
+  .pill.ghost{background:transparent;color:var(--ink);border:1px solid var(--line)}
+  /* B — label style */
+  .label{border:2px dashed var(--line);border-radius:12px;padding:12px;text-align:center;margin-bottom:12px}
+  .label .nm{font-weight:800;font-size:16px;letter-spacing:.2px}
+  .label .meta{font-size:12.5px;color:var(--muted);margin-top:2px}
+  .label .org{font-size:10.5px;color:var(--muted);margin-top:8px;text-transform:uppercase;letter-spacing:.5px}
+  /* C — batch row */
+  .batch{margin-top:11px;border-top:1px dashed var(--line);padding-top:10px;display:flex;align-items:center;gap:8px;
+    font-size:12px;color:var(--muted)}
+  .batch button{margin-left:auto;border:1px solid var(--brand);color:var(--brand);background:transparent;
+    border-radius:9px;padding:8px 10px;font-size:12px;font-weight:600;cursor:pointer;min-height:40px}
+  .foot{margin-top:16px;color:var(--muted);font-size:12px;text-align:center}
+  code{background:color-mix(in srgb,var(--brand) 12%,transparent);padding:1px 5px;border-radius:5px;font-size:11.5px}
+</style>
+</head>
+<body>
+<header>
+  <h1>📱 Mã QR trụ/tủ — 3 phương án</h1><div class="spacer"></div>
+  <button class="tbtn" id="themeBtn">🌓 Sáng/Tối</button>
+</header>
+<div class="wrap">
+  <p class="intro">Nút “Mã QR” trong popup trụ/tủ → modal này. QR = link mở app tới đúng trụ (<code>?view=Quan5&amp;m=Q5_012&amp;t=…</code>) + tên/loại/CS đọc được. Anh chọn kiểu modal (A/B/C) — khác nhau ở cách trình bày + có batch hay không.</p>
+  <div class="grid">
+
+    <!-- A compact -->
+    <div class="col">
+      <h2><span class="badge">A</span> Thẻ gọn</h2>
+      <p class="d">Tối giản: QR + 1 dòng tên + phụ. 3 nút ngang. Nhanh, hợp xem/sao chép link trên điện thoại.</p>
+      <div class="stage">
+        <div class="modal">
+          <div class="mh">📱 Mã QR trụ<button class="x">×</button></div>
+          <div id="qrA" class="qr"></div>
+          <div class="cap"><div class="nm">Trụ STK Q5_012</div><div class="sub">LED 100W · Tủ VTS_H23</div><div class="id">Q5_012</div></div>
+          <div class="acts">
+            <button class="pill ghost">⬇ Ảnh</button>
+            <button class="pill ghost">🖨 In</button>
+            <button class="pill go">🔗 Link</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- B label -->
+    <div class="col">
+      <h2><span class="badge">B</span> Kiểu nhãn dán</h2>
+      <p class="d">QR to + khung nhãn (tên đậm, loại/CS, đơn vị). Giống nhãn sẽ in & dán lên trụ. Nút “In nhãn” nổi bật.</p>
+      <div class="stage">
+        <div class="modal">
+          <div class="mh">🏷 Nhãn QR<button class="x">×</button></div>
+          <div class="label">
+            <div id="qrB" class="qr"></div>
+            <div class="nm" style="margin-top:8px">TRỤ STK Q5_012</div>
+            <div class="meta">LED 100W · Tủ VTS_H23</div>
+            <div class="org">CS Khu vực Trung Tâm</div>
+          </div>
+          <div class="acts">
+            <button class="pill go">🖨 In nhãn</button>
+            <button class="pill ghost">⬇ Ảnh</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- C compact + batch -->
+    <div class="col">
+      <h2><span class="badge">C</span> Thẻ gọn + In cả tủ</h2>
+      <p class="d">Như A, thêm lối “In nhãn QR cả tủ” (hàng loạt) — dán nhiều trụ ngoài hiện trường trong 1 lần in A4.</p>
+      <div class="stage">
+        <div class="modal">
+          <div class="mh">📱 Mã QR trụ<button class="x">×</button></div>
+          <div id="qrC" class="qr"></div>
+          <div class="cap"><div class="nm">Trụ STK Q5_012</div><div class="sub">LED 100W · Tủ VTS_H23</div><div class="id">Q5_012</div></div>
+          <div class="acts">
+            <button class="pill ghost">⬇ Ảnh</button>
+            <button class="pill ghost">🖨 In</button>
+            <button class="pill go">🔗 Link</button>
+          </div>
+          <div class="batch">In nhãn QR cả tủ VTS_H23 (42 trụ)<button>🖨 In loạt</button></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+  <p class="foot">Quét QR → app mở, zoom + popup đúng trụ (qua public view, người ngoài cũng xem được). Lưu ảnh PNG / In nhãn / Sao chép link. Áp cho cả trụ đèn & tủ điều khiển.</p>
+</div>
+<script>
+  // QR placeholder (lưới module ngẫu nhiên ổn định) — chỉ để xem bố cục
+  function drawQR(id,size){
+    var n=21, cell=size/n, c=document.getElementById(id);
+    var ns='http://www.w3.org/2000/svg', svg=document.createElementNS(ns,'svg');
+    svg.setAttribute('width',size);svg.setAttribute('height',size);svg.setAttribute('class','qr');
+    var seed=7; function rnd(){seed=(seed*1103515245+12345)&0x7fffffff;return seed/0x7fffffff;}
+    for(var y=0;y<n;y++)for(var x=0;x<n;x++){
+      var fp=(x<7&&y<7)||(x>=n-7&&y<7)||(x<7&&y>=n-7); // finder-ish
+      var on= fp ? ((x==0||x==6||y==0||y==6||(x>=2&&x<=4&&y>=2&&y<=4)|| (x>=n-7)&&(x==n-7||x==n-1)|| (y>=n-7)&&(y==n-7||y==n-1)) ? 1 : (fp?0:0)) : (rnd()>.5?1:0);
+      if(fp){ // vẽ finder chuẩn hơn
+        var inFinder=(x<7&&y<7)||(x>=n-7&&y<7)||(x<7&&y>=n-7);
+        var lx=x<7?x:(x>=n-7?x-(n-7):x), ly=y<7?y:(y>=n-7?y-(n-7):y);
+        on=(lx==0||lx==6||ly==0||ly==6||(lx>=2&&lx<=4&&ly>=2&&ly<=4))?1:0;
+      }
+      if(on){var r=document.createElementNS(ns,'rect');r.setAttribute('x',x*cell);r.setAttribute('y',y*cell);
+        r.setAttribute('width',cell+.5);r.setAttribute('height',cell+.5);r.setAttribute('fill','var(--qr)');svg.appendChild(r);}
+    }
+    c.appendChild(svg);
+  }
+  drawQR('qrA',150);drawQR('qrB',160);drawQR('qrC',140);
+  var b=document.getElementById('themeBtn'),r=document.documentElement;
+  function sysDark(){try{return matchMedia('(prefers-color-scheme:dark)').matches}catch(e){return false}}
+  if(sysDark())r.setAttribute('data-theme','dark');
+  b.onclick=function(){var c=r.getAttribute('data-theme')||(sysDark()?'dark':'light');r.setAttribute('data-theme',c==='dark'?'light':'dark');};
+</script>
+</body>
+</html>

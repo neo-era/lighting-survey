@@ -3486,6 +3486,8 @@
             }
             if (typeof _loadCachedCad === 'function') _loadCachedCad(sheet);
             _updatePublicCount();
+            // Deep-link QR: ?m=<id> → zoom + mở popup đúng trụ/tủ
+            if (typeof _mqFocusFromUrl === 'function') _mqFocusFromUrl();
         }
         window._startPublicView = _startPublicView;
 
@@ -6465,6 +6467,12 @@
               <div class="pc-actions ${actionClass}">
                 ${actionBtns}
               </div>
+              <div style="padding:0 16px 12px;">
+                <button onclick="_mqOpen()" title="Tạo mã QR cho trụ/tủ này (dán nhãn / chia sẻ)"
+                  style="width:100%;min-height:44px;border-radius:10px;border:1.5px solid #7c3aed;background:#f5f3ff;color:#6d28d9;font-size:13px;font-weight:700;cursor:pointer;">
+                  📱 Mã QR
+                </button>
+              </div>
               ${canDrag() && type >= 1 && type <= 4 ? `
               <div style="padding:0 16px 12px;">
                 <button onclick="openAlignRoute()" title="Căn thẳng các trụ cùng tuyến theo tim đường OSM"
@@ -7132,6 +7140,7 @@
     <script src="src/features/osm.js"></script>
     <script src="src/features/osm-prebuilt.js"></script>
     <script src="src/features/custom-roads.js"></script>
+    <script src="src/features/marker-qr.js"></script>
     <script>
 
         // ─────────────────────────────────────────────────────────────
