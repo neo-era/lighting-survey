@@ -3587,15 +3587,42 @@
                 box.innerHTML = '<span style="color:var(--danger,#dc2626);">Không tạo được QR (cần mạng). Vẫn copy được link bên dưới.</span>';
             }
         }
+        // Lưu ảnh "thông minh" cho mọi nền tảng. iOS Safari/PWA BỎ QUA <a download> với data/blob URL
+        // (bấm không lưu được) → ưu tiên Web Share API (hiện bảng "Lưu ảnh / Lưu vào Files").
+        // Desktop/Android → tải bằng blob URL. Cùng lắm → mở ảnh ra tab để chạm-giữ lưu.
+        async function _saveImageSmart(dataUrl, filename, title) {
+            if (!dataUrl) { if (typeof displayError === 'function') displayError('Chưa có ảnh để lưu.'); return; }
+            let blob = null;
+            try { blob = await (await fetch(dataUrl)).blob(); } catch (e) {}
+            if (blob && navigator.canShare) {
+                try {
+                    const file = new File([blob], filename, { type: 'image/png' });
+                    if (navigator.canShare({ files: [file] })) {
+                        try { await navigator.share({ files: [file], title: title || filename }); return; }
+                        catch (e) { if (e && e.name === 'AbortError') return; }  // user hủy; lỗi khác → tải tiếp
+                    }
+                } catch (e) {}
+            }
+            try {
+                const url = blob ? URL.createObjectURL(blob) : dataUrl;
+                const a = document.createElement('a');
+                a.href = url; a.download = filename; a.style.display = 'none';
+                document.body.appendChild(a); a.click(); a.remove();
+                if (blob) setTimeout(() => URL.revokeObjectURL(url), 5000);
+                return;
+            } catch (e) {}
+            try { const w = window.open('', '_blank'); if (w) { w.document.write('<title>' + filename + '</title><img src="' + dataUrl + '" style="max-width:100%">'); w.document.close(); return; } } catch (e) {}
+            if (typeof displayError === 'function') displayError('Không lưu được ảnh — chạm giữ vào mã QR để lưu.');
+        }
+        window._saveImageSmart = _saveImageSmart;
+
         function _downloadShareQr() {
             const cv = document.querySelector('#shareQr canvas');
             let url = '';
             if (cv) { try { url = cv.toDataURL('image/png'); } catch (e) {} }
             if (!url) { const img = document.querySelector('#shareQr img'); if (img) url = img.src; }
             if (!url) { if (typeof displayError === 'function') displayError('Chưa có QR để tải.'); return; }
-            const a = document.createElement('a');
-            a.href = url; a.download = 'qr-chia-se-' + (currentSheet || 'dia-ban') + '.png';
-            document.body.appendChild(a); a.click(); a.remove();
+            _saveImageSmart(url, 'qr-chia-se-' + (currentSheet || 'dia-ban') + '.png', 'QR chia sẻ địa bàn');
         }
         window._renderShareQr = _renderShareQr;
         window._downloadShareQr = _downloadShareQr;

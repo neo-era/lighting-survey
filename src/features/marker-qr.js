@@ -178,9 +178,11 @@
         function _mqSaveImage() {
             const d = _mqDataUrl(document.getElementById('mqQr'));
             if (!d) { _mqToast('QR chưa sẵn sàng.', true); return; }
+            const fn = _mqFilename(_mqCurrent.row);
+            // Lưu "thông minh" (Web Share trên iOS, blob trên desktop/Android) — tránh iOS bỏ qua <a download>.
+            if (typeof window._saveImageSmart === 'function') { window._saveImageSmart(d, fn, _mqCurrent.cap.name); return; }
             const a = document.createElement('a');
-            a.href = d; a.download = _mqFilename(_mqCurrent.row);
-            document.body.appendChild(a); a.click(); a.remove();
+            a.href = d; a.download = fn; document.body.appendChild(a); a.click(); a.remove();
         }
 
         async function _mqCopyLink() {
