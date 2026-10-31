@@ -1265,6 +1265,11 @@
                 if (!label) continue;
                 items.push({ kind: 'cable', key, label, qty: cabM ? _legendQty(cabM.get(key) || 0) : '' });
             }
+            // Block thật (bản vẽ mẫu): mỗi (block, layer trạng thái) 1 dòng — INSERT đúng block đó, màu theo layer
+            for (const rb of (counts.realBlocks || [])) {
+                items.push({ kind: 'blk', key: rb.block, layer: rb.layer, scale: rb.scale, unit: rb.unit,
+                             label: rb.label, qty: _legendQty(rb.count) });
+            }
 
             const lampRows = lampSpecs ? [...lampSpecs.entries()]
                 .filter(([, c]) => c > 0)
@@ -1278,6 +1283,12 @@
             function symbolOf(it, ox, oy) {
                 const buf = [];
                 const p = (...a) => { for (const v of a) buf.push(String(v)); };
+                if (it.kind === 'blk') {
+                    const s = it.scale.toFixed(4);
+                    p('0', 'INSERT', '8', it.layer, '2', it.key, '10', ox.toFixed(4), '20', oy.toFixed(4), '30', '0',
+                      '41', s, '42', s, '43', s, '50', '0');
+                    return buf;
+                }
                 if (it.kind === 'cable') _drawCableSymbol(p, ox - 4, oy, ox + 4, oy, it.key);
                 else if (/^cab(_|$)/.test(it.key)) _drawCabinetSymbol(p, ox, oy, it.key.replace(/^cab_?/, ''));
                 else _drawPoleSymbol(p, ox, oy, it.key.replace(/^pole_/, ''), { soLuongDen: 1 });
@@ -1300,7 +1311,7 @@
                 flush();
                 return isFinite(x0) ? { x0, y0, x1, y1 } : { x0: -1, y0: -1, x1: 1, y1: 1 };
             }
-            for (const it of items) it.bb = bboxOf(symbolOf(it, 0, 0));
+            for (const it of items) it.bb = it.kind === 'blk' ? _csBlockBBox(it.key, it.scale) : bboxOf(symbolOf(it, 0, 0));
 
             // Kích thước cột
             const TXT = 1.7, PADY = 1.2;
@@ -1347,7 +1358,7 @@
                 const ox = cx - (it.bb.x0 + it.bb.x1) / 2, oy = yc - (it.bb.y0 + it.bb.y1) / 2;
                 push(...symbolOf(it, ox, oy));
                 tx(cX[1] + 1.5, yc - TXT / 2, TXT, it.label);
-                tx(cX[2] + 1.5, yc - TXT / 2, TXT, _legendUnit(it.kind, it.key));
+                tx(cX[2] + 1.5, yc - TXT / 2, TXT, it.unit || _legendUnit(it.kind, it.key));
                 if (it.qty) tx(cX[4] - 1.5 - it.qty.length * TXT * 0.62, yc - TXT / 2, TXT, it.qty);
                 yCur -= it.h;
                 ln(bx, yCur, bx + boxW, yCur);
@@ -1887,7 +1898,8 @@
                     paper: 'a3', scale: 1000, cm: 105.75,
                     excludeOutliers: cbOut ? cbOut.checked : false,
                     stamps: stampsMeta,
-                    orientByRoad: !!(document.getElementById('cgOrientByRoad') || {}).checked  // v152
+                    orientByRoad: !!(document.getElementById('cgOrientByRoad') || {}).checked,  // v152
+                    realBlocks: (document.getElementById('cgRealBlocks') || { checked: true }).checked !== false
                 };
                 const results = [];
 
@@ -2358,13 +2370,17 @@
             push('0', 'LTYPE', '2', 'CENTER', '70', '0', '3', 'Center ____ _ ____ _ ____', '72', '65', '73', '4', '40', '20.0',
                  '49', '12.5', '49', '-2.5', '49', '2.5', '49', '-2.5');
             push('0', 'ENDTAB');
-            push('0', 'TABLE', '2', 'LAYER', '70', '6');
+            // Block thật trích từ bản vẽ mẫu (src/core/cad-symlib.js) — tắt được trong modal → quay về ký hiệu cũ
+            const _realBlocks = opts.realBlocks === true && typeof _csPickBlock === 'function';   // UI luôn truyền rõ; thiếu → ký hiệu cũ
+            push('0', 'TABLE', '2', 'LAYER', '70', String(6 + (_realBlocks ? CS_LAYERS.length : 0)));
             push('0', 'LAYER', '2', '0',              '70', '0', '62', '7', '6', 'CONTINUOUS');
             push('0', 'LAYER', '2', 'LIGHTING_CABLE', '70', '0', '62', '6', '6', 'CONTINUOUS');
             push('0', 'LAYER', '2', 'OSM_TIM_DUONG',  '70', '0', '62', '1', '6', 'CENTER');
             push('0', 'LAYER', '2', 'OSM_MEP_DUONG',  '70', '0', '62', '7', '6', 'CONTINUOUS');
             push('0', 'LAYER', '2', 'OSM_TEN_DUONG',  '70', '0', '62', '3', '6', 'CONTINUOUS');
             push('0', 'LAYER', '2', 'OSM_DUONG_KHAC', '70', '0', '62', '8', '6', 'CONTINUOUS');
+            // Layer trạng thái cải tạo cho block thật — màu theo layer (block con BYLAYER trên layer 0)
+            if (_realBlocks) for (const _ly of CS_LAYERS) push('0', 'LAYER', '2', _ly.layer, '70', '0', '62', String(_ly.color), '6', 'CONTINUOUS');
             push('0', 'ENDTAB');
             push('0', 'TABLE', '2', 'STYLE', '70', '1');
             push('0', 'STYLE', '2', 'STANDARD', '70', '0', '40', '0', '41', '1',
@@ -2465,6 +2481,8 @@
             }
 
             // Iterate markers: dispatch symbol theo (type, trangThai) — P59+
+            const _csDone = new Set();        // block thật đã định nghĩa (mỗi block 1 lần)
+            const _realUsed = new Map();      // 'block|layer' → dòng chú thích {block, layer, label, count, scale, unit}
             for (const r of rows) {
                 const lat = parseCoord(r[2]), lon = parseCoord(r[3]);
                 if (!isFinite(lat) || !isFinite(lon)) continue;
@@ -2479,10 +2497,8 @@
                 const loaiDen = String(r[10] || '').toUpperCase();
 
                 const _isPole = type >= 1 && type <= 4;
-                if (_orientByRoad && _isPole) {
-                    // v152 — block đèn N bóng, xoay vuông góc tim đường (fallback: tuyến cáp tới trụ cha)
-                    const nLamp = Math.min(4, Math.max(1, soLuongDen));
-                    const lampState = 'lamp' + nLamp;
+                // Góc xoay theo tim đường gần nhất (fallback tuyến cáp tới trụ cha) — quy ước app: 0° = đèn hướng +Y
+                const _roadRot = (nLamp) => {
                     const near = _roadIdx ? _rlNearest(x, y, _roadIdx, 40) : null;
                     let parentXY = null;
                     if (!near) {
@@ -2493,7 +2509,30 @@
                         }
                     }
                     _rlStats[near ? 'road' : (parentXY ? 'parent' : 'none')]++;
-                    const rot = _rlRotation(x, y, nLamp, near, parentXY);
+                    return _rlRotation(x, y, nLamp, near, parentXY);
+                };
+                const _bnReal = _realBlocks ? _csPickBlock(r) : null;
+                if (_bnReal) {
+                    // Block thật (bản vẽ mẫu): chọn theo loại trụ + loại đèn + số bóng; trạng thái → layer/màu
+                    const nLamp = Math.min(4, Math.max(1, soLuongDen));
+                    const rotR = (_orientByRoad && _isPole) ? _csRealRot(_roadRot(nLamp)) : 0;
+                    const ly = _csStateLayer(state);
+                    const sc = _csInsertScale(_bnReal, scale);
+                    _blocksDefL.push(..._csBlockDxf([_bnReal], _csDone));
+                    push('0', 'INSERT', '8', ly.layer, '2', _bnReal,
+                         '10', x.toFixed(4), '20', y.toFixed(4), '30', '0',
+                         '41', sc.toFixed(4), '42', sc.toFixed(4), '43', sc.toFixed(4), '50', rotR.toFixed(2));
+                    const _uk = _bnReal + '|' + ly.layer;
+                    const _u = _realUsed.get(_uk) || { block: _bnReal, layer: ly.layer, count: 0,
+                        scale: _csInsertScale(_bnReal, 1000), unit: _isPole ? 'trụ' : 'tủ',
+                        label: _csLabel(_bnReal) + ' — ' + ly.label };
+                    _u.count++;
+                    _realUsed.set(_uk, _u);
+                } else if (_orientByRoad && _isPole) {
+                    // v152 — block đèn N bóng, xoay vuông góc tim đường (fallback: tuyến cáp tới trụ cha)
+                    const nLamp = Math.min(4, Math.max(1, soLuongDen));
+                    const lampState = 'lamp' + nLamp;
+                    const rot = _roadRot(nLamp);
                     const _key = 'pole_' + lampState;
                     const _bn  = _ensureSymbolBlock(_key, type, lampState, { soLuongDen: nLamp });
                     push('0', 'INSERT', '8', '0', '2', _bn,
@@ -2508,22 +2547,24 @@
                     _usedStates.add(_key); _stateCounts.set(_key, (_stateCounts.get(_key) || 0) + 1);
                 }
 
-                // TEXT label tên trụ (cao 2m thực địa @ 1:1000) — tủ rộng 6.2 m nên đẩy nhãn ra ngoài khung
+                // TEXT label tên trụ (cao 2m thực địa @ 1:1000) — tủ rộng 6.2 m nên đẩy nhãn ra ngoài khung.
+                // Block thật: đầu đèn chiếm phía +X (tới ~9m) → đặt nhãn dưới tâm trụ cho khỏi đè đầu đèn.
                 push('0', 'TEXT', '8', '0');
-                push('10', (x + (_isPole ? 3 : 4)).toFixed(4), '20', (y - 1).toFixed(4), '30', '0');
+                push('10', (x + (_bnReal ? 1.5 : (_isPole ? 3 : 4))).toFixed(4), '20', (y - (_bnReal ? 4 : 1)).toFixed(4), '30', '0');
                 push('40', '2.0');
                 push('1', _dxfEscape(name));
 
-                bounds.minX = Math.min(bounds.minX, x - 5);
-                bounds.minY = Math.min(bounds.minY, y - 5);
-                bounds.maxX = Math.max(bounds.maxX, x + 5);
-                bounds.maxY = Math.max(bounds.maxY, y + 5);
+                const _pad = _bnReal ? 10 : 5;
+                bounds.minX = Math.min(bounds.minX, x - _pad);
+                bounds.minY = Math.min(bounds.minY, y - _pad);
+                bounds.maxX = Math.max(bounds.maxX, x + _pad);
+                bounds.maxY = Math.max(bounds.maxY, y + _pad);
             }
             // Expose used sets + lamp specs for legend generator
             opts.__usedStates = _usedStates;
             opts.__usedCableStates = _usedCableStates;
             opts.__lampSpecs = _buildLampSpecs(rows);
-            opts.__legendCounts = { states: _stateCounts, cables: _legendCableMeters(rows) };
+            opts.__legendCounts = { states: _stateCounts, cables: _legendCableMeters(rows), realBlocks: [..._realUsed.values()] };
 
             // Draw cables (dispatch pattern theo loaiCap state — P59+)
             // Skip toàn bộ block nếu user tắt cable trong modal (opts.includeCable === false)
@@ -3693,6 +3734,8 @@
             }
             const _cbOrient = document.getElementById('cgOrientByRoad');
             if (_cbOrient) { try { _cbOrient.checked = localStorage.getItem('cg_orient_by_road') === '1'; } catch(e){_swallow(e);} }
+            const _cbReal = document.getElementById('cgRealBlocks');
+            if (_cbReal) { try { _cbReal.checked = localStorage.getItem('cg_real_blocks') !== '0'; } catch(e){_swallow(e);} }
             _cgRestoreRoadWidths();
             _cgCurrentFilters = _restoreCadExportFilters();
             _cgRenderOffsetPresets();
@@ -4435,6 +4478,7 @@
                 drawingType: drawingType,  // P60: 'site-plan' | 'single-line' | 'overview'
                 osmOptions: (typeof _cgCollectOsmOpts === 'function') ? _cgCollectOsmOpts() : null,  // P65+P66: null nếu tắt
                 orientByRoad: !!(document.getElementById('cgOrientByRoad') || {}).checked,  // v152
+                realBlocks: (document.getElementById('cgRealBlocks') || { checked: true }).checked !== false,  // block bản vẽ mẫu
                 cadBaseOptions: (typeof _cgCollectCadBaseOpts === 'function') ? _cgCollectCadBaseOpts() : null,  // CAD nền từ upload
                 includeCable: (document.getElementById('cgIncludeCable') || {}).checked !== false,  // default true — cho phép tắt cáp
                 frameMode: (document.getElementById('cgFrameMode') || {}).value || 'auto-fit',   // 'auto-fit' | 'a3-standard'
@@ -4728,7 +4772,8 @@
                 scale: parseInt(document.getElementById('cgScale').value) || 1000,
                 cm: parseFloat(document.getElementById('cgMeridian').value) || 105.75,
                 stamps: stampsMetaBatch,
-                orientByRoad: !!(document.getElementById('cgOrientByRoad') || {}).checked  // v152
+                orientByRoad: !!(document.getElementById('cgOrientByRoad') || {}).checked,  // v152
+                realBlocks: (document.getElementById('cgRealBlocks') || { checked: true }).checked !== false
             };
             if (baseOpts.orientByRoad) {
                 baseOpts._osmPrefetch = await _cgPrefetchOsm(baseOpts, {

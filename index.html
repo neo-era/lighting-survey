@@ -434,6 +434,19 @@
                     </div>
                 </div>
 
+                <!-- Block thật trích từ bản vẽ mẫu (HPS-BETON, LED-STK, TDK_HIENHUU…) -->
+                <div style="margin-bottom:14px;">
+                    <label style="display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;color:var(--text);cursor:pointer;user-select:none;">
+                        <input type="checkbox" id="cgRealBlocks" checked style="width:16px;height:16px;cursor:pointer;"
+                               onchange="try{localStorage.setItem('cg_real_blocks', this.checked ? '1' : '0')}catch(e){}">
+                        🧱 Dùng block chuẩn bản vẽ (HPS-BETON, LED-STK, tủ…)
+                    </label>
+                    <div style="margin-top:4px;padding:5px 8px;font-size:11px;color:var(--text-muted);background:var(--surface-2);border-radius:4px;">
+                        Chèn đúng block theo loại trụ + loại đèn + số bóng (trích từ bản vẽ mẫu). Trạng thái cải tạo tách layer:
+                        CS_HIEN_HUU · CS_THU_HOI (đỏ) · CS_LAP_MOI (xanh) · CS_THAO_LAP (cam). Bỏ chọn → ký hiệu cũ.
+                    </div>
+                </div>
+
                 <!-- v152: Block đèn xoay theo hướng đường OSM -->
                 <div style="margin-bottom:14px;">
                     <label style="display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;color:var(--text);cursor:pointer;user-select:none;">
@@ -2984,6 +2997,7 @@
     <script src="src/core/dxf-utils.js"></script>
     <script src="src/core/cad-drawing.js"></script>
     <script src="src/core/mst.js"></script>
+    <script src="src/core/cad-symlib.js"></script>
     <script src="src/features/cable-check.js"></script>
     <script src="src/features/align-route.js"></script>
     <script src="src/features/route-summary.js"></script>

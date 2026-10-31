@@ -16,6 +16,7 @@ const sw = fs.readFileSync(path.join(REPO, 'sw.js'), 'utf8');
 // place: 'before' = nạp trước khối <script> chính (đợt 1 — file không chạy gì lúc nạp ngoài khai báo)
 //        'inline' = khối <script> chính được ngắt tại đúng chỗ cũ: </script><script src=…><script> (đợt 2)
 const MODULES = {
+    'src/core/cad-symlib.js': { place: 'before', fns: ['_csDxfName', '_csLampKind', '_csPickBlock', '_csStateLayer', '_csDef', '_csBlockDxf', '_csInsertScale', '_csBlockBBox', '_csRealRot', '_csLabel'] },
     'src/features/cable-check.js': { place: 'before', fns: ['_openLongCableCheck', '_lcRefreshList', '_deleteLongCablesSelected', '_lcTuClear', '_lcTuUndo', '_lcTuRerun', '_lcXoaDelete', '_tuCablePlan', '_xoaPlan', '_rowMapByNamePreferCoord'] },
     'src/features/route-summary.js': { place: 'before', fns: ['_openRouteSummary', '_exportRouteSummary', '_rsGroup', '_rsSummarize', '_rsFillCt5', '_rsFillWdx'] },
     'src/features/align-route.js': { place: 'before', fns: ['openAlignRoute', '_raRecompute', '_raRenderPanel', '_raApply', '_raUndoAlign', '_raClose', '_raBulk', '_raBulkSelect', '_raToggle'] },
