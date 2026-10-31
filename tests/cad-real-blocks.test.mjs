@@ -115,17 +115,17 @@ const EXPECT = {   // tên trụ → [block, layer]
     ok('1:2000 → tỉ lệ 1.6, nhãn lùi xa hơn (≥ 7m dưới tâm)', p2 && Math.abs(+p2.g['41'] - 1.6) < 1e-6 && t2 && (+p2.g['20']) - (+t2.g['20']) >= 7);
 }
 
-// ── 3. Có khung tên → legend chèn block thật ──
+// ── 3. Có khung tên → legend CHÚ THÍCH chèn block thật (mẫu 'dienluc'; mẫu QBT bỏ CHÚ THÍCH ngoài khung — xem titleblock-qbt-export) ──
 {
-    const o = opts('knop12', { realBlocks: true });
+    const o = opts('dienluc', { realBlocks: true });
     const dxf = await sb.ctx._generateCadDrawing(o);
     const { ents } = parse(dxf);
     const ins = ents.filter(e => !e.blk && e.t === 'INSERT' && e.g['2'] === 'LED-STK');
     const lgRows = o.__legendCounts.realBlocks.filter(x => x.block === 'LED-STK').length;
-    ok('knop12: LED-STK = 3 trụ + ' + lgRows + ' dòng chú thích (hiện hữu, thay đèn)', lgRows === 2 && ins.length === 3 + lgRows);
+    ok('dienluc: LED-STK = 3 trụ + ' + lgRows + ' dòng chú thích (hiện hữu, thay đèn)', lgRows === 2 && ins.length === 3 + lgRows);
     const dec = s => String(s || '').replace(/\\U\+([0-9A-F]{4})/gi, (_, h) => String.fromCharCode(parseInt(h, 16)));  // _dxfEscape → \U+XXXX
     const lg = ents.some(e => !e.blk && e.t === 'TEXT' && /Trụ BTLT \+ đèn HPS — thu hồi/.test(dec(e.g['1'])));
-    ok('knop12: chú thích có nhãn "Trụ BTLT + đèn HPS — thu hồi"', lg);
+    ok('dienluc: chú thích có nhãn "Trụ BTLT + đèn HPS — thu hồi"', lg);
 }
 
 // ── 3b. Xoay theo đường (không OSM → theo tuyến cáp): block thật = ký hiệu cũ + 90° (cùng hướng đầu đèn) ──

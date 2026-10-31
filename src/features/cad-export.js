@@ -2948,7 +2948,10 @@
                     }
                 }
 
+                // Mẫu QBT: chỉ giữ phần trong khung (thước tỉ lệ + bảng CHÚ THÍCH ngoài khung bỏ đi)
+                const _qbtOnlyFrame = !!(_titleRender && _titleRender.type === 'knop12');
                 // === 2. SCALE BAR — NGOÀI frame outer (strip dưới) ===
+                if (!_qbtOnlyFrame) {
                 const sbX = _stripSbX;
                 const sbY = _stripSbY;
                 const segLen = 10, segH = 2;
@@ -2967,6 +2970,7 @@
                 push('10', sbX.toFixed(4), '20', (sbY + 4).toFixed(4), '30', '0');
                 push('40', '2.2');
                 push('1', _dxfEscape('Tỉ lệ 1:' + scale));
+                }
 
                 // === 3. LEGEND BOX === (mẫu QBT đã có bảng ký hiệu 13 dòng trong khung → bỏ bảng cũ)
                 if (usedTypes.length > 0 && !(_titleRender && _titleRender.type === 'knop12')) {
@@ -3012,7 +3016,7 @@
                 push('1', 'B');
 
                 // === 4b. AUTO-LEGEND "CHÚ THÍCH" (P59+) — NGOÀI frame outer (strip dưới, cột phải) ===
-                _drawAutoLegend(push, _dxfEscape, _stripAlMapBounds, opts.__usedStates, opts.__usedCableStates, opts.__lampSpecs, opts.__legendCounts);
+                if (!_qbtOnlyFrame) _drawAutoLegend(push, _dxfEscape, _stripAlMapBounds, opts.__usedStates, opts.__usedCableStates, opts.__lampSpecs, opts.__legendCounts);
 
                 // === 5. APPROVAL STAMPS (P58) — 4 ô chuẩn hồ sơ Sở XD ===
                 if (activeStamps.length > 0) {

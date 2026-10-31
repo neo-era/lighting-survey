@@ -70,4 +70,4 @@ Tắt "block chuẩn" → cột Áp dụng dùng ký hiệu cũ cho trụ/tủ/c
 - Đường cáp + nhãn mét, nền OSM vẫn có thể đi xuyên qua bảng ký hiệu (bản gốc cũng vậy) — chỉ né ký hiệu trụ/tủ.
 - Tắt "block chuẩn": ký hiệu cũ trong cột Áp dụng không co theo kk.
 - Bình đồ tổng thể: ô GHI CHÚ vẫn đặt sát đáy khung (chồng khung tên — có từ trước).
-- Bảng "CHÚ THÍCH" trạng thái cải tạo + thước tỉ lệ vẫn vẽ ngoài khung như các mẫu khác.
+- Thước tỉ lệ + bảng "CHÚ THÍCH" ngoài khung: BỎ với mẫu QBT (v202) — bản vẽ chỉ còn phần trong khung.

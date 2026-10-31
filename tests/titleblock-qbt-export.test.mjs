@@ -90,6 +90,8 @@ const lgIns = top.filter(e => e.t === 'INSERT' && ['DEN_LED', 'DEN_HPS', 'DEN_MH
 ok('cột Áp dụng chèn block thật (đèn/trụ/TTC/tủ KNTT)', lgIns.length >= 8, lgIns.map(e => e.g['2'][0]));
 ok('mọi INSERT đều có BLOCK khai báo', top.concat([...blocks.values()].flat()).filter(e => e.t === 'INSERT').every(e => blocks.has(e.g['2'][0])),
     [...new Set(top.concat([...blocks.values()].flat()).filter(e => e.t === 'INSERT' && !blocks.has(e.g['2'][0])).map(e => e.g['2'][0]))]);
+ok('không còn thước tỉ lệ + bảng CHÚ THÍCH ngoài khung', !tx.some(e => /^Tỉ lệ 1:|^CHÚ THÍCH|^Chú thích/i.test(txt(e))));
+ok('mọi entity nằm trong viền giấy (không có gì dưới khung)', top.every(e => !e.g['20'] || n(e, '20') >= tby - 30 * kk), top.filter(e => e.g['20'] && n(e, '20') < tby - 30 * kk).slice(0, 3).map(e => [e.t, n(e, '20') - tby]));
 ok('bảng BẢNG KÝ HIỆU cũ không còn', !tx.some(e => txt(e) === 'BẢNG KÝ HIỆU'));
 
 // Bảng không đè ký hiệu trụ/tủ: ô bảng = từ đỉnh khung tên lên 73,51, từ mép phải trái 167,68
