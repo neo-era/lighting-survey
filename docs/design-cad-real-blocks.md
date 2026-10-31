@@ -62,8 +62,10 @@ Tên block trong DXF chuẩn hoá R12 (không dấu cách, in hoa): `HPS - BETON
 | Layer | Trạng thái (row[29]) | Màu |
 |---|---|---|
 | `CS_HIEN_HUU` | `''` / `giu` | 7 (trắng/đen) |
-| `CS_THU_HOI` | `thu`, `thu_can`, `thu_udc`, `thu_can_udc` | 1 (đỏ) |
-| `CS_LAP_MOI` | `moi_*` | 3 (xanh lá) |
+| `CS_THU_HOI` | `thu` | 1 (đỏ) |
+| `CS_THU_CAN_UDC` | `thu_can`, `thu_udc`, `thu_can_udc` (trụ giữ) | 4 (lam) |
+| `CS_LAP_MOI` | `moi_*` (trừ `moi_led_thay`) | 3 (xanh lá) |
+| `CS_THAY_DEN` | `moi_led_thay` (LED thay HPS trên trụ hiện hữu) | 5 (xanh dương) |
 | `CS_THAO_LAP` | `thao_lap` | 30 (cam) |
 
 ## Kiến trúc

@@ -3274,9 +3274,9 @@ phải ở cơ chế BLOCK — khung tên `TITLE_KNOP12` vẫn dùng BLOCK+INSER
 **Chế độ "block thật" (v200, `opts.realBlocks === true`, checkbox `cgRealBlocks` mặc định bật)** — khắc phục
 4 lỗi bên dưới cho bản vẽ mặt bằng: block trích từ bản vẽ mẫu QBT (`src/core/cad-symlib.js`, hằng `CAD_SYMLIB`
 sinh bởi `tools/cad-blocks/`). `_csPickBlock(row)` chọn theo loại marker + loại đèn (LED/HPS/MH) + số bóng
-(`_X2.._X4`) + tủ KNTT; trạng thái → layer `CS_HIEN_HUU/CS_THU_HOI/CS_LAP_MOI/CS_THAO_LAP` (màu theo layer,
+(`_X2.._X4`) + tủ KNTT; trạng thái → layer `CS_HIEN_HUU/CS_THU_HOI/CS_THU_CAN_UDC/CS_LAP_MOI/CS_THAY_DEN/CS_THAO_LAP` (màu theo layer,
 entity trong block layer 0); INSERT có `41/42/43` = tỉ lệ gốc × scale/1000; xoay = góc app + 90° (combo thật
-đèn hướng +X). Tên block chuẩn hoá R12 (`HPS-BETON`, `DEN_HPS`…). Legend: kind `'blk'` INSERT chính block đó.
+đèn hướng +X). Tên block chuẩn hoá R12 (`HPS-BETON`, `DEN_HPS`…). Legend: kind `'blk'` INSERT chính block đó (tách tủ nổi/ngầm). Nhãn tên đặt bằng `_csLabelPos` (né hướng đầu đèn).
 Bộ sinh mặc định TẮT khi thiếu `realBlocks` (tương thích test/đường gọi cũ). Xem `docs/design-cad-real-blocks.md`.
 
 **Lỗi đã biết, chưa sửa (chế độ ký hiệu cũ):**
