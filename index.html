@@ -434,6 +434,19 @@
                     </div>
                 </div>
 
+                <!-- v203 — Tự xoay nội dung cho tuyến nằm gọn trong phần trống của khung -->
+                <div style="margin-bottom:14px;">
+                    <label style="display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;color:var(--text);cursor:pointer;user-select:none;">
+                        <input type="checkbox" id="cgAutoRotate" style="width:16px;height:16px;cursor:pointer;"
+                               onchange="try{localStorage.setItem('cg_auto_rotate', this.checked ? '1' : '0')}catch(e){}">
+                        ↻ Tự xoay cho vừa khung
+                    </label>
+                    <div style="margin-top:4px;padding:5px 8px;font-size:11px;color:var(--text-muted);background:var(--surface-2);border-radius:4px;">
+                        Xoay cả trụ, cáp, nền đường để tuyến nằm ngang trong phần trống (vd tuyến dọc → ngang). Mũi tên Bắc xoay theo;
+                        khung tên luôn nằm ngang. Chỉ xoay khi khung nhỏ đi ≥ 10%. Khi đã xoay, toạ độ trong file không còn là VN-2000 thật.
+                    </div>
+                </div>
+
                 <!-- Block thật trích từ bản vẽ mẫu (HPS-BETON, LED-STK, TDK_HIENHUU…) -->
                 <div style="margin-bottom:14px;">
                     <label style="display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;color:var(--text);cursor:pointer;user-select:none;">
@@ -2832,8 +2845,12 @@
                     </div>
                 </div>
                 <div class="form-sep"></div>
-                <!-- Đường + Phường/Xã cùng hàng -->
+                <!-- Đường + Phường/Xã cùng hàng (v203: + Số nhà khi là tủ) -->
                 <div class="form-row">
+                    <div class="form-group" id="markerSoNhaGroup" style="display:none;flex:0 0 78px;min-width:0;">
+                        <label for="markerSoNhaInput">Số nhà</label>
+                        <input id="markerSoNhaInput" type="text" placeholder="123" autocomplete="off">
+                    </div>
                     <div class="form-group">
                         <label for="markerStreetInput">Đường</label>
                         <input id="markerStreetInput" type="text" placeholder="Tên đường...">
@@ -3000,6 +3017,7 @@
     <script src="src/core/mst.js"></script>
     <script src="src/core/cad-symlib.js"></script>
     <script src="src/core/cad-titleblock-qbt.js"></script>
+    <script src="src/core/cad-rotate.js"></script>
     <script src="src/features/cable-check.js"></script>
     <script src="src/features/align-route.js"></script>
     <script src="src/features/route-summary.js"></script>
@@ -6406,6 +6424,8 @@
             if (loaiden)     pcRows.push(`<div class="pc-row"><span class="pi">💡</span><span class="pk">Đèn</span><span class="pv">${loaiden}</span></div>`);
             if (congSuat)    pcRows.push(`<div class="pc-row"><span class="pi">⚡</span><span class="pk">Công suất</span><span class="pv">${congSuat}</span></div>`);
             if (maPE)        pcRows.push(`<div class="pc-row"><span class="pi">🔑</span><span class="pk">Mã PE</span><span class="pv">${maPE}</span></div>`);
+            const soNha = String(row[30] || '').replace(/[<>&"]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' }[c]));
+            if (soNha)       pcRows.push(`<div class="pc-row"><span class="pi">🏠</span><span class="pk">Số nhà</span><span class="pv">${soNha}</span></div>`);
             if (duong)       pcRows.push(`<div class="pc-row"><span class="pi">🛣</span><span class="pk">Đường</span><span class="pv">${duong}</span></div>`);
             if (phuongXa)    pcRows.push(`<div class="pc-row"><span class="pi">📍</span><span class="pk">Phường/Xã</span><span class="pv">${phuongXa}</span></div>`);
             if (nguoiKS && !_publicView) pcRows.push(`<div class="pc-row"><span class="pi">👤</span><span class="pk">Người KS</span><span class="pv">${nguoiKS}</span></div>`);
@@ -7228,7 +7248,7 @@
         }
         window._cgCollectCadBaseOpts = _cgCollectCadBaseOpts;
 
-        function _drawCadBaseInDxf(push, cadData, exportCm, outDE, outDN, clipBounds) {
+        function _drawCadBaseInDxf(push, cadData, exportCm, outDE, outDN, clipBounds, xform) {
             if (!cadData || !cadData.entities || cadData.entities.length === 0) {
                 return { entityCount: 0, skipped: 0 };
             }
@@ -7270,6 +7290,10 @@
                     ll = _applyAffineToLatLon(ll.lat, ll.lon, affine);
                 }
                 const vn = convertLatLonToVn2000(ll.lat, ll.lon, exportCm);
+                if (typeof xform === 'function') {   // v203: xoay cùng bản vẽ (tự xoay cho vừa khung)
+                    const p = xform(vn.x + outDE, vn.y + outDN);
+                    return { x: p[0], y: p[1] };
+                }
                 return { x: vn.x + outDE, y: vn.y + outDN };
             };
 
@@ -8207,6 +8231,7 @@
                 const cfg = TYPE_CONFIG[val];
                 if (customInput) { customInput.style.display = 'none'; customInput.value = cfg ? cfg.label : ''; }
             }
+            _syncSoNhaVisibility();
         }
 
         function selectPoleType(typeNum) {
@@ -8217,10 +8242,18 @@
             if (sel) sel.value = String(typeNum);
             const input = document.getElementById('markerPoleTypeInput');
             if (input) { input.style.display = 'none'; input.value = cfg.label; }
+            _syncSoNhaVisibility();
+        }
+
+        // v203 — ô Số nhà chỉ hiện khi đối tượng là tủ (loại 5/6)
+        function _syncSoNhaVisibility() {
+            const g = document.getElementById('markerSoNhaGroup');
+            if (g) g.style.display = (currentMarkerType === 5 || currentMarkerType === 6) ? '' : 'none';
         }
 
         function clearPoleTypeChips() {
             currentMarkerType = 1;
+            setTimeout(_syncSoNhaVisibility, 0);
             const sel = document.getElementById('markerPoleTypeSelect');
             if (sel) sel.value = '1';
             const input = document.getElementById('markerPoleTypeInput');
@@ -8578,6 +8611,9 @@
             if (streetInput) streetInput.value = lastMarkerStreet || '';
             const wardInput = document.getElementById('markerWardInput');
             if (wardInput) wardInput.value = lastMarkerWard || '';
+            const soNhaInputNew = document.getElementById('markerSoNhaInput');   // v203 — số nhà riêng từng tủ, không nhớ
+            if (soNhaInputNew) soNhaInputNew.value = '';
+            _syncSoNhaVisibility();
             const loaiCapInput = document.getElementById('markerLoaiCapInput');
             if (loaiCapInput) loaiCapInput.value = localStorage.getItem('lastLoaiCap') || 'noi';
             // P59+: reset Trạng thái cải tạo — restore từ localStorage lần cuối
@@ -9031,7 +9067,7 @@
                 hinhAnh: 12, capNhat: 13, markerGoc: 14, khoangCach: 15, maPE: 16,
                 duong: 17, phuongXa: 18, vn2000x: 19, vn2000y: 20, soLuongDen: 21,
                 loaiCap: 22, accuracy: 23, gpsMode: 24, labelOffset: 25,
-                phase: 26, heightM: 27, cableSpec: 28, trangThai: 29
+                phase: 26, heightM: 27, cableSpec: 28, trangThai: 29, soNha: 30
             };
             // v141: chunk 500 (was 200) + parallel 3 concurrent (was sequential)
             // v149 — Wave 4a: adaptive chunk size từ APP_CONFIG (mobile 200 / desktop 500) — giảm RAM peak mobile
@@ -9179,7 +9215,9 @@
                         phase:       row[26] || '',                                    // P57
                         heightM:     row[27] != null ? String(row[27]) : '',           // P57
                         cableSpec:   row[28] || '',                                    // P57
-                        trangThai:   row[29] || ''                                     // P59+
+                        trangThai:   row[29] || '',                                    // P59+
+                        // v203 — hàng ngắn (cache/CSV cũ chưa có cột 30) → không gửi, tránh xoá Số nhà trên sheet
+                        ...(row.length > 30 ? { soNha: row[30] != null ? String(row[30]) : '' } : {})
                     })
                 });
                 const data = await res.json();
@@ -9233,6 +9271,9 @@
                 const street = streetEl ? streetEl.value.trim() : '';
                 const wardEl = document.getElementById('markerWardInput');
                 const ward = wardEl ? wardEl.value.trim() : '';
+                // v203 — Số nhà: chỉ nhập cho tủ; trụ giữ giá trị cũ (nếu có)
+                const _isCabSave = (currentMarkerType === 5 || currentMarkerType === 6);
+                const soNhaInputVal = ((document.getElementById('markerSoNhaInput') || {}).value || '').trim();
                 lastMarkerName = name; lastMarkerNote = note; lastMarkerCabinet = cabinetName;
                 lastMarkerPoleType = poleType; lastMarkerLampType = lampType;
                 lastMarkerStreet = street; lastMarkerWard = ward;
@@ -9296,7 +9337,8 @@
                         phaseVal,                   // [26] Phase electric (P57)
                         heightMVal,                 // [27] Chiều cao trụ (P57)
                         cableSpecVal,               // [28] Cáp specification (P57)
-                        trangThaiVal                // [29] Trạng thái cải tạo (P59+)
+                        trangThaiVal,               // [29] Trạng thái cải tạo (P59+)
+                        _isCabSave ? soNhaInputVal : (_capturedEditingRow[30] || '')   // [30] Số nhà (v203)
                     ];
                     updated[0] = existingId;
                     for (let i = 0; i < updated.length; i++) _capturedEditingRow[i] = updated[i];
@@ -9326,7 +9368,8 @@
                         phaseVal,                   // [26] Phase electric (P57)
                         heightMVal,                 // [27] Chiều cao trụ (P57)
                         cableSpecVal,               // [28] Cáp specification (P57)
-                        trangThaiVal                // [29] Trạng thái cải tạo (P59+)
+                        trangThaiVal,               // [29] Trạng thái cải tạo (P59+)
+                        _isCabSave ? soNhaInputVal : ''   // [30] Số nhà (v203)
                     ];
                     loadedData.push(newRow); newMarkerRows.push(newRow);
                     markerImageDataUrls = ['', '', ''];
@@ -10549,6 +10592,9 @@
                 if (streetEl2) { streetEl2.value = row[17] || ''; streetEl2.placeholder = 'Tên đường...'; }
                 const wardEl = document.getElementById('markerWardInput');
                 if (wardEl) { wardEl.value = row[18] || ''; wardEl.placeholder = 'Nhập tên phường hoặc xã'; }
+                const soNhaElE = document.getElementById('markerSoNhaInput');   // v203
+                if (soNhaElE) soNhaElE.value = row[30] || '';
+                _syncSoNhaVisibility();
                 // v186 — ô nào còn TRỐNG thì tra địa chỉ theo toạ độ trụ (ô đã có giá trị giữ nguyên)
                 _fillEmptyGeoFieldsForEdit(row, lat, lon);
 

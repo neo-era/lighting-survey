@@ -80,6 +80,7 @@ const KHAOSAT_CSV_URL = '...';   // URL publish CSV của Google Sheet (DanhSach
 | [27]  | Chiều cao trụ (m)  | heightM         | **P57** integer 6/8/12 — dùng cho BOM + spec bản vẽ |
 | [28]  | Cáp specification  | cableSpec       | **P57** `'CXV/DSTA 4X25MM²-0,6/1kV'` (preset hoặc custom) |
 | [29]  | Trạng thái cải tạo | trangThai       | **P59+** `''`/`'giu'`/`'thu'`/`'thu_can'`/`'thu_udc'`/`'thu_can_udc'`/`'moi_led'`/`'moi_led_thay'`/`'thao_lap'` |
+| [30]  | Số nhà             | soNha           | **v203** chỉ nhập cho tủ (loại 5/6) — ghép địa chỉ tủ trong khung tên QBT |
 
 **VN2000**: Tọa độ phẳng Gauss-Krüger, múi 6°, ellipsoid GRS80 (hàm `convertLatLonToVn2000(lat,lon)` → `{x, y, zone}`).
 Tự động cập nhật tại 2 điểm: `saveMarkerPopup()` (thêm/sửa marker) và `updateMarkerCoordinatesInData()` (kéo marker).
@@ -3401,6 +3402,8 @@ Layout:
 - **Auto-gen tuyến cáp MST** (T22) — độc lập, làm riêng nhưng cần trước để T21 có data cable đầy đủ
 - **Batch export N tủ** (T25) — sau khi T21 stable
 - **Live edit text CAD trên map** (T26) — bổ trợ
+
+**Tự xoay cho vừa khung (v203)** — ô `cgAutoRotate` (mặc định tắt): xoay toàn bộ nội dung cho tuyến nằm ngang khi khung nhỏ đi ≥10%, rồi căn giữa trong vùng trống; khung tên không xoay, mũi tên Bắc xoay theo. Code `src/core/cad-rotate.js` (`@@CADROTATE`), thiết kế `docs/design-cad-auto-rotate.md`.
 
 **Template `knop12` = mẫu QBT 2026–2029 (v201+)** — thay layout KNỞ P12 cũ bên dưới: khung tên đáy 52,9, bảng ký hiệu 13 dòng
 (+ cột Số lượng) góc dưới phải, tiêu đề đầu tờ, logo CS; đo từ bản vẽ QBT. Code thuần `src/core/cad-titleblock-qbt.js`

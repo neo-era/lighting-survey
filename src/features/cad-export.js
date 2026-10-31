@@ -1902,7 +1902,8 @@
                     excludeOutliers: cbOut ? cbOut.checked : false,
                     stamps: stampsMeta,
                     orientByRoad: !!(document.getElementById('cgOrientByRoad') || {}).checked,  // v152
-                    realBlocks: (document.getElementById('cgRealBlocks') || { checked: true }).checked !== false
+                    realBlocks: (document.getElementById('cgRealBlocks') || { checked: true }).checked !== false,
+                    autoRotate: !!(document.getElementById('cgAutoRotate') || {}).checked
                 };
                 const results = [];
 
@@ -2485,6 +2486,32 @@
                 }
             }
 
+            // v203 — Tự xoay cho vừa khung (ô "↻ Tự xoay cho vừa khung"): xoay CẢ nội dung quanh tâm tuyến.
+            // Chọn góc làm tuyến nằm ngang nếu khung nhỏ đi ≥ 10% (src/core/cad-rotate.js). Toạ độ không còn VN-2000 thật.
+            let _rot = (typeof _rotMake === 'function') ? _rotMake(0, 0, 0) : { deg: 0, xf: (x, y) => [x, y] };
+            // Chia nhiều tờ: các tờ phải ghép khớp nhau theo toạ độ thật → không tự xoay từng tờ
+            const _rotMulti = (opts._sheetTotal || 1) > 1;
+            if (_rotMulti && opts.autoRotate === true) console.warn('[CAD Gen] Bản vẽ chia nhiều tờ — bỏ qua tự xoay để các tờ ghép khớp');
+            if (opts.autoRotate === true && !_rotMulti && typeof _rotBestAngle === 'function') {
+                const _pts = [];
+                for (const r of rows) {
+                    const la = parseCoord(r[2]), lo = parseCoord(r[3]);
+                    if (!isFinite(la) || !isFinite(lo)) continue;
+                    const v = convertLatLonToVn2000(la, lo, cm, k0);
+                    _pts.push({ x: v.x + outDE, y: v.y + outDN });
+                }
+                const _ksR = scale / 1000;
+                const _padR = _realBlocks ? Math.max(5, 10 * _ksR) : 5;
+                const _tid = opts.templateId;
+                const _score = (_tid === 'knop12' && typeof _qbtFitFrame === 'function')
+                    ? (b, pr) => _qbtFitFrame(b, pr, _ksR, 15).kk
+                    : _rotScoreA3(_tid === 'state' || !_tid ? 90 : 0, _tid === 'dienluc' ? 65 : (_cgIsNoTitle(_tid) || _tid === 'state' || !_tid ? 0 : 60));
+                const _best = _rotBestAngle(_pts, _score, { pad: _padR });
+                _rot = _rotMake(_best.cx, _best.cy, _best.deg);
+                if (_best.deg) console.log('[CAD Gen] Tự xoay', _best.deg + '°, khung nhỏ đi', ((1 - 1 / _best.gain) * 100).toFixed(0) + '%');
+            }
+            opts.__rotDeg = _rot.deg;
+
             // Iterate markers: dispatch symbol theo (type, trangThai) — P59+
             const _csDone = new Set();        // block thật đã định nghĩa (mỗi block 1 lần)
             const _realUsed = new Map();      // 'block|layer' → dòng chú thích {block, layer, label, count, scale, unit}
@@ -2492,7 +2519,8 @@
                 const lat = parseCoord(r[2]), lon = parseCoord(r[3]);
                 if (!isFinite(lat) || !isFinite(lon)) continue;
                 const vn = convertLatLonToVn2000(lat, lon, cm, k0);
-                const x = vn.x + outDE, y = vn.y + outDN;
+                const _xr = vn.x + outDE, _yr = vn.y + outDN;      // toạ độ thật (tra hướng đường)
+                const [x, y] = _rot.xf(_xr, _yr);                  // toạ độ vẽ (đã xoay nếu bật tự xoay)
                 const name = String(r[1] || '').trim();
                 posMap.set(r, { x, y });
 
@@ -2504,7 +2532,7 @@
                 const _isPole = type >= 1 && type <= 4;
                 // Góc xoay theo tim đường gần nhất (fallback tuyến cáp tới trụ cha) — quy ước app: 0° = đèn hướng +Y
                 const _roadRot = (nLamp) => {
-                    const near = _roadIdx ? _rlNearest(x, y, _roadIdx, 40) : null;
+                    const near = _roadIdx ? _rlNearest(_xr, _yr, _roadIdx, 40) : null;
                     let parentXY = null;
                     if (!near) {
                         const pll = _parentLL(r);
@@ -2514,7 +2542,7 @@
                         }
                     }
                     _rlStats[near ? 'road' : (parentXY ? 'parent' : 'none')]++;
-                    return _rlRotation(x, y, nLamp, near, parentXY);
+                    return _rlRotation(_xr, _yr, nLamp, near, parentXY) + _rot.deg;   // + góc tự xoay bản vẽ
                 };
                 let _bnReal = _realBlocks ? _csPickBlock(r) : null;
                 if (_bnReal && !_csDef(_bnReal)) _bnReal = null;   // thư viện thiếu block → ký hiệu cũ, không ghi INSERT treo
@@ -2523,7 +2551,7 @@
                 if (_bnReal) {
                     // Block thật (bản vẽ mẫu): chọn theo loại trụ + loại đèn + số bóng; trạng thái → layer/màu
                     const nLamp = Math.min(4, Math.max(1, soLuongDen));
-                    const rotR = (_orientByRoad && _isPole) ? _csRealRot(_roadRot(nLamp)) : 0;
+                    const rotR = (_orientByRoad && _isPole) ? _csRealRot(_roadRot(nLamp)) : _rot.deg;
                     _lbl = _csLabelPos(x, y, rotR, _isPole && type !== 2 ? nLamp : 0, _ks, name.length);
                     const ly = _csStateLayer(state);
                     const sc = _csInsertScale(_bnReal, scale);
@@ -2555,6 +2583,7 @@
                     const _bn  = _ensureSymbolBlock(_key, type, state, { soLuongDen, loaiDen });
                     push('0', 'INSERT', '8', '0', '2', _bn,
                          '10', x.toFixed(4), '20', y.toFixed(4), '30', '0');
+                    if (_rot.deg) push('50', _rot.deg.toFixed(2));
                     _usedStates.add(_key); _stateCounts.set(_key, (_stateCounts.get(_key) || 0) + 1);
                 }
 
@@ -2623,7 +2652,8 @@
                         const oo = opts.osmOptions;
                         const stats = _drawOsmBasemapInDxf(push, drawData, cm, outDE, outDN, clipBounds, k0,
                             { center: oo.roadCenter !== false, edge: !!oo.roadEdge, name: !!oo.roadName, other: !!oo.roadOther, widths: oo.roadWidths,
-                              radii: oo.cornerRadii, textHeight: 3 * scale / 1000 });  // 3mm trên giấy ở mọi tỉ lệ
+                              radii: oo.cornerRadii, textHeight: 3 * scale / 1000,   // 3mm trên giấy ở mọi tỉ lệ
+                              xform: _rot.deg ? _rot.xf : null });                   // v203: xoay cùng bản vẽ (cắt khung sau khi xoay)
                         console.log('[CAD Gen] OSM basemap drawn:', stats.entityCount, 'entities, skipped:', stats.skipped);
                     } catch (err) {
                         console.warn('[CAD Gen] OSM basemap skip:', err.message);
@@ -2642,7 +2672,7 @@
                         minX: bounds.minX - CLIP_PAD, minY: bounds.minY - CLIP_PAD,
                         maxX: bounds.maxX + CLIP_PAD, maxY: bounds.maxY + CLIP_PAD
                     };
-                    const stats = _drawCadBaseInDxf(push, opts.cadBaseOptions, cm, outDE, outDN, clipBounds);
+                    const stats = _drawCadBaseInDxf(push, opts.cadBaseOptions, cm, outDE, outDN, clipBounds, _rot.deg ? _rot.xf : null);
                     console.log('[CAD Gen] CAD base drawn:', stats.entityCount, 'entities, skipped:', stats.skipped);
                 } catch (err) {
                     console.warn('[CAD Gen] CAD base skip:', err.message);
@@ -2670,7 +2700,15 @@
                 const _mode = idx => { const c = new Map(); for (const r of rows) { const v = String(r[idx] || '').trim(); if (v) c.set(v, (c.get(v) || 0) + 1); }
                     let best = '', n = 0; for (const [v, m] of c) if (m > n) { best = v; n = m; } return { best, distinct: c.size }; };
                 if (!String(md.TEN_BAN_VE || '').trim()) { const t = _mode(7); if (t.distinct === 1) md.TEN_BAN_VE = t.best; }
-                if (!String(md.DIA_CHI || '').trim()) { const d = _mode(17); if (d.best) md.DIA_CHI = d.best.toUpperCase(); }
+                if (!String(md.DIA_CHI || '').trim()) {
+                    // v203 — địa chỉ tủ: "<Số nhà> <Đường>, <Phường>" lấy từ dòng TỦ (cột 30/17/18); không có tủ → đường nhiều nhất
+                    const _tuName = String(md.TEN_BAN_VE || '').trim();
+                    const _cabRow = _tuName ? (loadedData || []).slice(1).find(r =>
+                        (String(r[6]).trim() === '5' || String(r[6]).trim() === '6') && String(r[1] || '').trim() === _tuName) : null;
+                    const _addr = _cabRow ? _qbtCabinetAddress(_cabRow) : '';
+                    if (_addr) md.DIA_CHI = _addr;
+                    else { const d = _mode(17); if (d.best) md.DIA_CHI = d.best.toUpperCase(); }
+                }
             }
 
             // Title block — pre-compute size + expand bounds (RENDER được deferred đến POLISH block để dùng bounds đã pad aspect ratio)
@@ -2775,8 +2813,16 @@
                 const naW = 5, naH = 8;
                 // Expand bounds chỉ cho north arrow + stamps (frame ôm cả 2)
                 // Legend + auto-legend + scale bar → KHÔNG expand (chúng nằm ngoài frame)
-                bounds.maxX = Math.max(bounds.maxX, naX + naW);
-                bounds.maxY = Math.max(bounds.maxY, naY + naH + 6);
+                if (_rot.deg) {
+                    // mũi tên Bắc xoay theo → chừa vòng tròn bao (mũi tên + chữ "B")
+                    const _naR = naH + 6;
+                    bounds.maxX = Math.max(bounds.maxX, naX + _naR);
+                    bounds.maxY = Math.max(bounds.maxY, naY + _naR);
+                    bounds.minY = Math.min(bounds.minY, naY - _naR);
+                } else {
+                    bounds.maxX = Math.max(bounds.maxX, naX + naW);
+                    bounds.maxY = Math.max(bounds.maxY, naY + naH + 6);
+                }
                 // P58: Expand bounds cho stamps (bounds.maxY phải include stampsTopY + padding)
                 if (activeStamps.length > 0) {
                     // Center stamps horizontally trong mapBounds
@@ -2793,7 +2839,7 @@
                 const A3_RATIO = 420 / 297;  // landscape
                 if (_titleRender && _titleRender.type === 'knop12' && _titleRender.auto) {
                     // Khung tự co giãn: đặt khung theo đúng tỉ lệ tờ mẫu, khung tên/chữ/bảng nhân cùng hệ số kk
-                    const fit = _qbtFitFrame(bounds, Array.from(posMap.values()), _titleRender.k, 15);
+                    const fit = _qbtFitFrame(bounds, Array.from(posMap.values()), _titleRender.k, 15, { center: !!_rot.deg });
                     Object.assign(bounds, fit.bounds);
                     _titleRender.k = fit.kk;
                     _titleRender.tbH = QBT_FORM.H * fit.kk;
@@ -3001,19 +3047,23 @@
                     }
                 }
 
-                // === 4. NORTH ARROW ===
-                push('0', 'LINE', '8', '0', '10', naX.toFixed(4), '20', (naY + naH).toFixed(4), '30', '0',
-                     '11', (naX - naW).toFixed(4), '21', (naY - naH).toFixed(4), '31', '0');
-                push('0', 'LINE', '8', '0', '10', naX.toFixed(4), '20', (naY + naH).toFixed(4), '30', '0',
-                     '11', (naX + naW).toFixed(4), '21', (naY - naH).toFixed(4), '31', '0');
-                push('0', 'LINE', '8', '0', '10', (naX - naW).toFixed(4), '20', (naY - naH).toFixed(4), '30', '0',
-                     '11', (naX + naW).toFixed(4), '21', (naY - naH).toFixed(4), '31', '0');
-                push('0', 'LINE', '8', '0', '10', naX.toFixed(4), '20', (naY + naH).toFixed(4), '30', '0',
-                     '11', naX.toFixed(4), '21', (naY - naH).toFixed(4), '31', '0');
-                push('0', 'TEXT', '8', '0');
-                push('10', (naX - 1.5).toFixed(4), '20', (naY + naH + 2).toFixed(4), '30', '0');
-                push('40', '3.5');
-                push('1', 'B');
+                // === 4. NORTH ARROW === (v203: xoay theo góc tự xoay → luôn chỉ hướng Bắc thật)
+                {
+                    const _na = (dx, dy) => { const r = (_rot.deg || 0) * Math.PI / 180, c = Math.cos(r), sn = Math.sin(r);
+                        return [naX + dx * c - dy * sn, naY + dx * sn + dy * c]; };
+                    const _nl = (a, b) => { const p = _na(a[0], a[1]), q = _na(b[0], b[1]);
+                        push('0', 'LINE', '8', '0', '10', p[0].toFixed(4), '20', p[1].toFixed(4), '30', '0',
+                             '11', q[0].toFixed(4), '21', q[1].toFixed(4), '31', '0'); };
+                    _nl([0, naH], [-naW, -naH]);
+                    _nl([0, naH], [naW, -naH]);
+                    _nl([-naW, -naH], [naW, -naH]);
+                    _nl([0, naH], [0, -naH]);
+                    const _tb = _na(0, naH + 3.75);   // tâm chữ "B" phía mũi tên
+                    push('0', 'TEXT', '8', '0');
+                    push('10', (_tb[0] - 1.5).toFixed(4), '20', (_tb[1] - 1.75).toFixed(4), '30', '0');
+                    push('40', '3.5');
+                    push('1', 'B');
+                }
 
                 // === 4b. AUTO-LEGEND "CHÚ THÍCH" (P59+) — NGOÀI frame outer (strip dưới, cột phải) ===
                 if (!_qbtOnlyFrame) _drawAutoLegend(push, _dxfEscape, _stripAlMapBounds, opts.__usedStates, opts.__usedCableStates, opts.__lampSpecs, opts.__legendCounts);
@@ -3661,6 +3711,8 @@
             if (_cbOrient) { try { _cbOrient.checked = localStorage.getItem('cg_orient_by_road') === '1'; } catch(e){_swallow(e);} }
             const _cbReal = document.getElementById('cgRealBlocks');
             if (_cbReal) { try { _cbReal.checked = localStorage.getItem('cg_real_blocks') !== '0'; } catch(e){_swallow(e);} }
+            const _cbRot = document.getElementById('cgAutoRotate');   // v203 — mặc định tắt
+            if (_cbRot) { try { _cbRot.checked = localStorage.getItem('cg_auto_rotate') === '1'; } catch(e){_swallow(e);} }
             _cgRestoreRoadWidths();
             _cgCurrentFilters = _restoreCadExportFilters();
             _cgRenderOffsetPresets();
@@ -4413,6 +4465,7 @@
                 osmOptions: (typeof _cgCollectOsmOpts === 'function') ? _cgCollectOsmOpts() : null,  // P65+P66: null nếu tắt
                 orientByRoad: !!(document.getElementById('cgOrientByRoad') || {}).checked,  // v152
                 realBlocks: (document.getElementById('cgRealBlocks') || { checked: true }).checked !== false,  // block bản vẽ mẫu
+                autoRotate: !!(document.getElementById('cgAutoRotate') || {}).checked,
                 cadBaseOptions: (typeof _cgCollectCadBaseOpts === 'function') ? _cgCollectCadBaseOpts() : null,  // CAD nền từ upload
                 includeCable: (document.getElementById('cgIncludeCable') || {}).checked !== false,  // default true — cho phép tắt cáp
                 frameMode: (document.getElementById('cgFrameMode') || {}).value || 'auto-fit',   // 'auto-fit' | 'a3-standard'
@@ -4707,7 +4760,8 @@
                 cm: parseFloat(document.getElementById('cgMeridian').value) || 105.75,
                 stamps: stampsMetaBatch,
                 orientByRoad: !!(document.getElementById('cgOrientByRoad') || {}).checked,  // v152
-                realBlocks: (document.getElementById('cgRealBlocks') || { checked: true }).checked !== false
+                realBlocks: (document.getElementById('cgRealBlocks') || { checked: true }).checked !== false,
+                autoRotate: !!(document.getElementById('cgAutoRotate') || {}).checked
             };
             if (baseOpts.orientByRoad) {
                 baseOpts._osmPrefetch = await _cgPrefetchOsm(baseOpts, {

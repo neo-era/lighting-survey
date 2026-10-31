@@ -16,7 +16,8 @@ const sw = fs.readFileSync(path.join(REPO, 'sw.js'), 'utf8');
 // place: 'before' = nạp trước khối <script> chính (đợt 1 — file không chạy gì lúc nạp ngoài khai báo)
 //        'inline' = khối <script> chính được ngắt tại đúng chỗ cũ: </script><script src=…><script> (đợt 2)
 const MODULES = {
-    'src/core/cad-titleblock-qbt.js': { place: 'before', fns: ['_qbtTextW', '_qbtFit', '_qbtDrawTitleBlock', '_qbtDrawHeader', '_qbtLegendRows', '_qbtLegendSize', '_qbtDrawLegendTable'] },
+    'src/core/cad-titleblock-qbt.js': { place: 'before', fns: ['_qbtTextW', '_qbtFit', '_qbtDrawTitleBlock', '_qbtDrawHeader', '_qbtLegendRows', '_qbtLegendSize', '_qbtDrawLegendTable', '_qbtCabinetAddress'] },
+    'src/core/cad-rotate.js': { place: 'before', fns: ['_rotMake', '_rotTextAngle', '_rotBounds', '_rotBestAngle', '_rotScoreA3'] },
     'src/core/cad-symlib.js': { place: 'before', fns: ['_csDxfName', '_csLampKind', '_csPickBlock', '_csStateLayer', '_csDef', '_csBlockDxf', '_csInsertScale', '_csBlockBBox', '_csRealRot', '_csLabel'] },
     'src/features/cable-check.js': { place: 'before', fns: ['_openLongCableCheck', '_lcRefreshList', '_deleteLongCablesSelected', '_lcTuClear', '_lcTuUndo', '_lcTuRerun', '_lcXoaDelete', '_tuCablePlan', '_xoaPlan', '_rowMapByNamePreferCoord'] },
     'src/features/route-summary.js': { place: 'before', fns: ['_openRouteSummary', '_exportRouteSummary', '_rsGroup', '_rsSummarize', '_rsFillCt5', '_rsFillWdx'] },

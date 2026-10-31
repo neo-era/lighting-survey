@@ -766,9 +766,14 @@
                          x2: x1 + t1 * dx, y2: y1 + t1 * dy };
             };
             // Convert GeoJSON [lon, lat] → VN2000 + apply offset
+            // v203 — roadOpts.xform: xoay cùng bản vẽ (tự xoay cho vừa khung). Áp TRƯỚC khi cắt khung → cắt theo khung đã xoay.
+            const _xf = roadOpts && typeof roadOpts.xform === 'function' ? roadOpts.xform : null;
             const convert = (coords) => coords.map(([lon, lat]) => {
                 const vn = convertLatLonToVn2000(lat, lon, cm, k0);  // k0 phải khớp marker, nếu không lệch ~357m khi CM=105°
-                return { x: vn.x + outDE, y: vn.y + outDN };
+                const x = vn.x + outDE, y = vn.y + outDN;
+                if (!_xf) return { x, y };
+                const p = _xf(x, y);
+                return { x: p[0], y: p[1] };
             });
             const drawPolyline = (pts, layer) => {
                 for (let i = 1; i < pts.length; i++) {

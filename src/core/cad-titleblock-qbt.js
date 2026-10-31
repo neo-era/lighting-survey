@@ -281,6 +281,19 @@
             ];
         }
 
+        // Địa chỉ tủ cho ô BẢN VẼ: "<Số nhà> <Đường>, <Phường/Xã>" (in hoa) từ dòng tủ — cột 30 / 17 / 18.
+        // Thiếu phần nào bỏ phần đó; số nhà đã có trong tên đường (vd "123 An Dương Vương") thì không lặp.
+        function _qbtCabinetAddress(row) {
+            if (!row) return '';
+            const so = String(row[30] == null ? '' : row[30]).trim();
+            const duong = String(row[17] || '').trim();
+            const phuong = String(row[18] || '').trim();
+            // Không khử trùng số nhà: đường có tên bắt đầu bằng số ("3 Tháng 2", "19 Tháng 5") sẽ mất số nhà
+            const street = (so + ' ' + duong).trim();
+            const parts = [street, phuong].filter(Boolean);
+            return parts.join(', ').replace(/\s+/g, ' ').toUpperCase();
+        }
+
         function _qbtLegendSize(k) {
             const L = QBT_FORM.legend;
             k = k || 1;
@@ -313,7 +326,9 @@
         // Khung tự co giãn: đặt khung trong đúng tỉ lệ tờ mẫu (384,65 : 281,84) bao nội dung b, chừa tiêu đề đầu tờ 25·kk,
         // khung tên 52,9·kk và bảng ký hiệu không đè pts. kk = bề rộng khung trong / 384,65 (≥ k).
         // Trả về { bounds (vùng nội dung mới = khung trong − MI), kk }.
-        function _qbtFitFrame(b, pts, k, MI) {
+        // opts.center (v203): phần khung cao dư (do giữ tỉ lệ) chia đều trên/dưới thay vì dồn hết xuống đáy
+        // → nội dung nằm giữa vùng trống (giữa tiêu đề và khung tên/bảng ký hiệu). Mặc định tắt (giữ bố cục cũ).
+        function _qbtFitFrame(b, pts, k, MI, opts) {
             MI = MI == null ? 15 : MI;
             const F = QBT_FORM, R = F.W / F.innerH, gap = QBT_CLEAR.gap, mx = QBT_CLEAR.mx;
             const cx = (b.minX + b.maxX) / 2;
@@ -332,6 +347,14 @@
                 kk = nk;
             }
             innerTop = b.maxY + MI + 25 * kk;
+            if (opts && opts.center) {
+                // Dời khung lên d (nội dung xuống tương đối) — tối đa tới khi chạm khung tên / bảng ký hiệu
+                const tbTop = innerTop - innerH + F.H * kk;
+                const lg = _qbtLegendSize(kk), lgLeft = cx + innerW / 2 - lg.w;
+                let dMax = b.minY - MI - tbTop;
+                for (const p of pts || []) if (p.x + mx * kk >= lgLeft) dMax = Math.min(dMax, p.y - (tbTop + lg.h + gap * kk));
+                if (dMax > 0) innerTop += dMax / 2;
+            }
             return {
                 kk,
                 bounds: { minX: cx - innerW / 2 + MI, maxX: cx + innerW / 2 - MI, maxY: innerTop - MI, minY: innerTop - innerH + MI },
@@ -414,5 +437,5 @@
 
         if (typeof window !== 'undefined') {
             Object.assign(window, { QBT_FORM, _qbtTextW, _qbtFit, _qbtDrawTitleBlock, _qbtDrawHeader,
-                _qbtLegendRows, _qbtLegendSize, _qbtDrawLegendTable, _qbtLegendClear, _qbtFitFrame });
+                _qbtLegendRows, _qbtLegendSize, _qbtDrawLegendTable, _qbtLegendClear, _qbtFitFrame, _qbtCabinetAddress });
         }

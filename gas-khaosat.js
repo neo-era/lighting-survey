@@ -26,7 +26,8 @@ const HEADER = [
   'VN2000-X', 'VN2000-Y', 'Số lượng đèn', 'Loại cáp',
   'Độ chính xác (m)', 'Chế độ GPS', 'Label offset',
   'Phase electric', 'Chiều cao trụ (m)', 'Cáp specification',
-  'Trạng thái cải tạo'
+  'Trạng thái cải tạo',
+  'Số nhà'                       // v203 — số nhà của tủ (cột 31)
 ];
 
 // Header sheet SuCo (báo sự cố)
@@ -83,6 +84,7 @@ const FIELD_MAP = {
   'heightM':      'Chiều cao trụ (m)',
   'cableSpec':    'Cáp specification',
   'trangThai':    'Trạng thái cải tạo',
+  'soNha':        'Số nhà',          // v203
 };
 
 // ── UTILS ──────────────────────────────────────────────────────────────────
