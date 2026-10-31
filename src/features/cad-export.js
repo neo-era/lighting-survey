@@ -2511,21 +2511,27 @@
                     _rlStats[near ? 'road' : (parentXY ? 'parent' : 'none')]++;
                     return _rlRotation(x, y, nLamp, near, parentXY);
                 };
-                const _bnReal = _realBlocks ? _csPickBlock(r) : null;
+                let _bnReal = _realBlocks ? _csPickBlock(r) : null;
+                if (_bnReal && !_csDef(_bnReal)) _bnReal = null;   // thư viện thiếu block → ký hiệu cũ, không ghi INSERT treo
+                const _ks = scale / 1000;
+                let _lbl = null;                                    // vị trí nhãn tên (block thật)
                 if (_bnReal) {
                     // Block thật (bản vẽ mẫu): chọn theo loại trụ + loại đèn + số bóng; trạng thái → layer/màu
                     const nLamp = Math.min(4, Math.max(1, soLuongDen));
                     const rotR = (_orientByRoad && _isPole) ? _csRealRot(_roadRot(nLamp)) : 0;
+                    _lbl = _csLabelPos(x, y, rotR, _isPole && type !== 2 ? nLamp : 0, _ks, name.length);
                     const ly = _csStateLayer(state);
                     const sc = _csInsertScale(_bnReal, scale);
                     _blocksDefL.push(..._csBlockDxf([_bnReal], _csDone));
                     push('0', 'INSERT', '8', ly.layer, '2', _bnReal,
                          '10', x.toFixed(4), '20', y.toFixed(4), '30', '0',
                          '41', sc.toFixed(4), '42', sc.toFixed(4), '43', sc.toFixed(4), '50', rotR.toFixed(2));
-                    const _uk = _bnReal + '|' + ly.layer;
+                    // Tủ nổi / ngầm cùng block nhưng tách dòng chú thích
+                    const _cabKind = type === 5 ? ' nổi' : (type === 6 ? ' ngầm' : '');
+                    const _uk = _bnReal + '|' + ly.layer + '|' + _cabKind;
                     const _u = _realUsed.get(_uk) || { block: _bnReal, layer: ly.layer, count: 0,
                         scale: _csInsertScale(_bnReal, 1000), unit: _isPole ? 'trụ' : 'tủ',
-                        label: _csLabel(_bnReal) + ' — ' + ly.label };
+                        label: _csLabel(_bnReal) + _cabKind + ' — ' + ly.label };
                     _u.count++;
                     _realUsed.set(_uk, _u);
                 } else if (_orientByRoad && _isPole) {
@@ -2550,11 +2556,12 @@
                 // TEXT label tên trụ (cao 2m thực địa @ 1:1000) — tủ rộng 6.2 m nên đẩy nhãn ra ngoài khung.
                 // Block thật: đầu đèn chiếm phía +X (tới ~9m) → đặt nhãn dưới tâm trụ cho khỏi đè đầu đèn.
                 push('0', 'TEXT', '8', '0');
-                push('10', (x + (_bnReal ? 1.5 : (_isPole ? 3 : 4))).toFixed(4), '20', (y - (_bnReal ? 4 : 1)).toFixed(4), '30', '0');
+                if (_lbl) push('10', _lbl.x.toFixed(4), '20', _lbl.y.toFixed(4), '30', '0');   // né hướng đầu đèn, co theo tỉ lệ
+                else push('10', (x + (_isPole ? 3 : 4)).toFixed(4), '20', (y - 1).toFixed(4), '30', '0');
                 push('40', '2.0');
                 push('1', _dxfEscape(name));
 
-                const _pad = _bnReal ? 10 : 5;
+                const _pad = _bnReal ? Math.max(5, 10 * _ks) : 5;   // X4 @1:2000 vươn ~17m
                 bounds.minX = Math.min(bounds.minX, x - _pad);
                 bounds.minY = Math.min(bounds.minY, y - _pad);
                 bounds.maxX = Math.max(bounds.maxX, x + _pad);

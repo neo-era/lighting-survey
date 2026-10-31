@@ -13,18 +13,24 @@
         // @@CADSYMLIB_DATA_END
 
         // Layer theo trạng thái cải tạo (row[29]); block con BYLAYER trên layer 0 → thừa kế màu layer của INSERT.
+        // Trạng thái thay MỘT PHẦN (chỉ thu cần/UDC, chỉ thay đèn) tách layer riêng — trụ vẫn giữ, không vẽ như thay cả trụ.
         const CS_LAYERS = [
             { layer: 'CS_HIEN_HUU', color: 7, label: 'hiện hữu giữ nguyên' },
             { layer: 'CS_THU_HOI', color: 1, label: 'thu hồi' },
+            { layer: 'CS_THU_CAN_UDC', color: 4, label: 'thu hồi cần đèn/UDC (trụ giữ)' },
             { layer: 'CS_LAP_MOI', color: 3, label: 'lắp mới' },
+            { layer: 'CS_THAY_DEN', color: 5, label: 'thay đèn LED trên trụ hiện hữu' },
             { layer: 'CS_THAO_LAP', color: 30, label: 'tháo gỡ, lắp đặt lại' },
         ];
         function _csStateLayer(state) {
             const s = String(state || '').trim().toLowerCase();
-            if (/^thu/.test(s)) return CS_LAYERS[1];
-            if (/^moi/.test(s)) return CS_LAYERS[2];
-            if (s === 'thao_lap') return CS_LAYERS[3];
-            return CS_LAYERS[0];
+            const by = n => CS_LAYERS.find(l => l.layer === n);
+            if (s === 'thu') return by('CS_THU_HOI');
+            if (/^thu_/.test(s)) return by('CS_THU_CAN_UDC');          // thu_can, thu_udc, thu_can_udc
+            if (s === 'moi_led_thay') return by('CS_THAY_DEN');
+            if (/^moi/.test(s)) return by('CS_LAP_MOI');
+            if (s === 'thao_lap') return by('CS_THAO_LAP');
+            return by('CS_HIEN_HUU');
         }
 
         // Tên block hợp lệ R12: in hoa, ' - ' → '-', khoảng trắng → '_'
@@ -51,7 +57,9 @@
             if (!row) return null;
             const type = parseInt(row[6]);
             if (type === 5 || type === 6) {
-                return /KNTT/.test(_csFold(String(row[1] || '') + ' ' + String(row[4] || ''))) ? 'TU_DK_KNTT' : 'TDK_HIENHUU';
+                const t = _csFold(String(row[1] || '') + ' ' + String(row[4] || ''));
+                const kntt = /KNTT/.test(t) && !/(KHONG|CHUA)\s+(CO\s+)?KNTT/.test(t);   // "không/chưa (có) KNTT" ≠ KNTT
+                return kntt ? 'TU_DK_KNTT' : 'TDK_HIENHUU';
             }
             if (type === 2) return 'DEN_TRANG_TRI';
             if (type === 1 || type === 3 || type === 4) {
@@ -83,10 +91,14 @@
             const lampI = ref.prims.find(q => q[0] === 'I' && /^Den/.test(q[1]));
             if (!poleI || !lampI) return null;
             const lamp = _csDxfName(CS_LAMP_SRC[p.lamp]);
+            // Đèn thay thế khác bề rộng đèn gốc (MH 4m vs HPS 6m) → canh MÉP TRÁI đèn trùng mép đèn gốc (sát trụ, không hở)
+            const refLamp = _csDxfName(lampI[1]);
+            const dx0 = refLamp === lamp ? 0 : (_csBlockBBox(refLamp, 1).x0 - _csBlockBBox(lamp, 1).x0) * lampI[4];
+            const lx = lampI[2] + dx0, ly = lampI[3];
             const prims = [['I', _csDxfName(poleI[1]), poleI[2], poleI[3], poleI[4], poleI[5], poleI[6]]];
             for (const a of [0, 180, 270, 90].slice(0, p.n)) {
                 const r = a * Math.PI / 180, c = Math.cos(r), s = Math.sin(r);
-                prims.push(['I', lamp, lampI[2] * c - lampI[3] * s, lampI[2] * s + lampI[3] * c, lampI[4], lampI[5], (lampI[6] + a) % 360]);
+                prims.push(['I', lamp, lx * c - ly * s, lx * s + ly * c, lampI[4], lampI[5], (lampI[6] + a) % 360]);
             }
             return { prims, scale: ref.default_scale };
         }
@@ -159,6 +171,24 @@
 
         // Quy ước app: góc 0 = đầu đèn hướng +Y; combo thật: đầu đèn hướng +X → cộng 90°
         function _csRealRot(rot) { return (+rot || 0) + 90; }
+
+        // Vị trí nhãn tên (TEXT cao 2, căn trái) quanh tâm (x,y): chọn hướng KHÔNG có đầu đèn,
+        // ưu tiên dưới → trên → trái → phải → chéo. Đầu đèn của block thật nằm ở góc rotR + 0/180/270/90 (1..4 bóng).
+        // ks = tỉ lệ bản vẽ / 1000 (ký hiệu co giãn theo tỉ lệ). nLamp = 0 cho tủ (luôn đặt dưới).
+        function _csLabelPos(x, y, rotR, nLamp, ks, len) {
+            const n = Math.max(0, Math.min(4, parseInt(nLamp) || 0));
+            const lamps = [0, 180, 270, 90].slice(0, n).map(a => ((((+rotR || 0) + a) % 360) + 360) % 360);
+            const angd = (a, b) => { const d = Math.abs(a - b) % 360; return Math.min(d, 360 - d); };
+            let best = 270, bestD = -1;
+            for (const a of [270, 90, 180, 0, 225, 315, 135, 45]) {
+                const d = lamps.length ? Math.min(...lamps.map(l => angd(a, l))) : 180;
+                if (d >= 60) { best = a; break; }
+                if (d > bestD) { best = a; bestD = d; }
+            }
+            const R = 4.5 * (ks || 1) * (best % 90 ? 1.6 : 1), r = best * Math.PI / 180;   // chéo (4 bóng) → lùi xa hơn khe giữa 2 đầu đèn
+            const w = (len || 0) * 2 * 0.6;
+            return { x: x + R * Math.cos(r) - w / 2, y: y + R * Math.sin(r) - 1, ang: best };
+        }
 
         const CS_LABELS = {
             DEN_TRANG_TRI: 'Đèn trang trí',

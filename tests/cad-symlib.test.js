@@ -4,7 +4,7 @@ function load() {
     const src = require('../tools/app-source.cjs').appSource();
     const m = src.match(/\/\/ @@CADSYMLIB_START([\s\S]*?)\/\/ @@CADSYMLIB_END/);
     if (!m) throw new Error('Chưa có block @@CADSYMLIB_START/END');
-    return new Function(m[1] + '\nreturn { CAD_SYMLIB, _csDxfName, _csLampKind, _csPickBlock, _csStateLayer, _csBlockDxf, _csInsertScale, _csBlockBBox, _csRealRot, _csLabel, CS_LAYERS };')();
+    return new Function(m[1] + '\nreturn { CAD_SYMLIB, _csDxfName, _csLampKind, _csPickBlock, _csStateLayer, _csBlockDxf, _csInsertScale, _csBlockBBox, _csRealRot, _csLabel, CS_LAYERS, _csLabelPos, _csDef };')();
 }
 let pass = 0, fail = 0;
 const ok = (n, c) => { c ? pass++ : fail++; console.log((c ? '✓ ' : '✗ ') + n); };
@@ -48,19 +48,23 @@ ok('5 bóng → kẹp _X4', H._csPickBlock(row({ 6: '3', 10: 'LED', 21: '5' })) 
 ok('trang trí', H._csPickBlock(row({ 6: '2', 10: 'LED' })) === 'DEN_TRANG_TRI');
 ok('tủ tên KNTT', H._csPickBlock(row({ 6: '5', 1: 'Tủ KNTT P12' })) === 'TU_DK_KNTT');
 ok('tủ ghi chú kntt', H._csPickBlock(row({ 6: '6', 1: 'VTS_H23', 4: 'tủ kết nối kntt' })) === 'TU_DK_KNTT');
+ok('tủ ghi chú "không KNTT" → TDK_HIENHUU', H._csPickBlock(row({ 6: '5', 1: 'VTS', 4: 'không KNTT' })) === 'TDK_HIENHUU');
+ok('tủ ghi chú "chưa có KNTT" → TDK_HIENHUU', H._csPickBlock(row({ 6: '5', 1: 'VTS', 4: 'chưa có KNTT' })) === 'TDK_HIENHUU');
 ok('tủ thường → TDK_HIENHUU', H._csPickBlock(row({ 6: '5', 1: 'VTS_H23' })) === 'TDK_HIENHUU');
 ok('loại lạ → null', H._csPickBlock(row({ 6: '9' })) === null);
 
 // === _csStateLayer ===
 ok('trống → HIEN_HUU', H._csStateLayer('').layer === 'CS_HIEN_HUU');
 ok('giu → HIEN_HUU màu 7', H._csStateLayer('giu').layer === 'CS_HIEN_HUU' && H._csStateLayer('giu').color === 7);
-ok('thu_can → THU_HOI đỏ', H._csStateLayer('thu_can').layer === 'CS_THU_HOI' && H._csStateLayer('thu_can').color === 1);
-ok('thu_udc → THU_HOI', H._csStateLayer('thu_udc').layer === 'CS_THU_HOI');
+ok('thu → THU_HOI đỏ', H._csStateLayer('thu').layer === 'CS_THU_HOI' && H._csStateLayer('thu').color === 1);
+ok('thu_can → THU_CAN_UDC (trụ giữ, không vẽ như thu cả trụ)', H._csStateLayer('thu_can').layer === 'CS_THU_CAN_UDC' && H._csStateLayer('thu_can').color === 4);
+ok('thu_udc / thu_can_udc → THU_CAN_UDC', H._csStateLayer('thu_udc').layer === 'CS_THU_CAN_UDC' && H._csStateLayer('thu_can_udc').layer === 'CS_THU_CAN_UDC');
+ok('moi_led_thay → THAY_DEN (trụ hiện hữu)', H._csStateLayer('moi_led_thay').layer === 'CS_THAY_DEN' && H._csStateLayer('moi_led_thay').color === 5);
 ok('moi_led → LAP_MOI xanh', H._csStateLayer('moi_led').layer === 'CS_LAP_MOI' && H._csStateLayer('moi_led').color === 3);
 ok('moi_stk_170w → LAP_MOI', H._csStateLayer('moi_stk_170w').layer === 'CS_LAP_MOI');
 ok('thao_lap → THAO_LAP cam', H._csStateLayer('thao_lap').layer === 'CS_THAO_LAP' && H._csStateLayer('thao_lap').color === 30);
 ok('lạ → HIEN_HUU', H._csStateLayer('xyz').layer === 'CS_HIEN_HUU');
-ok('CS_LAYERS đủ 4 layer', H.CS_LAYERS.length === 4);
+ok('CS_LAYERS đủ 6 layer, tên R12 hợp lệ', H.CS_LAYERS.length === 6 && H.CS_LAYERS.every(l => /^[A-Z0-9_]+$/.test(l.layer)));
 
 // === _csBlockDxf ===
 const parse = (arr) => { const ents = []; for (let i = 0; i + 1 < arr.length; i += 2) if (arr[i] === '0') ents.push({ t: arr[i + 1], i }); return ents; };
@@ -96,6 +100,29 @@ ok('bbox combo chứa gốc (tâm trụ)', bb.x0 < 0 && bb.x1 > 0 && bb.y0 < 0 &
 ok('bbox combo ngang > dọc (đầu đèn bên phải)', (bb.x1 - bb.x0) > (bb.y1 - bb.y0) && bb.x1 > 5);
 const bb2 = H._csBlockBBox('LED-STK_X2', 0.8);
 ok('bbox X2 đối xứng hai bên', bb2.x0 < -5 && bb2.x1 > 5);
+
+// === Đèn MH canh sát trụ như đèn HPS (không hở) ===
+{
+    const bbW = n => { const b = H._csBlockBBox(n, 1); return b; };
+    const hps = H._csDef('HPS-STK').prims.find(q => q[0] === 'I' && q[1] === 'DEN_HPS');
+    const mh = H._csDef('MH-STK').prims.find(q => q[0] === 'I' && q[1] === 'DEN_MH');
+    const leftH = hps[2] + hps[4] * bbW('DEN_HPS').x0, leftM = mh[2] + mh[4] * bbW('DEN_MH').x0;
+    ok('MH-STK: mép đèn MH trùng mép đèn HPS (sát trụ)', Math.abs(leftH - leftM) < 1e-6);
+    const mh2 = H._csDef('MH-BETON_X2').prims.filter(q => q[0] === 'I' && q[1] === 'DEN_MH');
+    ok('MH-BETON_X2: 2 đèn đối xứng qua tâm', mh2.length === 2 && Math.abs(mh2[0][2] + mh2[1][2]) < 1e-6);
+}
+
+// === _csLabelPos: nhãn né hướng đầu đèn ===
+{
+    const P = (rot, n) => H._csLabelPos(0, 0, rot, n, 1, 3);
+    ok('nhãn: 1 bóng hướng +X → đặt dưới', P(0, 1).ang === 270 && P(0, 1).y < -2);
+    ok('nhãn: đèn hướng xuống (270°) → đặt trên', P(270, 1).ang === 90 && P(270, 1).y > 2);
+    ok('nhãn: 3 bóng (0/180/270) → đặt trên', P(0, 3).ang === 90);
+    ok('nhãn: 4 bóng → góc chéo', [225, 315, 135, 45].includes(P(0, 4).ang));
+    ok('nhãn: tủ (0 bóng) → dưới', P(0, 0).ang === 270);
+    ok('nhãn: căn giữa theo bề rộng chữ', Math.abs(P(0, 1).x + 3 * 2 * 0.6 / 2) < 1e-9);
+    ok('nhãn: khoảng cách co theo tỉ lệ', H._csLabelPos(0, 0, 0, 1, 2, 0).y < H._csLabelPos(0, 0, 0, 1, 1, 0).y);
+}
 
 // === _csRealRot / _csLabel ===
 ok('xoay thật = xoay app + 90', H._csRealRot(0) === 90 && H._csRealRot(-90) === 0);
