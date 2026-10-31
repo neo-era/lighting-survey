@@ -3402,6 +3402,11 @@ Layout:
 - **Batch export N tủ** (T25) — sau khi T21 stable
 - **Live edit text CAD trên map** (T26) — bổ trợ
 
+**Template `knop12` = mẫu QBT 2026–2029 (v201+)** — thay layout KNỞ P12 cũ bên dưới: khung tên đáy 52,9, bảng ký hiệu 13 dòng
+(+ cột Số lượng) góc dưới phải, tiêu đề đầu tờ, logo CS; đo từ bản vẽ QBT. Code thuần `src/core/cad-titleblock-qbt.js`
+(`@@QBTTITLE`), test `tests/titleblock-qbt*.test.*`, thiết kế `docs/design-titleblock-qbt.md`. Mục "Template knop12 — KNỞ P12"
+phía trên là lịch sử.
+
 **Prompt**: P48 (Phase A), P49 (Phase B — templates + generator), P50 (Phase B — modal UI + PDF path), P51 (Phase C — preview + custom + multi-sheet)
 
 ---

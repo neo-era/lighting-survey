@@ -103,24 +103,27 @@
                     { key: 'TI_LE',        label: 'Tỉ lệ',                 default: '1:1000' },
                 ]
             },
-            // Kiểu 3 — Horizontal strip đáy, layout KNỞ P12 (TT QLGT + logo + CTCP + Người lập + BẢN VẼ + SHBV)
+            // Kiểu 3 — Khung tên mẫu QBT 2026–2029 (CTCP CSCC TP.HCM) — id giữ 'knop12' để bản nháp cũ dùng tiếp.
+            // Vẽ bằng src/core/cad-titleblock-qbt.js (đo từ bản vẽ QBT). Xem docs/design-titleblock-qbt.md.
             knop12: {
-                label: '🏙 Nhà nước (KNỞ P12 — CTCP CSCC)',
+                label: '🏙 Nhà nước — mẫu QBT 2026–2029 (CTCP CSCC)',
                 file: 'assets/dxf-templates/title_state.dxf',   // unused — inline render
                 blockName: 'TITLE_STATE',
                 fields: [
-                    { key: 'TT_QLGT_NAME',  label: 'Tên TT Quản lý giao thông',    default: 'TT QUẢN LÝ GIAO THÔNG VÀ HẠ TẦNG KỸ THUẬT TP.HCM', multiline: true },
-                    { key: 'CV_PHU_TRACH',  label: 'Chức vụ phụ trách địa bàn',    default: 'CHUYÊN VIÊN PHỤ TRÁCH ĐỊA BÀN' },
-                    { key: 'NV_TT_QLGT',    label: 'Tên NV TT QLGT (người ký)',    default: '' },
-                    { key: 'CTCP_NAME',     label: 'Tên Công ty chiếu sáng',        default: 'CÔNG TY CỔ PHẦN CHIẾU SÁNG CÔNG CỘNG TP.HCM', multiline: true },
-                    { key: 'CS_KHU_VUC',    label: 'Chiếu sáng khu vực',           default: 'CHIẾU SÁNG KHU VỰC TRUNG TÂM' },
-                    { key: 'NV_CTCP',       label: 'Tên NV Công ty (người ký)',     default: '' },
-                    { key: 'NGUOI_LAP',     label: 'Người lập bản vẽ',             default: '' },
-                    { key: 'TEN_BAN_VE',    label: 'Tên bản vẽ / điểm khảo sát',  default: '' },
-                    { key: 'DIA_CHI',       label: 'Địa chỉ / mô tả tuyến',        default: '' },
-                    { key: 'TI_LE',         label: 'Tỷ lệ',                        default: '1/1000' },
-                    { key: 'SHBV_PATTERN',  label: 'SHBV (XX = số tờ tự điền)',    default: '' },
-                    { key: 'NGAY',          label: 'Ngày',                         default: () => new Date().toLocaleDateString('vi-VN') },
+                    { key: 'TT_QLGT_NAME',  label: 'Tên Trung tâm (xuống dòng = Enter)', default: 'TT QUẢN LÝ HẠ TẦNG\nKỸ THUẬT TP.HCM', multiline: true },
+                    { key: 'CV_PHU_TRACH',  label: 'Chức danh ký (ô Trung tâm)',      default: 'CHUYÊN VIÊN PHỤ TRÁCH ĐỊA BÀN' },
+                    { key: 'NV_TT_QLGT',    label: 'Người ký — Trung tâm',            default: '' },
+                    { key: 'CTCP_NAME',     label: 'Tên Công ty (xuống dòng = Enter)', default: 'CÔNG TY CỔ PHẦN\nCHIẾU SÁNG CÔNG CỘNG TP.HCM', multiline: true },
+                    { key: 'CS_KHU_VUC',    label: 'Chức danh ký (ô Công ty)',        default: 'CHIẾU SÁNG KHU VỰC TRUNG TÂM' },
+                    { key: 'NV_CTCP',       label: 'Người ký — Công ty',              default: '' },
+                    { key: 'NGUOI_LAP',     label: 'Người lập',                       default: '' },
+                    { key: 'TIEU_DE_BV',    label: 'Tên bản vẽ',                      default: 'BẢN VẼ SƠ ĐỒ TUYẾN TRẠM ĐÈN HỆ THỐNG CHIẾU SÁNG ĐÔ THỊ' },
+                    { key: 'TEN_BAN_VE',    label: 'Tên tủ điều khiển',               default: '' },
+                    { key: 'DIA_CHI',       label: 'Tên đường',                       default: '' },
+                    { key: 'SHBV_PATTERN',  label: 'SHBV (XX = số tờ tự điền)',       default: '' },
+                    { key: 'SO_SOAT_XET',   label: 'Số soát xét',                     default: '' },
+                    { key: 'BAN_VE_SO',     label: 'Bản vẽ số',                       default: '' },
+                    { key: 'NGAY',          label: 'Ngày',                            default: () => new Date().toLocaleDateString('vi-VN') },
                 ]
             }
         };
@@ -1657,9 +1660,9 @@
                 const innerRight = bounds.maxX + M - IM;
                 const innerBottom = bounds.minY - M + IM;
                 const tbW = innerRight - innerLeft;
-                md.TEN_BAN_VE = md.TEN_BAN_VE || 'SƠ ĐỒ NGUYÊN LÝ HỆ THỐNG CHIẾU SÁNG';
-                _drawTitleBlockKnop12(push, _dxfEscape, _wrapText, md, innerLeft, innerBottom, sheetIdx, sheetTotal, tbW);
-                _drawKnop12TitleStrip(push, _dxfEscape, innerLeft, innerRight, bounds.maxY - 25, md, opts.scale || 1000);
+                md.TIEU_DE_BV = 'SƠ ĐỒ NGUYÊN LÝ HỆ THỐNG CHIẾU SÁNG';
+                _drawTitleBlockKnop12(push, _dxfEscape, _wrapText, md, innerLeft, innerBottom, sheetIdx, sheetTotal, tbW, 1);
+                _drawKnop12TitleStrip(push, _dxfEscape, innerLeft, innerRight, bounds.maxY + M - IM, md, 1000);
             }
 
             // Auto-legend (sơ đồ nguyên lý — lấy lampSpecs từ rows)
@@ -2302,8 +2305,10 @@
                 const innerRight = bounds.maxX + M - IM;
                 const innerBottom = bounds.minY - M + IM;
                 const tbW = innerRight - innerLeft;
-                _drawTitleBlockKnop12(push, _dxfEscape, _wrapText, md, innerLeft, innerBottom, sheetIdx, sheetTotal, tbW);
-                _drawKnop12TitleStrip(push, _dxfEscape, innerLeft, innerRight, bounds.maxY - 25, md, opts.scale || 1000);
+                md.TIEU_DE_BV = 'BÌNH ĐỒ TỔNG THỂ HỆ THỐNG CHIẾU SÁNG';
+                md.TEN_BAN_VE = (opts.metadata && opts.metadata.TEN_BAN_VE) || '';
+                _drawTitleBlockKnop12(push, _dxfEscape, _wrapText, md, innerLeft, innerBottom, sheetIdx, sheetTotal, tbW, 1);
+                _drawKnop12TitleStrip(push, _dxfEscape, innerLeft, innerRight, bounds.maxY + M - IM, md, 1000);
             }
 
             // ═══ GHI CHÚ BOX — render sát góc dưới-trái inner frame ═══
@@ -2660,6 +2665,14 @@
                     : (typeof f.default === 'function' ? f.default() : f.default);
             });
 
+            // Mẫu QBT: chưa nhập tên tủ / tên đường → lấy từ dữ liệu tờ (tủ chung duy nhất; đường xuất hiện nhiều nhất)
+            if (opts.templateId === 'knop12') {
+                const _mode = idx => { const c = new Map(); for (const r of rows) { const v = String(r[idx] || '').trim(); if (v) c.set(v, (c.get(v) || 0) + 1); }
+                    let best = '', n = 0; for (const [v, m] of c) if (m > n) { best = v; n = m; } return { best, distinct: c.size }; };
+                if (!String(md.TEN_BAN_VE || '').trim()) { const t = _mode(7); if (t.distinct === 1) md.TEN_BAN_VE = t.best; }
+                if (!String(md.DIA_CHI || '').trim()) { const d = _mode(17); if (d.best) md.DIA_CHI = d.best.toUpperCase(); }
+            }
+
             // Title block — pre-compute size + expand bounds (RENDER được deferred đến POLISH block để dùng bounds đã pad aspect ratio)
             let _titleRender = null;  // { type: 'state'|'dienluc'|'simple', tbW, tbH, ... }
             // 'none' = chỉ dữ liệu (trụ + cáp + nền): bỏ khung tên, khung viền, chú thích, mũi tên Bắc, thước, ô con dấu
@@ -2685,15 +2698,18 @@
                         bounds.minX = bounds.maxX - tbW;
                     }
                 } else if (opts.templateId === 'knop12') {
-                    // KNỞ P12: Horizontal strip 320×28m — compact, khớp mẫu CTCP CSCC TP.HCM PDF
-                    const tbW = 320, tbH = 28;
-                    const origMaxY = bounds.maxY;
-                    _titleRender = { type: 'knop12', tbW, tbH, origMaxY };
-                    bounds.minY -= (tbH + 10);
-                    if ((bounds.maxX - bounds.minX) < tbW) {
-                        bounds.minX = bounds.maxX - tbW;
+                    // Mẫu QBT 2026–2029: khung tên đáy 52,9 + bảng ký hiệu 13 dòng (góc dưới phải) + tiêu đề đầu tờ.
+                    // Cả tờ giữ ĐÚNG tỉ lệ mẫu: khung trong 384,65 × 281,84 nhân hệ số kk (≥ tỉ lệ/1000).
+                    // A3 chuẩn: kk = tỉ lệ/1000, chừa chỗ ngay tại đây. Tự co giãn: tính kk sau khi biết khung (_qbtFitFrame).
+                    const k = scale / 1000;
+                    _titleRender = { type: 'knop12', k, tbH: QBT_FORM.H * k, auto: opts.frameMode !== 'a3-standard' };
+                    if (!_titleRender.auto) {
+                        const _clr = _qbtLegendClear(Array.from(posMap.values()), bounds, k);
+                        _titleRender.lgSide = _clr.side;
+                        _titleRender.lgE = _clr.E;
+                        bounds.minY -= _titleRender.tbH + _clr.E;
+                        bounds.maxY += 25 * k; // chỗ cho tiêu đề đầu tờ
                     }
-                    bounds.maxY += 25; // chỗ cho title strip phía trên
                 } else {
                     // Old simple layout — vẽ ngay như cũ (backward compat)
                     const tbX = bounds.maxX - 190;
@@ -2768,20 +2784,33 @@
                     bounds.minX = Math.min(bounds.minX, stampsStartX - 5);
                     bounds.maxX = Math.max(bounds.maxX, stampsStartX + stampsBlockW + 5);
                     bounds.maxY = Math.max(bounds.maxY, stampsTopY + 10);
+                    // Mẫu QBT: tiêu đề đầu tờ nằm TRÊN ô con dấu
+                    if (_titleRender && _titleRender.type === 'knop12') bounds.maxY = Math.max(bounds.maxY, stampsTopY + 10 + 25 * _titleRender.k);
                 }
 
                 // Force aspect ratio A3 landscape (420/297 ≈ 1.414) — auto-pad ngang nếu bounds portrait
                 // Ngăn bản vẽ hiển thị portrait khi cluster hẹp / title block cao.
                 const A3_RATIO = 420 / 297;  // landscape
+                if (_titleRender && _titleRender.type === 'knop12' && _titleRender.auto) {
+                    // Khung tự co giãn: đặt khung theo đúng tỉ lệ tờ mẫu, khung tên/chữ/bảng nhân cùng hệ số kk
+                    const fit = _qbtFitFrame(bounds, Array.from(posMap.values()), _titleRender.k, 15);
+                    Object.assign(bounds, fit.bounds);
+                    _titleRender.k = fit.kk;
+                    _titleRender.tbH = QBT_FORM.H * fit.kk;
+                }
                 const bW = bounds.maxX - bounds.minX;
                 const bH = bounds.maxY - bounds.minY;
 
-                if (opts.frameMode === 'a3-standard') {
+                if (_titleRender && _titleRender.type === 'knop12' && _titleRender.auto) {
+                    // đã đặt khung ở trên — giữ nguyên
+                } else if (opts.frameMode === 'a3-standard') {
                     // A3 chuẩn 1:1000 — khung viền ngoài = 420×297mm chính xác
                     // bounds = content area; viền ngoài = bounds + 2×M (M=20) → trừ trước
                     const paperMmW = 420, paperMmH = 297, frameM = 20;
-                    const targetW = paperMmW * scale / 1000 - 2 * frameM;  // 380m @ 1:1000
-                    const targetH = paperMmH * scale / 1000 - 2 * frameM;  // 257m @ 1:1000
+                    const _qbt = _titleRender && _titleRender.type === 'knop12';
+                    // Mẫu QBT: khung trong đúng 384,65 × 281,84 (lề giấy theo bản gốc) — bounds = khung trong − 15 mỗi cạnh
+                    const targetW = _qbt ? QBT_FORM.W * scale / 1000 - 30 : paperMmW * scale / 1000 - 2 * frameM;  // 380m @ 1:1000
+                    const targetH = _qbt ? QBT_FORM.innerH * scale / 1000 - 30 : paperMmH * scale / 1000 - 2 * frameM;  // 257m @ 1:1000
                     const cx = (bounds.minX + bounds.maxX) / 2;
                     const cy = (bounds.minY + bounds.maxY) / 2;
                     // Warn nếu markers vượt content area (user có thể muốn split N tờ)
@@ -2790,13 +2819,14 @@
                     }
                     bounds.minX = cx - targetW / 2;
                     bounds.maxX = cx + targetW / 2;
-                    bounds.minY = cy - targetH / 2;
-                    bounds.maxY = cy + targetH / 2;
-                    // Re-align title strip to inner frame top after enforcement
-                    if (_titleRender && _titleRender.type === 'knop12') {
-                        // innerTop = bounds.maxY + M - IM = bounds.maxY + 15
-                        // strip y1 = origMaxY + 24 → set origMaxY = innerTop - 24 = bounds.maxY - 9
-                        _titleRender.origMaxY = bounds.maxY - 9;
+                    if (_qbt && _titleRender.lgE > 0 && bH > targetH) {
+                        // Đã hạ đáy để bảng ký hiệu né trụ → giữ đáy (căn giữa sẽ kéo bảng lên đè trụ); phần thừa tràn phía trên
+                        const _minY = bounds.minY;
+                        bounds.minY = _minY;
+                        bounds.maxY = _minY + targetH;
+                    } else {
+                        bounds.minY = cy - targetH / 2;
+                        bounds.maxY = cy + targetH / 2;
                     }
                 } else {
                     // Auto-fit: chỉ ép aspect ratio, không ép kích thước
@@ -2816,10 +2846,12 @@
 
                 // === 1. FRAME TCVN 7285 (outer + inner) — vẽ SAU khi bounds đã expand ===
                 const M = 20, IM = 5;
-                const fox1 = (bounds.minX - M).toFixed(4);
-                const foy1 = (bounds.minY - M).toFixed(4);
-                const fox2 = (bounds.maxX + M).toFixed(4);
-                const foy2 = (bounds.maxY + M).toFixed(4);
+                // Viền ngoài: mặc định cách khung trong 5; mẫu QBT = mép giấy A3 với lề đúng bản gốc (trái 28,28 · phải 7,07 · dưới 7,08 · trên 8,05) × kk
+                const _pm = (_titleRender && _titleRender.type === 'knop12') ? QBT_FORM.paperMargin.map(v => v * _titleRender.k) : null;
+                const fox1 = (_pm ? bounds.minX - (M - IM) - _pm[0] : bounds.minX - M).toFixed(4);
+                const foy1 = (_pm ? bounds.minY - (M - IM) - _pm[3] : bounds.minY - M).toFixed(4);
+                const fox2 = (_pm ? bounds.maxX + (M - IM) + _pm[1] : bounds.maxX + M).toFixed(4);
+                const foy2 = (_pm ? bounds.maxY + (M - IM) + _pm[2] : bounds.maxY + M).toFixed(4);
                 push('0', 'LINE', '8', '0', '10', fox1, '20', foy1, '30', '0', '11', fox2, '21', foy1, '31', '0');
                 push('0', 'LINE', '8', '0', '10', fox2, '20', foy1, '30', '0', '11', fox2, '21', foy2, '31', '0');
                 push('0', 'LINE', '8', '0', '10', fox2, '20', foy2, '30', '0', '11', fox1, '21', foy2, '31', '0');
@@ -2886,10 +2918,11 @@
                         const availableW = innerRight - innerLeft;
                         const tbX = innerLeft;
                         const tbY = innerBottom;
+                        const k = _titleRender.k;
                         // 1. Collect title block entities at (0,0) base point
                         const _tbBL = [];
                         const _tbBP = (...a) => { for (const x of a) _tbBL.push(x); };
-                        _drawTitleBlockKnop12(_tbBP, _dxfEscape, _wrapText, md, 0, 0, sheetIdx, sheetTotal, availableW);
+                        _drawTitleBlockKnop12(_tbBP, _dxfEscape, _wrapText, md, 0, 0, sheetIdx, sheetTotal, availableW, k);
                         // 2. Register BLOCK definition (injected into BLOCKS section later)
                         _blocksDefL.push(
                             '0', 'BLOCK', '8', '0', '2', 'TITLE_KNOP12',
@@ -2901,7 +2934,17 @@
                         // 3. INSERT block at actual drawing position
                         push('0', 'INSERT', '8', '0', '2', 'TITLE_KNOP12',
                              '10', tbX.toFixed(4), '20', tbY.toFixed(4), '30', '0');
-                        _drawKnop12TitleStrip(push, _dxfEscape, innerLeft, innerRight, _titleRender.origMaxY, md, opts.scale || 1000);
+                        _drawKnop12TitleStrip(push, _dxfEscape, innerLeft, innerRight, innerTop, md, k * 1000);
+                        // 4. Bảng ký hiệu 13 dòng + số lượng của tờ này — góc dưới phải, đáy chạm đỉnh khung tên
+                        const _lgItems = _qbtLegendRows(rows, _legendCableMeters(rows), _realBlocks);
+                        const _lgW = _qbtLegendSize(k).w;
+                        const _lgRight = _titleRender.lgSide === 'left' ? innerLeft + _lgW : innerRight;
+                        const _lgRes = _qbtDrawLegendTable(push, _dxfEscape, _lgRight, tbY + _titleRender.tbH, k, _lgItems, {
+                            cable: (p, x1, y1, x2, y2, st) => _drawCableSymbol(p, x1, y1, x2, y2, st, '0'),
+                            pole: (p, x, y) => _drawPoleSymbol(p, x, y, 'giu', { soLuongDen: 1 }),
+                            cab: (p, x, y) => _drawCabinetSymbol(p, x, y, 'giu'),
+                        });
+                        if (_lgRes.blocks.length) _blocksDefL.push(..._csBlockDxf(_lgRes.blocks, _csDone));
                     }
                 }
 
@@ -2925,8 +2968,8 @@
                 push('40', '2.2');
                 push('1', _dxfEscape('Tỉ lệ 1:' + scale));
 
-                // === 3. LEGEND BOX ===
-                if (usedTypes.length > 0) {
+                // === 3. LEGEND BOX === (mẫu QBT đã có bảng ký hiệu 13 dòng trong khung → bỏ bảng cũ)
+                if (usedTypes.length > 0 && !(_titleRender && _titleRender.type === 'knop12')) {
                     const lx1 = lgX.toFixed(4), ly1 = (lgTop - lgH).toFixed(4);
                     const lx2 = (lgX + lgW).toFixed(4), ly2 = lgTop.toFixed(4);
                     push('0', 'LINE', '8', '0', '10', lx1, '20', ly1, '30', '0', '11', lx2, '21', ly1, '31', '0');
@@ -3054,9 +3097,11 @@
 
             // Patch HEADER — extents + khung nhìn để mở ra thấy nội dung ngay
             // 'none': nền OSM/CAD được cắt theo bounds ±30m → lề 35 để khung nhìn ôm hết nền
+            // Mẫu QBT: lề giấy trái 28,28·kk → khung nhìn ôm cả mép giấy
+            const _viewM = _noTitle ? 35 : ((_titleRender && _titleRender.type === 'knop12') ? 15 + QBT_FORM.paperMargin[0] * _titleRender.k : 20);
             L.splice(0, 6, '0', 'SECTION', '2', 'HEADER',
-                ..._dxfHeaderView(bounds, _noTitle ? 35 : 20), '0', 'ENDSEC');
-            _dxfInjectActiveVport(L, bounds, _noTitle ? 35 : 20);
+                ..._dxfHeaderView(bounds, _viewM), '0', 'ENDSEC');
+            _dxfInjectActiveVport(L, bounds, _viewM);
 
             // CRLF line-ending — AutoCAD strict
             return L.join('\r\n');
@@ -3451,146 +3496,15 @@
             });
         }
 
-        // Khung tên KNỞ P12 — horizontal strip đáy, 6 cột theo mẫu CTCP CSCC TP.HCM
-        // Layout: [TT QLGT(31%)|logo(4.4%)|CTCP(25%)|Người lập(5%)|BẢN VẼ(28%)|SHBV(6.3%)]
-        // 4 hàng ngang: R1 org names(20m) | R2 role labels(10m) | R3 sig space(10m) | R4 names+date(15m)
-        function _drawTitleBlockKnop12(push, escape, wrap, md, tbX, tbY, sheetIdx, sheetTotal, tbWOverride) {
-            const baseW = 320, tbH = 28;   // 28m = 28mm on A3 @ 1:1000 — khớp mẫu CTCP CSCC TP.HCM
-            const tbW = tbWOverride && tbWOverride > baseW ? tbWOverride : baseW;
-            const sc = tbW / baseW;
-
-            // Column X boundaries — khớp form KNỞ P12 Trần Thiện Chánh
-            // C0(TT QLGT):70 | C1(logo):18 | C2(CTCP CSCC):70 | C3(NGƯỜI LẬP):38 | C4(BẢN VẼ):93 | C5(SHBV):31
-            const colBase = [0, 70, 88, 158, 196, 289, 320];
-            const CX = colBase.map(b => tbX + b * sc);
-            const y1 = tbY + tbH;
-
-            // 3 rows trong 28m — tỷ lệ ~50%/25%/25%
-            const r12   = tbY + 14;   // full-width: tên tổ chức ↑ / nhãn vai trò ↓  (50% of 28)
-            const r23   = tbY + 7;    // full-width: nhãn vai trò ↑ / tên người ký ↓ (25% of 28)
-            const rShbv = tbY + 10;   // SHBV-only: "Số soát xét" ↑ / "Bản vẽ số" ↓
-
-            // Helpers
-            const hl = (xa, xb, y) => push('0', 'LINE', '8', '0',
-                '10', xa.toFixed(4), '20', y.toFixed(4), '30', '0',
-                '11', xb.toFixed(4), '21', y.toFixed(4), '31', '0');
-            const vl = (x, ya, yb) => push('0', 'LINE', '8', '0',
-                '10', x.toFixed(4), '20', ya.toFixed(4), '30', '0',
-                '11', x.toFixed(4), '21', yb.toFixed(4), '31', '0');
-            const tl = (x, y, t, sz) => {
-                push('0', 'TEXT', '8', '0');
-                push('10', x.toFixed(4), '20', y.toFixed(4), '30', '0');
-                push('40', String(sz));
-                push('1', escape(t));
-            };
-            // Center-justified text (DXF group 72=1 + alignment point 11/21)
-            const tc = (cx, y, t, sz) => {
-                push('0', 'TEXT', '8', '0');
-                push('10', cx.toFixed(4), '20', y.toFixed(4), '30', '0');
-                push('40', String(sz));
-                push('1', escape(t));
-                push('72', '1');
-                push('11', cx.toFixed(4), '21', y.toFixed(4), '31', '0');
-            };
-
-            // Outer frame
-            hl(CX[0], CX[6], y1); hl(CX[0], CX[6], tbY);
-            vl(CX[0], tbY, y1);   vl(CX[6], tbY, y1);
-
-            // Full-width separators
-            hl(CX[0], CX[6], r12);
-            hl(CX[0], CX[6], r23);
-
-            // Column separators (full height)
-            for (let i = 1; i < 6; i++) vl(CX[i], tbY, y1);
-
-            // SHBV-only extra separator
-            hl(CX[5], CX[6], rShbv);
-
-            // ── C0: TT QUẢN LÝ GIAO THÔNG ──
-            const c0W = CX[1] - CX[0], c0cx = CX[0] + c0W / 2;
-            const ttName = md.TT_QLGT_NAME || 'TT QUẢN LÝ GIAO THÔNG VÀ HẠ TẦNG KỸ THUẬT TP.HCM';
-            let yT = y1 - 3;
-            // sz=1.8, line gap 3.5m → 3 lines fit above r12=tbY+14 (top zone 14m)
-            wrap(ttName, Math.floor(c0W / (1.8 * 0.9))).slice(0, 3).forEach(l => { tc(c0cx, yT, l, '1.8'); yT -= 3.5; });
-            // Middle row (r23=tbY+7 → r12=tbY+14): role label
-            tl(CX[0] + 2 * sc, r12 - 2.5, md.CV_PHU_TRACH || 'CHUYÊN VIÊN PHỤ TRÁCH ĐỊA BÀN', '1.5');
-            // Bottom row (tbY → r23=tbY+7): name
-            tc(c0cx, tbY + 2.5, md.NV_TT_QLGT || '', '2.0');
-
-            // ── C1: Logo circle ──
-            const lX = (CX[1] + CX[2]) / 2;
-            const lY = (r12 + y1) / 2;
-            const lR = Math.min((CX[2] - CX[1]) * 0.4, 5);
-            push('0', 'CIRCLE', '8', '0');
-            push('10', lX.toFixed(4), '20', lY.toFixed(4), '30', '0');
-            push('40', lR.toFixed(4));
-
-            // ── C2: CÔNG TY CỔ PHẦN CHIẾU SÁNG CÔNG CỘNG ──
-            const c2W = CX[3] - CX[2], c2cx = CX[2] + c2W / 2;
-            const ctcpName = md.CTCP_NAME || 'CÔNG TY CỔ PHẦN CHIẾU SÁNG CÔNG CỘNG TP.HCM';
-            yT = y1 - 3;
-            wrap(ctcpName, Math.floor(c2W / (1.8 * 0.9))).slice(0, 3).forEach(l => { tc(c2cx, yT, l, '1.8'); yT -= 3.5; });
-            tl(CX[2] + 2 * sc, r12 - 2.5, md.CS_KHU_VUC || 'CHIẾU SÁNG KHU VỰC TRUNG TÂM', '1.5');
-            tc(c2cx, tbY + 2.5, md.NV_CTCP || '', '2.0');
-
-            // ── C3: NGƯỜI LẬP ──
-            const c3cx = CX[3] + (CX[4] - CX[3]) / 2;
-            tc(c3cx, r12 - 2.5, 'NGƯỜI LẬP', '1.5');
-            tc(c3cx, tbY + 2.5, md.NGUOI_LAP || '', '2.0');
-
-            // ── C4: BẢN VẼ SƠ ĐỒ — tiêu đề + thông tin bản vẽ ──
-            const c4W = CX[5] - CX[4], c4cx = CX[4] + c4W / 2;
-            // Row 1 (top, r12=tbY+14 → y1=tbY+28): title 2 dòng sz=2.5, start từ y1-4=tbY+24
-            const bvTitle = 'BẢN VẼ SƠ ĐỒ TUYẾN TRẠM ĐÈN HỆ THỐNG CHIẾU SÁNG ĐÔ THỊ';
-            yT = y1 - 4;
-            wrap(bvTitle, Math.floor(c4W / (2.5 * 0.9))).slice(0, 2).forEach(l => { tc(c4cx, yT, l, '2.5'); yT -= 5.5; });
-            // Row 2 (middle, r23=tbY+7 → r12=tbY+14): nhãn BẢN VẼ + Tỷ lệ ở r12-2=tbY+12
-            tl(CX[4] + 2 * sc, r12 - 2, 'BẢN VẼ:', '1.5');
-            const tileStr = 'Tỷ lệ: ' + (md.TI_LE || '1/1000');
-            tl(CX[5] - (tileStr.length + 1) * 1.5 * 0.7 * sc, r12 - 2, tileStr, '1.5');
-            // TEN_BAN_VE — nổi bật, căn giữa, r23+2=tbY+9
-            tc(c4cx, r23 + 2, md.TEN_BAN_VE || '', '2.2');
-            // Row 3 (bottom, tbY → r23=tbY+7): địa chỉ sz=1.5
-            if (md.DIA_CHI) tl(CX[4] + 2 * sc, tbY + 2, md.DIA_CHI, '1.5');
-
-            // ── C5: SHBV — 4 ô trong 28m (giảm tương ứng) ──
-            const shbvVal = (md.SHBV_PATTERN || '').replace(/XX/g, String(sheetIdx).padStart(2, '0'));
-            tl(CX[5] + 1 * sc, y1 - 3.5,                                  shbvVal ? 'SHBV: ' + shbvVal : 'SHBV:', '1.4');
-            // Số soát xét: center giữa rShbv=tbY+10 và r12=tbY+14 → tbY+10.5
-            tl(CX[5] + 1 * sc, rShbv + (r12 - rShbv) / 2 - 1,            'Số soát xét:', '1.3');
-            // Bản vẽ số: center giữa r23=tbY+7 và rShbv=tbY+10 → tbY+7.75
-            tl(CX[5] + 1 * sc, r23  + (rShbv - r23)  / 2 - 0.75,         'Bản vẽ số:', '1.3');
-            tl(CX[5] + 1 * sc, tbY + 2,                                   'Ngày: ' + (md.NGAY || ''), '1.3');
+        // Khung tên mẫu QBT 2026–2029 — vẽ bởi src/core/cad-titleblock-qbt.js (đúng kích thước/cỡ chữ bản gốc).
+        // tbW = bề rộng khung trong; k = tỉ lệ bản vẽ / 1000. Trả về {w, h}.
+        function _drawTitleBlockKnop12(push, escape, wrap, md, tbX, tbY, sheetIdx, sheetTotal, tbW, k) {
+            return _qbtDrawTitleBlock(push, escape, md, tbX, tbY, tbW, k || 1, sheetIdx, sheetTotal);
         }
 
-        // Dải tiêu đề ngang phía trên content area — KNỞ P12
-        function _drawKnop12TitleStrip(push, escape, innerLeft, innerRight, origMaxY, md, scale) {
-            const cx    = (innerLeft + innerRight) / 2;
-            const sepY  = origMaxY + 4;
-            const y2    = origMaxY + 13;
-            const y1    = origMaxY + 24;
-            // Đường kẻ ngang tách vùng content
-            push('0', 'LINE', '8', '0',
-                 '10', innerLeft.toFixed(4), '20', sepY.toFixed(4), '30', '0',
-                 '11', innerRight.toFixed(4), '21', sepY.toFixed(4), '31', '0');
-            // Dòng 1 — tiêu đề lớn, căn giữa, h=7m
-            push('0', 'TEXT', '8', '0');
-            push('10', cx.toFixed(4), '20', y1.toFixed(4), '30', '0');
-            push('40', '7');
-            push('1', escape('BẢN VẼ SƠ ĐỒ TUYẾN TRẠM ĐÈN HỆ THỐNG CHIẾU SÁNG ĐÔ THỊ'));
-            push('72', '1');
-            push('11', cx.toFixed(4), '21', y1.toFixed(4), '31', '0');
-            // Dòng 2 — phụ đề, căn giữa, h=4.5m
-            const tuName   = md.TEN_BAN_VE || md.CS_KHU_VUC || '';
-            const scaleStr = scale ? ('TL: 1/' + scale) : '';
-            const line2 = 'TỦ ĐIỀU KHIỂN' + (tuName ? ' - ' + tuName : '') + (scaleStr ? '    ' + scaleStr : '');
-            push('0', 'TEXT', '8', '0');
-            push('10', cx.toFixed(4), '20', y2.toFixed(4), '30', '0');
-            push('40', '4.5');
-            push('1', escape(line2));
-            push('72', '1');
-            push('11', cx.toFixed(4), '21', y2.toFixed(4), '31', '0');
+        // Tiêu đề đầu tờ (mẫu QBT): tên bản vẽ + "TỦ ĐIỀU KHIỂN - <tên tủ>", canh theo ĐỈNH khung trong
+        function _drawKnop12TitleStrip(push, escape, innerLeft, innerRight, innerTop, md, scale) {
+            _qbtDrawHeader(push, escape, innerLeft, innerRight, innerTop, md, (scale || 1000) / 1000);
         }
 
         // Wrap text theo max chars per line (greedy, respect word boundaries).
@@ -4074,8 +3988,8 @@
                     noiDungEl.value = meta.noiDungDefault;
                 }
             }
-            // Auto override TEN_BAN_VE cho dienluc template
-            const tenBvEl = document.getElementById('cgMeta_TEN_BAN_VE');
+            // Auto override TEN_BAN_VE cho dienluc template (mẫu QBT dùng TEN_BAN_VE = tên tủ → không đè)
+            const tenBvEl = (document.getElementById('cgTemplateId') || {}).value === 'knop12' ? null : document.getElementById('cgMeta_TEN_BAN_VE');
             if (tenBvEl) {
                 const currentVal = tenBvEl.value.trim();
                 const knownDefaults = Object.values(_DRAWING_TYPE_META).map(m => m.noiDungDefault);
@@ -4161,7 +4075,16 @@
             try {
                 const raw = localStorage.getItem('cad_metadata_draft_' + templateId);
                 if (!raw) return {};
-                return JSON.parse(raw) || {};
+                const d = JSON.parse(raw) || {};
+                // Mẫu knop12 đổi sang form QBT: tên đơn vị mặc định CŨ (1 dòng) → bỏ để lấy mặc định mới (2 dòng đúng mẫu)
+                if (templateId === 'knop12') {
+                    if (d.TT_QLGT_NAME === 'TT QUẢN LÝ GIAO THÔNG VÀ HẠ TẦNG KỸ THUẬT TP.HCM') delete d.TT_QLGT_NAME;
+                    if (d.CTCP_NAME === 'CÔNG TY CỔ PHẦN CHIẾU SÁNG CÔNG CỘNG TP.HCM') delete d.CTCP_NAME;
+                    // TEN_BAN_VE giờ là TÊN TỦ; bản nháp cũ có thể chứa tên loại bản vẽ (do đổi loại bản vẽ tự ghi đè trước đây)
+                    const _typeNames = Object.values(typeof _DRAWING_TYPE_META !== 'undefined' ? _DRAWING_TYPE_META : {}).map(m => m.noiDungDefault);
+                    if (_typeNames.includes(String(d.TEN_BAN_VE || '').trim())) delete d.TEN_BAN_VE;
+                }
+                return d;
             } catch(e) { return {}; }
         }
 
@@ -4189,7 +4112,7 @@
             const splitMode = document.getElementById('cgSheetSplit').value;
             let partitions;
             if (splitMode === 'auto') {
-                partitions = _computeSheetPartitions(b, scale, 'a3', 0.1);
+                partitions = _computeSheetPartitions(b, scale, 'a3', 0.1, (document.getElementById('cgTemplateId') || {}).value);
             } else {
                 const n = parseInt(splitMode) || 1;
                 if (n === 1) {
@@ -4816,7 +4739,9 @@
                         metadata: {
                             ...baseOpts.metadata,
                             CS_KHU_VUC: baseOpts.metadata.CS_KHU_VUC || tu,
-                            BV_SO: (baseOpts.metadata.BV_SO || '') + ' — ' + tu
+                            BV_SO: (baseOpts.metadata.BV_SO || '') + ' — ' + tu,
+                            // Mẫu QBT: ô "BẢN VẼ" + tiêu đề đầu tờ ghi tên tủ của từng file
+                            ...(baseOpts.templateId === 'knop12' ? { TEN_BAN_VE: tu, DIA_CHI: '' } : {})
                         }
                     };
                     try {
@@ -5245,10 +5170,15 @@
         // ── Multi-sheet split ─────────────────────────────────────────
         // A3 landscape @ 1:1000 → view = 420m × 297m thực địa
         // Grid partition với overlap 10%
-        function _computeSheetPartitions(bounds, scale, paper = 'a3', overlap = 0.1) {
+        function _computeSheetPartitions(bounds, scale, paper = 'a3', overlap = 0.1, templateId) {
             const paperDim = paper === 'a3' ? { W: 420, H: 297 } : { W: 297, H: 210 };
-            const sheetW = (paperDim.W - 20) * (scale / 1000);  // trừ lề, đơn vị m
-            const sheetH = (paperDim.H - 60) * (scale / 1000);  // trừ lề + title block area
+            let sheetW = (paperDim.W - 20) * (scale / 1000);  // trừ lề, đơn vị m
+            let sheetH = (paperDim.H - 60) * (scale / 1000);  // trừ lề + title block area
+            if (templateId === 'knop12' && paper === 'a3' && typeof QBT_FORM !== 'undefined') {
+                // Mẫu QBT: vùng vẽ = khung trong 384,65 × 281,84 − lề 15 − tiêu đề đầu tờ 25 − khung tên 52,9 − mũi tên Bắc ~20
+                sheetW = (QBT_FORM.W - 30 - 20) * (scale / 1000);
+                sheetH = (QBT_FORM.innerH - 30 - 25 - QBT_FORM.H) * (scale / 1000);
+            }
             const worldW = bounds.maxX - bounds.minX;
             const worldH = bounds.maxY - bounds.minY;
             const step = 1 - overlap;
