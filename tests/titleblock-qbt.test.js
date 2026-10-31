@@ -69,7 +69,39 @@ ok('tên bản vẽ ngắt 2 dòng theo bề rộng MText 109,6', titleT.length 
 ok('tên bản vẽ đủ chữ', titleT.map(t => t.s).join(' ') === 'BẢN VẼ SƠ ĐỒ TUYẾN TRẠM ĐÈN HỆ THỐNG CHIẾU SÁNG ĐÔ THỊ');
 ok('tên bản vẽ nằm trong ô trên (31,11–52,9)', titleT.every(t => t.y > 31.11 + 1 && t.y + t.h < 52.9 - 0.5), titleT.map(t => t.y));
 ok('logo: vòng tròn ngoài r=9,158 tâm (89,136;42,036)', T1.ents.some(e => e.type === 'CIRCLE' && near(num(e, '40'), 9.158) && near(num(e, '10'), 89.136) && near(num(e, '20'), 42.036)));
-ok('logo: chữ TP. HO CHI MINH chạy theo cung (có góc xoay)', X1.filter(t => t.h < 1.3).length === 11 && T1.ents.some(e => e.type === 'TEXT' && e.g['50']));
+ok('logo: chữ TP. HO CHI MINH chạy theo cung (có góc xoay)', X1.filter(t => t.h < 1.3 && t.y < 42.036 - 4).length === 11 && T1.ents.some(e => e.type === 'TEXT' && e.g['50']));
+{   // v204 — vòng trên logo: CÔNG TY CỔ PHẦN CHIẾU SÁNG
+    const top = T1.ents.filter(e => e.type === 'TEXT' && num(e, '40') < 1.3 && e.g['1'][0] !== 'P.')
+        .map(e => ({ x: num(e, '10') - 89.136, y: num(e, '20') - 42.036, h: num(e, '40'), rot: e.g['50'] ? num(e, '50') : 0, s: e.g['1'][0] }))
+        .filter(t => !['T', 'P.', 'H', 'O', 'C', 'I', 'M', 'N'].includes(t.s) || t.y > -4);
+    const ang = t => { const a = Math.atan2(t.y, t.x) * 180 / Math.PI; return a < -90 ? a + 360 : a; };   // (-90, 270]
+    const word = top.slice().sort((a, b) => ang(b) - ang(a)).map(t => t.s).join('');
+    ok('logo: vòng trên có chữ "CÔNG TY CỔ PHẦN CHIẾU SÁNG" (21 ký tự, đọc trái → phải)', word === 'CÔNGTYCỔPHẦNCHIẾUSÁNG', word);
+    ok('logo: chữ vòng trên cùng cỡ chữ vòng dưới (1,238)', top.every(t => near(t.h, 1.238)));
+    ok('logo: chữ vòng trên nằm giữa 2 vòng tròn (r 6,802 – 9,158, kể cả đỉnh chữ)',
+        top.every(t => { const r = Math.hypot(t.x, t.y); return r > 6.802 && r < 9.158 - 1.238; }), top.map(t => Math.hypot(t.x, t.y).toFixed(2)));
+    ok('logo: chữ vòng trên không chạm 2 ngôi sao (sao ở 211,7° và −31,7°; chữ trong −28° → 208°)',
+        top.every(t => ang(t) > -28 && ang(t) < 208), top.map(ang));
+    ok('logo: chữ vòng trên đứng thẳng theo bán kính (góc xoay = góc vị trí − 90° ± 8°)',
+        top.every(t => { const a = Math.atan2(t.y, t.x) * 180 / Math.PI; let d = ((t.rot - (a - 90)) % 360 + 540) % 360 - 180; return Math.abs(d) < 8; }));
+}
+{   // v204 — tên TT dài: giữ cỡ 4,24 bằng tên công ty, ngắt 3 dòng cân, không tràn ô
+    const md = Object.assign({}, MD, { TT_QLGT_NAME: 'TT QUẢN LÝ GIAO THÔNG VÀ HẠ TẦNG\nKỸ THUẬT TP.HCM' });
+    const X = texts(draw(p => H._qbtDrawTitleBlock(p, esc, md, 0, 0, 384.65, 1, 1)).ents);
+    const tt = X.filter(t => t.center && near(t.x, 37.915) && t.y > 31.11);
+    const ct = X.filter(t => t.center && near(t.x, 159.49) && t.y > 31.11);
+    ok('tên TT dài: 3 dòng "TT QUẢN LÝ GIAO / THÔNG VÀ HẠ TẦNG / KỸ THUẬT TP.HCM"', tt.map(t => t.s).join('|') === 'TT QUẢN LÝ GIAO|THÔNG VÀ HẠ TẦNG|KỸ THUẬT TP.HCM', tt.map(t => t.s));
+    ok('tên TT dài: cỡ chữ = cỡ tên công ty = 4,24', tt.length && tt.every(t => near(t.h, 4.24)) && ct.every(t => near(t.h, 4.24)), [tt.map(t => t.h), ct.map(t => t.h)]);
+    ok('tên TT dài: không dòng nào tràn ô (rộng 75,83)', tt.every(t => H._qbtTextW(t.s, t.h) <= 75.83 - 1));
+    ok('tên TT dài: nằm trọn tầng trên (31,11 – 52,9, chừa dấu)', tt.every(t => t.y > 31.11 + 0.8 && t.y + t.h * 1.3 < 52.9), tt.map(t => t.y));
+    const md2 = Object.assign({}, MD, { TT_QLGT_NAME: 'TT QUẢN LÝ GIAO THÔNG VÀ HẠ TẦNG KỸ THUẬT TP.HCM' });
+    const tt2 = texts(draw(p => H._qbtDrawTitleBlock(p, esc, md2, 0, 0, 384.65, 1, 1)).ents).filter(t => t.center && near(t.x, 37.915) && t.y > 31.11);
+    ok('tên TT không xuống dòng: cũng ngắt cân 3 dòng cỡ 4,24', tt2.length === 3 && tt2.every(t => near(t.h, 4.24)), tt2.map(t => t.s));
+    const md3 = Object.assign({}, MD, { TT_QLGT_NAME: 'TRUNG TÂM QUẢN LÝ GIAO THÔNG VÀ HẠ TẦNG KỸ THUẬT THÀNH PHỐ HỒ CHÍ MINH' });
+    const X3 = texts(draw(p => H._qbtDrawTitleBlock(p, esc, md3, 0, 0, 384.65, 1, 1)).ents);
+    const t3 = X3.filter(t => t.center && near(t.x, 37.915) && t.y > 31.11), c3 = X3.filter(t => t.center && near(t.x, 159.49) && t.y > 31.11);
+    ok('tên TT quá dài phải thu nhỏ → tên công ty thu theo, 2 bên cùng cỡ', t3.length && t3[0].h < 4.24 && c3.every(t => near(t.h, t3[0].h, 1e-3)) && t3.every(t => H._qbtTextW(t.s, t.h) <= 75.83 - 1), [t3.map(t => t.h), c3.map(t => t.h)]);
+}
 const lab = s => findT(X1, s);
 ok('nhãn tầng dưới cao 2,83, chân 25,39',
     ['CHUYÊN VIÊN PHỤ TRÁCH ĐỊA BÀN', 'CHIẾU SÁNG KHU VỰC TRUNG TÂM', 'NGƯỜI LẬP'].every(s => lab(s) && near(lab(s).h, 2.83) && near(lab(s).y, 25.39)));

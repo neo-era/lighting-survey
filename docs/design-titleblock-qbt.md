@@ -66,6 +66,13 @@ Tắt "block chuẩn" → cột Áp dụng dùng ký hiệu cũ cho trụ/tủ/c
 `_qbtLegendRows`, `_qbtLegendSize`, `_qbtDrawLegendTable`.
 `cad-export.js`: `_drawTitleBlockKnop12` / `_drawKnop12TitleStrip` gọi sang hàm mới; bản vẽ mặt bằng thêm bảng ký hiệu.
 
+## v204 — sửa theo góp ý
+- Tên TT QLGT và tên Công ty **luôn cùng cỡ chữ** (mẫu 4,24). Tên dài ngắt **cân dòng**, tối đa 3 dòng (giãn 6,6):
+  "TT QUẢN LÝ GIAO / THÔNG VÀ HẠ TẦNG / KỸ THUẬT TP.HCM". Giữ xuống dòng người dùng gõ; đoạn quá rộng thì ngắt cân trong đoạn.
+  Chỉ khi 3 dòng vẫn không vừa mới thu nhỏ — và bên kia thu theo (`_qbtFitOrg`).
+- Logo: thêm vòng chữ trên **"CÔNG TY CỔ PHẦN CHIẾU SÁNG"** (`_qbtArcTextTop`, cỡ 1,238 như vòng dưới, chân chữ r 7,2,
+  từ 201° → −10°, không chạm 2 ngôi sao 211,7° / −31,7°). Bản vẽ gốc dùng ARCTEXT (proxy) nên không trích được — dựng lại bằng TEXT từng ký tự.
+
 ## Đã biết / chưa làm
 - Đường cáp + nhãn mét, nền OSM vẫn có thể đi xuyên qua bảng ký hiệu (bản gốc cũng vậy) — chỉ né ký hiệu trụ/tủ.
 - Tắt "block chuẩn": ký hiệu cũ trong cột Áp dụng không co theo kk.

@@ -13,7 +13,7 @@
             colsFull: [75.83, 227.5, 349.85],   // ranh cột suốt chiều cao
             colLower: 151.13,              // ranh cột chỉ ở tầng dưới
             shbvSplits: [41.71, 16.97],    // chia thêm trong cột SHBV
-            hOrg: 4.24, orgGap: 7.07,      // tên đơn vị: 2 dòng, giãn dòng
+            hOrg: 4.24, orgGap: 7.07, orgGap3: 6.6,      // tên đơn vị: 2 dòng, giãn dòng
             orgBase: [43.62, 36.55],
             ttCx: 37.915, ctcpCx: 159.49,
             logo: { cx: 89.136, cy: 42.036 },
@@ -66,6 +66,74 @@
             }
             // AutoCAD: chiều cao chữ TrueType = chiều cao CHỮ HOA (Times: 0,662 em) → 1 em = h / 0,662
             return w * h / 0.662;
+        }
+
+        // Chữ uốn theo cung tròn phía trên (đọc trái → phải, chân chữ quay vào tâm) — mỗi ký tự 1 TEXT
+        // rBase = bán kính chân chữ, h = cao chữ, track = khoảng thêm giữa 2 ký tự. Trả prims ['T', x, y, h, rot, ch].
+        function _qbtArcTextTop(text, rBase, h, track) {
+            const chars = [...String(text || '').normalize('NFC')];
+            const rMid = rBase + h / 2;                                   // giãn ký tự theo bán kính giữa chữ
+            const ws = chars.map(c => _qbtTextW(c, h));
+            const total = ws.reduce((a, b) => a + b, 0) + (track || 0) * Math.max(0, chars.length - 1);
+            let a = Math.PI / 2 + total / 2 / rMid;                        // góc mép trái chữ đầu (đối xứng quanh đỉnh)
+            const out = [];
+            chars.forEach((c, i) => {
+                const th = a - ws[i] / 2 / rMid;                           // góc tâm ký tự
+                a -= (ws[i] + (track || 0)) / rMid;
+                if (c === ' ') return;
+                const sn = Math.sin(th), cs = Math.cos(th);
+                const x = rBase * cs - ws[i] / 2 * sn, y = rBase * sn + ws[i] / 2 * cs;   // chân-trái ký tự
+                out.push(['T', +x.toFixed(4), +y.toFixed(4), h, +(th * 180 / Math.PI - 90).toFixed(3), c]);
+            });
+            return out;
+        }
+        // Logo CS: dòng "CÔNG TY CỔ PHẦN CHIẾU SÁNG" vòng trên (bản vẽ gốc là ARCTEXT proxy — không trích được),
+        // cùng cỡ chữ vòng dưới "TP. HỒ CHÍ MINH" (1,238), nằm giữa 2 vòng tròn r 6,802 – 9,158.
+        const QBT_LOGO_TOP = _qbtArcTextTop('CÔNG TY CỔ PHẦN CHIẾU SÁNG', 7.2, 1.238, 0.05);
+
+        // Tên đơn vị (tầng trên khung tên): ngắt dòng CÂN (độ dài các dòng gần bằng nhau) để giữ cỡ chữ mẫu.
+        // Ưu tiên: giữ xuống dòng người dùng gõ (đoạn quá dài thì ngắt cân trong đoạn) → bỏ xuống dòng, ngắt cân cả chuỗi
+        // → hết cách mới thu nhỏ chữ (≥ minH). Trả {lines, h}.
+        function _qbtFitOrg(text, maxW, h, maxLines, minH) {
+            const balanced = (words, n, hh) => {              // chia words thành n dòng, cực tiểu dòng dài nhất
+                if (n <= 1 || words.length <= 1) return [words.join(' ')];
+                let best = null;
+                const rec = (start, left, acc) => {
+                    if (left === 1) {
+                        const ls = acc.concat(words.slice(start).join(' '));
+                        const m = Math.max(...ls.map(l => _qbtTextW(l, hh)));
+                        if (!best || m < best.m - 1e-9) best = { ls, m };
+                        return;
+                    }
+                    for (let e = start + 1; e <= words.length - left + 1; e++) rec(e, left - 1, acc.concat(words.slice(start, e).join(' ')));
+                };
+                rec(0, Math.min(n, words.length), []);
+                return best.ls;
+            };
+            const fitsAll = (ls, hh) => ls.every(l => _qbtTextW(l, hh) <= maxW);
+            const tryAt = (hh) => {
+                const paras = String(text || '').split(/\r?\n/).map(p => p.trim().split(/\s+/).filter(Boolean)).filter(w => w.length);
+                // a) giữ xuống dòng sẵn, mỗi đoạn ngắt cân ít dòng nhất
+                let lines = [];
+                for (const w of paras) {
+                    let got = null;
+                    for (let n = 1; n <= w.length && !got; n++) { const ls = balanced(w, n, hh); if (fitsAll(ls, hh)) got = ls; }
+                    lines = lines.concat(got || [w.join(' ')]);
+                }
+                if (lines.length <= maxLines && fitsAll(lines, hh)) return lines;
+                // b) bỏ xuống dòng, ngắt cân cả chuỗi
+                const all = [].concat(...paras);
+                for (let n = 1; n <= Math.min(maxLines, all.length); n++) { const ls = balanced(all, n, hh); if (fitsAll(ls, hh)) return ls; }
+                return null;
+            };
+            let hh = h;
+            for (let i = 0; i < 40; i++) {
+                const ls = tryAt(hh);
+                if (ls) return { lines: ls, h: hh };
+                if (hh <= minH) break;
+                hh = Math.max(minH, hh * 0.97);
+            }
+            return _qbtFit(text, maxW, minH, maxLines, minH);
         }
 
         // Ngắt chuỗi (giữ xuống dòng có sẵn) vừa bề rộng maxW ở chữ cao h; nếu > maxLines dòng thì thu nhỏ chữ (≥ minH)
@@ -147,22 +215,28 @@
             for (const s of F.shbvSplits) _qbtLine(push, X(F.colsFull[2]), Y(s), X(F.W), Y(s));
 
             const colW = (a, b) => (b - a) * k * sx - 1 * k;   // bề rộng chữ tối đa trong ô (lề 0,5 mỗi bên — nhãn mẫu gần kín ô)
-            const center2 = (txt, cx, maxW) => {                // 2 dòng tên đơn vị, giãn 7,07
-                const f = _qbtFit(txt, maxW, F.hOrg * k, 2, 2.5 * k);
+            // Tên 2 đơn vị (TT QLGT | Công ty): cùng 1 cỡ chữ (mẫu 4,24) — tối đa 3 dòng, căn giữa tầng trên
+            const orgDraw = (f, hh, cx) => {
                 const n = f.lines.length;
-                const gap = F.orgGap * (f.h / F.hOrg);
-                const mid = (F.orgBase[0] + F.orgBase[1]) / 2 * k;   // tâm khối 2 dòng như mẫu
-                f.lines.forEach((l, i) => _qbtText(push, esc, cx, y + mid + ((n - 1) / 2 - i) * gap, f.h, l, { center: true }));
+                const gap = (n >= 3 ? F.orgGap3 : F.orgGap) * (hh / F.hOrg);
+                const mid = (F.orgBase[0] + F.orgBase[1]) / 2 * k;   // tâm khối dòng như mẫu
+                f.lines.forEach((l, i) => _qbtText(push, esc, cx, y + mid + ((n - 1) / 2 - i) * gap, hh, l, { center: true }));
             };
+            const ttTxt = md.TT_QLGT_NAME || 'TT QUẢN LÝ HẠ TẦNG\nKỸ THUẬT TP.HCM';
+            const ctTxt = md.CTCP_NAME || 'CÔNG TY CỔ PHẦN\nCHIẾU SÁNG CÔNG CỘNG TP.HCM';
+            const ttW = colW(0, F.colsFull[0]);
+            const ctW = 2 * Math.min(F.ctcpCx - (F.logo.cx + 10), F.colsFull[1] - F.ctcpCx) * k * sx;
+            let fTT = _qbtFitOrg(ttTxt, ttW, F.hOrg * k, 3, 2.5 * k);
+            let fCT = _qbtFitOrg(ctTxt, ctW, F.hOrg * k, 3, 2.5 * k);
+            const hOrg = Math.min(fTT.h, fCT.h);
+            if (fTT.h > hOrg) fTT = _qbtFitOrg(ttTxt, ttW, hOrg, 3, hOrg);
+            if (fCT.h > hOrg) fCT = _qbtFitOrg(ctTxt, ctW, hOrg, 3, hOrg);
 
             // Tầng trên
-            center2(md.TT_QLGT_NAME || 'TT QUẢN LÝ HẠ TẦNG\nKỸ THUẬT TP.HCM', X(F.ttCx), colW(0, F.colsFull[0]));
+            orgDraw(fTT, hOrg, X(F.ttCx));
             _qbtPrims(push, esc, QBT_LOGO_PRIMS, X(F.logo.cx), Y(F.logo.cy), k);
-            {   // tên công ty nằm bên phải logo trong ô gộp 75,83–227,5
-                const right = F.colsFull[1], cx = F.ctcpCx;
-                const maxW = 2 * Math.min(cx - (F.logo.cx + 10), right - cx) * k * sx;
-                center2(md.CTCP_NAME || 'CÔNG TY CỔ PHẦN\nCHIẾU SÁNG CÔNG CỘNG TP.HCM', X(cx), maxW);
-            }
+            _qbtPrims(push, esc, QBT_LOGO_TOP, X(F.logo.cx), Y(F.logo.cy), k);
+            orgDraw(fCT, hOrg, X(F.ctcpCx));   // tên công ty bên phải logo (ô gộp 75,83–227,5)
             {   // tên bản vẽ — MText rộng 109,6 → 1–2 dòng, tâm khối tại (285,26; 41,99)
                 const f = _qbtFit(md.TIEU_DE_BV || QBT_TITLE_DEFAULT, F.titleW * k * sx, F.hTitle * k, 2, 2.5 * k);
                 const gap = f.h * 5 / 3, n = f.lines.length;
@@ -436,6 +510,6 @@
         // @@QBTTITLE_END
 
         if (typeof window !== 'undefined') {
-            Object.assign(window, { QBT_FORM, _qbtTextW, _qbtFit, _qbtDrawTitleBlock, _qbtDrawHeader,
+            Object.assign(window, { _qbtArcTextTop, _qbtFitOrg, QBT_FORM, _qbtTextW, _qbtFit, _qbtDrawTitleBlock, _qbtDrawHeader,
                 _qbtLegendRows, _qbtLegendSize, _qbtDrawLegendTable, _qbtLegendClear, _qbtFitFrame, _qbtCabinetAddress });
         }
