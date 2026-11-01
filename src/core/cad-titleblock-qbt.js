@@ -70,10 +70,12 @@
 
         // Chữ uốn theo cung tròn phía trên (đọc trái → phải, chân chữ quay vào tâm) — mỗi ký tự 1 TEXT
         // rBase = bán kính chân chữ, h = cao chữ, track = khoảng thêm giữa 2 ký tự. Trả prims ['T', x, y, h, rot, ch].
-        function _qbtArcTextTop(text, rBase, h, track) {
+        // wf = hệ số bề ngang chữ (DXF group 41, mặc định 1) — ép chữ hẹp lại cho dòng dài vừa cung.
+        function _qbtArcTextTop(text, rBase, h, track, wf) {
+            wf = wf || 1;
             const chars = [...String(text || '').normalize('NFC')];
             const rMid = rBase + h / 2;                                   // giãn ký tự theo bán kính giữa chữ
-            const ws = chars.map(c => _qbtTextW(c, h));
+            const ws = chars.map(c => _qbtTextW(c, h) * wf);
             const total = ws.reduce((a, b) => a + b, 0) + (track || 0) * Math.max(0, chars.length - 1);
             let a = Math.PI / 2 + total / 2 / rMid;                        // góc mép trái chữ đầu (đối xứng quanh đỉnh)
             const out = [];
@@ -83,13 +85,13 @@
                 if (c === ' ') return;
                 const sn = Math.sin(th), cs = Math.cos(th);
                 const x = rBase * cs - ws[i] / 2 * sn, y = rBase * sn + ws[i] / 2 * cs;   // chân-trái ký tự
-                out.push(['T', +x.toFixed(4), +y.toFixed(4), h, +(th * 180 / Math.PI - 90).toFixed(3), c]);
+                out.push(['T', +x.toFixed(4), +y.toFixed(4), h, +(th * 180 / Math.PI - 90).toFixed(3), c].concat(wf !== 1 ? [wf] : []));
             });
             return out;
         }
-        // Logo CS: dòng "CÔNG TY CỔ PHẦN CHIẾU SÁNG" vòng trên (bản vẽ gốc là ARCTEXT proxy — không trích được),
-        // cùng cỡ chữ vòng dưới "TP. HỒ CHÍ MINH" (1,238), nằm giữa 2 vòng tròn r 6,802 – 9,158.
-        const QBT_LOGO_TOP = _qbtArcTextTop('CÔNG TY CỔ PHẦN CHIẾU SÁNG', 7.2, 1.238, 0.05);
+        // Logo CS: dòng "CÔNG TY CỔ PHẦN CHIẾU SÁNG CÔNG CỘNG" vòng trên (bản vẽ gốc là ARCTEXT proxy — không trích được),
+        // cao 1,1 (vòng dưới 1,238), ép ngang 0,85 cho vừa cung giữa 2 ngôi sao; nằm giữa 2 vòng tròn r 6,802 – 9,158.
+        const QBT_LOGO_TOP = _qbtArcTextTop('CÔNG TY CỔ PHẦN CHIẾU SÁNG CÔNG CỘNG', 7.3, 1.1, 0.03, 0.85);
 
         // Tên đơn vị (tầng trên khung tên): ngắt dòng CÂN (độ dài các dòng gần bằng nhau) để giữ cỡ chữ mẫu.
         // Ưu tiên: giữ xuống dòng người dùng gõ (đoạn quá dài thì ngắt cân trong đoạn) → bỏ xuống dòng, ngắt cân cả chuỗi
@@ -174,6 +176,7 @@
             const t = esc ? esc(String(s)) : String(s);
             push('0', 'TEXT', '8', opts.layer || '0', '10', _qbtN(x), '20', _qbtN(y), '30', '0', '40', _qbtN(h), '1', t);
             if (opts.rot) push('50', _qbtN(opts.rot));
+            if (opts.wf && opts.wf !== 1) push('41', _qbtN(opts.wf));
             if (opts.center) push('72', '1', '11', _qbtN(x), '21', _qbtN(y), '31', '0');
         }
         function _qbtLine(push, x1, y1, x2, y2) {
@@ -187,7 +190,7 @@
                 else if (q[0] === 'C') push('0', 'CIRCLE', '8', '0', '10', _qbtN(ox + q[1] * s), '20', _qbtN(oy + q[2] * s), '30', '0', '40', _qbtN(q[3] * s));
                 else if (q[0] === 'A') push('0', 'ARC', '8', '0', '10', _qbtN(ox + q[1] * s), '20', _qbtN(oy + q[2] * s), '30', '0',
                     '40', _qbtN(q[3] * s), '50', _qbtN(q[4]), '51', _qbtN(q[5]));
-                else if (q[0] === 'T') _qbtText(push, esc, ox + q[1] * s, oy + q[2] * s, q[3] * s, q[5], { rot: q[4] });
+                else if (q[0] === 'T') _qbtText(push, esc, ox + q[1] * s, oy + q[2] * s, q[3] * s, q[5], { rot: q[4], wf: q[6] });
             }
         }
 

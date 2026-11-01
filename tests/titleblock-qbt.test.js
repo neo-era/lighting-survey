@@ -69,15 +69,21 @@ ok('tên bản vẽ ngắt 2 dòng theo bề rộng MText 109,6', titleT.length 
 ok('tên bản vẽ đủ chữ', titleT.map(t => t.s).join(' ') === 'BẢN VẼ SƠ ĐỒ TUYẾN TRẠM ĐÈN HỆ THỐNG CHIẾU SÁNG ĐÔ THỊ');
 ok('tên bản vẽ nằm trong ô trên (31,11–52,9)', titleT.every(t => t.y > 31.11 + 1 && t.y + t.h < 52.9 - 0.5), titleT.map(t => t.y));
 ok('logo: vòng tròn ngoài r=9,158 tâm (89,136;42,036)', T1.ents.some(e => e.type === 'CIRCLE' && near(num(e, '40'), 9.158) && near(num(e, '10'), 89.136) && near(num(e, '20'), 42.036)));
-ok('logo: chữ TP. HO CHI MINH chạy theo cung (có góc xoay)', X1.filter(t => t.h < 1.3 && t.y < 42.036 - 4).length === 11 && T1.ents.some(e => e.type === 'TEXT' && e.g['50']));
+ok('logo: chữ TP. HO CHI MINH chạy theo cung (có góc xoay)', X1.filter(t => near(t.h, 1.238)).length === 11 && T1.ents.some(e => e.type === 'TEXT' && e.g['50']));
 {   // v204 — vòng trên logo: CÔNG TY CỔ PHẦN CHIẾU SÁNG
-    const top = T1.ents.filter(e => e.type === 'TEXT' && num(e, '40') < 1.3 && e.g['1'][0] !== 'P.')
+    const top = T1.ents.filter(e => e.type === 'TEXT' && num(e, '40') < 1.2)
         .map(e => ({ x: num(e, '10') - 89.136, y: num(e, '20') - 42.036, h: num(e, '40'), rot: e.g['50'] ? num(e, '50') : 0, s: e.g['1'][0] }))
-        .filter(t => !['T', 'P.', 'H', 'O', 'C', 'I', 'M', 'N'].includes(t.s) || t.y > -4);
     const ang = t => { const a = Math.atan2(t.y, t.x) * 180 / Math.PI; return a < -90 ? a + 360 : a; };   // (-90, 270]
     const word = top.slice().sort((a, b) => ang(b) - ang(a)).map(t => t.s).join('');
-    ok('logo: vòng trên có chữ "CÔNG TY CỔ PHẦN CHIẾU SÁNG" (21 ký tự, đọc trái → phải)', word === 'CÔNGTYCỔPHẦNCHIẾUSÁNG', word);
-    ok('logo: chữ vòng trên cùng cỡ chữ vòng dưới (1,238)', top.every(t => near(t.h, 1.238)));
+    ok('logo: vòng trên có chữ "CÔNG TY CỔ PHẦN CHIẾU SÁNG CÔNG CỘNG" (29 ký tự, đọc trái → phải)', word === 'CÔNGTYCỔPHẦNCHIẾUSÁNGCÔNGCỘNG', word);
+    ok('logo: chữ vòng trên cao 1,1, ép ngang 0,85 (group 41)', top.every(t => near(t.h, 1.1)) &&
+        T1.ents.filter(e => e.type === 'TEXT' && e.g['1'][0] === 'Ộ').every(e => e.g['41'] && near(num(e, '41'), 0.85)));
+    {   // mép phải chữ cuối không chạm ngôi sao phải (−31,7°): đầu chữ G cuối
+        const last = top.slice().sort((a, b) => ang(a) - ang(b))[0];
+        const w = H._qbtTextW(last.s, last.h) * 0.85, r = last.rot * Math.PI / 180;
+        const ex = last.x + w * Math.cos(r), ey = last.y + w * Math.sin(r);
+        ok('logo: mép phải chữ cuối cách ngôi sao phải (> −28°)', Math.atan2(ey, ex) * 180 / Math.PI > -28, Math.atan2(ey, ex) * 180 / Math.PI);
+    }
     ok('logo: chữ vòng trên nằm giữa 2 vòng tròn (r 6,802 – 9,158, kể cả đỉnh chữ)',
         top.every(t => { const r = Math.hypot(t.x, t.y); return r > 6.802 && r < 9.158 - 1.238; }), top.map(t => Math.hypot(t.x, t.y).toFixed(2)));
     ok('logo: chữ vòng trên không chạm 2 ngôi sao (sao ở 211,7° và −31,7°; chữ trong −28° → 208°)',

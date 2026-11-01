@@ -70,8 +70,8 @@ Tắt "block chuẩn" → cột Áp dụng dùng ký hiệu cũ cho trụ/tủ/c
 - Tên TT QLGT và tên Công ty **luôn cùng cỡ chữ** (mẫu 4,24). Tên dài ngắt **cân dòng**, tối đa 3 dòng (giãn 6,6):
   "TT QUẢN LÝ GIAO / THÔNG VÀ HẠ TẦNG / KỸ THUẬT TP.HCM". Giữ xuống dòng người dùng gõ; đoạn quá rộng thì ngắt cân trong đoạn.
   Chỉ khi 3 dòng vẫn không vừa mới thu nhỏ — và bên kia thu theo (`_qbtFitOrg`).
-- Logo: thêm vòng chữ trên **"CÔNG TY CỔ PHẦN CHIẾU SÁNG"** (`_qbtArcTextTop`, cỡ 1,238 như vòng dưới, chân chữ r 7,2,
-  từ 201° → −10°, không chạm 2 ngôi sao 211,7° / −31,7°). Bản vẽ gốc dùng ARCTEXT (proxy) nên không trích được — dựng lại bằng TEXT từng ký tự.
+- Logo: thêm vòng chữ trên **"CÔNG TY CỔ PHẦN CHIẾU SÁNG CÔNG CỘNG"** (`_qbtArcTextTop`, v205: cao 1,1, ép ngang 0,85 (group 41), chân chữ r 7,3,
+  vừa cung giữa 2 ngôi sao, không chạm 211,7° / −31,7°). Bản vẽ gốc dùng ARCTEXT (proxy) nên không trích được — dựng lại bằng TEXT từng ký tự.
 
 ## Đã biết / chưa làm
 - Đường cáp + nhãn mét, nền OSM vẫn có thể đi xuyên qua bảng ký hiệu (bản gốc cũng vậy) — chỉ né ký hiệu trụ/tủ.
