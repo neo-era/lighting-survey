@@ -3405,6 +3405,10 @@ Layout:
 
 **Tự xoay cho vừa khung (v203)** — ô `cgAutoRotate` (mặc định tắt): xoay toàn bộ nội dung cho tuyến nằm ngang khi khung nhỏ đi ≥10%, rồi căn giữa trong vùng trống; khung tên không xoay, mũi tên Bắc xoay theo. Code `src/core/cad-rotate.js` (`@@CADROTATE`), thiết kế `docs/design-cad-auto-rotate.md`.
 
+**Bảng ký hiệu chỉ đếm cái được vẽ (v208)**: `_generateCadDrawing` lọc bỏ dòng không toạ độ (`_cgHasCoord`) trước khi vẽ/đếm;
+`_qbtLegendRows` không đếm đèn cho trụ STK/BTLT chưa ghi Loại đèn (trụ trang trí vẫn đếm). Xuất xong báo
+"⚠ N dòng không có toạ độ" (`_cgNoGpsNote`). Test `tests/legend-count-gps.test.mjs` (ca TQN-4 Quận 8).
+
 **Kiểu chữ DXF (v207)**: STYLE STANDARD = `times.ttf` + XDATA `1001 ACAD / 1000 Times New Roman / 1071 18` và bảng APPID `ACAD`
 (`_cadStyleTimes`, `_cadAppIdTable` trong cad-export.js). Thiếu XDATA → màn hình đúng nhưng IN ra txt.shx, chữ Việt thành "?".
 

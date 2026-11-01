@@ -184,6 +184,19 @@
             push('0', 'TABLE', '2', 'APPID', '70', '1', '0', 'APPID', '2', 'ACAD', '70', '0', '0', 'ENDTAB');
         }
 
+        // Dòng có toạ độ hợp lệ (vẽ được lên bản vẽ)
+        function _cgHasCoord(r) {
+            const la = parseCoord(r[2]), lo = parseCoord(r[3]);
+            return isFinite(la) && isFinite(lo) && !(la === 0 && lo === 0);
+        }
+        // Ghi chú cảnh báo khi bộ lọc có dòng thiếu toạ độ (không đưa vào bản vẽ / bảng ký hiệu)
+        function _cgNoGpsNote(filters) {
+            try {
+                const n = _filterRowsForCadExport(filters || {}).filter(r => !_cgHasCoord(r)).length;
+                return n ? ` — ⚠ ${n} dòng không có toạ độ, không đưa vào bản vẽ` : '';
+            } catch (e) { return ''; }
+        }
+
         function _getUniqueBasenames() {
             const s = new Set();
             (loadedData || []).slice(1).forEach(r => {
@@ -2396,8 +2409,10 @@
 
         async function _generateCadDrawing(opts) {
             const filters = opts.filters || {};
-            const rows = _filterRowsForCadExport(filters);
-            if (rows.length === 0) throw new Error('Filter không match marker nào để xuất');
+            // Chỉ giữ dòng có toạ độ: dòng thiếu Lat/Lon (vd dữ liệu import chưa khảo sát) không vẽ được
+            // nên cũng không được đếm vào bảng ký hiệu (trước đây đếm → số lượng lệch so với bản vẽ).
+            const rows = _filterRowsForCadExport(filters).filter(_cgHasCoord);
+            if (rows.length === 0) throw new Error('Filter không match marker nào có toạ độ để xuất');
 
             const cm    = opts.cm || 105.75;
             const k0    = Math.abs(cm - 105.0) < 0.01 ? 0.9996 : 0.9999;
@@ -4673,7 +4688,7 @@
                             ? { blob: new Blob([dxfText], { type: 'application/dxf' }), filename: baseName + '.dxf', isZip: false }
                             : await _maybeZipWithStamps(dxfText, baseName);
                         _saveBlob(packed.blob, packed.filename);
-                        displayInfo && displayInfo(packed.isZip ? '✅ Đã xuất zip (DXF + dấu/chữ ký)' : '✅ Đã xuất DXF');
+                        displayInfo && displayInfo((packed.isZip ? '✅ Đã xuất zip (DXF + dấu/chữ ký)' : '✅ Đã xuất DXF') + _cgNoGpsNote(opts.filters));
                         if (opts.templateId === 'state') _pushRevisionOnExport('state');
                     } else {
                         if (partitions.length > 10 && !confirm(`Bản vẽ có ${partitions.length} tờ. Việc xuất zip có thể mất nhiều thời gian. Tiếp tục?`)) return;
@@ -4694,7 +4709,7 @@
                         dxfFiles.forEach(f => zip.file(f.name, f.content));
                         const zipBlob = await zip.generateAsync({ type: 'blob' });
                         _saveBlob(zipBlob, `thiet-ke-${opts.templateId}-${stamp}.zip`);
-                        displayInfo && displayInfo(`✅ Đã xuất zip: ${dxfFiles.length}/${partitions.length} DXF`);
+                        displayInfo && displayInfo(`✅ Đã xuất zip: ${dxfFiles.length}/${partitions.length} DXF` + _cgNoGpsNote(opts.filters));
                         if (opts.templateId === 'state') _pushRevisionOnExport('state');
                     }
                     return;
@@ -4746,7 +4761,7 @@
                     if (pdfBlob) zip.file(pdfName, pdfBlob);
                     const zipBlob = await zip.generateAsync({ type: 'blob' });
                     _saveBlob(zipBlob, `ban-ve-${stamp}.zip`);
-                    displayInfo && displayInfo(`✅ Đã xuất zip: ${dxfFiles.length} DXF${pdfBlob ? ' + 1 PDF' : ''}`);
+                    displayInfo && displayInfo(`✅ Đã xuất zip: ${dxfFiles.length} DXF${pdfBlob ? ' + 1 PDF' : ''}` + _cgNoGpsNote(opts.filters));
                     if (opts.templateId === 'state') _pushRevisionOnExport('state');
                 }
             } catch (err) {

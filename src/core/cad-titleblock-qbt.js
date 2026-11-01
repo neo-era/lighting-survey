@@ -326,12 +326,14 @@
             const fold = s => String(s || '').replace(/đ/g, 'd').replace(/Đ/g, 'D').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase();
             const lampKind = v => { const s = fold(v); return /LED/.test(s) ? 'LED' : (/\bMH\b|METAL|HALIDE/.test(s) ? 'MH' : 'HPS'); };
             const c = { LED: 0, HPS: 0, MH: 0, denTT: 0, stk: 0, btlt: 0, truTT: 0, kntt: 0, tdk: 0 };
+            // Trụ STK/BTLT chưa ghi Loại đèn (cột 10 trống) → không đếm đèn (trước đây mặc định tính HPS → thừa đèn)
+            const hasLamp = r => String(r[10] == null ? '' : r[10]).trim() !== '';
             for (const r of rows || []) {
                 const t = parseInt(r[6]);
                 if (t === 1 || t === 3 || t === 4) {
-                    c[lampKind(r[10])] += n(r[21]);
+                    if (hasLamp(r)) c[lampKind(r[10])] += n(r[21]);
                     if (t === 1) c.stk++; else c.btlt++;
-                } else if (t === 2) { c.truTT++; c.denTT += n(r[21]); }
+                } else if (t === 2) { c.truTT++; c.denTT += n(r[21]); }   // trụ trang trí: đèn trang trí mặc định
                 else if (t === 5 || t === 6) {
                     const s = fold(String(r[1] || '') + ' ' + String(r[4] || ''));
                     if (/KNTT/.test(s) && !/(KHONG|CHUA)\s+(CO\s+)?KNTT/.test(s)) c.kntt++; else c.tdk++;
