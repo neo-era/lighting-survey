@@ -3405,6 +3405,9 @@ Layout:
 
 **Tự xoay cho vừa khung (v203)** — ô `cgAutoRotate` (mặc định tắt): xoay toàn bộ nội dung cho tuyến nằm ngang khi khung nhỏ đi ≥10%, rồi căn giữa trong vùng trống; khung tên không xoay, mũi tên Bắc xoay theo. Code `src/core/cad-rotate.js` (`@@CADROTATE`), thiết kế `docs/design-cad-auto-rotate.md`.
 
+**Kiểu chữ DXF (v207)**: STYLE STANDARD = `times.ttf` + XDATA `1001 ACAD / 1000 Times New Roman / 1071 18` và bảng APPID `ACAD`
+(`_cadStyleTimes`, `_cadAppIdTable` trong cad-export.js). Thiếu XDATA → màn hình đúng nhưng IN ra txt.shx, chữ Việt thành "?".
+
 **Template `akt` = mẫu A.K.T – Thay LED CT1 (v206)** — khổ A3, khung trong 397,93 × 281,36, khung tên đáy 41,83 (Công trình · Đơn vị TK + logo A.K.T tô SOLID · Phó GĐ · bảng ký · Tên bản vẽ · Giai đoạn/Tỷ lệ · Địa điểm · Ký hiệu/Tổng số/Năm), ô GHI CHÚ + cột SL. Code `src/core/cad-titleblock-akt.js` (`@@AKTTITLE`); mẫu khổ giấy cố định đi chung đường qua `_cgSheetForm(templateId, rows, real)` trong cad-export.js (QBT | A.K.T). Thiết kế `docs/design-titleblock-akt.md`.
 
 **Template `knop12` = mẫu QBT 2026–2029 (v201+)** — thay layout KNỞ P12 cũ bên dưới: khung tên đáy 52,9, bảng ký hiệu 13 dòng

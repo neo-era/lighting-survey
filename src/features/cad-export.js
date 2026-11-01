@@ -170,6 +170,20 @@
         }
 
         // ── Unique values helpers cho filter picker ───────────────────────
+        // Kiểu chữ STANDARD = Times New Roman. Phải có XDATA ACAD (tên phông + họ phông) như AutoCAD tự ghi:
+        // chỉ có tên tệp 'times.ttf' thì màn hình vẫn hiện đúng nhưng khi IN trình in tìm phông theo TÊN,
+        // không thấy → lùi về txt.shx, chữ tiếng Việt thành "?" (v207, anh báo 01/11/2026).
+        // 1071 = 0x12: FF_ROMAN (0x10) | VARIABLE_PITCH (2), charset 0, không nghiêng/đậm.
+        function _cadStyleTimes(push) {
+            push('0', 'STYLE', '2', 'STANDARD', '70', '0', '40', '0', '41', '1',
+                 '50', '0', '71', '0', '42', '2.5', '3', 'times.ttf', '4', '',
+                 '1001', 'ACAD', '1000', 'Times New Roman', '1071', '18');
+        }
+        // XDATA cần ứng dụng 'ACAD' đã đăng ký trong bảng APPID
+        function _cadAppIdTable(push) {
+            push('0', 'TABLE', '2', 'APPID', '70', '1', '0', 'APPID', '2', 'ACAD', '70', '0', '0', 'ENDTAB');
+        }
+
         function _getUniqueBasenames() {
             const s = new Set();
             (loadedData || []).slice(1).forEach(r => {
@@ -1497,9 +1511,10 @@
             // TABLES/STYLE — Times New Roman cho font tiếng Việt
             push('0', 'SECTION', '2', 'TABLES');
             push('0', 'TABLE', '2', 'STYLE', '70', '1');
-            push('0', 'STYLE', '2', 'STANDARD', '70', '0', '40', '0', '41', '1',
-                 '50', '0', '71', '0', '42', '2.5', '3', 'times.ttf', '4', '');
-            push('0', 'ENDTAB', '0', 'ENDSEC');
+            _cadStyleTimes(push);
+            push('0', 'ENDTAB');
+            _cadAppIdTable(push);
+            push('0', 'ENDSEC');
             push('0', 'SECTION', '2', 'ENTITIES');
 
             // Track bounds + used states cho auto-legend
@@ -2085,9 +2100,10 @@
             push('0', 'SECTION', '2', 'HEADER', '0', 'ENDSEC');
             push('0', 'SECTION', '2', 'TABLES');
             push('0', 'TABLE', '2', 'STYLE', '70', '1');
-            push('0', 'STYLE', '2', 'STANDARD', '70', '0', '40', '0', '41', '1',
-                 '50', '0', '71', '0', '42', '2.5', '3', 'times.ttf', '4', '');
-            push('0', 'ENDTAB', '0', 'ENDSEC');
+            _cadStyleTimes(push);
+            push('0', 'ENDTAB');
+            _cadAppIdTable(push);
+            push('0', 'ENDSEC');
             push('0', 'SECTION', '2', 'ENTITIES');
 
             // Compute cabinet positions VN2000
@@ -2418,9 +2434,10 @@
             if (_realBlocks) for (const _ly of CS_LAYERS) push('0', 'LAYER', '2', _ly.layer, '70', '0', '62', String(_ly.color), '6', 'CONTINUOUS');
             push('0', 'ENDTAB');
             push('0', 'TABLE', '2', 'STYLE', '70', '1');
-            push('0', 'STYLE', '2', 'STANDARD', '70', '0', '40', '0', '41', '1',
-                 '50', '0', '71', '0', '42', '2.5', '3', 'times.ttf', '4', '');
-            push('0', 'ENDTAB', '0', 'ENDSEC');
+            _cadStyleTimes(push);
+            push('0', 'ENDTAB');
+            _cadAppIdTable(push);
+            push('0', 'ENDSEC');
             // BLOCKS section injected here after entity generation (if any block defs created)
             const _blocksDefL = [];
             const _entitiesStartIdx = L.length;
