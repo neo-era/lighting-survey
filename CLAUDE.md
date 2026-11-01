@@ -3405,6 +3405,8 @@ Layout:
 
 **Tự xoay cho vừa khung (v203)** — ô `cgAutoRotate` (mặc định tắt): xoay toàn bộ nội dung cho tuyến nằm ngang khi khung nhỏ đi ≥10%, rồi căn giữa trong vùng trống; khung tên không xoay, mũi tên Bắc xoay theo. Code `src/core/cad-rotate.js` (`@@CADROTATE`), thiết kế `docs/design-cad-auto-rotate.md`.
 
+**Template `akt` = mẫu A.K.T – Thay LED CT1 (v206)** — khổ A3, khung trong 397,93 × 281,36, khung tên đáy 41,83 (Công trình · Đơn vị TK + logo A.K.T tô SOLID · Phó GĐ · bảng ký · Tên bản vẽ · Giai đoạn/Tỷ lệ · Địa điểm · Ký hiệu/Tổng số/Năm), ô GHI CHÚ + cột SL. Code `src/core/cad-titleblock-akt.js` (`@@AKTTITLE`); mẫu khổ giấy cố định đi chung đường qua `_cgSheetForm(templateId, rows, real)` trong cad-export.js (QBT | A.K.T). Thiết kế `docs/design-titleblock-akt.md`.
+
 **Template `knop12` = mẫu QBT 2026–2029 (v201+)** — thay layout KNỞ P12 cũ bên dưới: khung tên đáy 52,9, bảng ký hiệu 13 dòng
 (+ cột Số lượng) góc dưới phải, tiêu đề đầu tờ, logo CS; đo từ bản vẽ QBT. Code thuần `src/core/cad-titleblock-qbt.js`
 (`@@QBTTITLE`), test `tests/titleblock-qbt*.test.*`, thiết kế `docs/design-titleblock-qbt.md`. Mục "Template knop12 — KNỞ P12"

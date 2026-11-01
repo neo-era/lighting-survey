@@ -190,6 +190,9 @@
                 else if (q[0] === 'C') push('0', 'CIRCLE', '8', '0', '10', _qbtN(ox + q[1] * s), '20', _qbtN(oy + q[2] * s), '30', '0', '40', _qbtN(q[3] * s));
                 else if (q[0] === 'A') push('0', 'ARC', '8', '0', '10', _qbtN(ox + q[1] * s), '20', _qbtN(oy + q[2] * s), '30', '0',
                     '40', _qbtN(q[3] * s), '50', _qbtN(q[4]), '51', _qbtN(q[5]));
+                else if (q[0] === 'S') push('0', 'SOLID', '8', '0',   // tam giác tô đặc (R12): điểm 4 = điểm 3
+                    '10', _qbtN(ox + q[1] * s), '20', _qbtN(oy + q[2] * s), '30', '0', '11', _qbtN(ox + q[3] * s), '21', _qbtN(oy + q[4] * s), '31', '0',
+                    '12', _qbtN(ox + q[5] * s), '22', _qbtN(oy + q[6] * s), '32', '0', '13', _qbtN(ox + q[5] * s), '23', _qbtN(oy + q[6] * s), '33', '0');
                 else if (q[0] === 'T') _qbtText(push, esc, ox + q[1] * s, oy + q[2] * s, q[3] * s, q[5], { rot: q[4], wf: q[6] });
             }
         }
@@ -384,9 +387,14 @@
         // Mẫu đặt bảng bên PHẢI; nếu góc phải vướng mà góc trái trống thì dời sang TRÁI (không phải hạ đáy — khung
         // A3 cố định, hạ đáy sẽ đẩy nội dung tràn khỏi tờ). b = bounds nội dung (khung trong = b ± MI); pts = [{x,y}].
         // Trả về { E, side: 'right'|'left' }.
-        function _qbtLegendClear(pts, b, k, MI) {
+        // form (tuỳ chọn): mô tả mẫu khổ giấy {W, innerH, H, headerH, legendSize(k)} — mặc định mẫu QBT (xem _qbtSheetForm)
+        function _qbtSheetForm(form) {
+            const F = QBT_FORM;
+            return Object.assign({ W: F.W, innerH: F.innerH, H: F.H, headerH: 25, legendSize: _qbtLegendSize }, form || {});
+        }
+        function _qbtLegendClear(pts, b, k, MI, form) {
             MI = MI == null ? 15 : MI;
-            const lg = _qbtLegendSize(k), gap = QBT_CLEAR.gap * k, mx = QBT_CLEAR.mx * k;
+            const lg = _qbtSheetForm(form).legendSize(k), gap = QBT_CLEAR.gap * k, mx = QBT_CLEAR.mx * k;
             const lgTop = b.minY - MI + lg.h;       // đỉnh bảng khi đáy khung tên vừa chừa xong
             const need = (inside) => {
                 let E = 0;
@@ -407,14 +415,14 @@
         // → nội dung nằm giữa vùng trống (giữa tiêu đề và khung tên/bảng ký hiệu). Mặc định tắt (giữ bố cục cũ).
         function _qbtFitFrame(b, pts, k, MI, opts) {
             MI = MI == null ? 15 : MI;
-            const F = QBT_FORM, R = F.W / F.innerH, gap = QBT_CLEAR.gap, mx = QBT_CLEAR.mx;
+            const F = _qbtSheetForm(opts && opts.form), R = F.W / F.innerH, gap = QBT_CLEAR.gap, mx = QBT_CLEAR.mx, HD = F.headerH;
             const cx = (b.minX + b.maxX) / 2;
             const w0 = Math.max(b.maxX - b.minX + 2 * MI, F.W * k);
             let kk = k, innerW = w0, innerTop = 0, innerH = 0;
             for (let it = 0; it < 60; it++) {
-                innerTop = b.maxY + MI + 25 * kk;
+                innerTop = b.maxY + MI + HD * kk;
                 let needH = innerTop - (b.minY - MI) + F.H * kk;          // đỉnh khung tên ≤ đáy nội dung − MI
-                const lg = _qbtLegendSize(kk);
+                const lg = F.legendSize(kk);
                 const lgLeft = cx + innerW / 2 - lg.w;
                 for (const p of pts || []) if (p.x + mx * kk >= lgLeft) needH = Math.max(needH, innerTop + F.H * kk + lg.h + gap * kk - p.y);
                 innerW = Math.max(w0, R * needH);
@@ -423,11 +431,11 @@
                 if (Math.abs(nk - kk) < 1e-9) { kk = nk; break; }
                 kk = nk;
             }
-            innerTop = b.maxY + MI + 25 * kk;
+            innerTop = b.maxY + MI + HD * kk;
             if (opts && opts.center) {
                 // Dời khung lên d (nội dung xuống tương đối) — tối đa tới khi chạm khung tên / bảng ký hiệu
                 const tbTop = innerTop - innerH + F.H * kk;
-                const lg = _qbtLegendSize(kk), lgLeft = cx + innerW / 2 - lg.w;
+                const lg = F.legendSize(kk), lgLeft = cx + innerW / 2 - lg.w;
                 let dMax = b.minY - MI - tbTop;
                 for (const p of pts || []) if (p.x + mx * kk >= lgLeft) dMax = Math.min(dMax, p.y - (tbTop + lg.h + gap * kk));
                 if (dMax > 0) innerTop += dMax / 2;
@@ -436,6 +444,31 @@
                 kk,
                 bounds: { minX: cx - innerW / 2 + MI, maxX: cx + innerW / 2 - MI, maxY: innerTop - MI, minY: innerTop - innerH + MI },
             };
+        }
+
+        // Vẽ 1 ký hiệu bảng ký hiệu tại tâm (sx, ym), vừa ô maxW × maxH: block thật (INSERT, tên ghi vào blocks)
+        // | prims | cáp | trụ/tủ ký hiệu cũ (symFns). Dùng chung cho bảng QBT và ô GHI CHÚ mẫu A.K.T.
+        function _qbtDrawSym(push, esc, s, sx, ym, maxW, maxH, k, symFns, blocks) {
+            if (!s) return;
+            symFns = symFns || {};
+            if (s.blk && typeof _csBlockBBox === 'function' && typeof _csDef === 'function' && _csDef(s.blk)) {
+                const base = (typeof _csInsertScale === 'function' ? _csInsertScale(s.blk, 1000) : 1) * k;
+                const bb1 = _csBlockBBox(s.blk, 1);
+                const bw = bb1.x1 - bb1.x0, bh = bb1.y1 - bb1.y0;
+                const sc = Math.min(base, bw > 0 ? maxW / bw : base, bh > 0 ? maxH / bh : base);
+                const ix = sx - (bb1.x0 + bw / 2) * sc, iy = ym - (bb1.y0 + bh / 2) * sc;
+                push('0', 'INSERT', '8', '0', '2', s.blk, '10', _qbtN(ix), '20', _qbtN(iy), '30', '0',
+                    '41', _qbtN(sc), '42', _qbtN(sc), '43', _qbtN(sc), '50', '0');
+                if (blocks && blocks.indexOf(s.blk) < 0) blocks.push(s.blk);
+            } else if (s.prims) {
+                _qbtPrims(push, esc, s.prims, sx + 1.5 * k, ym, k * 1.6);
+            } else if (s.cable && symFns.cable) {
+                symFns.cable(push, sx - 9 * k, ym, sx + 9 * k, ym, s.cable);
+            } else if (s.pole && symFns.pole) {
+                symFns.pole(push, sx, ym);
+            } else if (s.cab && symFns.cab) {
+                symFns.cab(push, sx, ym);
+            }
         }
 
         // Bảng ký hiệu: góc dưới-phải tại (xRight, yBottom). Trả về {w, h, blocks} — blocks = tên block thật
@@ -485,27 +518,7 @@
                     const fq = _qbtFit(it.qty || '', L.cols[3] * k - 1.5 * k, L.hQty * k, 1, 1.3 * k);
                     if (it.qty) _qbtText(push, esc, colX(3) + L.cols[3] * k / 2, ym - fq.h / 2, fq.h, fq.lines[0], { center: true });
                     // Ký hiệu, căn giữa ô Áp dụng
-                    const sx = colX(2) + L.cols[2] * k / 2, maxW = L.cols[2] * k - 4 * k, maxH = L.rowH * k - 2.4 * k;
-                    const s = it.sym;
-                    if (!s) return;
-                    if (s.blk && typeof _csBlockBBox === 'function' && typeof _csDef === 'function' && _csDef(s.blk)) {
-                        const base = (typeof _csInsertScale === 'function' ? _csInsertScale(s.blk, 1000) : 1) * k;
-                        const bb1 = _csBlockBBox(s.blk, 1);
-                        const bw = bb1.x1 - bb1.x0, bh = bb1.y1 - bb1.y0;
-                        const sc = Math.min(base, bw > 0 ? maxW / bw : base, bh > 0 ? maxH / bh : base);
-                        const ix = sx - (bb1.x0 + bw / 2) * sc, iy = ym - (bb1.y0 + bh / 2) * sc;
-                        push('0', 'INSERT', '8', '0', '2', s.blk, '10', _qbtN(ix), '20', _qbtN(iy), '30', '0',
-                            '41', _qbtN(sc), '42', _qbtN(sc), '43', _qbtN(sc), '50', '0');
-                        if (blocks.indexOf(s.blk) < 0) blocks.push(s.blk);
-                    } else if (s.prims) {
-                        _qbtPrims(push, esc, s.prims, sx + 1.5 * k, ym, k * 1.6);
-                    } else if (s.cable && symFns.cable) {
-                        symFns.cable(push, sx - 9 * k, ym, sx + 9 * k, ym, s.cable);
-                    } else if (s.pole && symFns.pole) {
-                        symFns.pole(push, sx, ym);
-                    } else if (s.cab && symFns.cab) {
-                        symFns.cab(push, sx, ym);
-                    }
+                    _qbtDrawSym(push, esc, it.sym, colX(2) + L.cols[2] * k / 2, ym, L.cols[2] * k - 4 * k, L.rowH * k - 2.4 * k, k, symFns, blocks);
                 });
             }
             return { w, h, blocks };
@@ -513,6 +526,6 @@
         // @@QBTTITLE_END
 
         if (typeof window !== 'undefined') {
-            Object.assign(window, { _qbtArcTextTop, _qbtFitOrg, QBT_FORM, _qbtTextW, _qbtFit, _qbtDrawTitleBlock, _qbtDrawHeader,
+            Object.assign(window, { _qbtSheetForm, _qbtDrawSym, _qbtArcTextTop, _qbtFitOrg, QBT_FORM, _qbtTextW, _qbtFit, _qbtDrawTitleBlock, _qbtDrawHeader,
                 _qbtLegendRows, _qbtLegendSize, _qbtDrawLegendTable, _qbtLegendClear, _qbtFitFrame, _qbtCabinetAddress });
         }

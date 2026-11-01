@@ -125,6 +125,29 @@
                     { key: 'BAN_VE_SO',     label: 'Bản vẽ số',                       default: '' },
                     { key: 'NGAY',          label: 'Ngày',                            default: () => new Date().toLocaleDateString('vi-VN') },
                 ]
+            },
+            // Kiểu 4 — Khung tên mẫu A.K.T (Thay LED CT1). Vẽ bằng src/core/cad-titleblock-akt.js. Xem docs/design-titleblock-akt.md.
+            akt: {
+                label: '🏢 A.K.T – Thay LED',
+                file: 'assets/dxf-templates/title_state.dxf',   // unused — inline render
+                blockName: 'TITLE_AKT',
+                fields: [
+                    { key: 'AKT_CONG_TRINH', label: 'Công trình', default: () => AKT_DEFAULTS.AKT_CONG_TRINH, multiline: true },
+                    { key: 'AKT_DV_TEN',     label: 'Đơn vị thiết kế', default: () => AKT_DEFAULTS.AKT_DV_TEN },
+                    { key: 'AKT_DV_DIA_CHI', label: 'Trụ sở / ĐT / Email (xuống dòng = Enter)', default: () => AKT_DEFAULTS.AKT_DV_DIA_CHI, multiline: true },
+                    { key: 'AKT_PGD',        label: 'Phó Giám đốc', default: () => AKT_DEFAULTS.AKT_PGD },
+                    { key: 'AKT_CHU_TRI',    label: 'Chủ trì thiết kế', default: () => AKT_DEFAULTS.AKT_CHU_TRI },
+                    { key: 'AKT_THIET_KE',   label: 'Thiết kế', default: () => AKT_DEFAULTS.AKT_THIET_KE },
+                    { key: 'AKT_KIEM',       label: 'Kiểm', default: () => AKT_DEFAULTS.AKT_KIEM },
+                    { key: 'AKT_TEN_BV',     label: 'Tên bản vẽ (trống = tự điền theo đường/tủ)', default: '', multiline: true },
+                    { key: 'AKT_GIAI_DOAN',  label: 'Giai đoạn thực hiện', default: () => AKT_DEFAULTS.AKT_GIAI_DOAN, multiline: true },
+                    { key: 'AKT_TY_LE',      label: 'Tỷ lệ (trống = tự tính)', default: '' },
+                    { key: 'AKT_DIA_DIEM',   label: 'Địa điểm xây dựng', default: () => AKT_DEFAULTS.AKT_DIA_DIEM, multiline: true },
+                    { key: 'AKT_KY_HIEU',    label: 'Ký hiệu bản vẽ (XX = số tờ)', default: () => AKT_DEFAULTS.AKT_KY_HIEU },
+                    { key: 'AKT_TONG_SO',    label: 'Tổng số bản vẽ (trống = số tờ)', default: '' },
+                    { key: 'AKT_NAM',        label: 'Năm thực hiện', default: () => String(new Date().getFullYear()) },
+                    { key: 'AKT_TIEU_DE',    label: 'Tiêu đề đầu tờ', default: () => AKT_DEFAULTS.AKT_TIEU_DE },
+                ]
             }
         };
 
@@ -1602,12 +1625,13 @@
                 if ((bounds.maxX - bounds.minX) < 320) {
                     bounds.minX = bounds.maxX - 320;
                 }
-            } else if (opts.templateId === 'knop12') {
-                bounds.minY -= 65;
+            } else if (_cgSheetForm(opts.templateId)) {
+                const _sfB = _cgSheetForm(opts.templateId);
+                bounds.minY -= _sfB.roomBelow;
                 if ((bounds.maxX - bounds.minX) < 320) {
                     bounds.minX = bounds.maxX - 320;
                 }
-                bounds.maxY += 25; // chỗ cho title strip phía trên
+                bounds.maxY += _sfB.headerH; // chỗ cho title strip phía trên
             }
 
             // Enforce A3 landscape aspect ratio (width ≥ height × 420/297)
@@ -1655,14 +1679,16 @@
                 const tbW = innerRight - innerLeft;
                 md.TEN_BAN_VE = 'SƠ ĐỒ NGUYÊN LÝ HỆ THỐNG CHIẾU SÁNG';
                 _drawTitleBlockDienluc(push, _dxfEscape, _wrapText, md, innerLeft, innerBottom, sheetIdx, sheetTotal, tbW);
-            } else if (opts.templateId === 'knop12') {
+            } else if (_cgSheetForm(opts.templateId)) {
+                const _sfT = _cgSheetForm(opts.templateId);
                 const innerLeft = bounds.minX - M + IM;
                 const innerRight = bounds.maxX + M - IM;
                 const innerBottom = bounds.minY - M + IM;
                 const tbW = innerRight - innerLeft;
-                md.TIEU_DE_BV = 'SƠ ĐỒ NGUYÊN LÝ HỆ THỐNG CHIẾU SÁNG';
-                _drawTitleBlockKnop12(push, _dxfEscape, _wrapText, md, innerLeft, innerBottom, sheetIdx, sheetTotal, tbW, 1);
-                _drawKnop12TitleStrip(push, _dxfEscape, innerLeft, innerRight, bounds.maxY + M - IM, md, 1000);
+                _sfT.setTitle(md, 'SƠ ĐỒ NGUYÊN LÝ HỆ THỐNG CHIẾU SÁNG');
+                _sfT.setName(md, 'SƠ ĐỒ NGUYÊN LÝ HỆ THỐNG CHIẾU SÁNG' + (md.TEN_BAN_VE ? '\nTỦ ĐIỀU KHIỂN ' + String(md.TEN_BAN_VE).toUpperCase() : ''));
+                _sfT.drawTitle(push, md, innerLeft, innerBottom, tbW, 1, sheetIdx, sheetTotal);
+                _sfT.drawHeader(push, innerLeft, innerRight, bounds.maxY + M - IM, md, 1);
             }
 
             // Auto-legend (sơ đồ nguyên lý — lấy lampSpecs từ rows)
@@ -2249,12 +2275,13 @@
                 if ((bounds.maxX - bounds.minX) < 320) {
                     bounds.minX = bounds.maxX - 320;
                 }
-            } else if (opts.templateId === 'knop12') {
-                bounds.minY -= 65;
+            } else if (_cgSheetForm(opts.templateId)) {
+                const _sfB = _cgSheetForm(opts.templateId);
+                bounds.minY -= _sfB.roomBelow;
                 if ((bounds.maxX - bounds.minX) < 320) {
                     bounds.minX = bounds.maxX - 320;
                 }
-                bounds.maxY += 25; // chỗ cho title strip phía trên
+                bounds.maxY += _sfB.headerH; // chỗ cho title strip phía trên
             }
 
             // Enforce A3 landscape aspect ratio (width ≥ height × 420/297)
@@ -2301,15 +2328,17 @@
                 const innerBottom = bounds.minY - M + IM;
                 const tbW = innerRight - innerLeft;
                 _drawTitleBlockDienluc(push, _dxfEscape, _wrapText, md, innerLeft, innerBottom, sheetIdx, sheetTotal, tbW);
-            } else if (opts.templateId === 'knop12') {
+            } else if (_cgSheetForm(opts.templateId)) {
+                const _sfT = _cgSheetForm(opts.templateId);
                 const innerLeft = bounds.minX - M + IM;
                 const innerRight = bounds.maxX + M - IM;
                 const innerBottom = bounds.minY - M + IM;
                 const tbW = innerRight - innerLeft;
-                md.TIEU_DE_BV = 'BÌNH ĐỒ TỔNG THỂ HỆ THỐNG CHIẾU SÁNG';
+                _sfT.setTitle(md, 'BÌNH ĐỒ TỔNG THỂ HỆ THỐNG CHIẾU SÁNG');
                 md.TEN_BAN_VE = (opts.metadata && opts.metadata.TEN_BAN_VE) || '';
-                _drawTitleBlockKnop12(push, _dxfEscape, _wrapText, md, innerLeft, innerBottom, sheetIdx, sheetTotal, tbW, 1);
-                _drawKnop12TitleStrip(push, _dxfEscape, innerLeft, innerRight, bounds.maxY + M - IM, md, 1000);
+                _sfT.setName(md, 'BÌNH ĐỒ TỔNG THỂ HỆ THỐNG CHIẾU SÁNG');
+                _sfT.drawTitle(push, md, innerLeft, innerBottom, tbW, 1, sheetIdx, sheetTotal);
+                _sfT.drawHeader(push, innerLeft, innerRight, bounds.maxY + M - IM, md, 1);
             }
 
             // ═══ GHI CHÚ BOX — render sát góc dưới-trái inner frame ═══
@@ -2503,8 +2532,9 @@
                 const _ksR = scale / 1000;
                 const _padR = _realBlocks ? Math.max(5, 10 * _ksR) : 5;
                 const _tid = opts.templateId;
-                const _score = (_tid === 'knop12' && typeof _qbtFitFrame === 'function')
-                    ? (b, pr) => _qbtFitFrame(b, pr, _ksR, 15).kk
+                const _sfR = typeof _qbtFitFrame === 'function' ? _cgSheetForm(_tid, rows, _realBlocks) : null;
+                const _score = _sfR
+                    ? (b, pr) => _qbtFitFrame(b, pr, _ksR, 15, { form: _sfR }).kk
                     : _rotScoreA3(_tid === 'state' || !_tid ? 90 : 0, _tid === 'dienluc' ? 65 : (_cgIsNoTitle(_tid) || _tid === 'state' || !_tid ? 0 : 60));
                 const _best = _rotBestAngle(_pts, _score, { pad: _padR });
                 _rot = _rotMake(_best.cx, _best.cy, _best.deg);
@@ -2711,6 +2741,18 @@
                 }
             }
 
+            // Mẫu A.K.T: tên bản vẽ trống → "BẢN VẼ MẶT BẰNG ĐƯỜNG <đường nhiều nhất>" / "TỦ ĐIỀU KHIỂN <tủ>" / "<PHƯỜNG>"
+            if (opts.templateId === 'akt' && !String(md.AKT_TEN_BV || '').trim()) {
+                const _modeA = idx => { const c = new Map(); for (const r of rows) { const v = String(r[idx] || '').trim(); if (v) c.set(v, (c.get(v) || 0) + 1); }
+                    let best = '', n = 0; for (const [v, m] of c) if (m > n) { best = v; n = m; } return { best, distinct: c.size }; };
+                const _d = _modeA(17), _t = _modeA(7), _p = _modeA(18);
+                const _ls = ['BẢN VẼ MẶT BẰNG' + (_d.best ? ' ĐƯỜNG ' + _d.best.toUpperCase() : '')];
+                if (_t.distinct === 1) _ls.push('TỦ ĐIỀU KHIỂN ' + _t.best.toUpperCase());
+                if (_p.best) _ls.push(_p.best.toUpperCase());
+                md.AKT_TEN_BV = _ls.join('\n');
+            }
+            if (opts.templateId === 'akt' && !String(md.AKT_TY_LE || '').trim() && opts.frameMode === 'a3-standard') md.AKT_TY_LE = '1/' + scale;
+
             // Title block — pre-compute size + expand bounds (RENDER được deferred đến POLISH block để dùng bounds đã pad aspect ratio)
             let _titleRender = null;  // { type: 'state'|'dienluc'|'simple', tbW, tbH, ... }
             // 'none' = chỉ dữ liệu (trụ + cáp + nền): bỏ khung tên, khung viền, chú thích, mũi tên Bắc, thước, ô con dấu
@@ -2735,18 +2777,19 @@
                     if ((bounds.maxX - bounds.minX) < tbW) {
                         bounds.minX = bounds.maxX - tbW;
                     }
-                } else if (opts.templateId === 'knop12') {
-                    // Mẫu QBT 2026–2029: khung tên đáy 52,9 + bảng ký hiệu 13 dòng (góc dưới phải) + tiêu đề đầu tờ.
-                    // Cả tờ giữ ĐÚNG tỉ lệ mẫu: khung trong 384,65 × 281,84 nhân hệ số kk (≥ tỉ lệ/1000).
+                } else if (_cgSheetForm(opts.templateId)) {
+                    // Mẫu khổ giấy cố định (QBT 2026–2029 | A.K.T): khung tên đáy + bảng ký hiệu (góc dưới phải) + tiêu đề đầu tờ.
+                    // Cả tờ giữ ĐÚNG tỉ lệ mẫu: khung trong W × innerH nhân hệ số kk (≥ tỉ lệ/1000).
                     // A3 chuẩn: kk = tỉ lệ/1000, chừa chỗ ngay tại đây. Tự co giãn: tính kk sau khi biết khung (_qbtFitFrame).
                     const k = scale / 1000;
-                    _titleRender = { type: 'knop12', k, tbH: QBT_FORM.H * k, auto: opts.frameMode !== 'a3-standard' };
+                    const sf = _cgSheetForm(opts.templateId, rows, _realBlocks);
+                    _titleRender = { type: opts.templateId, sf, k, tbH: sf.H * k, auto: opts.frameMode !== 'a3-standard' };
                     if (!_titleRender.auto) {
-                        const _clr = _qbtLegendClear(Array.from(posMap.values()), bounds, k);
+                        const _clr = _qbtLegendClear(Array.from(posMap.values()), bounds, k, 15, sf);
                         _titleRender.lgSide = _clr.side;
                         _titleRender.lgE = _clr.E;
                         bounds.minY -= _titleRender.tbH + _clr.E;
-                        bounds.maxY += 25 * k; // chỗ cho tiêu đề đầu tờ
+                        bounds.maxY += sf.headerH * k; // chỗ cho tiêu đề đầu tờ
                     }
                 } else {
                     // Old simple layout — vẽ ngay như cũ (backward compat)
@@ -2831,32 +2874,32 @@
                     bounds.maxX = Math.max(bounds.maxX, stampsStartX + stampsBlockW + 5);
                     bounds.maxY = Math.max(bounds.maxY, stampsTopY + 10);
                     // Mẫu QBT: tiêu đề đầu tờ nằm TRÊN ô con dấu
-                    if (_titleRender && _titleRender.type === 'knop12') bounds.maxY = Math.max(bounds.maxY, stampsTopY + 10 + 25 * _titleRender.k);
+                    if (_titleRender && _titleRender.sf) bounds.maxY = Math.max(bounds.maxY, stampsTopY + 10 + _titleRender.sf.headerH * _titleRender.k);
                 }
 
                 // Force aspect ratio A3 landscape (420/297 ≈ 1.414) — auto-pad ngang nếu bounds portrait
                 // Ngăn bản vẽ hiển thị portrait khi cluster hẹp / title block cao.
                 const A3_RATIO = 420 / 297;  // landscape
-                if (_titleRender && _titleRender.type === 'knop12' && _titleRender.auto) {
+                if (_titleRender && _titleRender.sf && _titleRender.auto) {
                     // Khung tự co giãn: đặt khung theo đúng tỉ lệ tờ mẫu, khung tên/chữ/bảng nhân cùng hệ số kk
-                    const fit = _qbtFitFrame(bounds, Array.from(posMap.values()), _titleRender.k, 15, { center: !!_rot.deg });
+                    const fit = _qbtFitFrame(bounds, Array.from(posMap.values()), _titleRender.k, 15, { center: !!_rot.deg, form: _titleRender.sf });
                     Object.assign(bounds, fit.bounds);
                     _titleRender.k = fit.kk;
-                    _titleRender.tbH = QBT_FORM.H * fit.kk;
+                    _titleRender.tbH = _titleRender.sf.H * fit.kk;
                 }
                 const bW = bounds.maxX - bounds.minX;
                 const bH = bounds.maxY - bounds.minY;
 
-                if (_titleRender && _titleRender.type === 'knop12' && _titleRender.auto) {
+                if (_titleRender && _titleRender.sf && _titleRender.auto) {
                     // đã đặt khung ở trên — giữ nguyên
                 } else if (opts.frameMode === 'a3-standard') {
                     // A3 chuẩn 1:1000 — khung viền ngoài = 420×297mm chính xác
                     // bounds = content area; viền ngoài = bounds + 2×M (M=20) → trừ trước
                     const paperMmW = 420, paperMmH = 297, frameM = 20;
-                    const _qbt = _titleRender && _titleRender.type === 'knop12';
-                    // Mẫu QBT: khung trong đúng 384,65 × 281,84 (lề giấy theo bản gốc) — bounds = khung trong − 15 mỗi cạnh
-                    const targetW = _qbt ? QBT_FORM.W * scale / 1000 - 30 : paperMmW * scale / 1000 - 2 * frameM;  // 380m @ 1:1000
-                    const targetH = _qbt ? QBT_FORM.innerH * scale / 1000 - 30 : paperMmH * scale / 1000 - 2 * frameM;  // 257m @ 1:1000
+                    const _qbt = !!(_titleRender && _titleRender.sf);
+                    // Mẫu khổ giấy cố định: khung trong đúng W × innerH của mẫu (lề giấy theo bản gốc) — bounds = khung trong − 15 mỗi cạnh
+                    const targetW = _qbt ? _titleRender.sf.W * scale / 1000 - 30 : paperMmW * scale / 1000 - 2 * frameM;  // 380m @ 1:1000
+                    const targetH = _qbt ? _titleRender.sf.innerH * scale / 1000 - 30 : paperMmH * scale / 1000 - 2 * frameM;  // 257m @ 1:1000
                     const cx = (bounds.minX + bounds.maxX) / 2;
                     const cy = (bounds.minY + bounds.maxY) / 2;
                     // Warn nếu markers vượt content area (user có thể muốn split N tờ)
@@ -2893,7 +2936,7 @@
                 // === 1. FRAME TCVN 7285 (outer + inner) — vẽ SAU khi bounds đã expand ===
                 const M = 20, IM = 5;
                 // Viền ngoài: mặc định cách khung trong 5; mẫu QBT = mép giấy A3 với lề đúng bản gốc (trái 28,28 · phải 7,07 · dưới 7,08 · trên 8,05) × kk
-                const _pm = (_titleRender && _titleRender.type === 'knop12') ? QBT_FORM.paperMargin.map(v => v * _titleRender.k) : null;
+                const _pm = (_titleRender && _titleRender.sf) ? _titleRender.sf.paperMargin.map(v => v * _titleRender.k) : null;
                 const fox1 = (_pm ? bounds.minX - (M - IM) - _pm[0] : bounds.minX - M).toFixed(4);
                 const foy1 = (_pm ? bounds.minY - (M - IM) - _pm[3] : bounds.minY - M).toFixed(4);
                 const fox2 = (_pm ? bounds.maxX + (M - IM) + _pm[1] : bounds.maxX + M).toFixed(4);
@@ -2959,8 +3002,9 @@
                         const tbX = innerLeft;
                         const tbY = innerBottom;
                         _drawTitleBlockDienluc(push, _dxfEscape, _wrapText, md, tbX, tbY, sheetIdx, sheetTotal, tbW);
-                    } else if (_titleRender.type === 'knop12') {
-                        // KNỞ P12: generate title block as DXF BLOCK definition + INSERT at actual position
+                    } else if (_titleRender.sf) {
+                        // Mẫu khổ giấy cố định: khung tên = DXF BLOCK định nghĩa tại (0,0) + INSERT tại vị trí thật
+                        const sf = _titleRender.sf;
                         const availableW = innerRight - innerLeft;
                         const tbX = innerLeft;
                         const tbY = innerBottom;
@@ -2968,24 +3012,23 @@
                         // 1. Collect title block entities at (0,0) base point
                         const _tbBL = [];
                         const _tbBP = (...a) => { for (const x of a) _tbBL.push(x); };
-                        _drawTitleBlockKnop12(_tbBP, _dxfEscape, _wrapText, md, 0, 0, sheetIdx, sheetTotal, availableW, k);
+                        sf.drawTitle(_tbBP, md, 0, 0, availableW, k, sheetIdx, sheetTotal);
                         // 2. Register BLOCK definition (injected into BLOCKS section later)
                         _blocksDefL.push(
-                            '0', 'BLOCK', '8', '0', '2', 'TITLE_KNOP12',
+                            '0', 'BLOCK', '8', '0', '2', sf.block,
                             '70', '0', '10', '0.0000', '20', '0.0000', '30', '0.0000',
-                            '3', 'TITLE_KNOP12',
+                            '3', sf.block,
                             ..._tbBL,
                             '0', 'ENDBLK', '8', '0'
                         );
                         // 3. INSERT block at actual drawing position
-                        push('0', 'INSERT', '8', '0', '2', 'TITLE_KNOP12',
+                        push('0', 'INSERT', '8', '0', '2', sf.block,
                              '10', tbX.toFixed(4), '20', tbY.toFixed(4), '30', '0');
-                        _drawKnop12TitleStrip(push, _dxfEscape, innerLeft, innerRight, innerTop, md, k * 1000);
-                        // 4. Bảng ký hiệu 13 dòng + số lượng của tờ này — góc dưới phải, đáy chạm đỉnh khung tên
-                        const _lgItems = _qbtLegendRows(rows, _legendCableMeters(rows), _realBlocks);
-                        const _lgW = _qbtLegendSize(k).w;
+                        sf.drawHeader(push, innerLeft, innerRight, innerTop, md, k);
+                        // 4. Bảng ký hiệu + số lượng của tờ này — góc dưới phải, đáy chạm đỉnh khung tên
+                        const _lgW = sf.legendSize(k).w;
                         const _lgRight = _titleRender.lgSide === 'left' ? innerLeft + _lgW : innerRight;
-                        const _lgRes = _qbtDrawLegendTable(push, _dxfEscape, _lgRight, tbY + _titleRender.tbH, k, _lgItems, {
+                        const _lgRes = sf.drawLegend(push, _lgRight, tbY + _titleRender.tbH, k, {
                             cable: (p, x1, y1, x2, y2, st) => _drawCableSymbol(p, x1, y1, x2, y2, st, '0'),
                             pole: (p, x, y) => _drawPoleSymbol(p, x, y, 'giu', { soLuongDen: 1 }),
                             cab: (p, x, y) => _drawCabinetSymbol(p, x, y, 'giu'),
@@ -2995,7 +3038,7 @@
                 }
 
                 // Mẫu QBT: chỉ giữ phần trong khung (thước tỉ lệ + bảng CHÚ THÍCH ngoài khung bỏ đi)
-                const _qbtOnlyFrame = !!(_titleRender && _titleRender.type === 'knop12');
+                const _qbtOnlyFrame = !!(_titleRender && _titleRender.sf);
                 // === 2. SCALE BAR — NGOÀI frame outer (strip dưới) ===
                 if (!_qbtOnlyFrame) {
                 const sbX = _stripSbX;
@@ -3019,7 +3062,7 @@
                 }
 
                 // === 3. LEGEND BOX === (mẫu QBT đã có bảng ký hiệu 13 dòng trong khung → bỏ bảng cũ)
-                if (usedTypes.length > 0 && !(_titleRender && _titleRender.type === 'knop12')) {
+                if (usedTypes.length > 0 && !(_titleRender && _titleRender.sf)) {
                     const lx1 = lgX.toFixed(4), ly1 = (lgTop - lgH).toFixed(4);
                     const lx2 = (lgX + lgW).toFixed(4), ly2 = lgTop.toFixed(4);
                     push('0', 'LINE', '8', '0', '10', lx1, '20', ly1, '30', '0', '11', lx2, '21', ly1, '31', '0');
@@ -3152,7 +3195,7 @@
             // Patch HEADER — extents + khung nhìn để mở ra thấy nội dung ngay
             // 'none': nền OSM/CAD được cắt theo bounds ±30m → lề 35 để khung nhìn ôm hết nền
             // Mẫu QBT: lề giấy trái 28,28·kk → khung nhìn ôm cả mép giấy
-            const _viewM = _noTitle ? 35 : ((_titleRender && _titleRender.type === 'knop12') ? 15 + QBT_FORM.paperMargin[0] * _titleRender.k : 20);
+            const _viewM = _noTitle ? 35 : ((_titleRender && _titleRender.sf) ? 15 + _titleRender.sf.paperMargin[0] * _titleRender.k : 20);
             L.splice(0, 6, '0', 'SECTION', '2', 'HEADER',
                 ..._dxfHeaderView(bounds, _viewM), '0', 'ENDSEC');
             _dxfInjectActiveVport(L, bounds, _viewM);
@@ -3559,6 +3602,37 @@
         // Tiêu đề đầu tờ (mẫu QBT): tên bản vẽ + "TỦ ĐIỀU KHIỂN - <tên tủ>", canh theo ĐỈNH khung trong
         function _drawKnop12TitleStrip(push, escape, innerLeft, innerRight, innerTop, md, scale) {
             _qbtDrawHeader(push, escape, innerLeft, innerRight, innerTop, md, (scale || 1000) / 1000);
+        }
+
+        // Mẫu khổ giấy cố định (khung tên đáy + tiêu đề đầu tờ + bảng ký hiệu trong khung): QBT ('knop12') | A.K.T ('akt').
+        // Trả về mô tả dùng chung cho bố trí khung (tự co giãn / A3 chuẩn), chia tờ và vẽ; null nếu mẫu khác.
+        // rows/real: dữ liệu tờ đang xuất (bảng ký hiệu A.K.T có số dòng theo dữ liệu).
+        function _cgSheetForm(tid, rows, real) {
+            const cm = () => (typeof _legendCableMeters === 'function' ? _legendCableMeters(rows || []) : new Map());
+            if (tid === 'knop12' && typeof QBT_FORM !== 'undefined') {
+                return {
+                    id: 'knop12', block: 'TITLE_KNOP12', W: QBT_FORM.W, innerH: QBT_FORM.innerH, H: QBT_FORM.H, headerH: 25,
+                    paperMargin: QBT_FORM.paperMargin, legendSize: _qbtLegendSize, roomBelow: 65,
+                    drawTitle: (push, md, x, y, W, k, si, st) => _qbtDrawTitleBlock(push, _dxfEscape, md, x, y, W, k, si, st),
+                    drawHeader: (push, L, R, top, md, k) => _qbtDrawHeader(push, _dxfEscape, L, R, top, md, k),
+                    drawLegend: (push, right, bottom, k, symFns) => _qbtDrawLegendTable(push, _dxfEscape, right, bottom, k, _qbtLegendRows(rows, cm(), real), symFns),
+                    setTitle: (md, t) => { md.TIEU_DE_BV = t; },
+                    setName: () => {},
+                };
+            }
+            if (tid === 'akt' && typeof AKT_FORM !== 'undefined') {
+                const items = _aktLegendItems(rows || [], cm(), real);
+                return {
+                    id: 'akt', block: 'TITLE_AKT', W: AKT_FORM.W, innerH: AKT_FORM.innerH, H: AKT_FORM.H, headerH: AKT_FORM.headerH,
+                    paperMargin: AKT_FORM.paperMargin, legendSize: k => _aktLegendSize(k, items.length), roomBelow: Math.ceil(AKT_FORM.H + 12),
+                    drawTitle: (push, md, x, y, W, k, si, st) => _aktDrawTitleBlock(push, _dxfEscape, md, x, y, W, k, si, st, '1/' + Math.round(k * 1000)),
+                    drawHeader: (push, L, R, top, md, k) => _aktDrawHeader(push, _dxfEscape, L, R, top, md, k),
+                    drawLegend: (push, right, bottom, k, symFns) => _aktDrawLegend(push, _dxfEscape, right, bottom, k, items, symFns),
+                    setTitle: (md, t) => { md.AKT_TIEU_DE = t; },
+                    setName: (md, t) => { if (!String(md.AKT_TEN_BV || '').trim()) md.AKT_TEN_BV = t; },   // ô "Tên bản vẽ" trống → tên loại bản vẽ
+                };
+            }
+            return null;
         }
 
         // Wrap text theo max chars per line (greedy, respect word boundaries).
@@ -4799,7 +4873,13 @@
                             CS_KHU_VUC: baseOpts.metadata.CS_KHU_VUC || tu,
                             BV_SO: (baseOpts.metadata.BV_SO || '') + ' — ' + tu,
                             // Mẫu QBT: ô "BẢN VẼ" + tiêu đề đầu tờ ghi tên tủ của từng file
-                            ...(baseOpts.templateId === 'knop12' ? { TEN_BAN_VE: tu, DIA_CHI: '' } : {})
+                            ...(baseOpts.templateId === 'knop12' ? { TEN_BAN_VE: tu, DIA_CHI: '' } : {}),
+                            // Mẫu A.K.T: tên bản vẽ tự điền theo tủ; Ký hiệu "XX" = số thứ tự tủ, Tổng số = số tủ
+                            ...(baseOpts.templateId === 'akt' ? {
+                                AKT_TEN_BV: '',
+                                AKT_KY_HIEU: String(baseOpts.metadata.AKT_KY_HIEU || (typeof AKT_DEFAULTS !== 'undefined' ? AKT_DEFAULTS.AKT_KY_HIEU : '')).replace(/XX/g, String(i + 1).padStart(2, '0')),
+                                AKT_TONG_SO: String(baseOpts.metadata.AKT_TONG_SO || '').trim() || String(allTus.length).padStart(2, '0'),
+                            } : {})
                         }
                     };
                     try {
@@ -5232,10 +5312,11 @@
             const paperDim = paper === 'a3' ? { W: 420, H: 297 } : { W: 297, H: 210 };
             let sheetW = (paperDim.W - 20) * (scale / 1000);  // trừ lề, đơn vị m
             let sheetH = (paperDim.H - 60) * (scale / 1000);  // trừ lề + title block area
-            if (templateId === 'knop12' && paper === 'a3' && typeof QBT_FORM !== 'undefined') {
-                // Mẫu QBT: vùng vẽ = khung trong 384,65 × 281,84 − lề 15 − tiêu đề đầu tờ 25 − khung tên 52,9 − mũi tên Bắc ~20
-                sheetW = (QBT_FORM.W - 30 - 20) * (scale / 1000);
-                sheetH = (QBT_FORM.innerH - 30 - 25 - QBT_FORM.H) * (scale / 1000);
+            const _sfP = paper === 'a3' ? _cgSheetForm(templateId) : null;
+            if (_sfP) {
+                // Mẫu khổ giấy cố định: vùng vẽ = khung trong − lề 15 − tiêu đề đầu tờ − khung tên − mũi tên Bắc ~20
+                sheetW = (_sfP.W - 30 - 20) * (scale / 1000);
+                sheetH = (_sfP.innerH - 30 - _sfP.headerH - _sfP.H) * (scale / 1000);
             }
             const worldW = bounds.maxX - bounds.minX;
             const worldH = bounds.maxY - bounds.minY;
