@@ -3409,8 +3409,8 @@ Layout:
 `_qbtLegendRows` không đếm đèn cho trụ STK/BTLT chưa ghi Loại đèn (trụ trang trí vẫn đếm). Xuất xong báo
 "⚠ N dòng không có toạ độ" (`_cgNoGpsNote`). Test `tests/legend-count-gps.test.mjs` (ca TQN-4 Quận 8).
 
-**Kiểu chữ DXF (v207)**: STYLE STANDARD = `times.ttf` + XDATA `1001 ACAD / 1000 Times New Roman / 1071 18` và bảng APPID `ACAD`
-(`_cadStyleTimes`, `_cadAppIdTable` trong cad-export.js). Thiếu XDATA → màn hình đúng nhưng IN ra txt.shx, chữ Việt thành "?".
+**Kiểu chữ DXF**: STYLE STANDARD = `times.ttf`. ⚠ KHÔNG thêm XDATA (`1001 ACAD/1000 Times New Roman`) + bảng APPID vào DXF R12:
+v207 thử để sửa lỗi in ra txt.shx thì AutoCAD 2021 không mở được file → v209 gỡ. Lỗi in "?" xử lý trong AutoCAD (STYLE chọn lại phông).
 
 **Template `akt` = mẫu A.K.T – Thay LED CT1 (v206)** — khổ A3, khung trong 397,93 × 281,36, khung tên đáy 41,83 (Công trình · Đơn vị TK + logo A.K.T tô SOLID · Phó GĐ · bảng ký · Tên bản vẽ · Giai đoạn/Tỷ lệ · Địa điểm · Ký hiệu/Tổng số/Năm), ô GHI CHÚ + cột SL. Code `src/core/cad-titleblock-akt.js` (`@@AKTTITLE`); mẫu khổ giấy cố định đi chung đường qua `_cgSheetForm(templateId, rows, real)` trong cad-export.js (QBT | A.K.T). Thiết kế `docs/design-titleblock-akt.md`.
 

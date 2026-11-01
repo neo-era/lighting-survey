@@ -170,19 +170,14 @@
         }
 
         // ── Unique values helpers cho filter picker ───────────────────────
-        // Kiểu chữ STANDARD = Times New Roman. Phải có XDATA ACAD (tên phông + họ phông) như AutoCAD tự ghi:
-        // chỉ có tên tệp 'times.ttf' thì màn hình vẫn hiện đúng nhưng khi IN trình in tìm phông theo TÊN,
-        // không thấy → lùi về txt.shx, chữ tiếng Việt thành "?" (v207, anh báo 01/11/2026).
-        // 1071 = 0x12: FF_ROMAN (0x10) | VARIABLE_PITCH (2), charset 0, không nghiêng/đậm.
+        // Kiểu chữ STANDARD = times.ttf. v207 từng thêm XDATA ACAD "Times New Roman" + bảng APPID để sửa lỗi
+        // in ra txt.shx, nhưng AutoCAD 2021 KHÔNG mở được file DXF R12 đó (anh báo 01/11/2026) → v209 gỡ lại.
         function _cadStyleTimes(push) {
             push('0', 'STYLE', '2', 'STANDARD', '70', '0', '40', '0', '41', '1',
-                 '50', '0', '71', '0', '42', '2.5', '3', 'times.ttf', '4', '',
-                 '1001', 'ACAD', '1000', 'Times New Roman', '1071', '18');
+                 '50', '0', '71', '0', '42', '2.5', '3', 'times.ttf', '4', '');
         }
         // XDATA cần ứng dụng 'ACAD' đã đăng ký trong bảng APPID
-        function _cadAppIdTable(push) {
-            push('0', 'TABLE', '2', 'APPID', '70', '1', '0', 'APPID', '2', 'ACAD', '70', '0', '0', 'ENDTAB');
-        }
+        function _cadAppIdTable(push) { /* v209: tạm bỏ — file có bảng APPID + XDATA không mở được trong AutoCAD */ }
 
         // Dòng có toạ độ hợp lệ (vẽ được lên bản vẽ)
         function _cgHasCoord(r) {
