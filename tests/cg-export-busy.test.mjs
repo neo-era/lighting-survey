@@ -7,6 +7,7 @@ const ok = (n, c) => { c ? pass++ : fail++; console.log((c ? '✓ ' : '✗ ') + 
 
 const sb = loadAppSandbox();
 ok('sandbox nạp index.html không lỗi', sb.errors.length === 0);
+sb.run("currentUser = { role: 'admin', username: 'lam' }");   // v211: xuất CAD cần quyền xuất
 
 function fakeBtn(id, html, disabled) {
     const cls = new Set();

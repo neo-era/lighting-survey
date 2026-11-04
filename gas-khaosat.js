@@ -244,6 +244,10 @@ function handleGitHubUpload(filePath, contentBase64, message) {
   const token = PropertiesService.getScriptProperties().getProperty('GITHUB_TOKEN');
   if (!token) return jsonResponse({ status: 'error', message: 'GITHUB_TOKEN chưa cài trong Script Properties.' });
   if (!filePath) return jsonResponse({ status: 'error', message: 'Thiếu đường dẫn file (path).' });
+  // v211: chỉ cho ghi file Excel trong data/ — không cho ghi đè mã nguồn trang (index.html, *.js…)
+  if (!/^data\/[A-Za-z0-9_.-]+\.xlsx$/.test(String(filePath)) || String(filePath).indexOf('..') >= 0) {
+    return jsonResponse({ status: 'error', message: 'Chỉ được đẩy file .xlsx vào thư mục data/' });
+  }
 
   const apiUrl = 'https://api.github.com/repos/neo-era/lighting-survey/contents/'
     + filePath.split('/').map(encodeURIComponent).join('/');
@@ -597,8 +601,15 @@ function generateAndSavePepper() {
 // ── QUẢN LÝ TÀI KHOẢN (admin only) ─────────────────────────────────────
 // ══════════════════════════════════════════════════════════════════════════
 
-// Helper: verify admin credentials trong request
+// v211: lệnh quản trị đã được _authorize kiểm quyền theo vai trò (token) → dùng danh tính đó.
+// Không có (gọi trực tiếp / app cũ) → kiểm mật khẩu admin như trước.
 function _requireAdmin(data) {
+  if (data && data._authUser) return { ok: true, adminUser: data._authUser.username };
+  return _requireAdminLegacy(data);
+}
+
+// Helper: verify admin credentials trong request (cách cũ — app trước v211 gửi mật khẩu admin)
+function _requireAdminLegacy(data) {
   var adminAuth = data.adminAuth || {};
   var adminUser = String(adminAuth.username || '').trim();
   var adminPass = String(adminAuth.password || '');
@@ -826,6 +837,9 @@ function handleDeleteUser(data) {
 // ── ĐỔI THÔNG TIN TÀI KHOẢN ───────────────────────────────────────────────
 
 function handleChangeCredentials(data) {
+  return _withScriptLock(function () { return _handleChangeCredentialsLocked(data); });
+}
+function _handleChangeCredentialsLocked(data) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheet = ss.getSheetByName('TaiKhoan');
   if (!sheet) return jsonResponse({ status: 'error', message: 'Sheet TaiKhoan chưa được tạo' });
@@ -848,19 +862,44 @@ function handleChangeCredentials(data) {
     var storedHash = String(rows[i][1] || '').trim();
     if (dn.toLowerCase() !== username.toLowerCase()) continue;
 
+    if (_loginFailCount(dn) >= LOGIN_FAIL_MAX) return jsonResponse({ status: 'error', message: 'Sai quá nhiều lần — thử lại sau 15 phút.' });
     var verifyResult = _verifyPassword(currentPassword, storedHash);
     if (!verifyResult.ok) {
+      _loginFailAdd(dn);
       return jsonResponse({ status: 'error', message: 'Mật khẩu hiện tại không đúng' });
     }
 
     var rowNum = i + 2;
+    var meNow = _tkFind(dn);
+    if (meNow && _pmUserState(meNow.tt, meNow.hh, Date.now()) !== 'hoat_dong') {
+      return jsonResponse({ status: 'error', message: 'Tài khoản đã bị khoá hoặc hết hạn — liên hệ quản trị.' });
+    }
+    if (newUsername && !/^[A-Za-z0-9._-]{2,40}$/.test(newUsername)) {
+      return jsonResponse({ status: 'error', message: 'Tên đăng nhập 2–40 ký tự: chữ không dấu, số, . _ -' });
+    }
+    // v211: tên mới không được trùng; đổi tên/mật khẩu → tăng số phiên (token cũ hết hiệu lực), bỏ cờ buộc đổi MK
+    if (newUsername && newUsername.toLowerCase() !== dn.toLowerCase() && _tkFind(newUsername)) {
+      return jsonResponse({ status: 'error', message: 'Tên đăng nhập đã có người dùng: ' + newUsername });
+    }
     if (newUsername && newUsername !== dn) {
       sheet.getRange(rowNum, 1).setValue(newUsername);
     }
     if (newPassword) {
       sheet.getRange(rowNum, 2).setValue(_encodePasswordHash(newPassword));
     }
-    return jsonResponse({ status: 'ok', newUsername: newUsername || dn });
+    var out = { status: 'ok', newUsername: newUsername || dn };
+    try {
+      _AX.users = null;
+      var me = _tkFind(newUsername || dn);
+      if (me) {
+        if (newPassword) _tkSet(me, TKC.doiMk, '');
+        if (newPassword || (newUsername && newUsername !== dn)) _bumpSv(me);
+        var resp = _loginResponse(_tkFind(newUsername || dn));
+        out.token = resp.token; out.user = resp.user;
+      }
+      _logToHistory({ loaiThaoTac: 'change_credentials', nguoiThucHien: newUsername || dn, chiTiet: (newPassword ? 'đổi mật khẩu' : '') + (newUsername && newUsername !== dn ? ' đổi tên từ ' + dn : '') });
+    } catch (e) { /* phần phiên lỗi không làm hỏng việc đổi mật khẩu */ }
+    return jsonResponse(out);
   }
   return jsonResponse({ status: 'error', message: 'Không tìm thấy tài khoản' });
 }
@@ -942,8 +981,13 @@ function doPost(e) {
     }
 
     if (data.action === 'login') {
-      return handleLogin((data.username || '').trim(), data.password || '');
+      return handleLoginV2((data.username || '').trim(), data.password || '');
     }
+    if (data.action === 'whoami') return handleWhoami(data);
+
+    // v211 — kiểm phiên + quyền + địa bàn cho mọi lệnh còn lại (trước cả chặn dữ liệu cũ sau khôi phục)
+    const _deny = _authorize(data);
+    if (_deny) return _deny;
 
     // v210 — sau khi khôi phục 1 địa bàn, chặn máy còn giữ dữ liệu cũ ghi đè ngược
     const _stale = _bkStaleResponse(data);
@@ -981,6 +1025,15 @@ function doPost(e) {
         const hIdx    = buildHeaderIndex(headers);
 
         const rowNum = findRowNum(sheet, headers, hIdx, data);
+        if (data._moveOnly) {
+          // v211: chỉ có quyền dời → không tạo hàng mới, không đổi tên/ID
+          if (!(rowNum > 0)) return jsonResponse({ status: 'forbidden', code: 'forbidden', message: 'Không có quyền thêm đối tượng mới (chỉ được dời vị trí).' });
+          const cur = sheet.getRange(rowNum, 1, 1, headers.length).getValues()[0];
+          const nc = hIdx[norm('Tên trụ')], ic = hIdx[norm('ID')];
+          if (nc !== undefined) data.tenTru = String(cur[nc]);
+          if (ic !== undefined) data.id = String(cur[ic]);
+          delete data.oldTenTru;
+        }
         if (rowNum > 0) {
           updateRow(sheet, hIdx, rowNum, data);
         } else {
@@ -1055,11 +1108,23 @@ function doPost(e) {
     if (data.action === 'get_daily_report')    return handleGetDailyReport(data);
 
     // Quản lý tài khoản (admin only)
-    if (data.action === 'list_users')       return handleListUsers(data);
-    if (data.action === 'create_user')      return handleCreateUser(data);
-    if (data.action === 'update_user')      return handleUpdateUser(data);
-    if (data.action === 'reset_password')   return handleResetPassword(data);
-    if (data.action === 'delete_user')      return handleDeleteUser(data);
+    if (data.action === 'list_users')       return handleListUsersV2(data);
+    if (data.action === 'create_user')      return handleCreateUserV2(data);
+    if (data.action === 'update_user')      return handleUpdateUserV2(data);
+    if (data.action === 'reset_password')   return handleResetPasswordV2(data);
+    if (data.action === 'delete_user')      return handleDeleteUserV2(data);
+    if (data.action === 'lock_user')        return handleLockUser(data);
+    if (data.action === 'unlock_user')      return handleUnlockUser(data);
+    if (data.action === 'revoke_sessions')  return handleRevokeSessions(data);
+    if (data.action === 'list_roles')       return jsonResponse({ status: 'ok', roles: _rolesPublic(), catalog: PERM_CATALOG });
+    if (data.action === 'save_role')        return handleSaveRole(data);
+    if (data.action === 'delete_role')      return handleDeleteRole(data);
+    if (data.action === 'list_groups')      return jsonResponse({ status: 'ok', groups: _groupsPublic() });
+    if (data.action === 'save_group')       return handleSaveGroup(data);
+    if (data.action === 'delete_group')     return handleDeleteGroup(data);
+    if (data.action === 'set_auth_mode')    return handleSetAuthMode(data);
+    if (data.action === 'auth_status')      return handleAuthStatus(data);
+    if (data.action === 'log_export')       return handleLogExport(data);
 
     // P47: Preset library offset local grid (list = mọi user, save/delete = admin)
     if (data.action === 'list_presets')     return handleListPresets(data);
@@ -1485,8 +1550,8 @@ function handleLogAction(data) {
     sheet.autoResizeColumns(1, 6);
   }
   sheet.appendRow([
-    data.thoiGian     || '',
-    data.nguoiThucHien || '',
+    data.thoiGian     || new Date().toISOString(),
+    data._authUser ? data._authUser.username : (data.nguoiThucHien ? '(app cũ) ' + data.nguoiThucHien : ''),
     data.loaiThaoTac  || '',
     data.id           || '',
     data.tenTru       || '',
@@ -2446,6 +2511,13 @@ function handleUpdateNhiemVuStatus(data) {
       var rowNum = i + 2;
       var currentStatus = String(allData[i][statusCol] || '').trim();
       var newStatus = String(data.newStatus || '').trim();
+      // v211: có quyền nhiem_vu → mọi chuyển trạng thái hợp lệ; không có → chỉ người nhận tự chuyển sang làm/nộp
+      if (data._authUser && data._authUser.perms.indexOf('nhiem_vu') < 0) {
+        var isOwner = String(allData[i][2] || '').trim().toLowerCase() === data._authUser.username.toLowerCase();
+        if (!isOwner || ['in_progress', 'submitted'].indexOf(newStatus) < 0) {
+          return jsonResponse({ status: 'forbidden', message: 'Chỉ người được giao mới cập nhật được nhiệm vụ này (làm / nộp).' });
+        }
+      }
 
       // Validate transition (bảo mật server-side — client không được bypass)
       if (!_validateNvTransition(currentStatus, newStatus)) {
@@ -4433,4 +4505,868 @@ function handleRestoreBackupSheet(data) {
     return jsonResponse({ status: 'ok', tab: p.tab, rowsBefore: before, rowsAfter: after,
                           preRestoreUrl: pre.url, snapTab: snapName, restoredAt: epoch, serverNow: Date.now() });
   });
+}
+
+
+// ══ PHÂN QUYỀN v211 — lõi chung (chép từ src/core/perms.js bằng tools/sync-perms.cjs, KHÔNG sửa tay) ══
+// @@PERMS_START
+var PERM_CATALOG = [
+  ['xem', 'Xem bản đồ', 'Cơ bản'],
+  ['xuat_du_lieu', 'Xuất dữ liệu trong địa bàn', 'Cơ bản'],
+  ['xuat_toan_bo', 'Xuất toàn bộ dữ liệu', 'Cơ bản'],
+  ['them_sua', 'Thêm / sửa trụ, tủ', 'Dữ liệu'],
+  ['di_chuyen', 'Dời vị trí, sửa cáp', 'Dữ liệu'],
+  ['xoa', 'Xoá trụ, tủ', 'Dữ liệu'],
+  ['nhap_hang_loat', 'Nhập CSV/Excel, công cụ hàng loạt', 'Dữ liệu'],
+  ['su_co', 'Báo / cập nhật sự cố', 'Vận hành'],
+  ['bao_tri', 'Quản lý bảo trì', 'Vận hành'],
+  ['nhiem_vu', 'Giao / duyệt nhiệm vụ', 'Vận hành'],
+  ['giam_sat', 'Xem camera, đèn tắt', 'Vận hành'],
+  ['lich_su', 'Xem nhật ký thao tác', 'Quản trị'],
+  ['chia_se', 'Tạo link chia sẻ công khai', 'Quản trị'],
+  ['github', 'Đồng bộ GitHub', 'Quản trị'],
+  ['dia_ban', 'Quản lý địa bàn, preset toạ độ', 'Quản trị'],
+  ['sao_luu', 'Sao lưu & khôi phục', 'Quản trị'],
+  ['bao_cao', 'Gửi báo cáo ngày/tháng', 'Quản trị'],
+  ['quan_tri', 'Quản lý người dùng, nhóm, vai trò', 'Quản trị']
+];
+var PERM_KEYS = PERM_CATALOG.map(function (p) { return p[0]; });
+
+// Vai trò hệ thống: tương đương hành vi trước v211 (canEdit/canDelete/canDrag/canGithubSync/isAdmin)
+var SYSTEM_ROLES = {
+  admin: { ten: 'Quản trị', quyen: ['*'] },
+  user:  { ten: 'Đầy đủ', quyen: ['xem', 'xuat_du_lieu', 'xuat_toan_bo', 'them_sua', 'di_chuyen', 'xoa', 'nhap_hang_loat', 'su_co'] },
+  user1: { ten: 'Khảo sát viên', quyen: ['xem', 'xuat_du_lieu', 'xuat_toan_bo', 'them_sua', 'su_co'] },
+  demo:  { ten: 'Chỉ xem', quyen: ['xem', 'xuat_du_lieu', 'xuat_toan_bo'] }
+};
+// Vai trò mẫu gieo lần đầu (sửa/xoá được)
+var SAMPLE_ROLES = {
+  giam_sat: { ten: 'Giám sát / Trưởng XN', quyen: ['xem', 'xuat_du_lieu', 'them_sua', 'di_chuyen', 'su_co', 'bao_tri', 'nhiem_vu', 'lich_su'] },
+  tu_van:   { ten: 'Tư vấn / Nhà thầu', quyen: ['xem', 'xuat_du_lieu'], benNgoai: true }
+};
+
+// Trường được phép đổi khi chỉ có quyền "di_chuyen" (dời vị trí, sửa cáp)
+var MOVE_FIELDS = ['lat', 'lon', 'vn2000x', 'vn2000y', 'markerGoc', 'khoangCach', 'capNhat', 'labelOffset', 'loaiCap'];
+// Trường định danh/điều khiển trong payload — không tính là "đổi dữ liệu"
+var META_FIELDS = ['action', 'sheet', 'id', 'tenTru', 'oldTenTru', 'token', 'adminAuth', 'clientEpochSeen', 'nguoiThucHien', 'fields'];
+
+// Luật từng lệnh:
+//  pub  : không cần đăng nhập
+//  login: chỉ cần đăng nhập (mọi quyền)
+//  all  : cần ĐỦ các quyền   · any: cần ÍT NHẤT 1 quyền
+//  tab  : có ghi vào tab địa bàn (data.sheet) → kiểm danh sách tab + địa bàn hiệu lực
+//  strict: luôn chặn thật kể cả AUTH_MODE = log
+//  move : quyền di_chuyen thay được them_sua nếu chỉ đổi MOVE_FIELDS
+//  self : handler tự kiểm thêm (vd chủ nhiệm vụ)
+var ACTION_RULES = {
+  ping: { pub: 1 }, login: { pub: 1 }, whoami: { pub: 1 }, change_credentials: { pub: 1 },
+  backup_health: { pub: 1 }, list_presets: { pub: 1 }, list_roads: { pub: 1 }, list_dia_ban: { pub: 1 },
+  check_sheet: { login: 1 }, get_daily_report: { login: 1 }, log_action: { login: 1 }, log_export: { any: ['xuat_du_lieu', 'xuat_toan_bo'] },
+  full_update: { all: ['them_sua'], tab: 1, move: 1 },
+  batch_match_update: { all: ['them_sua'], tab: 1, move: 1 },
+  delete_row: { all: ['xoa'], tab: 1 },
+  batch_import: { all: ['them_sua', 'nhap_hang_loat'], tab: 1 },
+  assign_phases: { all: ['them_sua'], tab: 1 },
+  fill_marker_goc: { all: ['nhap_hang_loat'], tab: 1 },
+  fill_marker_goc_chain: { all: ['nhap_hang_loat'], tab: 1 },
+  normalize_coords: { all: ['nhap_hang_loat'], tab: 1 },
+  fix_loai: { all: ['nhap_hang_loat'], tab: 1 },
+  purge_no_gps: { all: ['xoa', 'nhap_hang_loat'], tab: 1 },
+  backup_pre_import: { any: ['nhap_hang_loat', 'them_sua', 'xoa', 'di_chuyen'], tab: 1 },
+  upload_image: { any: ['them_sua', 'su_co'] },
+  save_road: { all: ['them_sua'] }, delete_road: { all: ['them_sua'] },
+  report_suco: { all: ['su_co'] }, update_suco: { all: ['su_co'] },
+  create_bao_tri: { all: ['bao_tri'] }, complete_bao_tri: { all: ['bao_tri'] },
+  create_nhiem_vu: { all: ['nhiem_vu'] }, update_nhiem_vu_status: { login: 1, self: 1 },
+  upload_to_github: { all: ['github'], strict: 1 },
+  save_preset: { all: ['dia_ban'], strict: 1 }, delete_preset: { all: ['dia_ban'], strict: 1 },
+  create_dia_ban: { all: ['dia_ban'], strict: 1 }, archive_dia_ban: { all: ['dia_ban'], strict: 1 },
+  restore_dia_ban: { all: ['dia_ban'], strict: 1 }, delete_dia_ban: { all: ['dia_ban'], strict: 1 },
+  backup_now: { all: ['sao_luu'], strict: 1 }, list_backups: { all: ['sao_luu'], strict: 1 },
+  restore_preview: { all: ['sao_luu'], strict: 1 }, restore_backup_sheet: { all: ['sao_luu'], strict: 1 },
+  send_monthly_report: { all: ['bao_cao'], strict: 1 }, send_daily_report: { all: ['bao_cao'], strict: 1 },
+  list_users: { all: ['quan_tri'], strict: 1 }, create_user: { all: ['quan_tri'], strict: 1 },
+  update_user: { all: ['quan_tri'], strict: 1 }, reset_password: { all: ['quan_tri'], strict: 1 },
+  delete_user: { all: ['quan_tri'], strict: 1 }, lock_user: { all: ['quan_tri'], strict: 1 },
+  unlock_user: { all: ['quan_tri'], strict: 1 }, revoke_sessions: { all: ['quan_tri'], strict: 1 },
+  list_roles: { all: ['quan_tri'], strict: 1 }, save_role: { all: ['quan_tri'], strict: 1 },
+  delete_role: { all: ['quan_tri'], strict: 1 }, list_groups: { all: ['quan_tri'], strict: 1 },
+  save_group: { all: ['quan_tri'], strict: 1 }, delete_group: { all: ['quan_tri'], strict: 1 },
+  set_auth_mode: { all: ['quan_tri'], strict: 1 }, auth_status: { all: ['quan_tri'], strict: 1 }
+};
+
+// Tab hệ thống — không bao giờ được ghi qua lệnh dữ liệu
+var SYSTEM_TABS = ['taikhoan', 'vaitro', 'nhomnguoidung', 'lichsu', 'diaban', 'phanquyen', 'phan quyen', 'setting',
+  'offsetpresets', 'suco', 'baotri', 'nhiemvu', 'duongve', 'apikeys'];
+
+function _pmList(s) {
+  if (Array.isArray(s)) return s.map(function (x) { return String(x).trim(); }).filter(function (x) { return x; });
+  return String(s == null ? '' : s).split(',').map(function (x) { return x.trim(); }).filter(function (x) { return x; });
+}
+
+// rolesMap: { ma: {ten, quyen:[...]} } (đã gộp SYSTEM_ROLES). Vai trò không tồn tại → chỉ "xem".
+function _pmEffPerms(roleCode, rolesMap) {
+  var code = String(roleCode || '').trim().toLowerCase();
+  var r = (rolesMap && rolesMap[code]) || SYSTEM_ROLES[code];
+  if (!r) return ['xem'];
+  var q = _pmList(r.quyen);
+  if (q.indexOf('*') >= 0) return PERM_KEYS.slice();
+  var out = [];
+  q.forEach(function (k) { if (PERM_KEYS.indexOf(k) >= 0 && out.indexOf(k) < 0) out.push(k); });
+  if (out.indexOf('xem') < 0) out.unshift('xem');
+  return out;
+}
+
+// Địa bàn GHI hiệu lực. Mặc định từ chối: '*' = tất cả, trống = không có.
+// userVung: chuỗi/mảng vùng riêng · groupCodes: mã nhóm của người · groupsMap: {ma:{diaBan, trangThai}}
+// → { all: bool, list: [tab...], sources: { tab: ['riêng'|'nhóm X'] } }
+function _pmEffDistricts(userVung, groupCodes, groupsMap, isAdminRole) {
+  var res = { all: false, list: [], sources: {} };
+  if (isAdminRole) { res.all = true; return res; }
+  function add(tab, src) {
+    if (tab === '*') { res.all = true; return; }
+    if (res.list.indexOf(tab) < 0) res.list.push(tab);
+    (res.sources[tab] = res.sources[tab] || []).push(src);
+  }
+  _pmList(userVung).forEach(function (t) { add(t, 'riêng'); });
+  _pmList(groupCodes).forEach(function (g) {
+    var G = groupsMap && groupsMap[g];
+    if (!G || String(G.trangThai || 'hoat_dong') !== 'hoat_dong') return;
+    _pmList(G.diaBan).forEach(function (t) { add(t, 'nhóm ' + g); });
+  });
+  return res;
+}
+
+function _pmCanWriteTab(eff, tab) {
+  if (!eff) return false;
+  if (eff.all) return true;
+  return eff.list.indexOf(String(tab || '').trim()) >= 0;
+}
+
+function _pmIsSystemTab(tab) {
+  var t = String(tab || '').trim().toLowerCase();
+  return !t || t.charAt(0) === '_' || SYSTEM_TABS.indexOf(t) >= 0;
+}
+
+// Payload chỉ đổi các trường "dời vị trí" (full_update: các key; batch_match_update: records[].*)
+function _pmIsMoveOnly(action, data) {
+  function onlyMove(obj) {
+    var ks = Object.keys(obj || {});
+    for (var i = 0; i < ks.length; i++) {
+      var k = ks[i];
+      if (META_FIELDS.indexOf(k) >= 0) continue;
+      if (MOVE_FIELDS.indexOf(k) < 0) return false;
+    }
+    return true;
+  }
+  if (action === 'batch_match_update') {
+    var recs = (data && data.records) || [];
+    for (var j = 0; j < recs.length; j++) if (!onlyMove(recs[j])) return false;
+    return true;
+  }
+  return onlyMove(data);
+}
+
+// Trạng thái tài khoản lúc nowMs: 'hoat_dong' | 'khoa' | 'het_han'
+function _pmUserState(trangThai, hetHan, nowMs) {
+  if (String(trangThai || 'hoat_dong').trim() === 'khoa') return 'khoa';
+  var h = String(hetHan || '').trim();
+  if (h) {
+    var ms = /^\d{4}-\d{2}-\d{2}$/.test(h) ? Date.parse(h + 'T23:59:59+07:00') : Date.parse(h);
+    if (ms > 0 && nowMs > ms) return 'het_han';
+  }
+  return 'hoat_dong';
+}
+
+// Quyết định cho/chặn 1 lệnh.
+// ctx: { action, data, mode: 'log'|'on'|'off', tokenState: 'none'|'valid'|'invalid',
+//        user: null | { username, state, perms:[], districts:{all,list} }, tabKnown: bool (tab có thật trong danh mục địa bàn) }
+// → { allow, violation (ghi nhật ký), code: 'ok'|'auth_required'|'forbidden'|'bad_tab'|'unknown_action', message }
+function _pmDecide(ctx) {
+  var rule = ACTION_RULES[ctx.action];
+  if (!rule) return { allow: false, violation: false, code: 'unknown_action', message: 'Lệnh không hợp lệ: ' + ctx.action };
+  var data = ctx.data || {};
+  // B2 — luôn chặn ghi vào tab hệ thống / tab lạ (kể cả khi chưa bật kiểm quyền)
+  if (rule.tab) {
+    var tab = String(data.sheet || 'DanhSachTru');
+    if (_pmIsSystemTab(tab) || ctx.tabKnown === false) {
+      return { allow: false, violation: true, code: 'bad_tab', message: 'Không được ghi vào tab "' + tab + '"' };
+    }
+  }
+  if (rule.pub) return { allow: true, violation: false, code: 'ok' };
+  var mode = ctx.mode || 'log';
+  var u = ctx.user;
+  // Không có phiên hợp lệ
+  if (ctx.tokenState !== 'valid' || !u) {
+    var msg = ctx.tokenState === 'invalid' ? 'Phiên đăng nhập hết hạn hoặc không hợp lệ — đăng nhập lại.' : 'Cần đăng nhập (cập nhật app lên bản mới).';
+    if (mode === 'off' && !rule.strict) return { allow: true, violation: false, code: 'ok' };
+    if (!rule.strict && mode !== 'on' && ctx.tokenState === 'none') return { allow: true, violation: true, code: 'auth_required', message: msg };
+    return { allow: false, violation: true, code: 'auth_required', message: msg };
+  }
+  if (u.state !== 'hoat_dong') {
+    return { allow: false, violation: true, code: 'auth_required', message: u.state === 'khoa' ? 'Tài khoản đã bị khoá — liên hệ quản trị.' : 'Tài khoản đã hết hạn — liên hệ quản trị.' };
+  }
+  var perms = u.perms || [];
+  var has = function (k) { return perms.indexOf(k) >= 0; };
+  var ok = true;
+  if (rule.all) ok = rule.all.every(has);
+  if (rule.any) ok = ok && rule.any.some(has);
+  if (!ok && rule.move && has('di_chuyen') && _pmIsMoveOnly(ctx.action, data)) ok = true;
+  if (!ok) return { allow: false, violation: true, code: 'forbidden', message: 'Tài khoản không có quyền thực hiện thao tác này.' };
+  if (rule.tab && !_pmCanWriteTab(u.districts, data.sheet || 'DanhSachTru')) {
+    return { allow: false, violation: true, code: 'forbidden', message: 'Địa bàn "' + (data.sheet || 'DanhSachTru') + '" không thuộc phạm vi được giao.' };
+  }
+  return { allow: true, violation: false, code: 'ok' };
+}
+
+// Luật "không tự khoá mình ra ngoài": sau thay đổi phải còn ≥1 tài khoản hoạt động có quan_tri,
+// và người thực hiện không tự khoá / tự bỏ quyền quan_tri của mình.
+// users: [{username, role, state}] · change: {target, role?, state?, remove?} · actor: username
+function _pmLockoutCheck(users, rolesMap, change, actor) {
+  var tgt = String(change.target || '').toLowerCase(), me = String(actor || '').toLowerCase();
+  var after = users.filter(function (u) { return !(change.remove && u.username.toLowerCase() === tgt); }).map(function (u) {
+    if (u.username.toLowerCase() !== tgt) return u;
+    return { username: u.username, role: change.role != null ? change.role : u.role, state: change.state != null ? change.state : u.state };
+  });
+  var self = null;
+  after.forEach(function (u) { if (u.username.toLowerCase() === me) self = u; });
+  if (tgt === me) {
+    if (change.remove) return { ok: false, err: 'Không thể tự xoá chính mình' };
+    if (!self || self.state !== 'hoat_dong' || _pmEffPerms(self.role, rolesMap).indexOf('quan_tri') < 0) {
+      return { ok: false, err: 'Không thể tự khoá hoặc tự bỏ quyền quản trị của chính mình' };
+    }
+  }
+  var admins = after.filter(function (u) { return u.state === 'hoat_dong' && _pmEffPerms(u.role, rolesMap).indexOf('quan_tri') >= 0; });
+  if (!admins.length) return { ok: false, err: 'Phải còn ít nhất 1 tài khoản quản trị đang hoạt động' };
+  return { ok: true };
+}
+
+// Kiểm vai trò trước khi lưu
+function _pmValidateRole(ma, ten, quyen, isNew) {
+  var code = String(ma || '').trim().toLowerCase();
+  if (!/^[a-z][a-z0-9_]{1,29}$/.test(code)) return { ok: false, err: 'Mã vai trò 2–30 ký tự a-z, 0-9, _ và bắt đầu bằng chữ' };
+  if (SYSTEM_ROLES[code]) return { ok: false, err: 'Không sửa được vai trò hệ thống "' + code + '"' };
+  if (!String(ten || '').trim()) return { ok: false, err: 'Thiếu tên vai trò' };
+  var q = _pmList(quyen);
+  for (var i = 0; i < q.length; i++) if (PERM_KEYS.indexOf(q[i]) < 0) return { ok: false, err: 'Quyền không hợp lệ: ' + q[i] };
+  return { ok: true, code: code };
+}
+
+// ── Token phiên: payload JSON → base64 web-safe "." chữ ký. sign(str)→chuỗi base64 web-safe ──
+function _pmTokMake(payload, sign, b64enc) {
+  var body = b64enc(JSON.stringify(payload));
+  return body + '.' + sign(body);
+}
+function _pmTokEq(a, b) {
+  a = String(a); b = String(b);
+  var diff = a.length ^ b.length;
+  for (var i = 0; i < Math.max(a.length, b.length); i++) diff |= (a.charCodeAt(i) || 0) ^ (b.charCodeAt(i) || 0);
+  return diff === 0;
+}
+// → { ok, payload, err: 'format'|'sig'|'expired' }
+function _pmTokParse(tok, sign, b64dec, nowMs) {
+  var s = String(tok || '');
+  var i = s.indexOf('.');
+  if (i <= 0 || i !== s.lastIndexOf('.')) return { ok: false, err: 'format' };
+  var body = s.slice(0, i), sig = s.slice(i + 1);
+  if (!_pmTokEq(sign(body), sig)) return { ok: false, err: 'sig' };
+  var p;
+  try { p = JSON.parse(b64dec(body)); } catch (e) { return { ok: false, err: 'format' }; }
+  if (!p || !p.uid || !(p.exp > 0)) return { ok: false, err: 'format' };
+  if (nowMs >= p.exp) return { ok: false, err: 'expired' };
+  return { ok: true, payload: p };
+}
+// @@PERMS_END
+
+// ══════════════════════════════════════════════════════════════════════════
+// ── PHÂN QUYỀN v211 — phiên, kiểm quyền, người dùng / nhóm / vai trò ──────
+// ══════════════════════════════════════════════════════════════════════════
+var TK_SHEET = 'TaiKhoan';
+var TK_HEADER = ['Tên đăng nhập', 'Mật khẩu', 'Họ tên', 'Vai trò', 'Vùng', 'Nhóm', 'Trạng thái', 'Hết hạn', 'Đăng nhập cuối', 'Phiên', 'UID', 'Đổi MK'];
+var TKC = { user: 0, hash: 1, ten: 2, role: 3, vung: 4, nhom: 5, tt: 6, hh: 7, last: 8, sv: 9, uid: 10, doiMk: 11 };
+var ROLE_SHEET = 'VaiTro', ROLE_HEADER = ['Mã', 'Tên', 'Quyền', 'Bên ngoài', 'Ghi chú', 'Cập nhật'];
+var GROUP_SHEET = 'NhomNguoiDung', GROUP_HEADER = ['Mã', 'Tên', 'Địa bàn', 'Ghi chú', 'Trạng thái', 'Cập nhật'];
+var AUTH_TOKEN_DAYS = 30, AUTH_TOKEN_DAYS_EXT = 7, AUTH_RENEW_BEFORE_DAYS = 7;
+var AUTH_CACHE_SEC = 60, LOGIN_FAIL_MAX = 5, LOGIN_LOCK_SEC = 900;
+var DATA_TABS_BASE = ['DanhSachTru', 'Quan1', 'Quan3', 'Quan5', 'Quan8', 'Quan10', 'Quan11', 'PhuNhuan', 'BinhThanh',
+  'TanBinh', 'TanPhu', 'BauBang', 'TruVanTho', 'BenCat', 'CanGiuoc'];
+var _AX = {};   // bộ nhớ trong 1 lượt chạy
+
+function _axProps() {
+  if (!_AX.props) _AX.props = PropertiesService.getScriptProperties().getProperties();
+  return _AX.props;
+}
+function _axSetProp(k, v) {
+  PropertiesService.getScriptProperties().setProperty(k, String(v));
+  if (_AX.props) _AX.props[k] = String(v);
+}
+function _authMode() {
+  var m = String(_axProps().AUTH_MODE || 'log');
+  return (m === 'on' || m === 'off') ? m : 'log';
+}
+
+// ── Khoá bí mật + token ──
+function _authSecret() {
+  var p = _axProps();
+  if (p.AUTH_HMAC_KEY) return p.AUTH_HMAC_KEY;
+  var lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    var again = PropertiesService.getScriptProperties().getProperty('AUTH_HMAC_KEY');   // đọc lỗi → ném lên, KHÔNG sinh khoá mới
+    if (again) { p.AUTH_HMAC_KEY = again; return again; }
+    var k = Utilities.getUuid() + Utilities.getUuid();
+    _axSetProp('AUTH_HMAC_KEY', k);
+    return k;
+  } finally { lock.releaseLock(); }
+}
+function _b64e(s) { return Utilities.base64EncodeWebSafe(s, Utilities.Charset.UTF_8).replace(/=+$/, ''); }
+function _b64d(s) {
+  s = String(s); while (s.length % 4) s += '=';
+  return Utilities.newBlob(Utilities.base64DecodeWebSafe(s)).getDataAsString('UTF-8');
+}
+function _authSign(body) {
+  return Utilities.base64EncodeWebSafe(Utilities.computeHmacSha256Signature(body, _authSecret())).replace(/=+$/, '');
+}
+function _authIssueToken(u, profile) {
+  var now = Date.now();
+  var days = profile && profile.benNgoai ? AUTH_TOKEN_DAYS_EXT : AUTH_TOKEN_DAYS;
+  return _pmTokMake({ uid: u.uid, sv: Number(u.sv) || 1, iat: now, exp: now + days * 86400000 }, _authSign, _b64e);
+}
+
+// ── Sheet tài khoản / vai trò / nhóm ──
+function _tkSheet() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sh = ss.getSheetByName(TK_SHEET);
+  if (!sh) { sh = ss.insertSheet(TK_SHEET); sh.getRange(1, 1, 1, TK_HEADER.length).setValues([TK_HEADER]); sh.setFrozenRows(1); }
+  return sh;
+}
+// Chuyển đổi 1 lần: thêm cột F–L; vùng trống (nghĩa cũ "tất cả") → '*'; gán UID, phiên, trạng thái
+function _tkEnsureSchema() {
+  if (_AX.schemaOk || _axProps().AUTH_SCHEMA === '1') { _AX.schemaOk = true; return; }
+  var lock = LockService.getScriptLock(); lock.waitLock(20000);
+  try {
+    if (PropertiesService.getScriptProperties().getProperty('AUTH_SCHEMA') === '1') { _AX.schemaOk = true; return; }
+    var sh = _tkSheet();
+    sh.getRange(1, 1, 1, TK_HEADER.length).setValues([TK_HEADER]);
+    var n = sh.getLastRow() - 1;
+    if (n > 0) {
+      var vals = sh.getRange(2, 1, n, TK_HEADER.length).getValues();
+      vals.forEach(function (r) {
+        if (!String(r[TKC.user]).trim()) return;
+        if (!String(r[TKC.vung]).trim()) r[TKC.vung] = '*';
+        if (!String(r[TKC.tt]).trim()) r[TKC.tt] = 'hoat_dong';
+        if (!(Number(r[TKC.sv]) > 0)) r[TKC.sv] = 1;
+        if (!String(r[TKC.uid]).trim()) r[TKC.uid] = Utilities.getUuid();
+      });
+      sh.getRange(2, 1, n, TK_HEADER.length).setValues(vals);
+    }
+    _axSetProp('AUTH_SCHEMA', '1');
+    _AX.schemaOk = true;
+    _logToHistory({ loaiThaoTac: 'auth_migrate', nguoiThucHien: 'hệ thống', chiTiet: 'Chuyển TaiKhoan sang 12 cột; vùng trống → *' });
+  } finally { lock.releaseLock(); }
+}
+function _tkReadAll() {
+  if (_AX.users) return _AX.users;
+  _tkEnsureSchema();
+  var sh = _tkSheet(), n = sh.getLastRow() - 1, out = [];
+  if (n > 0) sh.getRange(2, 1, n, TK_HEADER.length).getValues().forEach(function (r, i) {
+    var name = String(r[TKC.user] || '').trim();
+    if (!name) return;
+    out.push({ row: i + 2, username: name, hash: String(r[TKC.hash] || '').trim(), ten: String(r[TKC.ten] || '').trim(),
+      role: String(r[TKC.role] || 'demo').trim().toLowerCase(), vung: String(r[TKC.vung] || '').trim(), nhom: String(r[TKC.nhom] || '').trim(),
+      tt: String(r[TKC.tt] || 'hoat_dong').trim(), hh: r[TKC.hh] instanceof Date ? Utilities.formatDate(r[TKC.hh], 'Asia/Ho_Chi_Minh', 'yyyy-MM-dd') : String(r[TKC.hh] || '').trim(),
+      last: r[TKC.last] instanceof Date ? r[TKC.last].toISOString() : String(r[TKC.last] || '').trim(),
+      sv: Number(r[TKC.sv]) || 1, uid: String(r[TKC.uid] || '').trim(), doiMk: String(r[TKC.doiMk] || '') === '1' || r[TKC.doiMk] === true || r[TKC.doiMk] === 1 });
+  });
+  _AX.users = out;
+  return out;
+}
+function _tkFind(username) {
+  var k = String(username || '').trim().toLowerCase();
+  return _tkReadAll().filter(function (u) { return u.username.toLowerCase() === k; })[0] || null;
+}
+function _tkSet(u, col, value) { _tkSheet().getRange(u.row, col + 1).setValue(value); _AX.users = null; }
+
+function _sheetObj(name, header) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sh = ss.getSheetByName(name);
+  if (!sh) {
+    sh = ss.insertSheet(name);
+    sh.getRange(1, 1, 1, header.length).setValues([header]).setFontWeight('bold').setBackground('#f1f5f9');
+    sh.setFrozenRows(1);
+    if (name === ROLE_SHEET) {   // gieo vai trò mẫu (sửa/xoá được)
+      Object.keys(SAMPLE_ROLES).forEach(function (k) {
+        var r = SAMPLE_ROLES[k];
+        sh.appendRow([k, r.ten, r.quyen.join(','), r.benNgoai ? '1' : '', 'Vai trò mẫu', new Date().toISOString()]);
+      });
+    }
+  }
+  return sh;
+}
+function _rolesMap() {
+  if (_AX.roles) return _AX.roles;
+  var map = {};
+  Object.keys(SYSTEM_ROLES).forEach(function (k) { map[k] = { ma: k, ten: SYSTEM_ROLES[k].ten, quyen: SYSTEM_ROLES[k].quyen.slice(), he: true, benNgoai: false }; });
+  var sh = _sheetObj(ROLE_SHEET, ROLE_HEADER), n = sh.getLastRow() - 1;
+  if (n > 0) sh.getRange(2, 1, n, ROLE_HEADER.length).getValues().forEach(function (r, i) {
+    var ma = String(r[0] || '').trim().toLowerCase();
+    if (!ma || map[ma] && map[ma].he) return;
+    map[ma] = { ma: ma, ten: String(r[1] || ma), quyen: _pmList(r[2]).filter(function (q) { return PERM_KEYS.indexOf(q) >= 0; }),
+      he: false, benNgoai: String(r[3] || '') === '1' || r[3] === true, ghiChu: String(r[4] || ''), row: i + 2 };
+  });
+  _AX.roles = map;
+  return map;
+}
+function _groupsMap() {
+  if (_AX.groups) return _AX.groups;
+  var map = {}, sh = _sheetObj(GROUP_SHEET, GROUP_HEADER), n = sh.getLastRow() - 1;
+  if (n > 0) sh.getRange(2, 1, n, GROUP_HEADER.length).getValues().forEach(function (r, i) {
+    var ma = String(r[0] || '').trim();
+    if (!ma) return;
+    map[ma] = { ma: ma, ten: String(r[1] || ma), diaBan: String(r[2] || '').trim(), ghiChu: String(r[3] || ''), trangThai: String(r[4] || 'hoat_dong').trim() || 'hoat_dong', row: i + 2 };
+  });
+  _AX.groups = map;
+  return map;
+}
+
+// Danh mục tab địa bàn thật (để chặn ghi vào tab hệ thống / tab lạ)
+function _knownDataTabs() {
+  if (_AX.tabs) return _AX.tabs;
+  var set = {};
+  DATA_TABS_BASE.forEach(function (t) { set[t] = 1; });
+  Object.keys(EXTERNAL_SPREADSHEET_IDS).forEach(function (t) { set[t] = 1; });
+  try {
+    var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(DIA_BAN_SHEET);
+    if (sh && sh.getLastRow() > 1) sh.getRange(2, 1, sh.getLastRow() - 1, 1).getValues().forEach(function (r) {
+      var t = String(r[0] || '').trim(); if (t) set[t] = 1;
+    });
+  } catch (e) { /* silent */ }
+  _AX.tabs = set;
+  return set;
+}
+
+function _profileOf(u) {
+  var roles = _rolesMap(), r = roles[u.role];
+  var state = _pmUserState(u.tt, u.hh, Date.now());
+  var perms = _pmEffPerms(u.role, roles);
+  var d = _pmEffDistricts(u.vung, u.nhom, _groupsMap(), perms.indexOf('quan_tri') >= 0 && u.role === 'admin');
+  return { username: u.username, displayName: u.ten || u.username, role: u.role, roleName: r ? r.ten : u.role + ' (không còn)',
+    roleMissing: !r, benNgoai: !!(r && r.benNgoai), state: state, perms: perms, districts: d, doiMk: u.doiMk, uid: u.uid, sv: u.sv,
+    hh: u.hh, nhom: _pmList(u.nhom), vung: u.vung, last: u.last };
+}
+
+// Hồ sơ theo UID có cache ≤ 60 s (khoá theo AUTH_GEN để xoá hàng loạt khi đổi vai trò/nhóm)
+function _authProfileByUid(uid) {
+  var gen = _axProps().AUTH_GEN || '0', key = 'au_' + gen + '_' + uid, cache = CacheService.getScriptCache();
+  var hit = cache.get(key);
+  if (hit) { try { var o = JSON.parse(hit); if (o && o.uid === uid) { o.state = _pmUserState(o._tt, o.hh, Date.now()); return o; } } catch (e) { /* đọc lại */ } }
+  var u = _tkReadAll().filter(function (x) { return x.uid === uid; })[0];
+  if (!u) return null;
+  var p = _profileOf(u); p._tt = u.tt;
+  try { cache.put(key, JSON.stringify(p), AUTH_CACHE_SEC); } catch (e) { /* silent */ }
+  return p;
+}
+function _authBustAll() { _axSetProp('AUTH_GEN', Utilities.getUuid().slice(0, 8)); _AX.users = _AX.roles = _AX.groups = null; }
+
+// Ngữ cảnh phiên từ request
+function _authCtx(data) {
+  if (data.token) {
+    var t = _pmTokParse(data.token, _authSign, _b64d, Date.now());
+    if (!t.ok) return { tokenState: 'invalid', user: null, why: t.err };
+    var p = _authProfileByUid(t.payload.uid);
+    if (!p || Number(p.sv) !== Number(t.payload.sv)) return { tokenState: 'invalid', user: null, why: 'revoked' };
+    return { tokenState: 'valid', user: p, tok: t.payload };
+  }
+  if (data.adminAuth && data.adminAuth.username) {   // app cũ gửi mật khẩu admin (giai đoạn chuyển tiếp)
+    // Chỉ nhận ở chế độ ghi nhận; dùng chung bộ đếm sai mật khẩu với đăng nhập (chống dò)
+    if (_authMode() === 'on') return { tokenState: 'invalid', user: null, why: 'legacy_disabled' };
+    var an = String(data.adminAuth.username || '').trim();
+    if (_loginFailCount(an) >= LOGIN_FAIL_MAX) return { tokenState: 'invalid', user: null, why: 'rate_limited' };
+    var a = _requireAdminLegacy(data);
+    if (a.ok) { var u = _tkFind(a.adminUser); if (u) return { tokenState: 'valid', user: _profileOf(u), legacy: true }; }
+    _loginFailAdd(an);
+    return { tokenState: 'invalid', user: null, why: 'admin_password' };
+  }
+  return { tokenState: 'none', user: null };
+}
+
+// Ghi vi phạm: đếm theo ngày (cho điều kiện bật "on") + 1 dòng LichSu / người / lệnh / giờ
+function _authRecordViolation(code, data, ctx) {
+  try {
+    var who = ctx && ctx.user ? ctx.user.username : String(data.nguoiThucHien || data.nguoiKS || data.by || '(app cũ)');
+    var day = Utilities.formatDate(new Date(), 'Asia/Ho_Chi_Minh', 'yyyyMMdd');
+    if (code === 'auth_required' && (!ctx || ctx.tokenState === 'none')) {
+      var k = 'AUTH_VIOL_' + day, cur = {};
+      try { cur = JSON.parse(_axProps()[k] || '{}'); } catch (e) { cur = {}; }
+      var wk = String(who).slice(0, 40);
+      if (cur[wk] === undefined && Object.keys(cur).length >= 50) wk = '(khác)';   // tên do app cũ tự khai — giới hạn để không vượt 9KB/thuộc tính
+      cur[wk] = (cur[wk] || 0) + 1;
+      _axSetProp(k, JSON.stringify(cur));
+    }
+    var cache = CacheService.getScriptCache(), ck = 'vl_' + code + '_' + who + '_' + data.action;
+    if (cache.get(ck)) return;
+    cache.put(ck, '1', 3600);
+    _logToHistory({ loaiThaoTac: 'auth_' + code, nguoiThucHien: who, tenTru: String(data.sheet || ''), chiTiet: 'action=' + data.action + ' mode=' + _authMode() });
+  } catch (e) { /* silent */ }
+}
+
+// Gọi đầu doPost (sau ping/login/whoami). Trả null = cho đi tiếp; ngược lại là response chặn.
+function _authorize(data) {
+  delete data._authUser; delete data._moveOnly;   // trường nội bộ — không bao giờ nhận từ client
+  var rule = ACTION_RULES[data.action];
+  if (rule && rule.pub) return null;
+  var ctx = { tokenState: 'none', user: null };
+  try { ctx = _authCtx(data); } catch (e) { return jsonResponse({ status: 'error', message: 'Lỗi kiểm phiên: ' + e.message }); }
+  var tabKnown = true;
+  if (rule && rule.tab) tabKnown = !!_knownDataTabs()[String(data.sheet || 'DanhSachTru')];
+  var dec = _pmDecide({ action: data.action, data: data, mode: _authMode(), tokenState: ctx.tokenState, user: ctx.user, tabKnown: tabKnown });
+  if (ctx.user && ctx.user.doiMk && dec.allow && ctx.tokenState === 'valid' && !ctx.legacy) {
+    return jsonResponse({ status: 'must_change_password', message: 'Cần đổi mật khẩu trước khi tiếp tục.' });
+  }
+  if (dec.violation) _authRecordViolation(dec.code, data, ctx);
+  if (!dec.allow) return jsonResponse({ status: dec.code === 'auth_required' ? 'auth_required' : 'forbidden', code: dec.code, message: dec.message });
+  data._authUser = ctx.user;   // handler dùng làm danh tính đáng tin
+  // Được phép nhờ quyền di_chuyen (không có them_sua) → handler chỉ cập nhật toạ độ hàng có sẵn
+  if (ctx.user && rule && rule.move && (ctx.user.perms || []).indexOf('them_sua') < 0) data._moveOnly = true;
+  return null;
+}
+function _actor(data, fallback) { return data && data._authUser ? data._authUser.username : String(fallback || ''); }
+
+// ── Chống dò mật khẩu (CacheService — biến toàn cục không giữ giữa các lượt chạy) ──
+function _loginFailCount(username) { return Number(CacheService.getScriptCache().get('lf_' + String(username || '').toLowerCase()) || 0); }
+function _loginFailAdd(username) {
+  var k = 'lf_' + String(username || '').toLowerCase(), c = CacheService.getScriptCache();
+  c.put(k, String(Number(c.get(k) || 0) + 1), LOGIN_LOCK_SEC);
+}
+
+// ── ĐĂNG NHẬP / whoami ──
+function _loginResponse(u, msg) {
+  var p = _profileOf(u);
+  return {
+    status: 'ok', token: _authIssueToken(u, p), message: msg || '',
+    user: { username: p.username, displayName: p.displayName, role: p.role, roleName: p.roleName,
+      vung: p.districts.all ? [] : p.districts.list,   // giữ nghĩa cũ cho app bản trước: [] = tất cả
+      perms: p.perms, districts: p.districts, benNgoai: p.benNgoai, mustChangePassword: !!p.doiMk, hetHan: p.hh },
+    authMode: _authMode()
+  };
+}
+function handleLoginV2(username, password) {
+  username = String(username || '').trim();
+  if (!username) return jsonResponse({ status: 'error', message: 'Sai tên đăng nhập hoặc mật khẩu' });
+  if (_loginFailCount(username) >= LOGIN_FAIL_MAX) {
+    return jsonResponse({ status: 'error', message: 'Sai quá ' + LOGIN_FAIL_MAX + ' lần — thử lại sau 15 phút hoặc nhờ quản trị đặt lại mật khẩu.' });
+  }
+  var u = _tkFind(username);
+  // Không có tài khoản vẫn băm 1 lần → thời gian phản hồi không lộ tên đăng nhập có tồn tại hay không
+  var v = u ? _verifyPassword(password, u.hash) : (_encodePasswordHash(String(password || '')), { ok: false });
+  if (!u || !v.ok) {
+    _loginFailAdd(username);
+    _logToHistory({ loaiThaoTac: 'login_fail', nguoiThucHien: username, chiTiet: 'sai mật khẩu hoặc không có tài khoản' });
+    return jsonResponse({ status: 'error', message: 'Sai tên đăng nhập hoặc mật khẩu' });
+  }
+  var st = _pmUserState(u.tt, u.hh, Date.now());
+  if (st !== 'hoat_dong') {
+    _logToHistory({ loaiThaoTac: 'login_fail', nguoiThucHien: u.username, chiTiet: st });
+    return jsonResponse({ status: 'error', message: st === 'khoa' ? 'Tài khoản đã bị khoá — liên hệ quản trị.' : 'Tài khoản đã hết hạn — liên hệ quản trị.' });
+  }
+  CacheService.getScriptCache().remove('lf_' + username.toLowerCase());
+  // Dòng thêm tay vào TaiKhoan sau khi chuyển đổi: chưa có UID/số phiên → cấp ngay để token dùng được
+  if (!u.uid || !(Number(u.sv) > 0)) {
+    try { if (!u.uid) _tkSet(u, TKC.uid, Utilities.getUuid()); if (!(Number(u.sv) > 0)) _tkSet(u, TKC.sv, 1); _authBustAll(); u = _tkFind(username); } catch (e) { /* silent */ }
+  }
+  if (v.needsMigration || v.needsRehash) { try { _tkSet(u, TKC.hash, _encodePasswordHash(password)); u = _tkFind(username); } catch (e) { /* silent */ } }
+  _tkSet(u, TKC.last, new Date().toISOString());
+  _logToHistory({ loaiThaoTac: 'login', nguoiThucHien: u.username, chiTiet: '' });
+  return jsonResponse(_loginResponse(_tkFind(username)));
+}
+function handleWhoami(data) {
+  var ctx = _authCtx(data);
+  if (ctx.tokenState !== 'valid') return jsonResponse({ status: 'auth_required', message: 'Phiên đăng nhập hết hạn — đăng nhập lại.' });
+  var p = ctx.user;
+  if (p.state !== 'hoat_dong') return jsonResponse({ status: 'auth_required', message: p.state === 'khoa' ? 'Tài khoản đã bị khoá.' : 'Tài khoản đã hết hạn.' });
+  var u = _tkFind(p.username), out = _loginResponse(u);
+  var left = ctx.tok ? ctx.tok.exp - Date.now() : 0;
+  var renewAt = (p.benNgoai ? 2 : AUTH_RENEW_BEFORE_DAYS) * 86400000;
+  if (!ctx.tok || left > renewAt) delete out.token;   // gia hạn trượt: chỉ cấp token mới khi sắp hết hạn
+  if (p.perms.indexOf('quan_tri') >= 0) out.authStatus = _authStatusData();
+  return jsonResponse(out);
+}
+
+// ── Chế độ kiểm quyền ──
+function _authStatusData() {
+  var props = _axProps(), byUser = {}, total = 0, days = [];
+  for (var i = 0; i < 7; i++) {
+    var d = Utilities.formatDate(new Date(Date.now() - i * 86400000), 'Asia/Ho_Chi_Minh', 'yyyyMMdd'), o = {};
+    try { o = JSON.parse(props['AUTH_VIOL_' + d] || '{}'); } catch (e) { o = {}; }
+    var dayTotal = 0;
+    Object.keys(o).forEach(function (k) { byUser[k] = (byUser[k] || 0) + o[k]; dayTotal += o[k]; total += o[k]; });
+    days.push({ day: d, count: dayTotal });
+  }
+  var since = Number(props.AUTH_MODE_SINCE || 0);
+  return { mode: _authMode(), since: since, daysInMode: since ? Math.floor((Date.now() - since) / 86400000) : null,
+    tokenless7d: total, byUser: byUser, days: days, canTurnOn: total === 0 };
+}
+function handleAuthStatus(data) { return jsonResponse({ status: 'ok', auth: _authStatusData() }); }
+function handleSetAuthMode(data) {
+  var mode = String(data.mode || '');
+  if (mode !== 'log' && mode !== 'on') return jsonResponse({ status: 'error', message: 'Chế độ chỉ là "log" hoặc "on" (tắt hẳn chỉ đặt trong Script Properties)' });
+  var st = _authStatusData();
+  if (mode === 'on' && !st.canTurnOn && data.force !== true) {
+    return jsonResponse({ status: 'error', code: 'has_violations', auth: st, message: 'Còn ' + st.tokenless7d + ' lệnh ghi không có phiên trong 7 ngày — các máy đó sẽ bị chặn nếu bật.' });
+  }
+  _axSetProp('AUTH_MODE', mode); _axSetProp('AUTH_MODE_SINCE', String(Date.now()));
+  _logToHistory({ loaiThaoTac: 'auth_mode', nguoiThucHien: _actor(data), chiTiet: mode + (data.force ? ' (cưỡng bức)' : '') });
+  return jsonResponse({ status: 'ok', auth: _authStatusData() });
+}
+
+// ── Người dùng ──
+function _publicUser(u) {
+  var p = _profileOf(u), dLeft = null;
+  if (u.hh) { var ms = Date.parse(u.hh + 'T23:59:59+07:00'); if (ms > 0) dLeft = Math.ceil((ms - Date.now()) / 86400000); }
+  return { username: u.username, displayName: u.ten, role: u.role, roleName: p.roleName, roleMissing: p.roleMissing, benNgoai: p.benNgoai,
+    vung: u.vung, nhom: p.nhom, state: p.state, trangThai: u.tt, hetHan: u.hh, daysLeft: dLeft, lastLogin: u.last,
+    idleDays: u.last ? Math.floor((Date.now() - Date.parse(u.last)) / 86400000) : null,
+    perms: p.perms, districts: p.districts, mustChangePassword: u.doiMk, isHashed: u.hash.indexOf(PASSWORD_ALGO) === 0 };
+}
+function _rolesPublic() {
+  var roles = _rolesMap(), cnt = {};
+  _tkReadAll().forEach(function (u) { cnt[u.role] = (cnt[u.role] || 0) + 1; });
+  return Object.keys(roles).map(function (k) { var r = roles[k]; return { ma: k, ten: r.ten, quyen: _pmEffPerms(k, roles), he: !!r.he, benNgoai: !!r.benNgoai, ghiChu: r.ghiChu || '', soNguoi: cnt[k] || 0 }; });
+}
+function _groupsPublic() {
+  var groups = _groupsMap(), cnt = {};
+  _tkReadAll().forEach(function (u) { _pmList(u.nhom).forEach(function (g) { cnt[g] = (cnt[g] || 0) + 1; }); });
+  return Object.keys(groups).map(function (k) { var g = groups[k]; return { ma: k, ten: g.ten, diaBan: g.diaBan, ghiChu: g.ghiChu, trangThai: g.trangThai, soNguoi: cnt[k] || 0 }; });
+}
+function handleListUsersV2(data) {
+  return jsonResponse({ status: 'ok', users: _tkReadAll().map(_publicUser), roles: _rolesPublic(), groups: _groupsPublic(),
+    catalog: PERM_CATALOG, dataTabs: Object.keys(_knownDataTabs()), auth: _authStatusData() });
+}
+function _validateUserFields(f, roles, groups) {
+  if (f.role !== undefined && !roles[String(f.role).toLowerCase()]) return 'Vai trò không tồn tại: ' + f.role;
+  if (f.nhom !== undefined) { var bad = _pmList(f.nhom).filter(function (g) { return !groups[g]; }); if (bad.length) return 'Nhóm không tồn tại: ' + bad.join(', '); }
+  if (f.vung !== undefined) {
+    var tabs = _knownDataTabs(), badT = _pmList(f.vung).filter(function (t) { return t !== '*' && !tabs[t]; });
+    if (badT.length) return 'Địa bàn không tồn tại: ' + badT.join(', ');
+  }
+  if (f.hetHan !== undefined && String(f.hetHan).trim() && !/^\d{4}-\d{2}-\d{2}$/.test(String(f.hetHan).trim())) return 'Ngày hết hạn dạng yyyy-mm-dd';
+  return '';
+}
+function handleCreateUserV2(data) {
+  return _withScriptLock(function () {
+    var nu = data.newUser || {}, username = String(nu.username || '').trim(), pw = String(nu.password || '');
+    if (!/^[A-Za-z0-9._-]{2,40}$/.test(username)) return jsonResponse({ status: 'error', message: 'Tên đăng nhập 2–40 ký tự: chữ không dấu, số, . _ -' });
+    if (pw.length < 6) return jsonResponse({ status: 'error', message: 'Mật khẩu ≥ 6 ký tự' });
+    if (_tkFind(username)) return jsonResponse({ status: 'error', message: 'Tên đăng nhập đã tồn tại: ' + username });
+    var roles = _rolesMap(), role = String(nu.role || 'demo').toLowerCase();
+    var err = _validateUserFields({ role: role, nhom: nu.nhom || '', vung: nu.vung || '', hetHan: nu.hetHan || '' }, roles, _groupsMap());
+    if (err) return jsonResponse({ status: 'error', message: err });
+    if (roles[role].benNgoai && !String(nu.hetHan || '').trim()) return jsonResponse({ status: 'error', message: 'Tài khoản bên ngoài bắt buộc có ngày hết hạn' });
+    var row = [username, _encodePasswordHash(pw), String(nu.displayName || username).trim(), role, _pmList(nu.vung).join(','), _pmList(nu.nhom).join(','),
+      'hoat_dong', String(nu.hetHan || '').trim(), '', 1, Utilities.getUuid(), nu.mustChange === false ? '' : '1'];
+    _tkSheet().appendRow(row); _AX.users = null;
+    _logToHistory({ loaiThaoTac: 'create_user', nguoiThucHien: _actor(data), id: username, tenTru: row[2], chiTiet: 'role=' + role + ' nhom=' + row[5] + ' vung=' + row[4] + ' hetHan=' + row[7] });
+    return jsonResponse({ status: 'ok', user: _publicUser(_tkFind(username)) });
+  });
+}
+function handleUpdateUserV2(data) {
+  return _withScriptLock(function () {
+    var u = _tkFind(data.targetUsername), up = data.updates || {};
+    if (!u) return jsonResponse({ status: 'error', message: 'Không tìm thấy: ' + data.targetUsername });
+    var roles = _rolesMap(), err = _validateUserFields(up, roles, _groupsMap());
+    if (err) return jsonResponse({ status: 'error', message: err });
+    var newRole = up.role !== undefined ? String(up.role).toLowerCase() : u.role;
+    var newHh = up.hetHan !== undefined ? String(up.hetHan).trim() : u.hh;
+    if (roles[newRole] && roles[newRole].benNgoai && !newHh) return jsonResponse({ status: 'error', message: 'Tài khoản bên ngoài bắt buộc có ngày hết hạn' });
+    if (newRole !== u.role || newHh !== u.hh) {   // đổi vai trò HOẶC ngày hết hạn → không được làm mất quản trị cuối
+      var lc = _pmLockoutCheck(_tkReadAll().map(function (x) { return { username: x.username, role: x.role, state: _pmUserState(x.tt, x.hh, Date.now()) }; }), roles,
+        { target: u.username, role: newRole, state: _pmUserState(u.tt, newHh, Date.now()) }, _actor(data));
+      if (!lc.ok) return jsonResponse({ status: 'error', message: lc.err });
+    }
+    var ch = [];
+    if (up.displayName !== undefined) { _tkSet(u, TKC.ten, String(up.displayName).trim()); ch.push('tên'); }
+    if (newRole !== u.role) { _tkSet(u, TKC.role, newRole); ch.push('vai trò ' + u.role + '→' + newRole); }
+    if (up.vung !== undefined) { _tkSet(u, TKC.vung, _pmList(up.vung).join(',')); ch.push('vùng=' + _pmList(up.vung).join(',')); }
+    if (up.nhom !== undefined) { _tkSet(u, TKC.nhom, _pmList(up.nhom).join(',')); ch.push('nhóm=' + _pmList(up.nhom).join(',')); }
+    if (up.hetHan !== undefined) { _tkSet(u, TKC.hh, newHh); ch.push('hết hạn=' + (newHh || 'không')); }
+    _authBustAll();
+    _logToHistory({ loaiThaoTac: 'update_user', nguoiThucHien: _actor(data), id: u.username, chiTiet: ch.join('; ') });
+    return jsonResponse({ status: 'ok', changes: ch, user: _publicUser(_tkFind(u.username)) });
+  });
+}
+function _bumpSv(u) { _tkSet(u, TKC.sv, (Number(u.sv) || 1) + 1); _authBustAll(); }
+function handleResetPasswordV2(data) {
+  return _withScriptLock(function () {
+    var u = _tkFind(data.targetUsername), pw = String(data.newPassword || '');
+    if (!u) return jsonResponse({ status: 'error', message: 'Không tìm thấy: ' + data.targetUsername });
+    if (pw.length < 6) return jsonResponse({ status: 'error', message: 'Mật khẩu ≥ 6 ký tự' });
+    _tkSet(u, TKC.hash, _encodePasswordHash(pw)); _tkSet(u, TKC.doiMk, '1'); _bumpSv(u);
+    CacheService.getScriptCache().remove('lf_' + u.username.toLowerCase());
+    _logToHistory({ loaiThaoTac: 'reset_password', nguoiThucHien: _actor(data), id: u.username, chiTiet: 'mật khẩu tạm, buộc đổi khi đăng nhập' });
+    return jsonResponse({ status: 'ok' });
+  });
+}
+function handleRevokeSessions(data) {
+  return _withScriptLock(function () {
+    var u = _tkFind(data.targetUsername);
+    if (!u) return jsonResponse({ status: 'error', message: 'Không tìm thấy: ' + data.targetUsername });
+    _bumpSv(u);
+    _logToHistory({ loaiThaoTac: 'revoke_sessions', nguoiThucHien: _actor(data), id: u.username, chiTiet: 'đăng xuất mọi máy' });
+    return jsonResponse({ status: 'ok' });
+  });
+}
+// Việc đang mở của 1 người (để bàn giao khi khoá)
+function _openAssignments(username) {
+  var out = { nhiemVu: [], suCo: [] }, k = String(username).toLowerCase();
+  try {
+    var nv = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('NhiemVu');
+    if (nv && nv.getLastRow() > 1) nv.getRange(2, 1, nv.getLastRow() - 1, HEADER_NHIEMVU.length).getValues().forEach(function (r, i) {
+      if (String(r[2]).trim().toLowerCase() === k && ['closed', 'approved', 'rejected'].indexOf(String(r[6]).trim()) < 0) out.nhiemVu.push({ row: i + 2, id: r[0] });
+    });
+    var sc = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('SuCo');
+    if (sc && sc.getLastRow() > 1) {
+      var hd = sc.getRange(1, 1, 1, sc.getLastColumn()).getValues()[0].map(norm), ix = hd.indexOf('người xử lý'), it = hd.indexOf('trạng thái');
+      if (ix >= 0) sc.getRange(2, 1, sc.getLastRow() - 1, sc.getLastColumn()).getValues().forEach(function (r, i) {
+        if (String(r[ix]).trim().toLowerCase() === k && String(r[it]).trim() !== 'Đã xử lý') out.suCo.push({ row: i + 2, col: ix + 1, id: r[0] });
+      });
+    }
+  } catch (e) { /* silent */ }
+  return out;
+}
+function handleLockUser(data) {
+  return _withScriptLock(function () {
+    var u = _tkFind(data.targetUsername);
+    if (!u) return jsonResponse({ status: 'error', message: 'Không tìm thấy: ' + data.targetUsername });
+    var lc = _pmLockoutCheck(_tkReadAll().map(function (x) { return { username: x.username, role: x.role, state: _pmUserState(x.tt, x.hh, Date.now()) }; }), _rolesMap(), { target: u.username, state: 'khoa' }, _actor(data));
+    if (!lc.ok) return jsonResponse({ status: 'error', message: lc.err });
+    var open = _openAssignments(u.username), to = String(data.transferTo || '').trim(), moved = 0;
+    if ((open.nhiemVu.length || open.suCo.length) && data.preview) return jsonResponse({ status: 'ok', preview: true, nhiemVu: open.nhiemVu.length, suCo: open.suCo.length });
+    if (to) {
+      var tu = _tkFind(to);
+      if (!tu || _pmUserState(tu.tt, tu.hh, Date.now()) !== 'hoat_dong') return jsonResponse({ status: 'error', message: 'Người nhận bàn giao không hợp lệ: ' + to });
+      var ss = SpreadsheetApp.getActiveSpreadsheet();
+      open.nhiemVu.forEach(function (x) { ss.getSheetByName('NhiemVu').getRange(x.row, 3).setValue(tu.username); moved++; });
+      open.suCo.forEach(function (x) { ss.getSheetByName('SuCo').getRange(x.row, x.col).setValue(tu.username); moved++; });
+    }
+    _tkSet(u, TKC.tt, 'khoa'); _bumpSv(u);
+    _logToHistory({ loaiThaoTac: 'lock_user', nguoiThucHien: _actor(data), id: u.username, chiTiet: 'bàn giao ' + moved + ' việc' + (to ? ' cho ' + to : '') + (data.reason ? '; lý do: ' + data.reason : '') });
+    return jsonResponse({ status: 'ok', moved: moved, remainingOpen: to ? 0 : open.nhiemVu.length + open.suCo.length });
+  });
+}
+function handleUnlockUser(data) {
+  return _withScriptLock(function () {
+    var u = _tkFind(data.targetUsername);
+    if (!u) return jsonResponse({ status: 'error', message: 'Không tìm thấy: ' + data.targetUsername });
+    if (data.hetHan !== undefined) {
+      var e = _validateUserFields({ hetHan: data.hetHan }, _rolesMap(), _groupsMap()); if (e) return jsonResponse({ status: 'error', message: e });
+      _tkSet(u, TKC.hh, String(data.hetHan).trim());
+    }
+    _tkSet(u, TKC.tt, 'hoat_dong'); _authBustAll();
+    _logToHistory({ loaiThaoTac: 'unlock_user', nguoiThucHien: _actor(data), id: u.username, chiTiet: data.hetHan !== undefined ? 'hết hạn=' + data.hetHan : '' });
+    return jsonResponse({ status: 'ok', user: _publicUser(_tkFind(u.username)) });
+  });
+}
+function handleDeleteUserV2(data) {
+  return _withScriptLock(function () {
+    var u = _tkFind(data.targetUsername);
+    if (!u) return jsonResponse({ status: 'error', message: 'Không tìm thấy: ' + data.targetUsername });
+    if (u.last) return jsonResponse({ status: 'error', message: 'Tài khoản đã từng đăng nhập — hãy KHOÁ thay vì xoá để giữ lịch sử.' });
+    var lc = _pmLockoutCheck(_tkReadAll().map(function (x) { return { username: x.username, role: x.role, state: _pmUserState(x.tt, x.hh, Date.now()) }; }), _rolesMap(), { target: u.username, remove: true }, _actor(data));
+    if (!lc.ok) return jsonResponse({ status: 'error', message: lc.err });
+    _tkSheet().deleteRow(u.row); _authBustAll();
+    _logToHistory({ loaiThaoTac: 'delete_user', nguoiThucHien: _actor(data), id: u.username, chiTiet: 'chưa từng đăng nhập' });
+    return jsonResponse({ status: 'ok' });
+  });
+}
+
+// ── Vai trò ──
+function handleSaveRole(data) {
+  return _withScriptLock(function () {
+    var r = data.role || {}, v = _pmValidateRole(r.ma, r.ten, r.quyen, !!data.isNew);
+    if (!v.ok) return jsonResponse({ status: 'error', message: v.err });
+    var roles = _rolesMap(), exists = roles[v.code];
+    if (data.isNew && exists) return jsonResponse({ status: 'error', message: 'Mã vai trò đã có: ' + v.code });
+    if (!data.isNew && !exists) return jsonResponse({ status: 'error', message: 'Không tìm thấy vai trò: ' + v.code });
+    var q = _pmList(r.quyen); if (q.indexOf('xem') < 0) q.unshift('xem');
+    // Bỏ quyen quan_tri khỏi vai trò đang dùng → kiểm luật không tự khoá
+    var trial = {}; Object.keys(roles).forEach(function (k) { trial[k] = roles[k]; });
+    trial[v.code] = { quyen: q };
+    var users = _tkReadAll().map(function (x) { return { username: x.username, role: x.role, state: _pmUserState(x.tt, x.hh, Date.now()) }; });
+    var lc = _pmLockoutCheck(users, trial, { target: _actor(data) }, _actor(data));
+    if (!lc.ok) return jsonResponse({ status: 'error', message: lc.err });
+    var sh = _sheetObj(ROLE_SHEET, ROLE_HEADER), row = [v.code, String(r.ten).trim(), q.join(','), r.benNgoai ? '1' : '', String(r.ghiChu || ''), new Date().toISOString()];
+    if (exists) sh.getRange(exists.row, 1, 1, row.length).setValues([row]); else sh.appendRow(row);
+    _authBustAll();
+    _logToHistory({ loaiThaoTac: data.isNew ? 'create_role' : 'update_role', nguoiThucHien: _actor(data), id: v.code, tenTru: row[1], chiTiet: 'quyền=' + row[2] + (r.benNgoai ? ' · bên ngoài' : '') });
+    return jsonResponse({ status: 'ok', roles: _rolesPublic() });
+  });
+}
+function handleDeleteRole(data) {
+  return _withScriptLock(function () {
+    var code = String(data.ma || '').toLowerCase(), roles = _rolesMap(), r = roles[code];
+    if (!r) return jsonResponse({ status: 'error', message: 'Không tìm thấy vai trò: ' + code });
+    if (r.he) return jsonResponse({ status: 'error', message: 'Không xoá được vai trò hệ thống' });
+    var users = _tkReadAll().filter(function (u) { return u.role === code; });
+    var repl = String(data.replaceWith || '').toLowerCase();
+    if (users.length) {
+      if (!roles[repl] || repl === code) return jsonResponse({ status: 'error', code: 'need_replace', count: users.length, message: users.length + ' người đang dùng vai trò này — chọn vai trò thay thế' });
+      var trial = {}; Object.keys(roles).forEach(function (k) { if (k !== code) trial[k] = roles[k]; });
+      var all = _tkReadAll().map(function (x) { return { username: x.username, role: x.role === code ? repl : x.role, state: _pmUserState(x.tt, x.hh, Date.now()) }; });
+      var lc = _pmLockoutCheck(all, trial, { target: _actor(data) }, _actor(data));
+      if (!lc.ok) return jsonResponse({ status: 'error', message: lc.err });
+      users.forEach(function (u) { _tkSheet().getRange(u.row, TKC.role + 1).setValue(repl); });
+    }
+    _sheetObj(ROLE_SHEET, ROLE_HEADER).deleteRow(r.row);
+    _authBustAll();
+    _logToHistory({ loaiThaoTac: 'delete_role', nguoiThucHien: _actor(data), id: code, chiTiet: users.length ? users.length + ' người chuyển sang ' + repl : '' });
+    return jsonResponse({ status: 'ok', roles: _rolesPublic() });
+  });
+}
+
+// ── Nhóm ──
+function handleSaveGroup(data) {
+  return _withScriptLock(function () {
+    var g = data.group || {}, ma = String(g.ma || '').trim();
+    if (!/^[A-Za-z0-9_-]{1,20}$/.test(ma)) return jsonResponse({ status: 'error', message: 'Mã nhóm 1–20 ký tự: chữ không dấu, số, _ -' });
+    if (!String(g.ten || '').trim()) return jsonResponse({ status: 'error', message: 'Thiếu tên nhóm' });
+    var tabs = _knownDataTabs(), db = _pmList(g.diaBan), bad = db.filter(function (t) { return t !== '*' && !tabs[t]; });
+    if (bad.length) return jsonResponse({ status: 'error', message: 'Địa bàn không tồn tại: ' + bad.join(', ') });
+    var groups = _groupsMap(), ex = groups[ma];
+    if (data.isNew && ex) return jsonResponse({ status: 'error', message: 'Mã nhóm đã có: ' + ma });
+    if (!data.isNew && !ex) return jsonResponse({ status: 'error', message: 'Không tìm thấy nhóm: ' + ma });
+    var tt = String(g.trangThai || 'hoat_dong') === 'ngung' ? 'ngung' : 'hoat_dong';
+    var row = [ma, String(g.ten).trim(), db.join(','), String(g.ghiChu || ''), tt, new Date().toISOString()];
+    var sh = _sheetObj(GROUP_SHEET, GROUP_HEADER);
+    if (ex) sh.getRange(ex.row, 1, 1, row.length).setValues([row]); else sh.appendRow(row);
+    _authBustAll();
+    _logToHistory({ loaiThaoTac: data.isNew ? 'create_group' : 'update_group', nguoiThucHien: _actor(data), id: ma, tenTru: row[1], chiTiet: 'địa bàn=' + (row[2] || '(không)') + ' · ' + tt });
+    return jsonResponse({ status: 'ok', groups: _groupsPublic() });
+  });
+}
+function handleDeleteGroup(data) {
+  return _withScriptLock(function () {
+    var ma = String(data.ma || '').trim(), g = _groupsMap()[ma];
+    if (!g) return jsonResponse({ status: 'error', message: 'Không tìm thấy nhóm: ' + ma });
+    var n = _tkReadAll().filter(function (u) { return _pmList(u.nhom).indexOf(ma) >= 0; }).length;
+    if (n) return jsonResponse({ status: 'error', message: 'Nhóm còn ' + n + ' thành viên — chuyển họ sang nhóm khác trước' });
+    _sheetObj(GROUP_SHEET, GROUP_HEADER).deleteRow(g.row); _authBustAll();
+    _logToHistory({ loaiThaoTac: 'delete_group', nguoiThucHien: _actor(data), id: ma, chiTiet: g.ten });
+    return jsonResponse({ status: 'ok', groups: _groupsPublic() });
+  });
+}
+
+// ── Nhật ký xuất dữ liệu ──
+function handleLogExport(data) {
+  _logToHistory({ loaiThaoTac: 'export', nguoiThucHien: _actor(data), tenTru: String(data.sheet || ''), chiTiet: String(data.kind || '') + ' · ' + (Number(data.count) || 0) + ' dòng' + (data.scope ? ' · ' + data.scope : '') });
+  return jsonResponse({ status: 'ok' });
+}
+
+
+// ── Mở khoá đăng nhập khẩn cấp (chạy tay trong trình soạn Apps Script) ──
+// Khi tài khoản quản trị bị khoá 15 phút vì có người cố tình gõ sai mật khẩu liên tục:
+// sửa tên trong dòng dưới rồi bấm Run. Không mở được từ app.
+function resetLoginLock() {
+  var username = 'admin';
+  CacheService.getScriptCache().remove('lf_' + String(username).toLowerCase());
+  Logger.log('Đã xoá bộ đếm sai mật khẩu của ' + username);
 }

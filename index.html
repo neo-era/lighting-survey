@@ -1052,6 +1052,12 @@
                 </div>
                 <div class="modal-body" style="padding:14px 16px;">
 
+                    <!-- v211: chế độ kiểm quyền đang ghi nhận (chỉ người có quyền quản trị) -->
+                    <div id="authModeBanner" style="display:none;align-items:center;gap:8px;margin-bottom:10px;padding:8px 10px;border-radius:10px;background:var(--warn-bg);border:1px solid var(--warn-bd);color:var(--warn-ink);font-size:12.5px;line-height:1.35;">
+                        <span id="authModeBannerText" style="flex:1;"></span>
+                        <button type="button" onclick="closeControlsModal(); openUserAdmin('auth');" style="min-height:32px;border-radius:8px;border:1px solid var(--border);background:var(--surface);font-size:12px;padding:0 10px;">Xem</button>
+                    </div>
+
                     <!-- User + version -->
                     <div style="margin-bottom:14px;">
                         <div style="display:flex;align-items:stretch;gap:6px;">
@@ -1802,6 +1808,7 @@
                     <button type="button" class="close" data-dismiss="modal"><span>&times;</span></button>
                 </div>
                 <div class="modal-body" style="padding:16px;">
+                    <div id="ccForcedNote" style="display:none;font-size:13px;margin-bottom:10px;padding:8px 12px;background:var(--primary-light);border-radius:6px;border:1px solid var(--primary);">🔑 Quản trị vừa đặt mật khẩu tạm cho tài khoản này — hãy đặt mật khẩu mới để tiếp tục.</div>
                     <div id="ccError" style="display:none;color:var(--danger);font-size:13px;margin-bottom:10px;padding:8px 12px;background:var(--danger-bg);border-radius:6px;border:1px solid var(--danger-bd);"></div>
                     <div class="form-group" style="margin-bottom:12px;">
                         <label style="font-size:12px;font-weight:700;color:var(--text-muted);text-transform:uppercase;">Tên đăng nhập mới <small style="font-weight:400;text-transform:none;">(để trống = giữ nguyên)</small></label>
@@ -2546,99 +2553,6 @@
         </div>
     </div>
 
-    <!-- ═══ ADMIN USERS MODAL ═══ -->
-    <div class="modal fade" id="adminUsersModal" tabindex="-1" role="dialog" aria-hidden="true">
-        <div class="modal-dialog modal-dialog-centered modal-xl" role="document">
-            <div class="modal-content">
-                <div class="modal-header" style="background:linear-gradient(135deg,#7c3aed,#ec4899);color:#fff;border-bottom:0;">
-                    <h5 class="modal-title" style="color:#fff;font-weight:800;">👥 Quản lý tài khoản</h5>
-                    <button type="button" class="close" data-dismiss="modal" style="color:#fff;text-shadow:none;opacity:.9;"><span>&times;</span></button>
-                </div>
-                <div class="modal-body p-0">
-                    <div id="adminUsersContent" style="max-height:75vh;overflow-y:auto;padding:16px;">
-                        <div style="text-align:center;padding:40px;color:var(--text-muted);">Đang tải...</div>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Đóng</button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- ═══ CREATE USER MODAL ═══ -->
-    <div class="modal fade" id="createUserModal" tabindex="-1" role="dialog" aria-hidden="true">
-        <div class="modal-dialog modal-dialog-centered" role="document">
-            <div class="modal-content">
-                <div class="modal-header" style="background:var(--primary-light);border-bottom:2px solid var(--primary);">
-                    <h5 class="modal-title">➕ Tạo tài khoản mới</h5>
-                    <button type="button" class="close" data-dismiss="modal"><span>&times;</span></button>
-                </div>
-                <div class="modal-body">
-                    <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;">Username <span style="color:var(--danger);">*</span></label>
-                    <input type="text" id="cuUsername" class="form-control form-control-sm" style="margin-bottom:10px;font-size:13px;" placeholder="Không dấu, không space" autocomplete="off">
-
-                    <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;">Password <span style="color:var(--danger);">*</span></label>
-                    <input type="text" id="cuPassword" class="form-control form-control-sm" style="margin-bottom:10px;font-size:13px;" placeholder="≥ 6 ký tự" autocomplete="new-password">
-
-                    <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;">Họ tên</label>
-                    <input type="text" id="cuDisplayName" class="form-control form-control-sm" style="margin-bottom:10px;font-size:13px;" placeholder="Nguyễn Văn A">
-
-                    <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;">Vai trò</label>
-                    <select id="cuRole" class="form-control form-control-sm" style="margin-bottom:10px;font-size:13px;">
-                        <option value="admin">👑 admin — toàn quyền</option>
-                        <option value="user" selected>👤 user — thêm/sửa/xóa</option>
-                        <option value="user1">👁 user1 — chỉ thêm/sửa</option>
-                        <option value="demo">🔒 demo — chỉ xem</option>
-                    </select>
-
-                    <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;">Vùng (địa bàn cho phép)</label>
-                    <input type="text" id="cuVung" class="form-control form-control-sm" style="font-size:13px;" placeholder="Vd: Quan1,Quan3 (trống = tất cả)">
-                    <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">Cách nhau bằng dấu phẩy. Để trống = user thấy tất cả địa bàn.</div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Hủy</button>
-                    <button type="button" id="btnSaveCreateUser" class="btn btn-primary" onclick="saveCreateUser()">💾 Tạo</button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- ═══ EDIT USER MODAL ═══ -->
-    <div class="modal fade" id="editUserModal" tabindex="-1" role="dialog" aria-hidden="true">
-        <div class="modal-dialog modal-dialog-centered" role="document">
-            <div class="modal-content">
-                <div class="modal-header" style="background:var(--warn-bg);border-bottom:2px solid var(--secondary);">
-                    <h5 class="modal-title">✏️ Sửa tài khoản</h5>
-                    <button type="button" class="close" data-dismiss="modal"><span>&times;</span></button>
-                </div>
-                <div class="modal-body">
-                    <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;">Username (không sửa được)</label>
-                    <input type="text" id="euUsername" class="form-control form-control-sm" style="margin-bottom:10px;font-size:13px;background:var(--surface-2);" readonly>
-
-                    <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;">Họ tên</label>
-                    <input type="text" id="euDisplayName" class="form-control form-control-sm" style="margin-bottom:10px;font-size:13px;">
-
-                    <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;">Vai trò</label>
-                    <select id="euRole" class="form-control form-control-sm" style="margin-bottom:10px;font-size:13px;">
-                        <option value="admin">👑 admin</option>
-                        <option value="user">👤 user</option>
-                        <option value="user1">👁 user1</option>
-                        <option value="demo">🔒 demo</option>
-                    </select>
-
-                    <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;">Vùng</label>
-                    <input type="text" id="euVung" class="form-control form-control-sm" style="font-size:13px;" placeholder="Vd: Quan1,Quan3">
-                    <div style="font-size:11px;color:var(--text-muted);margin-top:6px;">💡 Đổi password: dùng nút 🔑 trong danh sách</div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Hủy</button>
-                    <button type="button" id="btnSaveEditUser" class="btn btn-warning" onclick="saveEditUser()">💾 Lưu</button>
-                </div>
-            </div>
-        </div>
-    </div>
-
     <!-- ═══ P25: DASHBOARD KPI MODAL ═══ -->
     <div class="modal fade" id="dashboardModal" tabindex="-1" role="dialog" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered modal-xl" role="document">
@@ -3038,6 +2952,9 @@
     <script src="src/features/cable.js"></script>
     <script src="src/features/media.js"></script>
     <script src="src/features/backup.js"></script>
+    <script src="src/core/perms.js"></script>
+    <script src="src/features/auth.js"></script>
+    <script src="src/features/user-admin.js"></script>
 
     <script>
         // ─── Export to CAD Modal ───
@@ -3467,6 +3384,7 @@
         function confirmExportCad() {
             var rows = _cadExpGetRows();
             if (!rows.length) { displayError('Không có marker phù hợp để xuất.'); return; }
+            if (!(typeof _authExportGate !== 'function' || _authExportGate('cad_nhanh', rows.length))) return;   // v211
             var dE = parseFloat((document.getElementById('cadExpDE') || {}).value) || 0;
             var dN = parseFloat((document.getElementById('cadExpDN') || {}).value) || 0;
             var dxf = createDxfForMarkers(rows, { dE: dE, dN: dN });
@@ -3573,7 +3491,7 @@
 
         // ── Admin: modal link chia sẻ địa bàn ──
         function _openShareModal() {
-            if (!currentUser || currentUser.role !== 'admin') { displayError('Chỉ admin được tạo link chia sẻ.'); return; }
+            if (!hasPerm('chia_se')) { displayError('Bạn không có quyền tạo link chia sẻ.'); return; }
             if (!currentSheet) { displayError('Chưa chọn địa bàn để chia sẻ.'); return; }
             const link = _shareLinkFor(location.origin, location.pathname, currentSheet);
             const inp = document.getElementById('shareLinkInput');
@@ -3739,6 +3657,7 @@
                 if (nameEl) nameEl.textContent = currentUser.displayName || currentUser.username;
             }
             _applyRoleUI();
+            _authWhoami();   // v211: làm mới quyền/địa bàn; token hết hạn hoặc tài khoản cũ chưa có token → đăng nhập lại
             _loadDataVersion();
             // P47: Sync shared offset presets từ GAS (background, không block UI)
             if (typeof _syncSharedPresets === 'function') {
@@ -3921,13 +3840,9 @@
                     console.log('[login] OK sau ' + elapsed + 's');
                     _stopElapsedTicker();
                     _stopLoginProgress(true);
-                    currentUser = data.user;
-                    localStorage.setItem('ks_user', JSON.stringify(currentUser));
-                    if (currentUser.role === 'admin') {
-                        window._adminAuth = { username: username, password: password };
-                    }
                     _gasWarmed = true;
-                    _showApp();
+                    // v211: lưu token phiên (không giữ mật khẩu trong bộ nhớ); đăng nhập lại giữa phiên → tiếp tục, không mở lại app
+                    if (!_authAfterLogin(data)) _showApp();
                 } else {
                     errEl.classList.remove('info');
                     errEl.textContent = data.message || 'Sai tên đăng nhập hoặc mật khẩu';
@@ -4020,6 +3935,7 @@
                 if (data.status !== 'ok') { showErr(data.message || 'Lỗi không xác định.'); return; }
                 if (newUsername) currentUser.username = data.newUsername;
                 localStorage.setItem('ks_user', JSON.stringify(currentUser));
+                _authChangeDone(data);   // v211: GAS cấp token mới (token cũ đã bị thu hồi)
                 const nameEl = document.getElementById('topbarUserName');
                 if (nameEl && newUsername) nameEl.textContent = currentUser.displayName || currentUser.username;
                 $('#changeCredentialsModal').modal('hide');
@@ -4037,10 +3953,11 @@
         // user        → edit + delete + drag  (KHÔNG github sync)
         // user1       → edit                  (KHÔNG delete, KHÔNG drag, KHÔNG github sync)
         // demo        → chỉ xem
-        function canEdit()   { const r = currentUser && currentUser.role; return r === 'admin' || r === 'user' || r === 'user1'; }
-        function canDelete() { const r = currentUser && currentUser.role; return r === 'admin' || r === 'user'; }
-        function canDrag()   { const r = currentUser && currentUser.role; return r === 'admin' || r === 'user'; }
-        function canGithubSync() { const r = currentUser && currentUser.role; return r === 'admin'; }
+        // v211: theo quyền (src/core/perms.js + src/features/auth.js) và địa bàn được ghi — GAS mới chặn thật
+        function canEdit()   { return _authCanWriteHere('them_sua'); }
+        function canDelete() { return _authCanWriteHere('xoa'); }
+        function canDrag()   { return _authCanWriteHere('di_chuyen'); }
+        function canGithubSync() { return hasPerm('github'); }
 
         function _applyRoleUI() {
             const edit = canEdit();
@@ -4059,24 +3976,22 @@
             const chip = document.getElementById('topbarUser');
             if (chip && currentUser) {
                 const labels = { admin: 'Quản trị', user: 'Đầy đủ', user1: 'Khảo sát viên', demo: 'Xem' };
-                chip.title = `${currentUser.displayName || currentUser.username} — ${labels[currentUser.role] || currentUser.role} (nhấn để đăng xuất)`;
+                const rn = currentUser.roleName || labels[currentUser.role] || currentUser.role;
+                chip.title = `${currentUser.displayName || currentUser.username} — ${rn} (nhấn để đăng xuất)`;
             }
-            // Các trang chỉ dành cho admin
-            const isAdmin = currentUser && currentUser.role === 'admin';
-            const optLichSu = document.getElementById('pageOptLichSu');
-            if (optLichSu) optLichSu.style.display = isAdmin ? '' : 'none';
-            const optCamera = document.getElementById('pageOptCamera');
-            if (optCamera) optCamera.style.display = isAdmin ? '' : 'none';
-            const optDenTat = document.getElementById('pageOptDenTat');
-            if (optDenTat) optDenTat.style.display = isAdmin ? '' : 'none';
+            // v211 — các trang/nút quản trị theo quyền (thay cho kiểm role === 'admin')
+            const show = (id, on, disp) => { const el = document.getElementById(id); if (el) el.style.display = on ? (disp || '') : 'none'; };
+            show('pageOptLichSu', hasPerm('lich_su'));
+            show('pageOptCamera', hasPerm('giam_sat'));
+            show('pageOptDenTat', hasPerm('giam_sat'));
             // v150+v151 — nút admin địa bàn (tạo + quản lý)
-            const btnDBWrap = document.getElementById('btnDiaBanAdminWrap');
-            if (btnDBWrap) btnDBWrap.style.display = isAdmin ? 'flex' : 'none';
-            // v210 — sao lưu dữ liệu (chỉ admin)
-            ['sec-backup', 'sec-backup-div'].forEach(id => { const el = document.getElementById(id); if (el) el.style.display = isAdmin ? '' : 'none'; });
-            if (isAdmin && typeof _bkRefreshHealth === 'function') _bkRefreshHealth(true);
-            const btnShareWrap = document.getElementById('btnShareDistrictWrap');
-            if (btnShareWrap) btnShareWrap.style.display = isAdmin ? 'block' : 'none';
+            show('btnDiaBanAdminWrap', hasPerm('dia_ban'), 'flex');
+            // v210 — sao lưu dữ liệu
+            const canBk = hasPerm('sao_luu');
+            show('sec-backup', canBk); show('sec-backup-div', canBk);
+            if (canBk && typeof _bkRefreshHealth === 'function') _bkRefreshHealth(true);
+            show('btnShareDistrictWrap', hasPerm('chia_se'), 'block');
+            _authRenderBanner();
             // Nền OSM / Hẻm — cho người có quyền sửa (admin/user/user1), không cho demo
             const osmSec = document.getElementById('sec-osm-hem');
             if (osmSec) osmSec.style.display = edit ? '' : 'none';
@@ -4123,8 +4038,8 @@
         }
 
         function _openCreateDiaBan() {
-            if (!currentUser || currentUser.role !== 'admin') {
-                displayError('Chỉ admin được tạo địa bàn mới.');
+            if (!hasPerm('dia_ban')) {
+                displayError('Bạn không có quyền tạo địa bàn mới.');
                 return;
             }
             if (typeof closeControlsModal === 'function') closeControlsModal();
@@ -4240,8 +4155,8 @@
         let _ddbTargetItem = null; // item đang chuẩn bị delete
 
         async function _openManageDiaBan() {
-            if (!currentUser || currentUser.role !== 'admin') {
-                displayError('Chỉ admin được quản lý địa bàn.');
+            if (!hasPerm('dia_ban')) {
+                displayError('Bạn không có quyền quản lý địa bàn.');
                 return;
             }
             if (typeof closeControlsModal === 'function') closeControlsModal();
@@ -4479,11 +4394,12 @@
         window._submitDeleteDiaBan = _submitDeleteDiaBan;
 
         function _allowedPages() {
-            // Admin luôn thấy tất cả địa bàn, bất kể cột vung trong sheet TaiKhoan
-            if (currentUser && currentUser.role === 'admin') return DISTRICT_PAGES;
-            const vung = currentUser && currentUser.vung;
-            if (!vung || vung.length === 0) return DISTRICT_PAGES;
-            return DISTRICT_PAGES.filter(p => vung.includes(p.sheet));
+            // v211: địa bàn chỉ giới hạn GHI (dữ liệu xem là công khai). Danh sách chọn = địa bàn được ghi;
+            // không được ghi địa bàn nào (vd tài khoản chỉ xem) → thấy tất cả, ở chế độ chỉ xem.
+            const d = _authDistrictsOf(currentUser);
+            if (d.all || d.list.length === 0) return DISTRICT_PAGES;
+            const own = DISTRICT_PAGES.filter(p => d.list.includes(p.sheet));
+            return own.length ? own : DISTRICT_PAGES;
         }
 
         function _buildDistrictOptions() {
@@ -4499,44 +4415,20 @@
                 sel.insertBefore(opt, firstOpt);
             });
             // Sự cố — mọi role edit thấy được (admin, user, user1) để tra cứu
-            if (canEdit()) {
+            if (hasPerm('su_co') || hasPerm('them_sua')) {
                 const scOpt = document.createElement('option');
                 scOpt.value = 'suco';
                 scOpt.textContent = '⚠️ Sự cố';
                 sel.appendChild(scOpt);
             }
-            if (currentUser && currentUser.role === 'admin') {
-                // P25: Dashboard — đầu list admin options
-                const dbOpt = document.createElement('option');
-                dbOpt.value = 'dashboard';
-                dbOpt.textContent = '📊 Dashboard KPI';
-                sel.appendChild(dbOpt);
-                // P22: Bảo trì admin option
-                const btOpt = document.createElement('option');
-                btOpt.value = 'baotri';
-                btOpt.textContent = '🔧 Lịch bảo trì';
-                sel.appendChild(btOpt);
-                // P23: Nhiệm vụ admin option
-                const nvOpt = document.createElement('option');
-                nvOpt.value = 'nhiemvu';
-                nvOpt.textContent = '📋 Nhiệm vụ';
-                sel.appendChild(nvOpt);
-                // P26: Báo cáo Nhà nước
-                const bcOpt = document.createElement('option');
-                bcOpt.value = 'baocao';
-                bcOpt.textContent = '📑 Báo cáo Nhà nước';
-                sel.appendChild(bcOpt);
-                // Quản lý tài khoản
-                const auOpt = document.createElement('option');
-                auOpt.value = 'admin_users';
-                auOpt.textContent = '👥 Quản lý tài khoản';
-                sel.appendChild(auOpt);
-                // Báo cáo ngày
-                const bcnOpt = document.createElement('option');
-                bcnOpt.value = 'baocaongay';
-                bcnOpt.textContent = '📅 Báo cáo ngày';
-                sel.appendChild(bcnOpt);
-            }
+            // v211 — trang quản trị theo quyền (thứ tự giữ như cũ)
+            const addOpt = (v, t) => { const o = document.createElement('option'); o.value = v; o.textContent = t; sel.appendChild(o); };
+            if (hasPerm('bao_cao')) addOpt('dashboard', '📊 Dashboard KPI');
+            if (hasPerm('bao_tri')) addOpt('baotri', '🔧 Lịch bảo trì');
+            if (hasPerm('nhiem_vu')) addOpt('nhiemvu', '📋 Nhiệm vụ');
+            if (hasPerm('bao_cao')) addOpt('baocao', '📑 Báo cáo Nhà nước');
+            if (hasPerm('quan_tri')) addOpt('admin_users', '👥 Quản lý người dùng');
+            if (hasPerm('bao_cao')) addOpt('baocaongay', '📅 Báo cáo ngày');
         }
 
         // ── P33: VẼ POLYGON VÙNG ─────────────────────────────────────────
@@ -4983,7 +4875,7 @@
             const list = [];
             if (!currentUser) return list;
             const uname = currentUser.username || '';
-            const isAdmin = currentUser.role === 'admin';
+            const isAdmin = hasPerm('nhiem_vu');   // v211: người duyệt nhiệm vụ
 
             // 1. Nhiệm vụ liên quan user (assigned/rejected → user; submitted → admin)
             _nhiemVuAdminRows.forEach(r => {
@@ -5031,7 +4923,7 @@
             });
 
             // 2. Sự cố mới — Chờ xử lý (admin/user/user1 đều nhận notification để xử lý nhanh)
-            if (canEdit() && _activeIncidents.size > 0) {
+            if (hasPerm('su_co') && _activeIncidents.size > 0) {
                 let urgentCount = 0, normalCount = 0;
                 _activeIncidents.forEach(inc => {
                     inc.items.forEach(it => {
@@ -6464,9 +6356,9 @@
                 pcRows.push(`<div class="pc-row"><span class="pi">📏</span><span class="pk">Khoảng cách</span><span class="pv">${Math.round(totalDistance)} m</span><select size="3" class="pc-dist-list">${segments.join('')}</select></div>`);
             }
 
-            const reportBtn = canEdit() ? `<button class="pc-btn report" onclick="openSuCoModal()">⚠️ Sự cố</button>` : '';
+            const reportBtn = hasPerm('su_co') ? `<button class="pc-btn report" onclick="openSuCoModal()">⚠️ Sự cố</button>` : '';
             // P22: Nút bảo trì — chỉ admin
-            const baoTriBtn = (currentUser && currentUser.role === 'admin')
+            const baoTriBtn = hasPerm('bao_tri')
                 ? `<button class="pc-btn baotri" onclick="openBaoTriModal()">🔧 Bảo trì</button>` : '';
 
             // Block thông tin sự cố đang hoạt động
@@ -6480,7 +6372,7 @@
                     const ttColor = it.trangThai === 'Chờ xử lý' ? '#dc2626' : '#d97706';
                     return `<div style="font-size:12px;color:var(--text);margin-top:3px;">• ${it.loai || '—'} · ${mucDoHtml} · <span style="color:${ttColor};font-weight:600">${it.trangThai}</span></div>`;
                 }).join('');
-                const incClickable = canEdit();
+                const incClickable = hasPerm('su_co');
                 incidentBlock = `<div style="background:var(--warn-bg);border:1.5px solid var(--secondary);border-radius:10px;margin:6px 16px 0;padding:9px 12px;${incClickable ? 'cursor:pointer;' : ''}" ${incClickable ? 'onclick="openIncidentResolveModal()"' : ''}>
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
                       <span style="font-weight:700;color:var(--warn-ink);font-size:12px;">⚠️ ${_inc.count} sự cố chưa xử lý</span>
@@ -6500,7 +6392,7 @@
                     const loaiCfg = BAOTRI_LOAI.find(l => l.id === bt.loai) || { icon: '🔧', label: bt.loai };
                     return `<div style="font-size:12px;color:var(--text);margin-top:3px;">• ${loaiCfg.icon} ${loaiCfg.label} — <span style="color:${s.color};font-weight:700">${s.icon} ${s.label}</span> (Lần tới: ${bt.lanToi})</div>`;
                 }).join('');
-                const btAdmin = currentUser && currentUser.role === 'admin';
+                const btAdmin = hasPerm('bao_tri');
                 baoTriBlock = `<div style="background:var(--primary-light);border:1.5px solid var(--primary);border-radius:10px;margin:6px 16px 0;padding:9px 12px;${btAdmin ? 'cursor:pointer;' : ''}" ${btAdmin ? 'onclick="openBaoTriModal()"' : ''}>
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
                         <span style="font-weight:700;color:var(--primary);font-size:12px;">🔧 ${_btUrgent.length} bảo trì cần thực hiện</span>
@@ -6561,7 +6453,7 @@
                   📏 Căn thẳng tuyến ${_esc(normalizeMarkerBaseName(String(name).trim()))}
                 </button>
               </div>` : ''}
-              ${_drawCableMode && canEdit() ? `
+              ${_drawCableMode && canDrag() ? `
               <div style="padding:0 16px 12px;">
                 ${!_cableDrawChild
                     ? `<button onclick="setCableChild()"
@@ -6777,7 +6669,7 @@
                 }
             }
             for (const r of unnamed) {
-                if (await syncRowToGAS(r, { silent: true })) { dirtyMovedRows.delete(r); ok++; }
+                if (await syncRowToGAS(r, { silent: true, moveOnly: true })) { dirtyMovedRows.delete(r); ok++; }
                 else failed++;
             }
             if (btnLabel) btnLabel.textContent = origLabel || 'Cập nhật';
@@ -9193,6 +9085,10 @@
                                 body: JSON.stringify({ action: 'upload_image', imageBase64: getBase64FromDataUrl(_stamped), soTru, ext })
                             });
                             const upData = await upRes.json();
+                            if ((upData.status === 'auth_required' || upData.status === 'must_change_password') && typeof _authQueueRetry === 'function') {
+                                _authQueueRetry(row, opts);   // chưa đụng row[12] → lần lưu lại vẫn còn ảnh
+                                return false;
+                            }
                             if (upData.status === 'ok') {
                                 uploadedParts.push(upData.path);
                             } else {
@@ -9217,7 +9113,7 @@
                 if (uploadedParts.length > 0) row[12] = uploadedParts.filter(Boolean).join(';');
                 const res = await fetch(KHAOSAT_GAS_URL, {
                     method: 'POST',
-                    body: JSON.stringify({
+                    body: JSON.stringify(_syncPayloadFor(opts, {
                         action: 'full_update',
                         sheet: currentSheet,
                         id: String(row[0] || ''), tenTru: row[1] || '', oldTenTru: oldTenTru,
@@ -9241,9 +9137,15 @@
                         trangThai:   row[29] || '',                                    // P59+
                         // v203 — hàng ngắn (cache/CSV cũ chưa có cột 30) → không gửi, tránh xoá Số nhà trên sheet
                         ...(row.length > 30 ? { soNha: row[30] != null ? String(row[30]) : '' } : {})
-                    })
+                    }))
                 });
                 const data = await res.json();
+                // v211: phiên hết hạn / phải đổi mật khẩu → giữ thay đổi, tự lưu lại sau khi đăng nhập
+                if ((data.status === 'auth_required' || data.status === 'must_change_password') && typeof _authQueueRetry === 'function') {
+                    _authQueueRetry(row, opts);
+                    return false;
+                }
+                if (data.status === 'forbidden') throw new Error((data.message || 'không có quyền') + ' — thay đổi CHƯA được lưu');
                 if (data.status !== 'ok') throw new Error(data.message || 'lỗi không rõ');
                 if (!silent) displayError('Đã lưu lên Data.');
                 return true;
@@ -9599,6 +9501,7 @@
         async function saveMarkerData() {
             try {
                 if (!newMarkerRows || newMarkerRows.length===0) { displayError('Không có marker mới để lưu.'); return; }
+                if (!(typeof _authExportGate !== 'function' || _authExportGate('excel_moi', newMarkerRows.length))) return;   // v211
                 displayInfo('Đang chuẩn bị file...');
                 try { await _loadExcelJS(); } catch(_) { /* fallback sang XLSX.js bên dưới */ }
                 prepareImagePathsForSave(newMarkerRows);
@@ -9970,6 +9873,7 @@
             }
             _activeFilters.tuDieuKhien = [];
             currentSheet = sheetName;
+            _authApplyWriteUi();   // v211: quyền ghi phụ thuộc địa bàn đang mở
             // Bỏ dữ liệu địa bàn cũ (giữ dòng tiêu đề) — nếu tải địa bàn mới lỗi / rỗng, mọi chức năng
             // (tìm kiếm, xuất CAD, kiểm tra cáp, sinh ID…) không còn chạy trên dữ liệu địa bàn trước.
             loadedData = (Array.isArray(loadedData) && loadedData[0]) ? [loadedData[0]] : [];
@@ -10043,7 +9947,7 @@
                 return;
             }
             if (val === 'admin_users') {
-                showAdminUsersModal();
+                openUserAdmin();
                 setTimeout(() => { if (s) s.value = prev; }, 0);
                 return;
             }
@@ -11997,232 +11901,7 @@
         // ── P25: DASHBOARD KPI ─────────────────────────────────────────────
         let _dashboardCharts = {}; // chartId → Chart instance để destroy khi rerender
 
-        // ══════════════════════════════════════════════════════════════
-        // ── QUẢN LÝ TÀI KHOẢN (admin only) ──────────────────────────
-        // ══════════════════════════════════════════════════════════════
-        let _adminUsersList = [];
-
-        async function showAdminUsersModal() {
-            if (!currentUser || currentUser.role !== 'admin') {
-                displayError('Chỉ admin mới xem được'); return;
-            }
-            if (!window._adminAuth) {
-                displayError('Cần đăng nhập lại để có quyền quản lý (bấm Đăng xuất → đăng nhập lại)');
-                return;
-            }
-            $('#adminUsersModal').modal('show');
-            await _loadAdminUsers();
-        }
-
-        async function _loadAdminUsers() {
-            const container = document.getElementById('adminUsersContent');
-            container.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-muted);">Đang tải...</div>';
-            try {
-                const resp = await fetch(KHAOSAT_GAS_URL, {
-                    method: 'POST',
-                    body: JSON.stringify({
-                        action: 'list_users',
-                        adminAuth: window._adminAuth
-                    })
-                });
-                const data = await resp.json();
-                if (data.status !== 'ok') throw new Error(data.message || 'Lỗi tải');
-                _adminUsersList = data.users || [];
-                _renderAdminUsersTable();
-            } catch (err) {
-                container.innerHTML = `<div style="padding:20px;color:var(--danger);">Lỗi: ${err.message}</div>`;
-            }
-        }
-
-        function _renderAdminUsersTable() {
-            const container = document.getElementById('adminUsersContent');
-            const q = normalizeTextSearchable((document.getElementById('auSearch') || {}).value || '');
-            const fRole = (document.getElementById('auFilterRole') || {}).value || '';
-            let users = _adminUsersList.slice();
-            if (fRole) users = users.filter(u => u.role === fRole);
-            if (q) users = users.filter(u => normalizeTextSearchable(u.username + ' ' + u.displayName + ' ' + u.vung).includes(q));
-
-            const roleColor = {
-                admin: '#dc2626', user: '#059669', user1: '#f59e0b', demo: '#64748b'
-            };
-            const cnt = { admin: 0, user: 0, user1: 0, demo: 0 };
-            _adminUsersList.forEach(u => { if (cnt[u.role] != null) cnt[u.role]++; });
-
-            let html = `
-                <div style="display:flex;gap:8px;flex-wrap:wrap;padding:10px;background:var(--surface-2);border-radius:8px;margin-bottom:10px;font-size:12px;">
-                    <span style="background:var(--danger-bg);color:var(--danger);padding:4px 10px;border-radius:6px;font-weight:700;">👑 Admin: ${cnt.admin}</span>
-                    <span style="background:var(--ok-bg);color:var(--success);padding:4px 10px;border-radius:6px;font-weight:700;">👤 User: ${cnt.user}</span>
-                    <span style="background:var(--warn-bg);color:var(--secondary);padding:4px 10px;border-radius:6px;font-weight:700;">👁 User1: ${cnt.user1}</span>
-                    <span style="background:var(--surface-2);color:var(--text-muted);padding:4px 10px;border-radius:6px;font-weight:700;">🔒 Demo: ${cnt.demo}</span>
-                    <span style="color:var(--text-muted);padding:4px 10px;margin-left:auto;">Hiển thị ${users.length}/${_adminUsersList.length}</span>
-                </div>
-                <div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap;align-items:center;">
-                    <button onclick="_openCreateUserModal()" class="btn btn-sm btn-primary" style="font-size:12px;">+ Thêm tài khoản</button>
-                    <input type="search" id="auSearch" placeholder="🔍 Tìm username, tên, vùng..."
-                           oninput="_renderAdminUsersTable()"
-                           value="${((document.getElementById('auSearch')||{}).value || '').replace(/"/g,'&quot;')}"
-                           style="flex:1;min-width:180px;padding:6px 10px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;">
-                    <select id="auFilterRole" onchange="_renderAdminUsersTable()"
-                            style="padding:6px 10px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;">
-                        <option value="">Mọi vai trò</option>
-                        <option value="admin" ${fRole==='admin'?'selected':''}>👑 Admin</option>
-                        <option value="user" ${fRole==='user'?'selected':''}>👤 User</option>
-                        <option value="user1" ${fRole==='user1'?'selected':''}>👁 User1</option>
-                        <option value="demo" ${fRole==='demo'?'selected':''}>🔒 Demo</option>
-                    </select>
-                    <button onclick="_loadAdminUsers()" class="btn btn-sm btn-outline-secondary" style="font-size:11px;">🔄</button>
-                </div>
-                <table class="table table-sm table-bordered" style="font-size:12px;">
-                    <thead style="background:var(--surface-2);font-weight:700;position:sticky;top:0;">
-                        <tr><th>Username</th><th>Họ tên</th><th>Vai trò</th><th>Vùng</th><th>Password</th><th>Hành động</th></tr>
-                    </thead><tbody>`;
-            for (const u of users) {
-                const isCurrent = currentUser && u.username.toLowerCase() === currentUser.username.toLowerCase();
-                const pwStatus = u.hasPassword
-                    ? (u.isHashed ? '<span style="color:var(--success);">🔒 Hashed</span>' : '<span style="color:var(--secondary);">⚠ Plaintext</span>')
-                    : '<span style="color:var(--danger);">❌ Trống</span>';
-                html += `<tr ${isCurrent ? 'style="background:var(--primary-light);"' : ''}>
-                    <td><b>${u.username}</b> ${isCurrent ? '<span style="font-size:9px;color:var(--primary);">(bạn)</span>' : ''}</td>
-                    <td>${u.displayName || '<i style="color:var(--text-muted);">chưa có</i>'}</td>
-                    <td><span style="color:${roleColor[u.role]||'var(--text-muted)'};font-weight:700;">${u.role}</span></td>
-                    <td style="font-family:monospace;font-size:11px;">${u.vung || '<i style="color:var(--text-muted);">tất cả</i>'}</td>
-                    <td>${pwStatus}</td>
-                    <td style="white-space:nowrap;">
-                        <button class="btn btn-xs btn-outline-warning" onclick="_openEditUserModal('${u.username}')" title="Sửa" style="font-size:10px;padding:2px 6px;">✏️</button>
-                        <button class="btn btn-xs btn-outline-primary" onclick="_resetUserPassword('${u.username}')" title="Reset password" style="font-size:10px;padding:2px 6px;">🔑</button>
-                        ${!isCurrent ? `<button class="btn btn-xs btn-outline-danger" onclick="_deleteUser('${u.username}')" title="Xóa" style="font-size:10px;padding:2px 6px;">🗑</button>` : ''}
-                    </td>
-                </tr>`;
-            }
-            html += '</tbody></table>';
-            container.innerHTML = html;
-        }
-
-        function _openCreateUserModal() {
-            document.getElementById('cuUsername').value = '';
-            document.getElementById('cuPassword').value = '';
-            document.getElementById('cuDisplayName').value = '';
-            document.getElementById('cuRole').value = 'user';
-            document.getElementById('cuVung').value = '';
-            $('#createUserModal').modal('show');
-        }
-
-        async function saveCreateUser() {
-            const newUser = {
-                username:    document.getElementById('cuUsername').value.trim(),
-                password:    document.getElementById('cuPassword').value,
-                displayName: document.getElementById('cuDisplayName').value.trim(),
-                role:        document.getElementById('cuRole').value,
-                vung:        document.getElementById('cuVung').value.trim()
-            };
-            if (!newUser.username || !newUser.password) { displayError('Cần username + password'); return; }
-            if (newUser.password.length < 6) { displayError('Password ≥ 6 ký tự'); return; }
-            const btn = document.getElementById('btnSaveCreateUser');
-            if (btn) { btn.disabled = true; btn.textContent = '⏳...'; }
-            try {
-                const resp = await fetch(KHAOSAT_GAS_URL, {
-                    method: 'POST',
-                    body: JSON.stringify({
-                        action: 'create_user',
-                        adminAuth: window._adminAuth,
-                        newUser
-                    })
-                });
-                const data = await resp.json();
-                if (data.status !== 'ok') throw new Error(data.message || 'Lỗi tạo');
-                $('#createUserModal').modal('hide');
-                displayInfo(`✅ Đã tạo user: ${newUser.username}`);
-                setTimeout(_loadAdminUsers, 400);
-            } catch (err) {
-                displayError('Lỗi: ' + err.message);
-            } finally {
-                if (btn) { btn.disabled = false; btn.textContent = '💾 Tạo'; }
-            }
-        }
-
-        function _openEditUserModal(username) {
-            const u = _adminUsersList.find(x => x.username === username);
-            if (!u) return;
-            document.getElementById('euUsername').value = u.username;
-            document.getElementById('euDisplayName').value = u.displayName;
-            document.getElementById('euRole').value = u.role;
-            document.getElementById('euVung').value = u.vung;
-            $('#editUserModal').modal('show');
-        }
-
-        async function saveEditUser() {
-            const username = document.getElementById('euUsername').value;
-            const updates = {
-                displayName: document.getElementById('euDisplayName').value.trim(),
-                role:        document.getElementById('euRole').value,
-                vung:        document.getElementById('euVung').value.trim()
-            };
-            const btn = document.getElementById('btnSaveEditUser');
-            if (btn) { btn.disabled = true; btn.textContent = '⏳...'; }
-            try {
-                const resp = await fetch(KHAOSAT_GAS_URL, {
-                    method: 'POST',
-                    body: JSON.stringify({
-                        action: 'update_user',
-                        adminAuth: window._adminAuth,
-                        targetUsername: username,
-                        updates
-                    })
-                });
-                const data = await resp.json();
-                if (data.status !== 'ok') throw new Error(data.message || 'Lỗi update');
-                $('#editUserModal').modal('hide');
-                displayInfo(`✅ Cập nhật: ${data.changes.join(', ')}`);
-                setTimeout(_loadAdminUsers, 400);
-            } catch (err) {
-                displayError('Lỗi: ' + err.message);
-            } finally {
-                if (btn) { btn.disabled = false; btn.textContent = '💾 Lưu'; }
-            }
-        }
-
-        async function _resetUserPassword(username) {
-            const newPass = prompt(`Reset password cho "${username}":\n(≥ 6 ký tự)`, '');
-            if (!newPass) return;
-            if (newPass.length < 6) { displayError('Password ≥ 6 ký tự'); return; }
-            try {
-                const resp = await fetch(KHAOSAT_GAS_URL, {
-                    method: 'POST',
-                    body: JSON.stringify({
-                        action: 'reset_password',
-                        adminAuth: window._adminAuth,
-                        targetUsername: username,
-                        newPassword: newPass
-                    })
-                });
-                const data = await resp.json();
-                if (data.status !== 'ok') throw new Error(data.message || 'Lỗi reset');
-                displayInfo(`✅ Đã reset password cho ${username}`);
-                setTimeout(_loadAdminUsers, 400);
-            } catch (err) {
-                displayError('Lỗi: ' + err.message);
-            }
-        }
-
-        async function _deleteUser(username) {
-            if (!confirm(`Xóa tài khoản "${username}"?\n\nHành động này KHÔNG THỂ hoàn tác.`)) return;
-            try {
-                const resp = await fetch(KHAOSAT_GAS_URL, {
-                    method: 'POST',
-                    body: JSON.stringify({
-                        action: 'delete_user',
-                        adminAuth: window._adminAuth,
-                        targetUsername: username
-                    })
-                });
-                const data = await resp.json();
-                if (data.status !== 'ok') throw new Error(data.message || 'Lỗi xóa');
-                displayInfo(`🗑 Đã xóa: ${username}`);
-                setTimeout(_loadAdminUsers, 400);
-            } catch (err) {
-                displayError('Lỗi: ' + err.message);
-            }
-        }
+        // v211: quản lý người dùng / nhóm / vai trò → src/features/user-admin.js (openUserAdmin)
 
         async function showDashboardModal() {
             $('#dashboardModal').modal('show');
@@ -12767,7 +12446,7 @@
         }
 
         function openIncidentResolveModal() {
-            if (!canEdit()) return;
+            if (!hasPerm('su_co')) return;
             const row = _currentPopupRow;
             if (!row) return;
             const name = String(row[1] || '');
@@ -12992,6 +12671,7 @@
                 displayError('Chưa có dữ liệu sự cố để xuất.');
                 return;
             }
+            if (!(typeof _authExportGate !== 'function' || _authExportGate('su_co', _suCoAdminRows.length))) return;   // v211
 
             const { rows, filterLabel } = _sucoGetFilteredRows();
             if (rows.length === 0) {

@@ -190,6 +190,7 @@
             if (!Array.isArray(loadedData) || loadedData.length < 2) {
                 displayError('Chưa có dữ liệu để xuất.'); return;
             }
+            if (!(typeof _authExportGate !== 'function' || _authExportGate('excel_sua', loadedData.length - 1))) return;   // v211
             if (typeof XLSX === 'undefined') { displayError('Thư viện XLSX chưa tải xong, thử lại.'); return; }
             try {
                 displayInfo('Đang tạo Excel...');

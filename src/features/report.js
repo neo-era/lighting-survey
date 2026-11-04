@@ -168,6 +168,7 @@
         async function exportReport() {
             const rows = getReportFilteredRows();
             if (!rows.length) { displayError('Không có dữ liệu để xuất.'); return; }
+            if (!(typeof _authExportGate !== 'function' || _authExportGate('bao_cao_excel', rows.length))) return;   // v211
             displayInfo('Đang tải thư viện Excel...');
             try { await _loadExcelJS(); } catch(_) { /* fallback sang XLSX.js bên dưới */ }
 

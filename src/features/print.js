@@ -530,6 +530,7 @@
         async function exportDrawingPDF(opts) {
             opts = opts || {};
             const _returnBlob = opts.returnBlob === true;
+            if (!_returnBlob && !(typeof _authExportGate !== 'function' || _authExportGate('pdf', Math.max(0, (loadedData || []).length - 1)))) return;   // v211
             // Bug fix: clear stale blob so failed re-export doesn't serve previous result
             window._lastPdfBlob = null;
             window._lastPdfFilename = null;

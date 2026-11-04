@@ -342,7 +342,7 @@
                 const region = prompt('Khu vực (tùy chọn):', '') || '';
                 // P47: admin có thể chọn shared, ngược lại local
                 let mode = 'local';
-                if (currentUser && currentUser.role === 'admin') {
+                if (hasPerm('dia_ban')) {
                     mode = confirm(`Lưu shared (🌍 cả team) hay local (👤 chỉ trình duyệt này)?\n\n[OK] = Shared\n[Cancel] = Local`) ? 'shared' : 'local';
                 }
                 const saved = await _saveCadOffsetPreset({

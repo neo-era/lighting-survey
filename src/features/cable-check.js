@@ -166,7 +166,7 @@
         function _lcTuCabinets() {
             return [..._lcTuStats().keys()].sort((a, b) => a.localeCompare(b, 'vi', { numeric: true }));
         }
-        const _lcTuIsAdmin = () => !!(typeof currentUser !== 'undefined' && currentUser && currentUser.role === 'admin');
+        const _lcTuIsAdmin = () => typeof hasPerm === 'function' && hasPerm('dia_ban');   // v211: trước là role admin
         const _lcTuIsBig = () => { const n = _lcTuCabinets().length; return _lcTuSel.size >= LC_TU_BIG || (n > 1 && _lcTuSel.size === n); };
         function _lcTuInit() {
             _lcTuStatsCache = null;

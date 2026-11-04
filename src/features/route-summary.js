@@ -454,6 +454,7 @@ function _closeRouteSummary() { if (_rsBusy) _rsCancel = true; const m = documen
 let _rsBusy = false;
 async function _exportRouteSummary() {
     if (_rsBusy) return;
+    if (!(typeof _authExportGate !== 'function' || _authExportGate('tong_hop_tuyen', 0))) return;   // v211
     const tpl = (document.querySelector('input[name="rsTpl"]:checked') || {}).value || 'ct5';
     const mode = _rsCurrentMode();
     const useOsm = !!(document.getElementById('rsOsm') || {}).checked;

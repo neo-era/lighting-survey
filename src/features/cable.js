@@ -445,7 +445,7 @@
             if (!row) return;
             const childName = String(row[1] || '').trim();
             row[14] = ''; row[15] = '';
-            syncRowToGAS(row, { silent: true });
+            syncRowToGAS(row, { silent: true, moveOnly: true });
             _rebuildCableLines();
             displaySuccess('Đã xóa đoạn cáp: ' + childName);
         }
@@ -482,7 +482,7 @@
                 row[14] = _parentRefFor(pRow, _rowIndex((loadedData || []).slice(1), newMarkerRows));
                 row[15] = (Number.isFinite(pLat) && Number.isFinite(cLat))
                     ? haversineM(cLat, cLon, pLat, pLon) : '';
-                syncRowToGAS(row, { silent: true });
+                syncRowToGAS(row, { silent: true, moveOnly: true });
                 _rebuildCableLines();
                 displaySuccess('Đã đổi điểm gốc: ' + childName + ' ← ' + newParentName);
             };
@@ -549,7 +549,7 @@
             childRow[14] = _parentRefFor(row, _rowIndex((loadedData || []).slice(1), newMarkerRows));
             childRow[15] = String(dist);
             map.closePopup();
-            const ok = await syncRowToGAS(childRow, { silent: false });
+            const ok = await syncRowToGAS(childRow, { silent: false, moveOnly: true });
             if (ok !== false && _cableVisible) _rebuildCableLines();
             displayError('✓ Nối cáp: ' + _cableDrawChild.name + ' → ' + parentName + ' (' + dist + 'm)');
             _cableDrawChild = null;

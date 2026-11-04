@@ -329,8 +329,8 @@
             mode = mode || 'local';
             if (mode === 'shared') {
                 // Cần admin. Kiểm tra role client-side trước; nếu không admin → downgrade sang local.
-                if (!currentUser || currentUser.role !== 'admin') {
-                    displayError && displayError('Chỉ admin mới lưu shared preset. Sẽ lưu local.');
+                if (!hasPerm('dia_ban')) {
+                    displayError && displayError('Bạn không có quyền lưu preset dùng chung. Sẽ lưu local.');
                     mode = 'local';
                 }
             }
@@ -373,8 +373,8 @@
         // Delete preset — nếu source='shared' cần admin.
         async function _deleteCadOffsetPreset(id, source) {
             if (source === 'shared') {
-                if (!currentUser || currentUser.role !== 'admin') {
-                    displayError && displayError('Chỉ admin mới xóa shared preset');
+                if (!hasPerm('dia_ban')) {
+                    displayError && displayError('Bạn không có quyền xoá preset dùng chung');
                     return false;
                 }
                 if (id === 'vn2000_std' || id === 'tham_luong') {
@@ -410,7 +410,9 @@
         let _adminAuthCached = null;
         async function _getAdminAuth() {
             if (_adminAuthCached) return _adminAuthCached;
-            if (!currentUser || currentUser.role !== 'admin') return null;
+            // v211: có token phiên → GAS xác thực bằng token, không hỏi lại mật khẩu
+            if (currentUser && currentUser.token) return { username: currentUser.username };
+            if (!currentUser || !hasPerm('dia_ban')) return null;
             const pwd = prompt(`Xác nhận mật khẩu admin cho ${currentUser.username}:`);
             if (!pwd) return null;
             _adminAuthCached = { username: currentUser.username, password: pwd };
@@ -1822,6 +1824,7 @@
         async function _onCgExportBom() {
             const rows = _filterRowsForCadExport(_cgCurrentFilters);
             if (!rows || rows.length === 0) { displayError && displayError('Filter không match marker'); return; }
+            if (!(typeof _authExportGate !== 'function' || _authExportGate('bom', rows.length))) return;   // v211
             const opts = { metadata: _collectMetadata() };
             try {
                 await _exportBomExcel(rows, opts);
@@ -1930,6 +1933,7 @@
             const rows = _filterRowsForCadExport(_cgCurrentFilters);
             if (!rows || rows.length === 0) { displayError && displayError('Filter không match marker'); return; }
             if (!confirm('Compile hồ sơ đầy đủ (3 bản vẽ DXF + BOM Excel + tính điện Excel + dấu/chữ ký). Có thể mất 30-60s. Tiếp tục?')) return;
+            if (!(typeof _authExportGate !== 'function' || _authExportGate('ho_so', rows.length))) return;   // v211 — kiểm + ghi nhật ký SAU khi xác nhận
 
             const btn = document.getElementById('cgBtnDossier');
             const oldText = btn ? btn.textContent : '';
@@ -2071,6 +2075,7 @@
         async function _onCgExportElectrical() {
             const rows = _filterRowsForCadExport(_cgCurrentFilters);
             if (!rows || rows.length === 0) { displayError && displayError('Filter không match marker'); return; }
+            if (!(typeof _authExportGate !== 'function' || _authExportGate('tinh_dien', rows.length))) return;   // v211
             try {
                 await _exportElectricalExcel(rows, { metadata: _collectMetadata() });
             } catch (err) {
@@ -3926,7 +3931,7 @@
 
             // Nếu user là admin → hỏi lưu local hay shared. Ngược lại → local mặc định.
             let mode = 'local';
-            if (currentUser && currentUser.role === 'admin') {
+            if (hasPerm('dia_ban')) {
                 const choice = confirm(
                     `Lưu preset "${name}"?\n\n` +
                     `[OK] = 🌍 Shared (cả team dùng chung, cần admin)\n` +
@@ -4492,6 +4497,7 @@
                 if (_cgOsmFetching && _cgExportAbort && !_cgExportAbort.signal.aborted && Date.now() - _cgExportT0 > 800) _cgExportAbort.abort();
                 return;
             }
+            if (!(typeof _authExportGate !== 'function' || _authExportGate('cad_' + (mode || 'dxf'), _filterRowsForCadExport(_cgCurrentFilters).length))) return;   // v211
             _cgExportBusy = true;
             _cgExportAbort = (typeof AbortController !== 'undefined') ? new AbortController() : null;
             _cgExportT0 = Date.now();
@@ -4839,6 +4845,7 @@
         // ── T25: Batch export — mỗi tủ 1 DXF trong zip ────────────────
         async function _onCgBatchExport() {
             const allTus = _getUniqueCabinets();
+            if (!(typeof _authExportGate !== 'function' || _authExportGate('cad_batch', Math.max(0, (loadedData || []).length - 1)))) return;   // v211
             if (allTus.length === 0) {
                 displayError && displayError('Không có tủ nào trong dữ liệu');
                 return;

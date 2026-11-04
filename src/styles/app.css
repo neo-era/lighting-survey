@@ -1090,3 +1090,112 @@
 }
 .bk-restore .bad, .bk-counts li.bad { color: var(--danger-ink, var(--danger)); font-weight: 600; }
 @media (max-width: 560px) { .bk-btn { min-height: 44px; padding: 0 14px; } }
+
+/* v211 — bắt buộc đổi mật khẩu: ẩn nút đóng/Hủy */
+#changeCredentialsModal.cc-forced .close,
+#changeCredentialsModal.cc-forced [data-dismiss="modal"] { display: none !important; }
+
+/* ── v211 — Quản lý người dùng (src/features/user-admin.js) ── */
+#uaOverlay{position:fixed;inset:0;z-index:3200;display:none;align-items:center;justify-content:center;background:rgba(2,12,16,.55);padding:max(10px,env(safe-area-inset-top)) 10px max(10px,env(safe-area-inset-bottom))}
+#uaOverlay.on{display:flex}
+body.ua-open{overflow:hidden}
+#uaOverlay .ua-sheet{width:min(1180px,100%);height:min(780px,100%);background:var(--surface-solid);color:var(--text);border:1px solid var(--border);border-radius:var(--radius-lg);box-shadow:var(--shadow-xl);display:flex;flex-direction:column;overflow:hidden;font-family:var(--font)}
+#uaOverlay .ua-hd{display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--border)}
+#uaOverlay .ua-hd h2{font-size:17px;margin:0;font-weight:800;flex:1}
+#uaOverlay .ua-x{width:44px;height:44px;border-radius:12px;border:1px solid var(--border);background:var(--surface-2);color:var(--text);font-size:16px;flex:none}
+#uaOverlay .ua-back{display:none;font-size:22px}
+#uaOverlay .ua-tabs{display:flex;gap:2px;padding:0 12px;border-bottom:1px solid var(--border);overflow-x:auto}
+#uaOverlay .ua-tab{min-height:44px;padding:0 14px;font-weight:700;font-size:14px;color:var(--text-muted);background:none;border:0;border-bottom:2px solid transparent;white-space:nowrap}
+#uaOverlay .ua-tab.on{color:var(--text);border-bottom-color:var(--primary)}
+#uaOverlay .ua-tab .c{font-size:11px;background:var(--surface-2);border-radius:99px;padding:1px 7px;margin-left:5px}
+#uaOverlay .ua-banner{margin:10px 16px 0;padding:6px 12px;min-height:40px;border-radius:12px;background:var(--warn-bg);color:var(--warn-ink);border:1px solid var(--warn-bd);font-size:13px;display:flex;gap:10px;align-items:center}
+#uaOverlay .ua-banner span{flex:1}
+#uaOverlay .ua-split{flex:1;display:grid;grid-template-columns:340px 1fr;min-height:0}
+#uaOverlay .ua-list{border-right:1px solid var(--border);overflow:auto;padding:12px}
+#uaOverlay .ua-sticky{position:sticky;top:-12px;margin-top:-12px;background:var(--surface-solid);padding-top:12px;z-index:1}
+#uaOverlay .ua-ck-t{min-width:0}
+#uaOverlay .ua-in{width:100%;min-height:44px;border-radius:12px;border:1px solid var(--border);background:var(--surface-2);color:var(--text);padding:0 12px;font:inherit;font-size:16px;margin-top:5px;box-sizing:border-box}
+#uaOverlay .ua-in[readonly]{opacity:.7}
+#uaOverlay .ua-chips{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}
+#uaOverlay .ua-chip{display:inline-flex;align-items:center;gap:4px;font-size:12px;padding:3px 9px;border-radius:99px;background:var(--surface-2);border:1px solid var(--border);color:var(--text);white-space:nowrap;font-family:inherit}
+#uaOverlay button.ua-chip{min-height:34px;cursor:pointer}
+#uaOverlay .ua-chip.r{background:var(--primary-light);border-color:var(--primary);font-weight:700}
+#uaOverlay .ua-chip.warn{background:var(--warn-bg);color:var(--warn-ink);border-color:var(--warn-bd)}
+#uaOverlay .ua-chip.bad{background:var(--danger-bg);color:var(--danger-ink);border-color:var(--danger-bd)}
+#uaOverlay .ua-chip.ok{background:var(--ok-bg);color:var(--ok-ink);border-color:var(--ok-bd)}
+#uaOverlay .ua-it{display:flex;gap:10px;align-items:center;width:100%;text-align:left;min-height:52px;padding:8px 10px;border-radius:12px;border:0;background:none;color:var(--text);font:inherit;font-size:14px;cursor:pointer}
+#uaOverlay .ua-it:hover{background:var(--surface-2)}
+#uaOverlay .ua-it.on{background:var(--primary-light)}
+#uaOverlay .ua-it-t{flex:1;min-width:0}
+#uaOverlay .ua-it small,#uaOverlay .ua-ck small{display:block;color:var(--text-muted);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#uaOverlay .ua-av{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;font-weight:800;font-size:13px;background:var(--primary-light);color:var(--text);flex:none}
+#uaOverlay .ua-av.lg{width:52px;height:52px;font-size:18px}
+#uaOverlay .ua-det{overflow:auto;padding:0 20px 20px;min-width:0}
+#uaOverlay .ua-full{grid-column:1/-1}
+#uaOverlay .ua-dhd{position:sticky;top:0;z-index:2;background:var(--surface-solid);display:flex;gap:12px;align-items:center;padding:14px 0 12px;border-bottom:1px solid var(--border);margin-bottom:12px}
+#uaOverlay .ua-dt{flex:1;min-width:0}
+#uaOverlay .ua-name{font-size:18px;font-weight:800}
+#uaOverlay .ua-muted{color:var(--text-muted);font-size:13px}
+#uaOverlay .ua-sec{border:1px solid var(--border);border-radius:16px;padding:12px 14px;margin-bottom:12px}
+#uaOverlay .ua-sec h4{margin:0 0 10px;font-size:12.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted)}
+#uaOverlay .ua-sub{font-size:12px;font-weight:700;color:var(--text-muted);margin:4px 0}
+#uaOverlay .ua-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+#uaOverlay .ua-f{display:block;font-size:12px;font-weight:700;margin-bottom:6px}
+#uaOverlay .ua-f .ua-in{font-weight:400}
+#uaOverlay .ua-btn{min-height:44px;padding:0 14px;border-radius:12px;border:1px solid var(--border);background:var(--surface-2);color:var(--text);font-weight:600;font-size:13.5px;font-family:inherit;display:inline-flex;align-items:center;justify-content:center;gap:6px;cursor:pointer}
+#uaOverlay .ua-btn.sm{min-height:34px;font-size:12.5px}
+#uaOverlay .ua-btn.p{background:var(--primary);color:var(--on-primary);border-color:transparent}
+#uaOverlay .ua-btn.d{background:var(--danger-bg);color:var(--danger-ink);border-color:var(--danger-bd)}
+#uaOverlay .ua-btn:disabled{opacity:.5;cursor:not-allowed}
+#uaOverlay .ua-btn.wide{width:100%;margin-top:8px}
+#uaOverlay .ua-btn.ua-pulse{box-shadow:0 0 0 3px var(--primary-light)}
+#uaOverlay .ua-acts{display:flex;gap:8px;flex-wrap:wrap}
+#uaOverlay .ua-checks{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:4px 10px}
+#uaOverlay .ua-pgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:2px 10px}
+#uaOverlay .ua-pg{margin-bottom:8px}
+#uaOverlay .ua-ck{display:flex;gap:8px;align-items:flex-start;font-size:14px;min-height:40px;padding:8px 0;cursor:pointer;min-width:0}
+#uaOverlay .ua-ck input{width:20px;height:20px;flex:none;margin:0;accent-color:var(--primary)}
+#uaOverlay .ua-ck.off{opacity:.6}
+#uaOverlay .ua-more{margin-top:8px}
+#uaOverlay .ua-more summary{cursor:pointer;min-height:40px;display:flex;align-items:center;font-size:13px;font-weight:700;color:var(--text-muted)}
+#uaOverlay .ua-eff{margin-top:10px;font-size:13.5px;line-height:1.5}
+#uaOverlay .ua-sum{font-size:12px;color:var(--text-muted);margin-bottom:4px}
+#uaOverlay .ua-handover{margin-top:10px;padding:12px;border-radius:12px;background:var(--danger-bg);border:1px solid var(--danger-bd);display:flex;flex-direction:column;gap:8px}
+#uaOverlay .ua-pw{background:var(--ok-bg);border-color:var(--ok-bd);color:var(--ok-ink)}
+#uaOverlay .ua-pw code{font-size:16px;font-weight:800;padding:2px 6px;background:var(--surface-solid);border-radius:6px;color:var(--text)}
+#uaOverlay .ua-empty{padding:40px 10px;text-align:center;color:var(--text-muted)}
+#uaOverlay .ua-empty.sm{padding:16px 6px}
+#uaOverlay .ua-matrix{overflow:auto}
+#uaOverlay .ua-matrix table,#uaOverlay .ua-tbl{border-collapse:collapse;font-size:13px;width:100%}
+#uaOverlay .ua-matrix th,#uaOverlay .ua-matrix td,#uaOverlay .ua-tbl th,#uaOverlay .ua-tbl td{border-bottom:1px solid var(--border);padding:6px 8px;text-align:center}
+#uaOverlay .ua-matrix td:first-child,#uaOverlay .ua-matrix th:first-child,#uaOverlay .ua-tbl td:first-child,#uaOverlay .ua-tbl th:first-child{text-align:left}
+#uaOverlay .ua-matrix tr.g td{font-weight:800;color:var(--text-muted);background:var(--surface-2);text-align:left}
+@media (max-width:720px){
+  #uaOverlay{padding:0}
+  #uaOverlay .ua-sheet{border-radius:0;height:100%}
+  #uaOverlay .ua-split{grid-template-columns:1fr}
+  #uaOverlay.ua-show-det .ua-list{display:none}
+  #uaOverlay:not(.ua-show-det) .ua-det:not(.ua-full){display:none}
+  #uaOverlay.ua-show-det .ua-back{display:inline-flex;align-items:center;justify-content:center}
+  #uaOverlay .ua-row{grid-template-columns:1fr}
+  #uaOverlay .ua-det{padding:0 12px 16px}
+  #uaOverlay .ua-cmp{display:none}
+}
+@media (orientation:landscape) and (max-height:520px){
+  #uaOverlay{padding:0}
+  #uaOverlay .ua-sheet{height:100%;border-radius:0}
+  #uaOverlay .ua-split{grid-template-columns:260px 1fr}
+  #uaOverlay .ua-list{display:block !important}
+  #uaOverlay .ua-det{display:block !important}
+  #uaOverlay .ua-back{display:none !important}
+  #uaOverlay .ua-hd{padding:4px 12px}
+  #uaOverlay .ua-banner{margin:6px 12px 0;max-height:40px;min-height:0;padding:4px 10px;white-space:nowrap;overflow:hidden}
+  #uaOverlay .ua-banner span{overflow:hidden;text-overflow:ellipsis}
+  #uaOverlay .ua-dhd{padding:8px 0}
+}
+
+@media (pointer:coarse){
+  #uaOverlay button.ua-chip,#uaOverlay .ua-btn.sm{min-height:44px}
+  #uaOverlay .ua-ck,#uaOverlay .ua-more summary{min-height:44px}
+  #authModeBanner button{min-height:44px !important}
+}

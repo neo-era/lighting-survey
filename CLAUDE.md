@@ -153,6 +153,7 @@ Nếu lọc chạy trước `fitBounds` thì `getBounds()` sẽ thiếu marker �
 | upload_to_github | Nhận Excel base64 từ client → upload file lên GitHub repo    |
 | backup_now / list_backups / restore_preview / restore_backup_sheet | **v210** sao lưu (admin) — xem `docs/design-backup.md` |
 | backup_pre_import / backup_health | **v210** sao lưu trước thao tác hàng loạt / tình trạng sao lưu tự động |
+| whoami / lock_user / unlock_user / revoke_sessions / list_roles / save_role / delete_role / list_groups / save_group / delete_group / set_auth_mode / auth_status / log_export | **v211** phân quyền — xem `docs/design-user-groups-roles.md` |
 
 **Sao lưu (v210)**: bản sao nguyên file Google Sheet trong thư mục Drive `LightingSurvey_Backup` (trigger `dailyBackup` 01h + nút tay + tự động trước thao tác hàng loạt qua `_bkPreBatch`). Khôi phục 1 tab → GAS đặt mốc `BK_EPOCH_<tab>`; trong 30 ngày mọi lệnh ghi tab đó phải kèm `clientEpochSeen` (bọc `fetch` trong `src/features/backup.js` tự gắn) nếu không trả `status:'stale'`. ⚠ Lệnh ghi hàng loạt mới phải gọi `_bkPreBatch` trước và có trong `_bkWriteActions` (GAS + app — test đối chiếu).
 
@@ -223,6 +224,13 @@ if ('serviceWorker' in navigator) {
 > **Lưu ý tải thư viện:** jQuery + Bootstrap chuyển xuống cuối `<body>` (không còn ở `<head>`) để HTML render ngay. ExcelJS lazy-load qua `_loadExcelJS()` — chỉ tải khi user gọi `saveMarkerData()`, `updateGitHubExcel()`, hoặc `exportReport()`. jsPDF + html2canvas lazy-load qua `_loadPrintLibs()` — chỉ tải khi user bấm "Xuất PDF" trong modal In bản vẽ.
 
 ## Phân quyền người dùng
+
+> **v211 — thay thế mô tả bên dưới.** Quyền theo **vai trò** (18 quyền, `src/core/perms.js` — khối `@@PERMS` chép sang GAS bằng `node tools/sync-perms.cjs`)
+> + **nhóm** (đơn vị, mang địa bàn) — sheet `VaiTro`, `NhomNguoiDung`; `TaiKhoan` 12 cột (F nhóm, G trạng thái, H hết hạn, I đăng nhập cuối, J sv, K uid, L buộc đổi MK).
+> Đăng nhập trả **token phiên** (HMAC, 30 ngày, bên ngoài 7 ngày; `whoami` gia hạn trượt); `src/features/auth.js` gắn token vào mọi `fetch` tới GAS,
+> `hasPerm(k)`, `_authCanWriteSheet(tab)`. Địa bàn chỉ giới hạn **ghi** (xem là công khai). GAS `_authorize` đầu `doPost`; `AUTH_MODE`
+> (`log` = ghi nhận, `on` = chặn; lệnh quản trị luôn chặn). Quản lý: `openUserAdmin()` (`src/features/user-admin.js`). Thiết kế: `docs/design-user-groups-roles.md`.
+> ⚠ Không còn giữ mật khẩu admin trong bộ nhớ (`window._adminAuth` bỏ); `_getAdminAuth()` trả `{username}` khi có token.
 
 Dữ liệu tài khoản đọc từ sheet `TaiKhoan` (cột A=tenDangNhap, B=matKhau, C=hoTen, D=vaiTro, **E=vung**).
 Bảng phân quyền định nghĩa ở sheet `PhanQuyen`:
