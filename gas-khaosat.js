@@ -4091,7 +4091,7 @@ function _bkFolder() {
     if (id) {   // thư mục cũ mất/không truy cập được → báo để admin biết bản cũ nằm ở chỗ khác
       var note = 'Thư mục backup cũ (' + id + ') không còn truy cập được — đã tạo thư mục mới ' + f.getUrl();
       _logToHistory({ loaiThaoTac: 'backup_folder_new', nguoiThucHien: 'hệ thống', chiTiet: note });
-      try { GmailApp.sendEmail(Session.getEffectiveUser().getEmail(), '[Lighting Survey] Đã tạo lại thư mục sao lưu', note); } catch (e) { /* silent */ }
+      try { MailApp.sendEmail(Session.getEffectiveUser().getEmail(), '[Lighting Survey] Đã tạo lại thư mục sao lưu', note); } catch (e) { /* silent */ }
     }
   }
   try {
@@ -4188,7 +4188,7 @@ function dailyBackup() {
     var detail = JSON.stringify({ failed: r.failed, retention: r.retentionFailed }).slice(0, 2000);
     _logToHistory({ loaiThaoTac: 'backup_failed', nguoiThucHien: 'tự động', chiTiet: detail });
     try {
-      GmailApp.sendEmail(Session.getEffectiveUser().getEmail(), '[Lighting Survey] Sao lưu tự động bị lỗi',
+      MailApp.sendEmail(Session.getEffectiveUser().getEmail(), '[Lighting Survey] Sao lưu tự động bị lỗi',
         'Sao lưu tự động lúc ' + _bkFmt(Date.now()) + ' có lỗi.\n\nThành công: ' + r.ok.length +
         '\nLỗi: ' + detail + '\n\nKiểm tra quyền Drive / file ngoài trong Apps Script.');
     } catch (e) { Logger.log('Không gửi được email báo lỗi sao lưu: ' + e.message); }

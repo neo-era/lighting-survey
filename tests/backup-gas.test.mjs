@@ -110,6 +110,7 @@ function makeWorld(opts = {}) {
         ScriptApp: { getProjectTriggers: () => triggers.slice(), deleteTrigger: t => { triggers.splice(triggers.indexOf(t), 1); },
             newTrigger: h => { const b = { tz: null, hour: null, timeBased() { return b; }, atHour(x) { b.hour = x; return b; }, everyDays() { return b; }, inTimezone(z) { b.tz = z; return b; }, create() { const t = { getHandlerFunction: () => h, hour: b.hour, tz: b.tz }; triggers.push(t); return t; } }; return b; } },
         GmailApp: { sendEmail: (...a) => mails.push(a) },
+        MailApp: { sendEmail: (...a) => mails.push(a) },
     };
     vm.createContext(ctx);
     vm.runInContext(SRC, ctx);
