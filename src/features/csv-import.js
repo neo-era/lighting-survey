@@ -494,6 +494,7 @@
     }
 
     async function _confirmCsvImport() {
+        if (typeof _bkPreBatch === 'function' && !(await _bkPreBatch('nhập CSV'))) return;
         const zoneOpts = _getCsvZoneParams();
         const offsetOpts = _getCsvOffset();
         const mode = _getCsvMode();
@@ -612,7 +613,9 @@
         // Helper: gọi batch_match_update 1 chunk với retry
         const BATCH_SIZE = 50;
         const MAX_RETRIES = 3;
+        let _bkStaleStop = false;   // v210: địa bàn vừa được khôi phục → dừng cả đợt, không gửi tiếp
         async function _batchUpdateChunk(records, attempt = 1) {
+            if (_bkStaleStop) return 0;
             try {
                 const res = await fetch(KHAOSAT_GAS_URL, {
                     method: 'POST',
@@ -621,6 +624,7 @@
                 if (!res.ok) throw new Error('HTTP ' + res.status);
                 const data = await res.json();
                 if (data.status === 'ok') return data.updated || 0;
+                if (data.status === 'stale') { _bkStaleStop = true; return 0; }
                 throw new Error(data.message || 'GAS error');
             } catch (err) {
                 console.warn(`[batch_match_update] chunk lỗi lần ${attempt}:`, err.message);

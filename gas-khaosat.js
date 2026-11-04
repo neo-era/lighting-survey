@@ -945,6 +945,18 @@ function doPost(e) {
       return handleLogin((data.username || '').trim(), data.password || '');
     }
 
+    // v210 — sau khi khôi phục 1 địa bàn, chặn máy còn giữ dữ liệu cũ ghi đè ngược
+    const _stale = _bkStaleResponse(data);
+    if (_stale) return _stale;
+
+    // v210 — sao lưu dữ liệu
+    if (data.action === 'backup_now')           return handleBackupNow(data);
+    if (data.action === 'backup_pre_import')    return handleBackupPreImport(data);
+    if (data.action === 'list_backups')         return handleListBackups(data);
+    if (data.action === 'backup_health')        return handleBackupHealth(data);
+    if (data.action === 'restore_preview')      return handleRestorePreview(data);
+    if (data.action === 'restore_backup_sheet') return handleRestoreBackupSheet(data);
+
     if (data.action === 'change_credentials') {
       return handleChangeCredentials(data);
     }
@@ -3902,4 +3914,523 @@ function handleCreateDiaBan(data) {
     }
     return jsonResponse({ status: 'error', message: 'create_dia_ban lỗi: ' + err.message });
   }
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// ── SAO LƯU DỮ LIỆU (v210) — xem docs/design-backup.md ────────────────────
+// ══════════════════════════════════════════════════════════════════════════
+// @@BACKUP_PURE_START
+var BK_APP = 'lighting-survey-backup';
+var BK_KINDS = { auto: 'tự động', manual: 'tay', pre_restore: 'trước khôi phục', pre_import: 'trước nhập' };
+var BK_KEEP = { auto: 30, autoWeeks: 8, autoMonths: 12, manual: 20, pre_restore: 20, pre_import: 20 };
+var BK_CORE_COLS = ['id', 'tên trụ', 'lat', 'lon'];
+var BK_DENY_TABS = ['taikhoan', 'lichsu', 'diaban', 'phanquyen', 'offsetpresets', 'suco', 'baotri', 'nhiemvu'];
+var BK_STALE_WINDOW_MS = 30 * 86400000;
+var _bkWriteActions = ['full_update', 'delete_row', 'batch_import', 'batch_match_update', 'assign_phases',
+  'fill_marker_goc', 'fill_marker_goc_chain', 'normalize_coords', 'fix_loai', 'purge_no_gps'];
+
+function _bkName(srcName, stamp, kind, by) {
+  var label = BK_KINDS[kind] || kind;
+  if (kind !== 'auto' && by) label += ': ' + by;
+  return srcName + ' — backup ' + stamp + ' (' + label + ')';
+}
+
+function _bkMeta(o) {
+  return JSON.stringify({ app: BK_APP, v: 1, src: o.src, kind: o.kind, by: o.by || '', at: o.at, rows: o.rows || {} });
+}
+
+function _bkParseMeta(desc) {
+  if (!desc) return null;
+  try {
+    var o = JSON.parse(desc);
+    if (!o || o.app !== BK_APP || !o.src || !BK_KINDS.hasOwnProperty(o.kind)) return null;
+    return o;
+  } catch (e) { return null; }
+}
+
+// Khoá ngày/tuần/tháng theo giờ VN (UTC+7, không có giờ mùa hè)
+function _bkVnKeys(ms) {
+  var d = new Date(ms + 7 * 3600000);
+  var y = d.getUTCFullYear(), mo = d.getUTCMonth() + 1;
+  // Tuần ISO: thứ Năm của tuần quyết định năm
+  var t = new Date(Date.UTC(y, d.getUTCMonth(), d.getUTCDate()));
+  var dow = (t.getUTCDay() + 6) % 7;
+  t.setUTCDate(t.getUTCDate() - dow + 3);
+  var firstThu = new Date(Date.UTC(t.getUTCFullYear(), 0, 4));
+  var wk = 1 + Math.round(((t - firstThu) / 86400000 - 3 + ((firstThu.getUTCDay() + 6) % 7)) / 7);
+  return { week: t.getUTCFullYear() + '-W' + wk, month: y + '-' + (mo < 10 ? '0' : '') + mo };
+}
+
+// items: [{id, src, kind, atMs}] → mảng id cần cho vào Thùng rác
+function _bkPickToTrash(items) {
+  var groups = {};
+  (items || []).forEach(function(it) {
+    var k = it.src + '|' + it.kind;
+    (groups[k] = groups[k] || []).push(it);
+  });
+  var trash = [];
+  Object.keys(groups).forEach(function(k) {
+    var arr = groups[k].slice().sort(function(a, b) { return b.atMs - a.atMs; });
+    var kind = arr[0].kind;
+    var keep = {};
+    if (kind === 'auto') {
+      arr.slice(0, BK_KEEP.auto).forEach(function(it) { keep[it.id] = 1; });
+      var weeks = {}, nW = 0, monthsSeen = {}, nM = 0;
+      arr.forEach(function(it) {
+        var keys = _bkVnKeys(it.atMs);
+        if (!weeks[keys.week] && nW < BK_KEEP.autoWeeks) { weeks[keys.week] = 1; nW++; keep[it.id] = 1; }
+        if (!monthsSeen[keys.month] && nM < BK_KEEP.autoMonths) { monthsSeen[keys.month] = 1; nM++; keep[it.id] = 1; }
+      });
+    } else {
+      arr.slice(0, BK_KEEP[kind] || 20).forEach(function(it) { keep[it.id] = 1; });
+    }
+    arr.forEach(function(it) { if (!keep[it.id]) trash.push(it.id); });
+  });
+  return trash;
+}
+
+function _bkTooSoon(lastMs, nowMs, minMs) {
+  if (!(lastMs > 0)) return false;
+  return nowMs - lastMs < minMs;
+}
+
+function _bkTrimHeader(h) {
+  var a = (h || []).map(function(x) { return norm(x); });
+  while (a.length && !a[a.length - 1]) a.pop();
+  return a;
+}
+
+// req: {tab, confirm, reason, backupHeader, currentHeader, metaSrc, targetSrc}
+function _bkValidateRestore(req) {
+  var tab = String(req.tab || '').trim();
+  if (!tab) return { ok: false, err: 'Thiếu tên tab' };
+  if (tab.charAt(0) === '_' || BK_DENY_TABS.indexOf(norm(tab)) >= 0) return { ok: false, err: 'Không được khôi phục tab hệ thống: ' + tab };
+  if (String(req.confirm || '').trim() !== tab) return { ok: false, err: 'Gõ xác nhận sai — cần gõ đúng "' + tab + '"' };
+  if (String(req.reason || '').trim().length < 3) return { ok: false, err: 'Cần ghi lý do khôi phục' };
+  if (!req.metaSrc || req.metaSrc !== req.targetSrc) return { ok: false, err: 'Bản sao không thuộc file chứa tab này' };
+  var cur = _bkTrimHeader(req.currentHeader), bak = _bkTrimHeader(req.backupHeader);
+  if (cur.indexOf('tên trụ') < 0) return { ok: false, err: 'Tab hiện tại không phải tab dữ liệu trụ' };
+  for (var i = 0; i < BK_CORE_COLS.length; i++) {
+    if (bak.indexOf(BK_CORE_COLS[i]) < 0) return { ok: false, err: 'Bản sao thiếu cột lõi: ' + BK_CORE_COLS[i] };
+  }
+  if (bak.length > cur.length) return { ok: false, err: 'Bản sao có nhiều cột hơn tab hiện tại' };
+  for (var j = 0; j < bak.length; j++) {
+    if (bak[j] !== cur[j]) return { ok: false, err: 'Cột thứ ' + (j + 1) + ' khác nhau ("' + bak[j] + '" ≠ "' + cur[j] + '")' };
+  }
+  return { ok: true };
+}
+
+// epochMs: mốc khôi phục (giờ server). seenEpoch: mốc server mà máy đã nạp lại dữ liệu sau đó
+// (client chỉ ghi nhận sau khi tải lại ≥ BK_PUBLISH_DELAY_MS kể từ mốc — CSV publish có độ trễ).
+// So giờ server với giờ server, không dùng đồng hồ điện thoại.
+function _bkIsStale(epochMs, seenEpoch, nowMs) {
+  if (!(epochMs > 0)) return false;
+  if (nowMs - epochMs > BK_STALE_WINDOW_MS) return false;
+  return !(Number(seenEpoch) >= epochMs);
+}
+
+// Thời gian cập nhật: Date | ISO | "HH:mm:ss d/m/yyyy" | "d/m/yyyy HH:mm:ss" (giờ VN) → ms
+function _bkParseTs(v) {
+  if (v instanceof Date) return v.getTime();
+  var s = String(v == null ? '' : v).trim();
+  if (!s) return NaN;
+  if (/^\d{4}-\d{2}-\d{2}T/.test(s)) return Date.parse(s);
+  var t = s.match(/(\d{1,2}):(\d{2})(?::(\d{2}))?/), d = s.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (!d) return NaN;
+  var h = t ? +t[1] : 0, mi = t ? +t[2] : 0, se = t && t[3] ? +t[3] : 0;
+  return Date.UTC(+d[3], +d[2] - 1, +d[1], h - 7, mi, se);
+}
+
+function _bkPreviewCounts(curRows, bakRows, backupAtMs) {
+  function keyOf(r) { var id = String(r[0] || '').trim(); return id ? 'id:' + id : (String(r[1] || '').trim() ? 'n:' + String(r[1]).trim() : ''); }
+  var cur = (curRows || []).slice(1).filter(keyOf), bak = (bakRows || []).slice(1).filter(keyOf);
+  var bakKeys = {}, curKeys = {};
+  bak.forEach(function(r) { bakKeys[keyOf(r)] = 1; });
+  cur.forEach(function(r) { curKeys[keyOf(r)] = 1; });
+  var hdr = (curRows && curRows[0] || []).map(function(x) { return norm(x); });
+  var tIdx = hdr.indexOf('thời gian cập nhật');
+  var changed = 0;
+  if (tIdx >= 0) cur.forEach(function(r) { var t = _bkParseTs(r[tIdx]); if (t > backupAtMs) changed++; });
+  return {
+    current: cur.length, backup: bak.length,
+    onlyCurrent: cur.filter(function(r) { return !bakKeys[keyOf(r)]; }).length,
+    onlyBackup: bak.filter(function(r) { return !curKeys[keyOf(r)]; }).length,
+    changedAfter: changed
+  };
+}
+// @@BACKUP_PURE_END
+
+// ── Phần chạy trên Google (Drive/Sheet/Trigger) ──────────────────────────
+var BK_TZ = 'Asia/Ho_Chi_Minh';
+var BK_FOLDER_NAME = 'LightingSurvey_Backup';
+var BK_MANUAL_GAP_MS = 5 * 60000;
+var BK_PREIMPORT_REUSE_MS = 15 * 60000;
+var BK_CELL_LIMIT = 9500000;  // Google Sheet tối đa 10 triệu ô/file — chừa biên
+
+function _bkStamp(d) { return Utilities.formatDate(d, BK_TZ, 'yyyy-MM-dd HH-mm'); }
+function _bkFmt(ms) { return ms > 0 ? Utilities.formatDate(new Date(ms), BK_TZ, 'HH:mm dd/MM/yyyy') : ''; }
+
+// Thư mục backup: tự tạo lại nếu mất; luôn ép riêng tư (không chia sẻ link)
+function _bkFolder() {
+  var props = PropertiesService.getScriptProperties();
+  var id = props.getProperty('BACKUP_FOLDER_ID');
+  var f = null;
+  if (id) {
+    try {
+      f = DriveApp.getFolderById(id);
+      if (f.isTrashed()) f = null;
+    } catch (e) {
+      // Chỉ tạo thư mục mới khi chắc chắn không còn; lỗi Drive tạm thời → báo lỗi, KHÔNG đổi thư mục
+      if (!/not found|no item|không tìm thấy|không có mục|does not exist|access denied|bị từ chối/i.test(String(e.message || e))) throw e;
+      f = null;
+    }
+  }
+  if (!f) {
+    f = DriveApp.createFolder(BK_FOLDER_NAME);
+    props.setProperty('BACKUP_FOLDER_ID', f.getId());
+    if (id) {   // thư mục cũ mất/không truy cập được → báo để admin biết bản cũ nằm ở chỗ khác
+      var note = 'Thư mục backup cũ (' + id + ') không còn truy cập được — đã tạo thư mục mới ' + f.getUrl();
+      _logToHistory({ loaiThaoTac: 'backup_folder_new', nguoiThucHien: 'hệ thống', chiTiet: note });
+      try { GmailApp.sendEmail(Session.getEffectiveUser().getEmail(), '[Lighting Survey] Đã tạo lại thư mục sao lưu', note); } catch (e) { /* silent */ }
+    }
+  }
+  try {
+    if (f.getSharingAccess() !== DriveApp.Access.PRIVATE) f.setSharing(DriveApp.Access.PRIVATE, DriveApp.Permission.NONE);
+  } catch (e) { Logger.log('Không ép được chế độ riêng tư cho thư mục backup: ' + e.message); }
+  return f;
+}
+
+// Nguồn: file chính + các file ngoài (mỗi ID 1 lần)
+function _bkSources() {
+  var act = SpreadsheetApp.getActiveSpreadsheet();
+  var out = [{ id: act.getId(), tab: '' }], seen = {};
+  seen[act.getId()] = 1;
+  Object.keys(EXTERNAL_SPREADSHEET_IDS).forEach(function(tab) {
+    var id = EXTERNAL_SPREADSHEET_IDS[tab];
+    if (!id || seen[id]) return;
+    seen[id] = 1;
+    out.push({ id: id, tab: tab });
+  });
+  return out;
+}
+
+function _bkSourceIdForTab(tab) {
+  return EXTERNAL_SPREADSHEET_IDS[tab] || SpreadsheetApp.getActiveSpreadsheet().getId();
+}
+
+function _bkCopyOne(srcId, kind, by, folder, now) {
+  var t0 = Date.now();
+  var file = DriveApp.getFileById(srcId);
+  var ss = SpreadsheetApp.openById(srcId);
+  var rows = {};
+  ss.getSheets().forEach(function(sh) { rows[sh.getName()] = Math.max(0, sh.getLastRow() - 1); });
+  var copy = file.makeCopy(_bkName(file.getName(), _bkStamp(now), kind, by), folder);
+  copy.setDescription(_bkMeta({ src: srcId, kind: kind, by: by, at: now.toISOString(), rows: rows }));
+  return { id: copy.getId(), name: copy.getName(), url: copy.getUrl(), src: srcId, ms: Date.now() - t0 };
+}
+
+function _bkListItems(folder) {
+  var me = '';
+  try { me = Session.getEffectiveUser().getEmail(); } catch (e) { /* silent */ }
+  var items = [], it = folder.getFiles();
+  while (it.hasNext()) {
+    var f = it.next();
+    try {
+      if (f.isTrashed()) continue;
+      var m = _bkParseMeta(f.getDescription());
+      if (!m) continue;
+      var owner = '';
+      try { owner = f.getOwner() ? f.getOwner().getEmail() : ''; } catch (e) { /* silent */ }
+      items.push({ id: f.getId(), name: f.getName(), url: f.getUrl(), src: m.src, kind: m.kind, by: m.by,
+                   at: m.at, atMs: Date.parse(m.at), rows: m.rows || {}, mine: !!me && owner === me });
+    } catch (e) { /* bỏ qua file lỗi */ }
+  }
+  return items;
+}
+
+// Chỉ bỏ Thùng rác file: có meta app + nằm trong thư mục backup + chủ là tài khoản chạy script
+function _bkApplyRetention(folder) {
+  var items = _bkListItems(folder).filter(function(x) { return x.mine && x.atMs > 0; });
+  var ids = _bkPickToTrash(items), trashed = 0, failed = [];
+  ids.forEach(function(id) {
+    try { DriveApp.getFileById(id).setTrashed(true); trashed++; }
+    catch (e) { failed.push({ file: id, error: String(e.message || e) }); }
+  });
+  return { trashed: trashed, failed: failed };
+}
+
+function _bkRun(kind, by, onlySrcIds) {
+  var folder = _bkFolder(), now = new Date(), ok = [], failed = [];
+  _bkSources().forEach(function(s) {
+    if (onlySrcIds && onlySrcIds.indexOf(s.id) < 0) return;
+    try { ok.push(_bkCopyOne(s.id, kind, by, folder, now)); }
+    catch (e) { failed.push({ src: s.id, tab: s.tab, error: String(e.message || e) }); }
+  });
+  var ret = { trashed: 0, failed: [] };
+  if (kind !== 'pre_import') {   // trước nhập: không dọn để người dùng khỏi chờ — lượt hằng ngày dọn
+    try { ret = _bkApplyRetention(folder); } catch (e) { ret.failed.push({ file: '*', error: String(e.message || e) }); }
+  }
+  return { ok: ok, failed: failed, retentionFailed: ret.failed, trashed: ret.trashed };
+}
+
+// ── Trigger hằng ngày ───────────────────────────────────────────────────
+function dailyBackup() {
+  var props = PropertiesService.getScriptProperties();
+  var r;
+  try { r = _bkRun('auto', ''); }
+  catch (e) { r = { ok: [], failed: [{ src: '*', error: String(e.message || e) }], retentionFailed: [], trashed: 0 }; }
+  var nowIso = new Date().toISOString();
+  var st = { at: nowIso, ok: r.ok.length, failed: r.failed.length, trashed: r.trashed };
+  if (r.ok.length) st.lastOkAt = nowIso;
+  else { try { st.lastOkAt = (JSON.parse(props.getProperty('BACKUP_LAST_AUTO') || '{}')).lastOkAt || ''; } catch (e) { st.lastOkAt = ''; } }
+  props.setProperty('BACKUP_LAST_AUTO', JSON.stringify(st));
+  if (r.failed.length || r.retentionFailed.length) {
+    var detail = JSON.stringify({ failed: r.failed, retention: r.retentionFailed }).slice(0, 2000);
+    _logToHistory({ loaiThaoTac: 'backup_failed', nguoiThucHien: 'tự động', chiTiet: detail });
+    try {
+      GmailApp.sendEmail(Session.getEffectiveUser().getEmail(), '[Lighting Survey] Sao lưu tự động bị lỗi',
+        'Sao lưu tự động lúc ' + _bkFmt(Date.now()) + ' có lỗi.\n\nThành công: ' + r.ok.length +
+        '\nLỗi: ' + detail + '\n\nKiểm tra quyền Drive / file ngoài trong Apps Script.');
+    } catch (e) { Logger.log('Không gửi được email báo lỗi sao lưu: ' + e.message); }
+  }
+  Logger.log('Sao lưu tự động: ' + r.ok.length + ' bản, lỗi ' + r.failed.length + ', bỏ Thùng rác ' + r.trashed);
+  return r;
+}
+
+/** Chạy 1 lần trong Apps Script Editor: tạo trigger 01:00 hằng ngày + cấp quyền Drive. Chạy lại vẫn chỉ có 1 trigger. */
+function setupDailyBackupTrigger() {
+  var removed = 0;
+  ScriptApp.getProjectTriggers().forEach(function(t) {
+    if (t.getHandlerFunction() === 'dailyBackup') { ScriptApp.deleteTrigger(t); removed++; }
+  });
+  ScriptApp.newTrigger('dailyBackup').timeBased().atHour(1).everyDays(1).inTimezone(BK_TZ).create();
+  var folder = _bkFolder();
+  Logger.log('✓ Trigger dailyBackup chạy khoảng 01:00–02:00 mỗi ngày (giờ VN)' + (removed ? ' — đã xoá ' + removed + ' trigger cũ' : ''));
+  Logger.log('  Thư mục backup: ' + folder.getUrl());
+}
+
+function removeDailyBackupTrigger() {
+  var removed = 0;
+  ScriptApp.getProjectTriggers().forEach(function(t) {
+    if (t.getHandlerFunction() === 'dailyBackup') { ScriptApp.deleteTrigger(t); removed++; }
+  });
+  Logger.log('✓ Đã xoá ' + removed + ' trigger dailyBackup');
+}
+
+// ── Action: chặn máy giữ dữ liệu cũ sau khôi phục ──────────────────────
+function _bkStaleResponse(data) {
+  if (_bkWriteActions.indexOf(data.action) < 0) return null;
+  var tab = String(data.sheet || SHEET_NAME);
+  var ep = Number(PropertiesService.getScriptProperties().getProperty('BK_EPOCH_' + tab) || 0);
+  if (!_bkIsStale(ep, data.clientEpochSeen, Date.now())) return null;
+  return jsonResponse({ status: 'stale', sheet: tab, restoredAt: ep, serverNow: Date.now(),
+    message: 'Địa bàn ' + tab + ' đã được khôi phục từ bản sao lúc ' + _bkFmt(ep) +
+             ' — máy này đang giữ dữ liệu cũ. Tải lại địa bàn rồi làm lại thao tác.' });
+}
+
+// ── Action: sao lưu ngay (admin) ────────────────────────────────────────
+function handleBackupNow(data) {
+  var auth = _requireAdmin(data);
+  if (!auth.ok) return jsonResponse({ status: 'error', message: auth.error });
+  var props = PropertiesService.getScriptProperties();
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)) return jsonResponse({ status: 'busy', message: 'Server đang bận — thử lại sau vài giây.' });
+  try {
+    var last = Number(props.getProperty('BACKUP_LAST_MANUAL') || 0);
+    if (_bkTooSoon(last, Date.now(), BK_MANUAL_GAP_MS)) {
+      return jsonResponse({ status: 'error', message: 'Vừa sao lưu tay lúc ' + _bkFmt(last) + ' — chờ đủ 5 phút rồi bấm lại.' });
+    }
+    props.setProperty('BACKUP_LAST_MANUAL', String(Date.now()));
+  } finally { try { lock.releaseLock(); } catch (e) { /* silent */ } }
+
+  var r = _bkRun('manual', auth.adminUser);
+  if (!r.ok.length) props.deleteProperty('BACKUP_LAST_MANUAL');
+  _logToHistory({ loaiThaoTac: 'backup', nguoiThucHien: auth.adminUser,
+    chiTiet: JSON.stringify({ ok: r.ok.map(function(x) { return x.name; }), failed: r.failed, trashed: r.trashed }).slice(0, 2000) });
+  return jsonResponse({ status: r.ok.length ? 'ok' : 'error', ok: r.ok, failed: r.failed, trashed: r.trashed,
+    message: r.ok.length ? '' : 'Sao lưu thất bại: ' + (r.failed[0] ? r.failed[0].error : '') });
+}
+
+// ── Action: sao lưu trước thao tác hàng loạt (mọi người có quyền sửa) ───
+function handleBackupPreImport(data) {
+  var tab = String(data.sheet || SHEET_NAME).trim();
+  var by = String(data.by || '').trim().slice(0, 40);
+  var srcId = _bkSourceIdForTab(tab);
+  var key = 'BACKUP_LAST_PREIMPORT_' + srcId;
+  var props = PropertiesService.getScriptProperties();
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)) return jsonResponse({ status: 'busy', message: 'Server đang bận — thử lại sau vài giây.' });
+  try {
+    var last = Number(props.getProperty(key) || 0);
+    if (_bkTooSoon(last, Date.now(), BK_PREIMPORT_REUSE_MS)) {
+      return jsonResponse({ status: 'ok', reused: true, at: last, message: 'Đã có bản sao lúc ' + _bkFmt(last) });
+    }
+    props.setProperty(key, String(Date.now()));
+  } finally { try { lock.releaseLock(); } catch (e) { /* silent */ } }
+
+  var r = _bkRun('pre_import', by, [srcId]);
+  if (!r.ok.length) {
+    props.deleteProperty(key);
+    return jsonResponse({ status: 'error', message: 'Không sao lưu được: ' + (r.failed[0] ? r.failed[0].error : '') });
+  }
+  return jsonResponse({ status: 'ok', reused: false, at: Date.now() });
+}
+
+// ── Action: danh sách bản sao + tình trạng (admin) ──────────────────────
+function handleListBackups(data) {
+  var auth = _requireAdmin(data);
+  if (!auth.ok) return jsonResponse({ status: 'error', message: auth.error });
+  var folder = _bkFolder();
+  var items = _bkListItems(folder).sort(function(a, b) { return b.atMs - a.atMs; }).slice(0, 60);
+  var names = {};
+  _bkSources().forEach(function(s) {
+    try { names[s.id] = DriveApp.getFileById(s.id).getName(); } catch (e) { names[s.id] = s.tab || s.id; }
+  });
+  var props = PropertiesService.getScriptProperties();
+  var lastAuto = {};
+  try { lastAuto = JSON.parse(props.getProperty('BACKUP_LAST_AUTO') || '{}'); } catch (e) { lastAuto = {}; }
+  var autoItem = items.filter(function(x) { return x.kind === 'auto'; })[0];
+  var hasTrigger = ScriptApp.getProjectTriggers().some(function(t) { return t.getHandlerFunction() === 'dailyBackup'; });
+  return jsonResponse({
+    status: 'ok',
+    items: items.map(function(x) {
+      return { id: x.id, name: x.name, url: x.url, src: x.src, srcName: names[x.src] || x.src,
+               kind: x.kind, by: x.by, at: x.at, atText: _bkFmt(x.atMs), rows: x.rows };
+    }),
+    health: { hasTrigger: hasTrigger, lastAutoAt: autoItem ? autoItem.at : (lastAuto.lastOkAt || ''),
+              lastRunAt: lastAuto.at || '', lastRunFailed: lastAuto.failed || 0 },
+    externalTabs: Object.keys(EXTERNAL_SPREADSHEET_IDS),
+    restoreInProgress: (function() { try { return JSON.parse(props.getProperty('BK_RESTORE_INPROGRESS') || 'null'); } catch (e) { return null; } })(),
+    folderUrl: folder.getUrl()
+  });
+}
+
+// ── Action: tình trạng sao lưu tự động (không cần admin — chỉ giờ, không có link) ──
+function handleBackupHealth(data) {
+  var lastAuto = {};
+  try { lastAuto = JSON.parse(PropertiesService.getScriptProperties().getProperty('BACKUP_LAST_AUTO') || '{}'); } catch (e) { lastAuto = {}; }
+  var hasTrigger = ScriptApp.getProjectTriggers().some(function(t) { return t.getHandlerFunction() === 'dailyBackup'; });
+  return jsonResponse({ status: 'ok', health: { hasTrigger: hasTrigger, lastAutoAt: lastAuto.lastOkAt || '',
+                        lastRunAt: lastAuto.at || '', lastRunFailed: lastAuto.failed || 0 } });
+}
+
+// ── Khôi phục ───────────────────────────────────────────────────────────
+function _bkOpenBackup(backupId) {
+  var f = DriveApp.getFileById(String(backupId || ''));
+  var meta = _bkParseMeta(f.getDescription());
+  if (!meta) throw new Error('File này không phải bản sao của app');
+  var folderId = _bkFolder().getId(), inFolder = false, ps = f.getParents();
+  while (ps.hasNext()) { if (ps.next().getId() === folderId) inFolder = true; }
+  if (!inFolder) throw new Error('Bản sao không nằm trong thư mục backup');
+  return { file: f, meta: meta, ss: SpreadsheetApp.openById(f.getId()) };
+}
+
+// Mở ĐÚNG file + tab đích — không dùng getSheet() vì có nhánh dự phòng ngầm sang DanhSachTru
+function _bkTargetSheet(tab) {
+  var srcId = _bkSourceIdForTab(tab);
+  var ss = SpreadsheetApp.openById(srcId);
+  var sh = ss.getSheetByName(tab);
+  if (!sh) throw new Error('File đích không có tab "' + tab + '"');
+  return { ss: ss, sheet: sh, srcId: srcId };
+}
+
+function _bkHeaderOf(sh) {
+  return sh.getRange(1, 1, 1, Math.max(1, sh.getLastColumn())).getValues()[0];
+}
+
+function _bkPrepareRestore(data, confirm, reason) {
+  var tab = String(data.tab || '').trim();
+  var b = _bkOpenBackup(data.backupId);
+  var t = _bkTargetSheet(tab);
+  var bsh = b.ss.getSheetByName(tab);
+  if (!bsh) throw new Error('Bản sao không có tab "' + tab + '"');
+  var v = _bkValidateRestore({ tab: tab, confirm: confirm, reason: reason,
+    backupHeader: _bkHeaderOf(bsh), currentHeader: _bkHeaderOf(t.sheet), metaSrc: b.meta.src, targetSrc: t.srcId });
+  return { tab: tab, b: b, t: t, bsh: bsh, v: v };
+}
+
+function handleRestorePreview(data) {
+  var auth = _requireAdmin(data);
+  if (!auth.ok) return jsonResponse({ status: 'error', message: auth.error });
+  try {
+    var p = _bkPrepareRestore(data, String(data.tab || '').trim(), 'xem trước');
+    if (!p.v.ok) return jsonResponse({ status: 'error', message: p.v.err });
+    var counts = _bkPreviewCounts(p.t.sheet.getDataRange().getValues(), p.bsh.getDataRange().getValues(), Date.parse(p.b.meta.at));
+    return jsonResponse({ status: 'ok', tab: p.tab, backupAt: p.b.meta.at, backupAtText: _bkFmt(Date.parse(p.b.meta.at)),
+                          backupName: p.b.file.getName(), counts: counts });
+  } catch (e) {
+    return jsonResponse({ status: 'error', message: String(e.message || e) });
+  }
+}
+
+function handleRestoreBackupSheet(data) {
+  var auth = _requireAdmin(data);
+  if (!auth.ok) return jsonResponse({ status: 'error', message: auth.error });
+  return _withScriptLock(function() {
+    var p;
+    try { p = _bkPrepareRestore(data, data.confirm, data.reason); }
+    catch (e) { return jsonResponse({ status: 'error', message: String(e.message || e) }); }
+    if (!p.v.ok) return jsonResponse({ status: 'error', message: p.v.err });
+
+    var target = p.t.sheet, ss = p.t.ss, bsh = p.bsh;
+    var nR = Math.max(1, bsh.getLastRow()), nC = Math.max(1, bsh.getLastColumn());
+    var cells = 0;
+    ss.getSheets().forEach(function(sh) { cells += sh.getMaxRows() * sh.getMaxColumns(); });
+    if (cells + 2 * target.getMaxRows() * target.getMaxColumns() + bsh.getMaxRows() * bsh.getMaxColumns() > BK_CELL_LIMIT) {
+      return jsonResponse({ status: 'error', message: 'File đích gần giới hạn 10 triệu ô của Google Sheet — xoá bớt tab cũ (_TruocKP_…) rồi thử lại.' });
+    }
+    var curHeader = _bkHeaderOf(target);
+    var before = Math.max(0, target.getLastRow() - 1);
+
+    // 1) Sao lưu cả file đích ("trước khôi phục")
+    var pre;
+    try { pre = _bkCopyOne(p.t.srcId, 'pre_restore', auth.adminUser, _bkFolder(), new Date()); }
+    catch (e) { return jsonResponse({ status: 'error', message: 'Không tạo được bản "trước khôi phục" — dừng, chưa ghi gì: ' + e.message }); }
+
+    // 2) Chụp tab hiện tại thành tab ẩn trong file đích
+    var snapName = ('_TruocKP_' + p.tab + '_' + Utilities.formatDate(new Date(), BK_TZ, 'yyyyMMdd_HHmm')).slice(0, 99);
+    var snap = target.copyTo(ss);
+    snap.setName(snapName);
+    snap.hideSheet();
+
+    // Giữ 3 tab chụp mới nhất của tab này (tránh dồn chạm giới hạn ô)
+    ss.getSheets().filter(function(sh) { return sh.getName().indexOf('_TruocKP_' + p.tab + '_') === 0 && sh !== snap; })
+      .sort(function(a, b) { return a.getName() < b.getName() ? 1 : -1; })
+      .slice(2).forEach(function(sh) { try { ss.deleteSheet(sh); } catch (e) { /* silent */ } });
+
+    // Cờ "đang khôi phục": nếu lượt chạy bị cắt (giới hạn 6 phút) thì list_backups cảnh báo admin
+    var props = PropertiesService.getScriptProperties();
+    props.setProperty('BK_RESTORE_INPROGRESS', JSON.stringify({ tab: p.tab, snapTab: snapName, at: new Date().toISOString(), by: auth.adminUser }));
+
+    // 3) Ghi đè: tab tạm (copy từ bản sao) → Range.copyTo trong cùng file — giữ kiểu dữ liệu, giữ gid tab
+    var tmp = bsh.copyTo(ss);
+    try {
+      target.getRange(1, 1, target.getMaxRows(), target.getMaxColumns()).clearContent();
+      if (target.getMaxRows() < nR) target.insertRowsAfter(target.getMaxRows(), nR - target.getMaxRows());
+      if (target.getMaxColumns() < nC) target.insertColumnsAfter(target.getMaxColumns(), nC - target.getMaxColumns());
+      tmp.getRange(1, 1, nR, nC).copyTo(target.getRange(1, 1), SpreadsheetApp.CopyPasteType.PASTE_NORMAL, false);
+      target.getRange(1, 1, 1, curHeader.length).setValues([curHeader]);
+      SpreadsheetApp.flush();
+    } catch (e) {
+      // Lỗi giữa chừng → trả lại nội dung cũ từ tab chụp
+      try {
+        target.getRange(1, 1, target.getMaxRows(), target.getMaxColumns()).clearContent();
+        snap.getDataRange().copyTo(target.getRange(1, 1), SpreadsheetApp.CopyPasteType.PASTE_NORMAL, false);
+      } catch (e2) { /* còn bản "trước khôi phục" trên Drive */ }
+      props.deleteProperty('BK_RESTORE_INPROGRESS');
+      return jsonResponse({ status: 'error', message: 'Khôi phục lỗi, đã trả lại dữ liệu cũ: ' + e.message });
+    } finally {
+      try { ss.deleteSheet(tmp); } catch (e) { /* silent */ }
+    }
+
+    var after = Math.max(0, target.getLastRow() - 1);
+    var epoch = Date.now();
+    props.setProperty('BK_EPOCH_' + p.tab, String(epoch));
+    props.deleteProperty('BK_RESTORE_INPROGRESS');
+    _logToHistory({ loaiThaoTac: 'restore_backup', tenTru: p.tab, nguoiThucHien: auth.adminUser,
+      chiTiet: JSON.stringify({ backup: p.b.file.getName(), backupId: p.b.file.getId(), reason: String(data.reason || '').trim(),
+                                rowsBefore: before, rowsAfter: after, preRestore: pre.name, snapTab: snapName }).slice(0, 2000) });
+    return jsonResponse({ status: 'ok', tab: p.tab, rowsBefore: before, rowsAfter: after,
+                          preRestoreUrl: pre.url, snapTab: snapName, restoredAt: epoch, serverNow: Date.now() });
+  });
 }

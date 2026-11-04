@@ -1531,6 +1531,18 @@
 
                     <div class="ctrl-divider"></div>
 
+                    <!-- v210 — Sao lưu dữ liệu (chỉ admin) -->
+                    <div class="ctrl-section" id="sec-backup" style="display:none;">
+                        <div class="ctrl-title">🗄 Sao lưu dữ liệu</div>
+                        <div id="bkHealth" class="bk-health" aria-live="polite"></div>
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+                            <button id="bkBtnNow" onclick="_bkBackupNow()" class="ctrl-btn primary" style="margin-bottom:0;font-size:12px;padding:8px;">🗄 Sao lưu ngay</button>
+                            <button onclick="_bkOpenList()" class="ctrl-btn" style="margin-bottom:0;font-size:12px;padding:8px;">📋 Bản sao &amp; khôi phục</button>
+                        </div>
+                    </div>
+
+                    <div class="ctrl-divider" id="sec-backup-div" style="display:none;"></div>
+
                     <!-- Ranh hành chính (offline) -->
                     <div class="ctrl-section" id="sec-ranh">
                         <div class="ctrl-title">🏛 Ranh phường/xã</div>
@@ -3025,6 +3037,7 @@
     <script src="src/features/route-summary.js"></script>
     <script src="src/features/cable.js"></script>
     <script src="src/features/media.js"></script>
+    <script src="src/features/backup.js"></script>
 
     <script>
         // ─── Export to CAD Modal ───
@@ -4059,6 +4072,9 @@
             // v150+v151 — nút admin địa bàn (tạo + quản lý)
             const btnDBWrap = document.getElementById('btnDiaBanAdminWrap');
             if (btnDBWrap) btnDBWrap.style.display = isAdmin ? 'flex' : 'none';
+            // v210 — sao lưu dữ liệu (chỉ admin)
+            ['sec-backup', 'sec-backup-div'].forEach(id => { const el = document.getElementById(id); if (el) el.style.display = isAdmin ? '' : 'none'; });
+            if (isAdmin && typeof _bkRefreshHealth === 'function') _bkRefreshHealth(true);
             const btnShareWrap = document.getElementById('btnShareDistrictWrap');
             if (btnShareWrap) btnShareWrap.style.display = isAdmin ? 'block' : 'none';
             // Nền OSM / Hẻm — cho người có quyền sửa (admin/user/user1), không cho demo
@@ -7096,6 +7112,7 @@
             if (!cabinet) { displayError('Chưa nhập/chọn tủ điều khiển để auto phase.'); return; }
             if (!KHAOSAT_GAS_URL) { displayError('Chưa cấu hình GAS URL.'); return; }
             if (!confirm(`Auto A/B/C cho toàn tủ "${cabinet}"?\nSẽ ghi đè phase hiện có của tất cả trụ trong tủ.\nSort theo tên trụ (natural), round-robin A→B→C.`)) return;
+            if (typeof _bkPreBatch === 'function' && !(await _bkPreBatch('gán pha'))) return;
             try {
                 if (typeof displayInfo === 'function') displayInfo('Đang gán phase...');
                 const res = await fetch(KHAOSAT_GAS_URL, {
@@ -9062,6 +9079,10 @@
         async function _batchSyncRowsToGAS(rows, fields, onProgress, opts) {
             if (!KHAOSAT_GAS_URL || !Array.isArray(rows) || rows.length === 0) {
                 return { updated: 0, notFound: 0, failed: 0, chunks: 0 };
+            }
+            // v210 — ghi hàng loạt (≥20 dòng): sao lưu file trước (GAS dùng lại bản <15 phút nên gọi nhiều lần không tốn)
+            if (rows.length >= 20 && typeof _bkPreBatch === 'function' && !(await _bkPreBatch('ghi ' + rows.length + ' dòng'))) {
+                return { updated: 0, notFound: 0, failed: rows.length, chunks: 0, aborted: true };
             }
             const COL = {
                 id: 0, tenTru: 1, lat: 2, lon: 3, ghiChu: 4, nguoiKS: 5, loai: 6,

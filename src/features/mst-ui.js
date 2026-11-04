@@ -482,6 +482,7 @@
 
         async function _mstApplyToData(diffOnly) {
             if (!_mstResult) return;
+            if (typeof _bkPreBatch === 'function' && !(await _bkPreBatch('áp tuyến cáp MST'))) return;
             const btnDiff = document.getElementById('mstBtnApplyDiff');
             const btnAll = document.getElementById('mstBtnApply');
             const activeBtn = diffOnly ? btnDiff : btnAll;

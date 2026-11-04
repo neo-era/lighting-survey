@@ -151,6 +151,10 @@ Nếu lọc chạy trước `fitBounds` thì `getBounds()` sẽ thiếu marker �
 | delete_row       | Xóa 1 hàng khỏi `DanhSachTru` (tìm theo ID hoặc Tên trụ)    |
 | upload_image     | Upload ảnh base64 → `images/<name>.<ext>` trên GitHub        |
 | upload_to_github | Nhận Excel base64 từ client → upload file lên GitHub repo    |
+| backup_now / list_backups / restore_preview / restore_backup_sheet | **v210** sao lưu (admin) — xem `docs/design-backup.md` |
+| backup_pre_import / backup_health | **v210** sao lưu trước thao tác hàng loạt / tình trạng sao lưu tự động |
+
+**Sao lưu (v210)**: bản sao nguyên file Google Sheet trong thư mục Drive `LightingSurvey_Backup` (trigger `dailyBackup` 01h + nút tay + tự động trước thao tác hàng loạt qua `_bkPreBatch`). Khôi phục 1 tab → GAS đặt mốc `BK_EPOCH_<tab>`; trong 30 ngày mọi lệnh ghi tab đó phải kèm `clientEpochSeen` (bọc `fetch` trong `src/features/backup.js` tự gắn) nếu không trả `status:'stale'`. ⚠ Lệnh ghi hàng loạt mới phải gọi `_bkPreBatch` trước và có trong `_bkWriteActions` (GAS + app — test đối chiếu).
 
 ### Lưu ý GAS
 - Mỗi lần sửa `gas-khaosat.js` phải **redeploy New version** (không tạo deployment mới — sẽ đổi URL)

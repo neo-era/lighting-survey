@@ -71,8 +71,11 @@ ok('backup CSV tải trước, có header + 4 dòng XÓA + 1 trụ con', saved.l
     saved[0].b.text.split('\r\n').length === 6 && /TQT_TQT4_7/.test(saved[0].b.text));
 ok('backup giữ Marker gốc CŨ của trụ con ("XÓA", 3364)', /TQT_TQT4_7[^\r\n]*XÓA,3364/.test(saved[0].b.text));
 ok('trụ con: bỏ Marker gốc + Khoảng cách, ghi sheet theo ID', data.find(r => r[0] === 'A2')[14] === '' && synced.length === 1 && synced[0].join() === 'A2');
-ok('gửi 4 lệnh delete_row đúng sheet, dòng có ID gửi ID', posts.length === 4 && posts.every(p => p.action === 'delete_row' && p.sheet === 'Quan3') && posts[0].id === '18149_2');
-ok('dòng không ID gửi tên gốc (" XOA " đã trim)', posts.some(p => p.id === '' && p.tenTru === 'XOA'));
+// v210 — trước khi xoá hàng loạt: sao lưu file trên Drive (backup_pre_import) rồi mới gửi lệnh xoá
+ok('v210: gửi backup_pre_import đúng sheet TRƯỚC các lệnh xoá', posts[0] && posts[0].action === 'backup_pre_import' && posts[0].sheet === 'Quan3');
+const dels = posts.filter(p => p.action === 'delete_row');
+ok('gửi 4 lệnh delete_row đúng sheet, dòng có ID gửi ID', dels.length === 4 && posts.length === 5 && dels.every(p => p.sheet === 'Quan3') && dels[0].id === '18149_2');
+ok('dòng không ID gửi tên gốc (" XOA " đã trim)', dels.some(p => p.id === '' && p.tenTru === 'XOA'));
 ok('gỡ khỏi dữ liệu: 3 dòng thành công bị gỡ, dòng lỗi (18149_2) còn lại', data.length === 5 && data.some(r => r[0] === '18149_2') && !data.some(r => r[1] === 'XÓA'));
 ok('giữ nguyên "TQT_XOA_1" và trụ thường', data.some(r => r[1] === 'TQT_XOA_1') && data.some(r => r[0] === 'A3' && r[14] === 'TQT_TQT4_7'));
 ok('vẽ lại bản đồ 1 lần', rendered === 1);

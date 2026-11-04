@@ -98,6 +98,7 @@
                 if (typed != null) displayError && displayError('Chưa gõ đúng "XOA" — không xoá.');
                 return;
             }
+            if (typeof _bkPreBatch === 'function' && !(await _bkPreBatch('xoá dòng "XÓA"'))) return;
             _lcTuBusy = true; _lcXoaRender(); _lcTuUpdate();
             const btn = document.getElementById('lcXoaBtn');
             let ok = 0, failed = 0;

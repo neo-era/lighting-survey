@@ -28,6 +28,7 @@
             }
             const est = Math.ceil(missing.length / 60);
             if (!confirm(`Sẽ điền địa chỉ cho ${missing.length} marker. Ước tính ~${est} phút (rate limit 1 req/s Nominatim). Tiếp tục?`)) return;
+            if (typeof _bkPreBatch === 'function' && !(await _bkPreBatch('điền địa chỉ hàng loạt'))) return;
 
             _batchGeocodeCancel = false;
             const bar = document.getElementById('loadProgressBar');
@@ -128,6 +129,7 @@
             }
             const notFoundMsg = notFound.length ? `\n⚠ ${notFound.length} trụ gốc không tìm thấy (bỏ qua).` : '';
             if (!confirm(`Sẽ tính lại khoảng cách Haversine cho ${toCalc.length} marker có Marker gốc.${notFoundMsg}\nCột "Khoảng cách (m)" sẽ bị GHI ĐÈ. Tiếp tục?`)) return;
+            if (toCalc.length >= 20 && typeof _bkPreBatch === 'function' && !(await _bkPreBatch('tính lại khoảng cách cáp'))) return;
 
             const bar = document.getElementById('loadProgressBar');
             const setBar = pct => {
@@ -368,6 +370,7 @@
 
             const total = changed.length + added.length;
             if (total === 0) return;
+            if (typeof _bkPreBatch === 'function' && !(await _bkPreBatch('cập nhật từ Excel'))) return;
 
             displayInfo(`Đang cập nhật ${total} marker...`);
             let ok = 0;
