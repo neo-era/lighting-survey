@@ -163,6 +163,7 @@ Nếu lọc chạy trước `fitBounds` thì `getBounds()` sẽ thiếu marker �
 - `findRowNum()` tìm hàng theo ID trước, fallback `oldTenTru` (tên cũ trước khi edit), fallback `tenTru` — đảm bảo sửa tên trụ không tạo row mới
 - `buildFieldValues()` **cho phép empty string** (`''`) — để clear cell khi xóa cáp (`row[14]=''`, `row[15]=''`); skip `oldTenTru` (không ghi vào sheet)
 - `updateRowFields()` dùng `setValue('')` khi value là `null` hoặc `''` → xóa nội dung cell
+- **Cột chữ = văn bản thuần (v212)**: địa bàn tạo động đọc qua link CSV **gviz** — gviz đoán kiểu cả cột theo số đông, nên tên trụ `1`,`2`… bị Sheets đổi thành số làm mọi tên chữ (`H535/59-3`) trả về **rỗng** → bản đồ hiện ID. `_TEXT_COLS` (Tên trụ, Marker gốc, Mã PE, Tủ…) luôn ghi định dạng `@` + chuỗi (`updateRowFields`, `appendRow`, `_applyTextCols` sau ghi hàng loạt). Dữ liệu cũ: chạy tay `suaCotChuGviz()` 1 lần. Test `tests/text-cols-gas.test.mjs`
 
 ## Quy trình deploy GAS
 

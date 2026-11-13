@@ -25,11 +25,14 @@ export function makeWorld(opts = {}) {
             if (this.sh.failCopy) throw new Error('lỗi giả lập khi chép');
             this.getValues().forEach((row, i) => row.forEach((x, j) => dest.sh.set(dest.r + i, dest.c + j, x)));
         }
-        setFontWeight() { return this; } setBackground() { return this; } setHorizontalAlignment() { return this; } setWrap() { return this; } setFontColor() { return this; } setNumberFormat() { return this; } setVerticalAlignment() { return this; } setFontSize() { return this; }
+        setFontWeight() { return this; } setBackground() { return this; } setHorizontalAlignment() { return this; } setWrap() { return this; } setFontColor() { return this; } setNumberFormat(f) { for (let i = 0; i < this.nr; i++) for (let j = 0; j < this.nc; j++) this.sh.fmt[(this.r + i) + ':' + (this.c + j)] = f; return this; } setVerticalAlignment() { return this; } setFontSize() { return this; }
     }
     class Sheet {
-        constructor(ss, name, data) { this.ss = ss; this.name = name; this.data = data.map(r => r.slice()); this.maxRows = Math.max(1000, data.length); this.maxCols = Math.max(26, ...data.map(r => r.length), 1); this.hidden = false; this.gid = ++seq; }
-        set(r, c, v) { while (this.data.length < r) this.data.push([]); const row = this.data[r - 1]; while (row.length < c) row.push(''); row[c - 1] = v; }
+        constructor(ss, name, data) { this.ss = ss; this.name = name; this.data = data.map(r => r.slice()); this.maxRows = Math.max(1000, data.length); this.maxCols = Math.max(26, ...data.map(r => r.length), 1); this.hidden = false; this.gid = ++seq; this.fmt = {}; }
+        // Như Google Sheets: chuỗi trông như số bị đổi thành SỐ, trừ khi ô định dạng văn bản thuần ('@')
+        _coerce(r, c, v) { return (typeof v === 'string' && /^-?\d+(\.\d+)?$/.test(v) && this.fmt[r + ':' + c] !== '@') ? Number(v) : v; }
+        set(r, c, v) { while (this.data.length < r) this.data.push([]); const row = this.data[r - 1]; while (row.length < c) row.push(''); row[c - 1] = this._coerce(r, c, v); }
+        getRangeList(a1s) { const sh = this; return { setNumberFormat(f) { a1s.forEach(a => { const m = /^([A-Z]+)(\d+)$/.exec(a); let c = 0; for (const ch of m[1]) c = c * 26 + ch.charCodeAt(0) - 64; sh.fmt[m[2] + ':' + c] = f; }); return this; } }; }
         getName() { return this.name; } setName(n) { this.name = n; return this; }
         getSheetId() { return this.gid; }
         getLastRow() { for (let i = this.data.length - 1; i >= 0; i--) if (this.data[i].some(x => x !== '' && x != null)) return i + 1; return 0; }
@@ -40,7 +43,7 @@ export function makeWorld(opts = {}) {
         copyTo(ss) { const s = new Sheet(ss, 'Copy of ' + this.name, this.data); ss.sheets.push(s); return s; }
         hideSheet() { this.hidden = true; }
         insertRowsAfter(a, n) { this.maxRows += n; } insertColumnsAfter(a, n) { this.maxCols += n; }
-        appendRow(row) { this.data.push(row.slice()); }
+        appendRow(row) { const r = this.data.length + 1; this.data.push(row.map((v, j) => this._coerce(r, j + 1, v))); }
         deleteRow(r) { this.data.splice(r - 1, 1); }
         setFrozenRows() {} autoResizeColumns() {} setColumnWidth() {} insertColumnAfter() {} getFrozenRows() { return 1; }
     }

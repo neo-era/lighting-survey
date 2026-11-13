@@ -1224,6 +1224,7 @@ function handleBatchImport(sheetName, rows, clearFirst) {
     const startRow = clearFirst ? 2 : (Math.max(sheet.getLastRow(), 1) + 1);
     const numCols  = rows[0].length;
     sheet.getRange(startRow, 1, rows.length, numCols).setValues(rows);
+    try { _applyTextCols(sheet, startRow, rows.length); } catch (e) { /* không chặn nhập */ }   // v212
   }
 
   return jsonResponse({ status: 'ok', count: rows.length, sheet: sheetName });
@@ -1595,7 +1596,9 @@ function updateRowFields(sheet, hIdx, rowNum, fieldValues) {
   for (const [header, value] of Object.entries(fieldValues)) {
     const col = hIdx[norm(header)];
     if (col !== undefined && value !== undefined) {
-      sheet.getRange(rowNum, col + 1).setValue(value === null ? '' : value);
+      const rg = sheet.getRange(rowNum, col + 1);
+      if (_isTextCol(header) && value !== null && value !== '') { rg.setNumberFormat('@'); rg.setValue(String(value)); }
+      else rg.setValue(value === null ? '' : value);
     }
   }
 }
@@ -1604,6 +1607,68 @@ function appendRow(sheet, headers, hIdx, data) {
   const fieldValues = buildFieldValues(data);
   const row = headers.map(h => fieldValues[h] !== undefined ? fieldValues[h] : '');
   sheet.appendRow(row);
+  // Cột chữ: đặt văn bản thuần rồi ghi lại → "1" không bị đổi thành số 1 (xem _TEXT_COLS)
+  const r = sheet.getLastRow(), a1 = [], fix = [];
+  headers.forEach(function (h, j) {
+    if (_isTextCol(h) && row[j] !== '' && row[j] != null) { a1.push(_colA1(j + 1) + r); fix.push([j + 1, String(row[j])]); }
+  });
+  if (a1.length) {
+    sheet.getRangeList(a1).setNumberFormat('@');
+    fix.forEach(function (f) { sheet.getRange(r, f[0]).setValue(f[1]); });
+  }
+}
+
+// ── CỘT CHỮ (v212) ─────────────────────────────────────────────────────────
+// Link CSV gviz (địa bàn tạo động) đoán kiểu cả cột theo số đông: tên trụ "1","2"… bị Sheets đổi thành SỐ
+// → gviz coi cột là số → mọi tên chữ ("H535/59-3") trả về RỖNG → app hiện ID thay tên. Giữ các cột này là văn bản thuần.
+var _TEXT_COLS = ['ID', 'Tên trụ', 'Ghi chú', 'Người KS', 'Tủ điều khiển', 'Loại trụ', 'Loại cần', 'Loại đèn', 'Công suất',
+  'Marker gốc', 'Mã PE', 'Đường', 'Phường/ Xã', 'Số nhà', 'Cáp specification', 'Trạng thái cải tạo', 'Phase electric', 'Loại cáp', 'Chế độ GPS'];
+var _TEXT_COL_SET = null;
+function _isTextCol(header) {
+  if (!_TEXT_COL_SET) { _TEXT_COL_SET = {}; _TEXT_COLS.forEach(function (h) { _TEXT_COL_SET[norm(h)] = 1; }); }
+  return !!_TEXT_COL_SET[norm(header)];
+}
+// Đặt cột chữ của [startRow .. startRow+nRows-1] thành văn bản thuần; số/ngày → chữ. Trả số ô đã đổi.
+function _applyTextCols(sh, startRow, nRows, headers) {
+  if (!(nRows > 0)) return 0;
+  headers = headers || sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0];
+  var n = 0;
+  headers.forEach(function (h, j) {
+    if (!_isTextCol(h)) return;
+    var rg = sh.getRange(startRow, j + 1, nRows, 1), vals = rg.getValues(), changed = false;
+    var out = vals.map(function (r) {
+      var v = r[0];
+      if (typeof v === 'number') { changed = true; n++; return [String(v)]; }
+      if (v instanceof Date) { changed = true; n++; return [Utilities.formatDate(v, 'Asia/Ho_Chi_Minh', 'yyyy-MM-dd HH:mm')]; }
+      return [v];
+    });
+    rg.setNumberFormat('@');
+    if (changed) rg.setValues(out);
+  });
+  return n;
+}
+function _colA1(c) { var s = ''; while (c > 0) { var m = (c - 1) % 26; s = String.fromCharCode(65 + m) + s; c = Math.floor((c - 1) / 26); } return s; }
+
+// Sửa dữ liệu cũ một lần: chạy tay trong trình soạn Apps Script (chọn hàm suaCotChuGviz → Run).
+// Mọi tab địa bàn: cột chữ → định dạng văn bản thuần, giá trị số đổi thành chữ (1 → "1"). Không đụng cột số.
+function suaCotChuGviz() {
+  // Mọi tab có cột ID + Tên trụ (cả địa bàn tạo động và file ngoài EXTERNAL_SPREADSHEET_IDS)
+  var books = [SpreadsheetApp.getActiveSpreadsheet()], log = [];
+  Object.keys(EXTERNAL_SPREADSHEET_IDS || {}).forEach(function (k) { try { books.push(SpreadsheetApp.openById(EXTERNAL_SPREADSHEET_IDS[k])); } catch (e) { log.push(k + ': lỗi mở file ngoài — ' + e.message); } });
+  var sheets = [];
+  books.forEach(function (b) { b.getSheets().forEach(function (sh) { sheets.push(sh); }); });
+  sheets.forEach(function (sh) {
+    var name = sh.getName();
+    var last = sh.getLastRow(), lastC = sh.getLastColumn();
+    if (last < 2 || lastC < 2) return;
+    var headers = sh.getRange(1, 1, 1, lastC).getValues()[0], n = 0;
+    var hn = headers.map(function (h) { return norm(h); });
+    if (hn.indexOf(norm('ID')) < 0 || hn.indexOf(norm('Tên trụ')) < 0) return;
+    n = _applyTextCols(sh, 2, last - 1, headers);
+    log.push(name + ': ' + n + ' ô đổi sang chữ');
+  });
+  Logger.log(log.join('\n'));
+  return log;
 }
 
 function buildFieldValues(data) {
@@ -1757,6 +1822,7 @@ function handleNormalizeCoords(sheetName) {
 
   if (fixedCount > 0) {
     sheet.getRange(2, 1, allData.length, numCols).setValues(allData);
+    try { _applyTextCols(sheet, 2, allData.length); } catch (e) { /* silent */ }   // v212
   }
 
   return jsonResponse({ status: 'ok', fixed: fixedCount, total: allData.length, sheet: sheetName });
@@ -1878,6 +1944,7 @@ function handleFillMarkerGoc(sheetName, overwrite) {
 
   if (fixedCount > 0) {
     sheet.getRange(2, 1, allData.length, numCols).setValues(allData);
+    try { _applyTextCols(sheet, 2, allData.length); } catch (e) { /* silent */ }   // v212
   }
   return jsonResponse({ status: 'ok', fixed: fixedCount, total: allData.length, sheet: sheetName });
 }
@@ -1996,6 +2063,7 @@ function handleFillMarkerGocChain(sheetName, overwrite) {
 
   if (filledCount > 0) {
     sheet.getRange(2, 1, allData.length, numCols).setValues(allData);
+    try { _applyTextCols(sheet, 2, allData.length); } catch (e) { /* silent */ }   // v212
   }
   return jsonResponse({ status: 'ok', filled: filledCount, total: allData.length, sheet: sheetName });
 }
@@ -2036,6 +2104,7 @@ function handleFixLoai(sheetName) {
 
   if (fixedCount > 0) {
     sheet.getRange(2, 1, allData.length, numCols).setValues(allData);
+    try { _applyTextCols(sheet, 2, allData.length); } catch (e) { /* silent */ }   // v212
   }
   return jsonResponse({ status: 'ok', fixed: fixedCount, total: allData.length, sheet: sheetName });
 }
