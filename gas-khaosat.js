@@ -1593,11 +1593,18 @@ function updateRow(sheet, hIdx, rowNum, data) {
 }
 
 function updateRowFields(sheet, hIdx, rowNum, fieldValues) {
+  // Cột chữ: đặt văn bản thuần 1 lần cho cả hàng (1 lần flush) — bảng có cột định kiểu thì bỏ qua
+  const a1 = [];
+  for (const [header, value] of Object.entries(fieldValues)) {
+    const col = hIdx[norm(header)];
+    if (col !== undefined && _isTextCol(header) && value !== null && value !== '' && value !== undefined) a1.push(_colA1(col + 1) + rowNum);
+  }
+  if (a1.length) { try { sheet.getRangeList(a1).setNumberFormat('@'); SpreadsheetApp.flush(); } catch (e) { /* cột định kiểu */ } }
   for (const [header, value] of Object.entries(fieldValues)) {
     const col = hIdx[norm(header)];
     if (col !== undefined && value !== undefined) {
       const rg = sheet.getRange(rowNum, col + 1);
-      if (_isTextCol(header) && value !== null && value !== '') { _safeTextFormat(rg); rg.setValue(String(value)); }
+      if (_isTextCol(header) && value !== null && value !== '') rg.setValue(String(value));
       else rg.setValue(value === null ? '' : value);
     }
   }
@@ -1614,7 +1621,7 @@ function appendRow(sheet, headers, hIdx, data) {
   });
   if (a1.length) {
     var fmtOk = true;
-    try { sheet.getRangeList(a1).setNumberFormat('@'); } catch (e) { fmtOk = false; }   // bảng có cột định kiểu → bỏ qua
+    try { sheet.getRangeList(a1).setNumberFormat('@'); SpreadsheetApp.flush(); } catch (e) { fmtOk = false; }   // bảng có cột định kiểu → bỏ qua
     if (fmtOk) fix.forEach(function (f) { sheet.getRange(r, f[0]).setValue(f[1]); });
   }
 }
@@ -1648,8 +1655,9 @@ function _applyTextCols(sh, startRow, nRows, headers) {
   });
   return n;
 }
-// Bảng (Tables) của Google Sheets có cột định kiểu: setNumberFormat ném lỗi → không chặn việc ghi
-function _safeTextFormat(rg) { try { rg.setNumberFormat('@'); return true; } catch (e) { return false; } }
+// Bảng (Tables) của Google Sheets có cột định kiểu: setNumberFormat ném lỗi → không chặn việc ghi.
+// Lỗi chỉ hiện khi Sheets thực thi lệnh dồn → flush ngay trong try để bắt tại chỗ.
+function _safeTextFormat(rg) { try { rg.setNumberFormat('@'); SpreadsheetApp.flush(); return true; } catch (e) { return false; } }
 function _colA1(c) { var s = ''; while (c > 0) { var m = (c - 1) % 26; s = String.fromCharCode(65 + m) + s; c = Math.floor((c - 1) / 26); } return s; }
 
 // Sửa dữ liệu cũ một lần: chạy tay trong trình soạn Apps Script (chọn hàm suaCotChuGviz → Run).
