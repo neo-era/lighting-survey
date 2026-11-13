@@ -1650,8 +1650,9 @@ function _applyTextCols(sh, startRow, nRows, headers) {
       if (v instanceof Date) { k++; return [Utilities.formatDate(v, 'Asia/Ho_Chi_Minh', 'yyyy-MM-dd HH:mm')]; }
       return [v];
     });
+    if (!k) return;                      // không có ô số → không cần đụng (lệnh ghi sau tự đặt định dạng từng ô)
     if (!_safeTextFormat(rg)) return;   // cột định kiểu (Bảng của Google Sheets) → không đổi được, bỏ qua cột
-    if (k) { try { rg.setValues(out); n += k; } catch (e) { /* bỏ qua cột */ } }
+    try { rg.setValues(out); n += k; } catch (e) { /* bỏ qua cột */ }
   });
   return n;
 }
