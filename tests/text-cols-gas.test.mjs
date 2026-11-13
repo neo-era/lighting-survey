@@ -46,5 +46,23 @@ const cell = (w, n, id, col) => { const sh = tab(w, n); const r = sh.data.find(x
     ok('nhập hàng loạt: tên "5" + Marker gốc "4" + Mã PE "20" giữ là chữ', cell(w, 'Hung', 'Q_50', 'Tên trụ') === '5' && cell(w, 'Hung', 'Q_50', 'Marker gốc') === '4' && cell(w, 'Hung', 'Q_50', 'Mã PE') === '20', r);
 }
 
+{
+    // Bảng (Tables) Google Sheets: cột định kiểu ném lỗi khi đặt định dạng — không được làm hỏng lệnh ghi / hàm sửa
+    const w = mk();
+    const sh = tab(w, 'Hung');
+    const proto = Object.getPrototypeOf(sh.getRange(1, 1));
+    const orig = proto.setNumberFormat;
+    proto.setNumberFormat = function () { throw new Error("You can't set the number format of cells in a typed column."); };
+    sh.getRangeList = () => ({ setNumberFormat() { throw new Error('typed column'); } });
+    const r1 = w.post({ action: 'full_update', sheet: 'Hung', id: 'Q_2', tenTru: 'H9' });
+    ok('cột định kiểu: sửa trụ vẫn thành công', r1.status === 'ok' && cell(w, 'Hung', 'Q_2', 'Tên trụ') === 'H9', r1);
+    const r2 = w.post({ action: 'full_update', sheet: 'Hung', id: 'Q_77', tenTru: 'H10', lat: '10,8', lon: '106,6' });
+    ok('cột định kiểu: thêm trụ vẫn thành công', r2.status === 'ok' && cell(w, 'Hung', 'Q_77', 'Tên trụ') === 'H10', r2);
+    let threw = false, log;
+    try { log = w.ctx.suaCotChuGviz(); } catch (e) { threw = true; }
+    ok('cột định kiểu: hàm sửa không dừng giữa chừng', !threw, log);
+    proto.setNumberFormat = orig;
+}
+
 console.log(`\n=== Result: ${pass} pass / ${fail} fail ===`);
 if (fail) process.exit(1);

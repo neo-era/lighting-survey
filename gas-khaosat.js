@@ -1597,7 +1597,7 @@ function updateRowFields(sheet, hIdx, rowNum, fieldValues) {
     const col = hIdx[norm(header)];
     if (col !== undefined && value !== undefined) {
       const rg = sheet.getRange(rowNum, col + 1);
-      if (_isTextCol(header) && value !== null && value !== '') { rg.setNumberFormat('@'); rg.setValue(String(value)); }
+      if (_isTextCol(header) && value !== null && value !== '') { _safeTextFormat(rg); rg.setValue(String(value)); }
       else rg.setValue(value === null ? '' : value);
     }
   }
@@ -1613,8 +1613,9 @@ function appendRow(sheet, headers, hIdx, data) {
     if (_isTextCol(h) && row[j] !== '' && row[j] != null) { a1.push(_colA1(j + 1) + r); fix.push([j + 1, String(row[j])]); }
   });
   if (a1.length) {
-    sheet.getRangeList(a1).setNumberFormat('@');
-    fix.forEach(function (f) { sheet.getRange(r, f[0]).setValue(f[1]); });
+    var fmtOk = true;
+    try { sheet.getRangeList(a1).setNumberFormat('@'); } catch (e) { fmtOk = false; }   // bảng có cột định kiểu → bỏ qua
+    if (fmtOk) fix.forEach(function (f) { sheet.getRange(r, f[0]).setValue(f[1]); });
   }
 }
 
@@ -1635,18 +1636,20 @@ function _applyTextCols(sh, startRow, nRows, headers) {
   var n = 0;
   headers.forEach(function (h, j) {
     if (!_isTextCol(h)) return;
-    var rg = sh.getRange(startRow, j + 1, nRows, 1), vals = rg.getValues(), changed = false;
+    var rg = sh.getRange(startRow, j + 1, nRows, 1), vals = rg.getValues(), k = 0;
     var out = vals.map(function (r) {
       var v = r[0];
-      if (typeof v === 'number') { changed = true; n++; return [String(v)]; }
-      if (v instanceof Date) { changed = true; n++; return [Utilities.formatDate(v, 'Asia/Ho_Chi_Minh', 'yyyy-MM-dd HH:mm')]; }
+      if (typeof v === 'number') { k++; return [String(v)]; }
+      if (v instanceof Date) { k++; return [Utilities.formatDate(v, 'Asia/Ho_Chi_Minh', 'yyyy-MM-dd HH:mm')]; }
       return [v];
     });
-    rg.setNumberFormat('@');
-    if (changed) rg.setValues(out);
+    if (!_safeTextFormat(rg)) return;   // cột định kiểu (Bảng của Google Sheets) → không đổi được, bỏ qua cột
+    if (k) { try { rg.setValues(out); n += k; } catch (e) { /* bỏ qua cột */ } }
   });
   return n;
 }
+// Bảng (Tables) của Google Sheets có cột định kiểu: setNumberFormat ném lỗi → không chặn việc ghi
+function _safeTextFormat(rg) { try { rg.setNumberFormat('@'); return true; } catch (e) { return false; } }
 function _colA1(c) { var s = ''; while (c > 0) { var m = (c - 1) % 26; s = String.fromCharCode(65 + m) + s; c = Math.floor((c - 1) / 26); } return s; }
 
 // Sửa dữ liệu cũ một lần: chạy tay trong trình soạn Apps Script (chọn hàm suaCotChuGviz → Run).
@@ -1664,8 +1667,8 @@ function suaCotChuGviz() {
     var headers = sh.getRange(1, 1, 1, lastC).getValues()[0], n = 0;
     var hn = headers.map(function (h) { return norm(h); });
     if (hn.indexOf(norm('ID')) < 0 || hn.indexOf(norm('Tên trụ')) < 0) return;
-    n = _applyTextCols(sh, 2, last - 1, headers);
-    log.push(name + ': ' + n + ' ô đổi sang chữ');
+    try { n = _applyTextCols(sh, 2, last - 1, headers); log.push(name + ': ' + n + ' ô đổi sang chữ'); }
+    catch (e) { log.push(name + ': LỖI — ' + e.message); }
   });
   Logger.log(log.join('\n'));
   return log;
