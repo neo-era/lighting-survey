@@ -1138,6 +1138,9 @@ Xoay 2D bằng CSS transform trên `.leaflet-map-pane`. Slider `[0°, 359°]` tr
 ### Chọn trên bản đồ — dấu ngắm ⊕ (v213)
 Nút "Chọn trên bản đồ" trong form marker: `setMarkerToPickOnMap()` hiện dấu ngắm đỏ cố định giữa bản đồ (`#pickCrosshair`, CSS `src/styles/app.css`), đưa vị trí đang có vào tâm (zoom ≥ 18). Kéo bản đồ → toạ độ tâm hiện trên thanh hướng dẫn; **✓ Chọn** (`confirmPickOnMap`) lấy `map.getCenter()`; chạm thẳng bản đồ vẫn lấy điểm chạm. Cả hai đi qua `_finishPickOnMap(lat,lng)`. Test `tests/pick-crosshair.test.mjs`.
 
+### Nền tối cho thanh/nhãn chữ trắng — `--inverse-bg` (v213)
+⚠ KHÔNG dùng `background:var(--text)` làm nền tối: ở chế độ tối `--text` là màu sáng → chữ trắng trên nền trắng (lỗi thật thanh "Chọn trên bản đồ"). Dùng `--inverse-bg` / `--inverse-fg` / `--inverse-muted` (tối ở cả 2 chế độ, tương phản ≥ 7). Test `tests/inverse-contrast.test.mjs` chặn tái phát.
+
 ### Reverse geocoding không đồng bộ
 ```javascript
 // _pendingGeocodePromise — tránh race condition khi drag marker liên tục

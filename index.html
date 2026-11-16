@@ -557,7 +557,7 @@
 
     <!-- ═══ PDF PREVIEW FULLSCREEN MODAL (T21 P51) ═══ -->
     <div id="pdfPreviewModal" style="display:none;position:fixed;inset:0;background:#111;z-index:9800;flex-direction:column;">
-        <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 16px;background:var(--text);color:#fff;flex-shrink:0;">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 16px;background:var(--inverse-bg);color:#fff;flex-shrink:0;">
             <h4 style="margin:0;font-size:15px;font-weight:800;">👁 Preview bản vẽ PDF</h4>
             <div style="display:flex;gap:6px;">
                 <button onclick="_pdfPreviewSave()" style="background:var(--success);color:#fff;border:none;padding:6px 14px;border-radius:5px;font-size:12px;font-weight:700;cursor:pointer;">💾 Xuất PDF</button>
@@ -1599,8 +1599,8 @@
                     <button type="button" class="close" data-dismiss="modal" onclick="_cleanupMapillary()">&times;</button>
                 </div>
                 <div class="modal-body p-0" style="position:relative;">
-                    <div id="mapillaryViewer" style="width:100%;height:480px;background:var(--text);"></div>
-                    <div id="mapillaryStatus" style="display:none;position:absolute;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:12px;background:var(--text);color:var(--text-muted);font-size:14px;text-align:center;padding:24px;">
+                    <div id="mapillaryViewer" style="width:100%;height:480px;background:var(--inverse-bg);"></div>
+                    <div id="mapillaryStatus" style="display:none;position:absolute;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:12px;background:var(--inverse-bg);color:var(--text-muted);font-size:14px;text-align:center;padding:24px;">
                         <div id="mapillaryStatusIcon" style="font-size:36px;">⏳</div>
                         <div id="mapillaryStatusText">Đang tải...</div>
                     </div>
@@ -1617,7 +1617,7 @@
     <div class="modal fade" id="manageDiaBanModal" tabindex="-1" role="dialog">
         <div class="modal-dialog modal-lg modal-dialog-centered" role="document">
             <div class="modal-content">
-                <div class="modal-header" style="padding:12px 18px;background:var(--text);color:#fff;">
+                <div class="modal-header" style="padding:12px 18px;background:var(--inverse-bg);color:#fff;">
                     <h5 class="modal-title" style="font-size:15px;font-weight:700;">⚙ Quản lý địa bàn</h5>
                     <button type="button" class="close" data-dismiss="modal" style="color:#fff;opacity:.9;">&times;</button>
                 </div>
@@ -1765,7 +1765,7 @@
                     </h5>
                     <button type="button" class="close" data-dismiss="modal" onclick="_closeStreetView()">&times;</button>
                 </div>
-                <div class="modal-body p-0" style="position:relative;background:var(--text);">
+                <div class="modal-body p-0" style="position:relative;background:var(--inverse-bg);">
                     <iframe id="svIframe" style="width:100%;height:520px;border:0;display:block;" allowfullscreen loading="lazy"
                             referrerpolicy="no-referrer-when-downgrade"></iframe>
                     <div id="svEmptyState" style="display:none;position:absolute;inset:0;align-items:center;justify-content:center;flex-direction:column;gap:12px;color:var(--border);text-align:center;padding:24px;font-size:14px;">
@@ -1845,7 +1845,7 @@
     <div class="modal fade" id="printDrawingModal" tabindex="-1" role="dialog">
       <div class="modal-dialog modal-lg" role="document">
         <div class="modal-content">
-          <div class="modal-header" style="background:var(--text);color:white;border-radius:8px 8px 0 0;">
+          <div class="modal-header" style="background:var(--inverse-bg);color:white;border-radius:8px 8px 0 0;">
             <h5 class="modal-title"><i class="fa fa-print"></i> In bản vẽ sơ đồ tuyến trạm đèn</h5>
             <button type="button" class="close" data-dismiss="modal" style="color:white;opacity:.7;"><span>&times;</span></button>
           </div>
@@ -1966,7 +1966,7 @@
     <div id="error" role="status" aria-live="polite"></div>
 
     <!-- ═══ PICK ON MAP HINT ═══ -->
-    <div id="pickOnMapHint" style="display:none; position:fixed; bottom:calc(var(--bottombar-h) + var(--safe-bottom) + 14px); left:50%; transform:translateX(-50%); z-index:4500; background:var(--text); color:white; font-size:14px; font-weight:600; padding:10px 10px 10px 16px; border-radius:16px; box-shadow:0 4px 20px rgba(0,0,0,.35); width:max-content; max-width:calc(100vw - 24px); box-sizing:border-box; align-items:center; gap:10px;">
+    <div id="pickOnMapHint" style="display:none; position:fixed; bottom:calc(var(--bottombar-h) + var(--safe-bottom) + 14px); left:50%; transform:translateX(-50%); z-index:4500; background:var(--inverse-bg); color:white; border:1px solid rgba(255,255,255,.18); font-size:14px; font-weight:600; padding:10px 10px 10px 16px; border-radius:16px; box-shadow:0 4px 20px rgba(0,0,0,.35); width:max-content; max-width:calc(100vw - 24px); box-sizing:border-box; align-items:center; gap:10px;">
         <span style="display:flex;flex-direction:column;line-height:1.25;min-width:0;flex:1;">
             <span>Kéo bản đồ cho dấu ⊕ trúng vị trí</span>
             <span id="pickOnMapCoords" style="font-size:11px;font-weight:500;opacity:.75;font-family:ui-monospace,Menlo,monospace;"></span>
@@ -2442,7 +2442,7 @@
     <div class="modal fade" id="baoCaoModal" tabindex="-1" role="dialog" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered modal-lg" role="document">
             <div class="modal-content">
-                <div class="modal-header" style="background:var(--text);color:#fff;border-bottom:0;">
+                <div class="modal-header" style="background:var(--inverse-bg);color:#fff;border-bottom:0;">
                     <h5 class="modal-title" style="color:#fff;font-weight:800;">📑 Báo cáo theo mẫu Nhà nước</h5>
                     <button type="button" class="close" data-dismiss="modal" style="color:#fff;text-shadow:none;opacity:.9;"><span>&times;</span></button>
                 </div>
@@ -13305,21 +13305,21 @@
 
     <!-- ── PRINT PREVIEW BAR ── -->
     <div id="printPreviewBar" style="display:none;position:fixed;top:12px;left:50%;
-        transform:translateX(-50%);z-index:4500;background:var(--text);color:white;
+        transform:translateX(-50%);z-index:4500;background:var(--inverse-bg);color:white;
         border-radius:8px;padding:8px 16px;gap:10px;align-items:center;
         font-size:13px;font-weight:600;box-shadow:0 4px 16px rgba(0,0,0,.4);">
       <span><i class="fa fa-eye"></i> Xem trước bản vẽ</span>
       <span style="display:flex;align-items:center;gap:4px;border-left:1px solid var(--text-muted);padding-left:10px;">
-        <span style="font-size:11px;color:var(--text-muted);">Xoay:</span>
+        <span style="font-size:11px;color:var(--inverse-muted);">Xoay:</span>
         <button onclick="_rotateMap(-5)" title="Xoay trái 5°"
-          style="background:var(--text);color:white;border:none;border-radius:4px;
+          style="background:var(--inverse-bg);color:white;border:none;border-radius:4px;
                  padding:3px 8px;cursor:pointer;font-size:13px;">◀</button>
-        <span id="previewRotVal" style="min-width:34px;text-align:center;font-size:12px;color:var(--border);">0°</span>
+        <span id="previewRotVal" style="min-width:34px;text-align:center;font-size:12px;color:var(--inverse-fg);">0°</span>
         <button onclick="_rotateMap(5)" title="Xoay phải 5°"
-          style="background:var(--text);color:white;border:none;border-radius:4px;
+          style="background:var(--inverse-bg);color:white;border:none;border-radius:4px;
                  padding:3px 8px;cursor:pointer;font-size:13px;">▶</button>
         <button onclick="_rotateMap(-_currentMapRotation)" title="Đặt lại 0°"
-          style="background:var(--text);color:var(--text-muted);border:none;border-radius:4px;
+          style="background:var(--inverse-bg);color:var(--inverse-muted);border:none;border-radius:4px;
                  padding:3px 6px;cursor:pointer;font-size:11px;">↺</button>
       </span>
       <button onclick="exportDrawingPDF()" style="background:var(--primary);color:white;border:none;
@@ -13350,7 +13350,7 @@
     <div class="modal fade" id="dailyReportModal" tabindex="-1" role="dialog" aria-hidden="true">
       <div class="modal-dialog modal-dialog-centered modal-xl" role="document">
         <div class="modal-content" style="border-radius:12px;overflow:hidden;">
-          <div class="modal-header" style="background:var(--text);color:#fff;border-bottom:0;padding:14px 20px;">
+          <div class="modal-header" style="background:var(--inverse-bg);color:#fff;border-bottom:0;padding:14px 20px;">
             <h5 class="modal-title" style="font-size:15px;font-weight:700;">📅 Báo cáo khảo sát hàng ngày</h5>
             <button type="button" class="close" data-dismiss="modal" style="color:#fff;opacity:.7;font-size:22px;">&times;</button>
           </div>

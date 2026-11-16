@@ -25,6 +25,8 @@
             --radius-full: 9999px;
             --font: 'Be Vietnam Pro', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
             --navy:   #0f172a; --navy2: #1e293b;
+            /* Nền tối cố định cho thanh/nhãn nổi chữ trắng — KHÔNG dùng var(--text) làm nền (ở chế độ tối --text là màu sáng → chữ trắng trên nền trắng) */
+            --inverse-bg: #0b1a1f; --inverse-fg: #ffffff; --inverse-muted: rgba(255,255,255,.72);
             --orange: #f97316; --red:   #e11d48;
             --topbar-h:    60px;
             --bottombar-h: 0px;
@@ -47,6 +49,7 @@
                 --border:        rgba(255,255,255,.11);
                 --text:          #e6f5f3;
                 --text-muted:    #86a6ac;
+                --inverse-bg: #1d3a42;
                 --shadow:    0 6px 18px rgba(0,0,0,.45);
                 --shadow-lg: 0 14px 36px rgba(0,0,0,.55);
                 --shadow-xl: 0 26px 60px rgba(0,0,0,.65);
@@ -66,6 +69,7 @@
             --border:        rgba(255,255,255,.11);
             --text:          #e6f5f3;
             --text-muted:    #86a6ac;
+            --inverse-bg: #1d3a42;
             --shadow:    0 6px 18px rgba(0,0,0,.45);
             --shadow-lg: 0 14px 36px rgba(0,0,0,.55);
             --shadow-xl: 0 26px 60px rgba(0,0,0,.65);
@@ -168,7 +172,7 @@
             top: calc(var(--safe-top) + 68px);
             left: 50%; transform: translateX(-50%);
             z-index: 3002;
-            background: var(--text); color: white;
+            background: var(--inverse-bg); color: white;
             font-size: 12px; font-weight: 600;
             padding: 5px 14px; border-radius: var(--radius-full);
             display: none; white-space: nowrap;
@@ -364,7 +368,7 @@
         .ctrl-btn.primary { background: var(--primary); color: white; }
         .ctrl-btn.success { background: var(--success); color: white; }
         .ctrl-btn.warning { background: var(--secondary); color: white; }
-        .ctrl-btn.dark    { background: var(--text); color: white; }
+        .ctrl-btn.dark    { background: var(--inverse-bg); color: white; }
         .ctrl-btn.outline { background: var(--surface-2); color: var(--text); border: 1.5px solid var(--border); }
         .ctrl-btn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 6px; }
         .ctrl-btn-grid .ctrl-btn { margin-bottom: 0; }
@@ -635,7 +639,7 @@
             bottom: calc(var(--bottombar-h) + var(--safe-bottom) + 14px);
             left: 50%; transform: translateX(-50%);
             z-index: 6000;
-            background: var(--text); color: white;
+            background: var(--inverse-bg); color: white;
             font-size: 13px; font-weight: 500; font-family: var(--font);
             padding: 10px 20px; border-radius: var(--radius-full);
             box-shadow: var(--shadow-lg);
@@ -812,8 +816,9 @@
             :root {
                 --surface: #1f2937; --surface-2: #111827;
                 --border: #374151; --text: #f9fafb; --text-muted: #9ca3af;
+                --inverse-bg: #1d3a42;
             }
-            #error { background: var(--text); }
+            #error { background: var(--inverse-bg); }
         }
 
         /* ══ RESPONSIVE — Mobile nhỏ (iPhone SE, Android < 390px) ══ */
