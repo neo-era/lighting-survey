@@ -1966,9 +1966,13 @@
     <div id="error" role="status" aria-live="polite"></div>
 
     <!-- ═══ PICK ON MAP HINT ═══ -->
-    <div id="pickOnMapHint" style="display:none; position:fixed; bottom:calc(var(--bottombar-h) + var(--safe-bottom) + 14px); left:50%; transform:translateX(-50%); z-index:4500; background:var(--text); color:white; font-size:14px; font-weight:600; padding:12px 20px 12px 16px; border-radius:999px; box-shadow:0 4px 20px rgba(0,0,0,.35); white-space:nowrap; align-items:center; gap:12px;">
-        <span>📍 Nhấp vào bản đồ để chọn vị trí</span>
-        <button onclick="cancelPickOnMap()" style="background:rgba(255,255,255,.15);border:none;color:white;border-radius:8px;padding:5px 12px;cursor:pointer;font-size:13px;font-weight:600;font-family:inherit;">Hủy</button>
+    <div id="pickOnMapHint" style="display:none; position:fixed; bottom:calc(var(--bottombar-h) + var(--safe-bottom) + 14px); left:50%; transform:translateX(-50%); z-index:4500; background:var(--text); color:white; font-size:14px; font-weight:600; padding:10px 10px 10px 16px; border-radius:16px; box-shadow:0 4px 20px rgba(0,0,0,.35); width:max-content; max-width:calc(100vw - 24px); box-sizing:border-box; align-items:center; gap:10px;">
+        <span style="display:flex;flex-direction:column;line-height:1.25;min-width:0;flex:1;">
+            <span>Kéo bản đồ cho dấu ⊕ trúng vị trí</span>
+            <span id="pickOnMapCoords" style="font-size:11px;font-weight:500;opacity:.75;font-family:ui-monospace,Menlo,monospace;"></span>
+        </span>
+        <button onclick="confirmPickOnMap()" style="background:#dc2626;border:none;color:white;border-radius:8px;padding:7px 14px;cursor:pointer;font-size:14px;font-weight:700;font-family:inherit;white-space:nowrap;">✓ Chọn</button>
+        <button onclick="cancelPickOnMap()" style="background:rgba(255,255,255,.15);border:none;color:white;border-radius:8px;padding:7px 12px;cursor:pointer;font-size:13px;font-weight:600;font-family:inherit;white-space:nowrap;">Hủy</button>
     </div>
 
     <!-- ═══ GPS BACKGROUND STATUS PILL ═══ -->
@@ -8358,18 +8362,7 @@
             map.on('click', function(e) {
                 closeControlsModal();
                 if (pickMarkerMode) {
-                    markerPopupLocation = [e.latlng.lat, e.latlng.lng];
-                    pendingMarkerLocation = [e.latlng.lat, e.latlng.lng];
-                    if (tempMarker) tempMarker.setLatLng(e.latlng);
-                    const coordsEl = document.getElementById('markerCoordsText');
-                    if (coordsEl) coordsEl.textContent = `Tọa độ: ${e.latlng.lat.toFixed(6)}, ${e.latlng.lng.toFixed(6)}`;
-                    fillGeoFields(e.latlng.lat, e.latlng.lng);
-                    pickMarkerMode = false;
-                    map.getContainer().style.cursor = '';
-                    const hint = document.getElementById('pickOnMapHint');
-                    if (hint) hint.style.display = 'none';
-                    document.getElementById('markerPopupForm').style.display = 'flex';
-                    displayError('Đã chọn vị trí trên bản đồ.');
+                    _finishPickOnMap(e.latlng.lat, e.latlng.lng);
                     return;
                 }
                 if (!pendingNewMarker) return;
@@ -13128,20 +13121,72 @@
             });
         }
 
+        // v213 — Chọn trên bản đồ: dấu ngắm ⊕ cố định giữa bản đồ. Kéo bản đồ cho dấu trúng vị trí rồi bấm "Chọn"
+        // (chạm thẳng vào bản đồ vẫn chọn điểm chạm như cũ).
+        const _PICK_CROSSHAIR_SVG = '<svg width="72" height="72" viewBox="0 0 72 72" aria-hidden="true">'
+            + '<g fill="none" stroke="#fff" stroke-width="5" stroke-linecap="round" opacity=".85">'
+            + '<circle cx="36" cy="36" r="13"/><path d="M36 6v20M36 46v20M6 36h20M46 36h20"/></g>'
+            + '<g fill="none" stroke="#dc2626" stroke-width="2.5" stroke-linecap="round">'
+            + '<circle cx="36" cy="36" r="13"/><path d="M36 6v20M36 46v20M6 36h20M46 36h20"/></g>'
+            + '<circle cx="36" cy="36" r="2" fill="#dc2626"/></svg>';
+        function _pickCrosshairEl() {
+            let el = document.getElementById('pickCrosshair');
+            if (!el) {
+                el = document.createElement('div');
+                el.id = 'pickCrosshair';
+                el.innerHTML = _PICK_CROSSHAIR_SVG;
+                map.getContainer().appendChild(el);
+            }
+            return el;
+        }
+        function _onPickMapMove() {
+            const c = map.getCenter();
+            const el = document.getElementById('pickOnMapCoords');
+            if (el && c) el.textContent = `${c.lat.toFixed(6)}, ${c.lng.toFixed(6)}`;
+        }
+        function _endPickOnMap() {
+            pickMarkerMode = false;
+            try { map.off('move', _onPickMapMove); } catch (e) { /* silent */ }
+            map.getContainer().style.cursor = '';
+            const ch = document.getElementById('pickCrosshair');
+            if (ch) ch.style.display = 'none';
+            const hint = document.getElementById('pickOnMapHint');
+            if (hint) hint.style.display = 'none';
+            document.getElementById('markerPopupForm').style.display = 'flex';
+        }
+        function _finishPickOnMap(lat, lng) {
+            markerPopupLocation = [lat, lng];
+            pendingMarkerLocation = [lat, lng];
+            if (tempMarker) tempMarker.setLatLng([lat, lng]);
+            const coordsEl = document.getElementById('markerCoordsText');
+            if (coordsEl) coordsEl.textContent = `Tọa độ: ${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+            _endPickOnMap();
+            fillGeoFields(lat, lng);
+            displayError('Đã chọn vị trí trên bản đồ.');
+        }
+        function confirmPickOnMap() {
+            if (!pickMarkerMode) return;
+            const c = map.getCenter();
+            _finishPickOnMap(c.lat, c.lng);
+        }
+
         function setMarkerToPickOnMap() {
             pickMarkerMode = true;
             document.getElementById('markerPopupForm').style.display = 'none';
             const hint = document.getElementById('pickOnMapHint');
             if (hint) hint.style.display = 'flex';
             map.getContainer().style.cursor = 'crosshair';
+            // Đưa vị trí đang có vào giữa dấu ngắm, phóng đủ to để ngắm chính xác
+            const loc = Array.isArray(markerPopupLocation) ? markerPopupLocation : null;
+            if (loc && isFinite(loc[0]) && isFinite(loc[1])) map.setView([loc[0], loc[1]], Math.max(map.getZoom(), 18));
+            _pickCrosshairEl().style.display = 'block';
+            try { map.off('move', _onPickMapMove); } catch (e) { /* silent */ }
+            map.on('move', _onPickMapMove);
+            _onPickMapMove();
         }
 
         function cancelPickOnMap() {
-            pickMarkerMode = false;
-            map.getContainer().style.cursor = '';
-            const hint = document.getElementById('pickOnMapHint');
-            if (hint) hint.style.display = 'none';
-            document.getElementById('markerPopupForm').style.display = 'flex';
+            _endPickOnMap();
         }
 
         // ─── Khởi tạo ───

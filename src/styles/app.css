@@ -1199,3 +1199,7 @@ body.ua-open{overflow:hidden}
   #uaOverlay .ua-ck,#uaOverlay .ua-more summary{min-height:44px}
   #authModeBanner button{min-height:44px !important}
 }
+
+        /* v213 — dấu ngắm "Chọn trên bản đồ": cố định giữa bản đồ, không chặn thao tác kéo/chạm */
+        #pickCrosshair { display: none; position: absolute; left: 50%; top: 50%; width: 72px; height: 72px; margin: -36px 0 0 -36px; pointer-events: none; z-index: 650; }
+        #pickCrosshair svg { display: block; }

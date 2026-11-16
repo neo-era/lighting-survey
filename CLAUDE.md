@@ -1135,6 +1135,9 @@ Xoay 2D bằng CSS transform trên `.leaflet-map-pane`. Slider `[0°, 359°]` tr
 - Khi `baseSelect` thay đổi → tự sync sang `markerGocInput` + tính khoảng cách Haversine vào `markerKhoangCachInput`
 - Gọi `_fillBaseSelect()` từ `oninput` của cả `nameInput` và `cabinetInput`
 
+### Chọn trên bản đồ — dấu ngắm ⊕ (v213)
+Nút "Chọn trên bản đồ" trong form marker: `setMarkerToPickOnMap()` hiện dấu ngắm đỏ cố định giữa bản đồ (`#pickCrosshair`, CSS `src/styles/app.css`), đưa vị trí đang có vào tâm (zoom ≥ 18). Kéo bản đồ → toạ độ tâm hiện trên thanh hướng dẫn; **✓ Chọn** (`confirmPickOnMap`) lấy `map.getCenter()`; chạm thẳng bản đồ vẫn lấy điểm chạm. Cả hai đi qua `_finishPickOnMap(lat,lng)`. Test `tests/pick-crosshair.test.mjs`.
+
 ### Reverse geocoding không đồng bộ
 ```javascript
 // _pendingGeocodePromise — tránh race condition khi drag marker liên tục
