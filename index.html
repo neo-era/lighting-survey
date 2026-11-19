@@ -2154,17 +2154,26 @@
 
                     <!-- Múi chiếu (chỉ hiện khi format VN-2000) -->
                     <div class="form-group" id="csvZoneGroup" style="display:none;">
-                        <label style="font-size:13px;font-weight:600;">Múi chiếu VN-2000</label>
-                        <div style="display:flex;gap:12px;margin-top:4px;">
-                            <label style="font-size:13px;cursor:pointer;">
-                                <input type="radio" name="csvZone" id="csvZone3" value="3" checked style="margin-right:4px;">
-                                3° — CM 105.75° (HCM/BD/LA)
-                            </label>
-                            <label style="font-size:13px;cursor:pointer;">
-                                <input type="radio" name="csvZone" id="csvZone6" value="6" style="margin-right:4px;">
-                                6° — CM 105° (cả nước)
-                            </label>
-                        </div>
+                        <label for="csvCm" style="font-size:13px;font-weight:600;">Kinh tuyến trục VN-2000</label>
+                        <select id="csvCm" class="form-control" style="font-size:16px;margin-top:4px;">
+                            <option value="104.5">104°30'</option>
+                            <option value="104.75">104°45'</option>
+                            <option value="105">105°00'</option>
+                            <option value="105.5">105°30'</option>
+                            <option value="105.75">105°45' — TP.HCM, Bình Dương, Long An</option>
+                            <option value="106">106°00' — Hòa Bình, Quảng Bình, Tuyên Quang</option>
+                            <option value="106.25">106°15' — Bình Phước (cũ), Quảng Trị</option>
+                            <option value="106.5">106°30' — Bắc Kạn, Thái Nguyên</option>
+                            <option value="107">107°00'</option>
+                            <option value="107.25">107°15'</option>
+                            <option value="107.5">107°30'</option>
+                            <option value="107.75">107°45'</option>
+                            <option value="108">108°00'</option>
+                            <option value="108.25">108°15'</option>
+                            <option value="108.5">108°30'</option>
+                            <option value="6zone">Múi 6° — KTT 105°, k0 0,9996 (bản đồ cả nước)</option>
+                        </select>
+                        <div id="csvCmHint" style="font-size:11px;margin-top:4px;color:var(--text-muted);">Múi 3°, k0 0,9999. Chọn theo tỉnh của công trình (tên file thường ghi, VD "10615" = 106°15').</div>
                     </div>
 
                     <!-- Bù offset local grid (chỉ hiện khi format VN-2000) -->

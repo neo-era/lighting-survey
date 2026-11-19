@@ -1349,6 +1349,8 @@ Preset "📍 Tham Lương" (dE=-391.75m, dN=+223.86m) đã verify với 10 đi�
 - `parseFloat("10,759269") = 10` (mất decimal) → **dùng `parseCoord()`** cho lat/lon từ sheet
 - Sheet Google locale VN lưu `10,759269` (comma decimal) — mọi so sánh Δ Haversine phải qua `parseCoord`
 
+**Kinh tuyến trục (v215)**: ô chọn `#csvCm` (104°30'…108°30', múi 3° k0 0,9999 + `6zone` = KTT 105° k0 0,9996), nhớ `csv_cm`. `_csvCmFromFileName` đọc KTT trong tên file (`10615`/`106-15`/`106°15'` → 106.25) → tự chọn; nếu khác 105°45' thì đặt offset lưới cục bộ về 0. Ca thật: Tân Khai (Bình Phước cũ, 106°15'). Test `tests/csv-cm.test.mjs`.
+
 **Persistence localStorage**:
 - `csv_offset_e`, `csv_offset_n` — auto save khi user đổi input, restore khi mở modal
 

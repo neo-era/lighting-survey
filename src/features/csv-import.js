@@ -241,11 +241,8 @@
         // Restore offset từ localStorage
         _restoreCsvOffset();
 
-        // Wire event handlers
-        ['csvZone3', 'csvZone6'].forEach(id => {
-            const el = document.getElementById(id);
-            if (el) el.onchange = _updateCsvPreview;
-        });
+        // Kinh tuyến trục: tên file (VD "VN2000-10615") > lần chọn trước > 105°45'
+        _restoreCsvCm(filename);
         const loaiEl = document.getElementById('csvImportLoai');
         if (loaiEl) loaiEl.onchange = _updateCsvPreview;
 
@@ -253,10 +250,44 @@
         $('#csvImportModal').modal('show');
     }
 
+    // v215: kinh tuyến trục chọn theo tỉnh (múi 3°, k0 0,9999) hoặc múi 6° (KTT 105°, k0 0,9996)
     function _getCsvZoneParams() {
-        const zone = document.querySelector('input[name="csvZone"]:checked');
-        if (zone && zone.value === '6') return { cm: 105, k0: 0.9996 };
-        return { cm: 105.75, k0: 0.9999 };
+        const el = document.getElementById('csvCm');
+        const v = el ? String(el.value) : '';
+        if (v === '6zone') return { cm: 105, k0: 0.9996 };
+        const cm = parseFloat(v);
+        return { cm: isFinite(cm) ? cm : 105.75, k0: 0.9999 };
+    }
+
+    // Đọc kinh tuyến trục ghi trong tên file: "10615" / "106-15" / "106°15'" → 106.25. Không có → null
+    function _csvCmFromFileName(name) {
+        const m = String(name || '').match(/(?:^|[^\d])(10[2-9])\s*[-_°º\s]?\s*(00|15|30|45)(?!\d)/);
+        if (!m) return null;
+        return Number(m[1]) + Number(m[2]) / 60;
+    }
+
+    function _restoreCsvCm(filename) {
+        const el = document.getElementById('csvCm');
+        if (!el) return;
+        const has = v => Array.prototype.some.call(el.options || [], o => o.value === v);
+        const fromName = _csvCmFromFileName(filename);
+        let saved = null;
+        try { saved = localStorage.getItem('csv_cm'); } catch (e) { _swallow(e); }
+        const pick = (fromName !== null && has(String(fromName))) ? String(fromName) : (saved && has(saved) ? saved : '105.75');
+        el.value = pick;
+        const hint = document.getElementById('csvCmHint');
+        if (hint) hint.innerHTML = 'Múi 3°, k0 0,9999. Chọn theo tỉnh của công trình (tên file thường ghi, VD "10615" = 106°15\').';
+        if (hint && fromName !== null && has(String(fromName)))
+            hint.innerHTML = '✅ Tự chọn theo tên file. Múi 3°, k0 0,9999.';
+        // Tên file ghi KTT khác 105°45' → file là VN-2000 chuẩn của tỉnh đó: bỏ offset lưới cục bộ còn nhớ từ lần trước (VD Tham Lương)
+        if (fromName !== null && fromName !== 105.75) {
+            const inE = document.getElementById('csvOffsetE'), inN = document.getElementById('csvOffsetN');
+            if (inE && inN && ((parseFloat(inE.value) || 0) !== 0 || (parseFloat(inN.value) || 0) !== 0)) {
+                inE.value = 0; inN.value = 0;
+                if (hint) hint.innerHTML += ' Đã đặt offset về 0 (file theo VN-2000 chuẩn của tỉnh).';
+            }
+        }
+        el.onchange = () => { try { localStorage.setItem('csv_cm', el.value); } catch (e) { _swallow(e); } _updateCsvPreview(); };
     }
 
     // Offset local grid (chỉ apply cho format VN-2000):
