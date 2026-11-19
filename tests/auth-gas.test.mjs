@@ -215,5 +215,15 @@ const login = (w, u, p) => w.post({ action: 'login', username: u, password: p })
     ok('dòng thêm tay sau chuyển đổi → đăng nhập + token dùng được', r.status === 'ok' && w.post({ action: 'whoami', token: r.token }).status === 'ok', r);
 }
 
+// ── v214: app gửi adminAuth chỉ có username (mật khẩu không còn giữ) + token → lệnh quản lý địa bàn chạy ──
+{
+    const w = world();
+    const tA = login(w, 'admin', 'admin123').token, tH = login(w, 'hung', 'hung123').token;
+    const r = w.post({ action: 'create_dia_ban', sheet: 'tankhai', label: 'Phường Tân Khai', prefix: 'TK', region: 'Khác', adminAuth: { username: 'admin' }, token: tA });
+    ok('admin có token + adminAuth chỉ username → tạo địa bàn được', r.status === 'ok' && !!w.active.getSheetByName('tankhai'), r);
+    const r2 = w.post({ action: 'create_dia_ban', sheet: 'thu2', label: 'Thử', prefix: 'T2', region: 'Khác', adminAuth: { username: 'hung' }, token: tH });
+    ok('user thường có token → vẫn bị chặn tạo địa bàn', r2.status !== 'ok', r2);
+}
+
 console.log(`\n${pass} pass, ${fail} fail`);
 process.exit(fail ? 1 : 0);

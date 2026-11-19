@@ -4103,7 +4103,7 @@
 
             // v150 fix F1: _getAdminAuth là async → phải await
             const auth = (typeof _getAdminAuth === 'function') ? await _getAdminAuth() : null;
-            if (!auth || !auth.username || !auth.password) {
+            if (!_adminAuthReady(auth)) {
                 errEl.textContent = 'Cần xác nhận mật khẩu admin để tiếp tục.';
                 errEl.style.display = 'block';
                 btn.disabled = false; btn.innerHTML = '➕ Tạo sheet mới';
@@ -4254,7 +4254,7 @@
             if (!confirmed) return;
 
             const auth = await _getAdminAuth();
-            if (!auth || !auth.username || !auth.password) {
+            if (!_adminAuthReady(auth)) {
                 displayError('Cần xác nhận mật khẩu admin.');
                 return;
             }
@@ -4285,7 +4285,7 @@
 
         async function _mdbRestore(sheet) {
             const auth = await _getAdminAuth();
-            if (!auth || !auth.username || !auth.password) {
+            if (!_adminAuthReady(auth)) {
                 displayError('Cần xác nhận mật khẩu admin.');
                 return;
             }
@@ -4350,7 +4350,7 @@
             }
 
             const auth = await _getAdminAuth();
-            if (!auth || !auth.username || !auth.password) {
+            if (!_adminAuthReady(auth)) {
                 errEl.textContent = 'Cần xác nhận mật khẩu admin.';
                 errEl.style.display = 'block';
                 return;

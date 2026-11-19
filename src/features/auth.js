@@ -48,6 +48,14 @@ function _authCanExport(sheet, user) {
     return hasPerm('xuat_du_lieu', user) && _authCanWriteSheet(sheet, user);
 }
 
+// v214: _getAdminAuth() khi có token phiên chỉ trả {username} (không giữ mật khẩu) — GAS xác thực bằng token.
+// Không có token → vẫn cần mật khẩu (cách cũ).
+function _adminAuthReady(auth) {
+    if (!auth || !auth.username) return false;
+    if (auth.password) return true;
+    return !!(typeof currentUser !== 'undefined' && currentUser && currentUser.token);
+}
+
 // Gắn token vào body JSON (không ghi đè token đã có; login/ping không gắn)
 function _authAttachToken(body, token) {
     if (!token || typeof body !== 'string' || body.charAt(0) !== '{') return body;

@@ -232,6 +232,7 @@ if ('serviceWorker' in navigator) {
 > `hasPerm(k)`, `_authCanWriteSheet(tab)`. Địa bàn chỉ giới hạn **ghi** (xem là công khai). GAS `_authorize` đầu `doPost`; `AUTH_MODE`
 > (`log` = ghi nhận, `on` = chặn; lệnh quản trị luôn chặn). Quản lý: `openUserAdmin()` (`src/features/user-admin.js`). Thiết kế: `docs/design-user-groups-roles.md`.
 > ⚠ Không còn giữ mật khẩu admin trong bộ nhớ (`window._adminAuth` bỏ); `_getAdminAuth()` trả `{username}` khi có token.
+> ⚠ Kiểm kết quả `_getAdminAuth()` bằng `_adminAuthReady(auth)` (auth.js), KHÔNG đòi `auth.password` — lỗi thật v211→v214: Thêm/Ẩn/Khôi phục/Xóa địa bàn báo "Cần xác nhận mật khẩu admin". Test `tests/admin-auth-token.test.mjs`.
 
 Dữ liệu tài khoản đọc từ sheet `TaiKhoan` (cột A=tenDangNhap, B=matKhau, C=hoTen, D=vaiTro, **E=vung**).
 Bảng phân quyền định nghĩa ở sheet `PhanQuyen`:
