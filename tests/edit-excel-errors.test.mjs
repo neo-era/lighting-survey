@@ -69,5 +69,16 @@ W._bkPreBatch = async () => true;
     ok('phiên hết hạn → báo đăng nhập lại', /đăng nhập/i.test(msgs.join('\n')), msgs);
 }
 
+// 4. Excel vùng VN làm hỏng số thập phân (Độ chính xác) → không coi là thay đổi
+{
+    const f = W._excelLocaleMangled;
+    ok('có hàm _excelLocaleMangled', typeof f === 'function');
+    ok('"1.42459545905752" ↔ "14.245.954.590.575.200" = hỏng do Excel', f('1.42459545905752', '14.245.954.590.575.200'));
+    ok('"0.7999999999999999" ↔ "7.999.999.999.999.990" = hỏng do Excel', f('0.7999999999999999', '7.999.999.999.999.990'));
+    ok('"0,014267767225016895" ↔ "14.267.767.225.016.900" = hỏng do Excel', f('0,014267767225016895', '14.267.767.225.016.900'));
+    ok('sửa thật 19 → 25 không bị bỏ qua', !f('19', '25'));
+    ok('sửa thật "1.000" (hợp lệ) từ "2" không bị bỏ qua', !f('2', '1.000'));
+}
+
 console.log(`\n=== Result: ${pass} pass / ${fail} fail ===`);
 if (fail) process.exit(1);

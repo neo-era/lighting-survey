@@ -222,6 +222,16 @@
         }
         window._exportEditableExcel = _exportEditableExcel;
 
+        // Excel (vùng Việt Nam) đọc số thập phân dấu chấm thành số nguyên có phân cách nghìn:
+        // "1.42459545905752" → "14.245.954.590.575.200". Cùng dãy chữ số (bỏ 0 đầu/cuối) → coi là KHÔNG đổi.
+        function _excelLocaleMangled(orig, xl) {
+            if (!/^-?\d{1,3}(\.\d{3})+$/.test(xl)) return false;
+            const d = v => String(v).replace(/\D/g, '').replace(/^0+/, '').replace(/0+$/, '');
+            const a = d(orig), b = d(xl);
+            return !!a && (a === b || (a.length >= 8 && b.length >= 8 && (b.startsWith(a.slice(0, 12)) || a.startsWith(b.slice(0, 12)))));
+        }
+        window._excelLocaleMangled = _excelLocaleMangled;
+
         // Biến lưu trữ pending changes để confirm
         let _editExcelPending = null;
 
@@ -291,6 +301,8 @@
                         if (c === 13) continue; // skip timestamp
                         const orig = String(origRow[c] || '').trim();
                         const xl = String(xlRow[c] || '').trim();
+                        // v216: Excel máy VN đọc "1.4245954" thành 14.245.954.… (dấu chấm = phân cách nghìn) → giữ giá trị gốc
+                        if (orig !== xl && _excelLocaleMangled(orig, xl)) { xlRow[c] = origRow[c]; continue; }
                         if (orig !== xl) {
                             const colName = (loadedData[0][c] || ('Col ' + c));
                             diffs.push({ col: c, colName, orig, xl });
