@@ -1142,6 +1142,9 @@ Nút "Chọn trên bản đồ" trong form marker: `setMarkerToPickOnMap()` hi�
 ### Nền tối cho thanh/nhãn chữ trắng — `--inverse-bg` (v213)
 ⚠ KHÔNG dùng `background:var(--text)` làm nền tối: ở chế độ tối `--text` là màu sáng → chữ trắng trên nền trắng (lỗi thật thanh "Chọn trên bản đồ"). Dùng `--inverse-bg` / `--inverse-fg` / `--inverse-muted` (tối ở cả 2 chế độ, tương phản ≥ 7). Test `tests/inverse-contrast.test.mjs` chặn tái phát.
 
+### Cập nhật từ Excel — báo lỗi từng dòng (v216)
+`_confirmEditExcelUpdate` (data-tools.js) gọi `syncRowToGAS(row,{silent:true})`; lý do lỗi lấy ở `syncRowToGAS.lastError` (forbidden / phiên hết hạn / lỗi GAS) → gom theo lý do, báo + alert; 3 dòng liền cùng lỗi thì dừng. Vẽ lại marker tìm theo **ID** (tên trụ trùng giữa các tủ). Test `tests/edit-excel-errors.test.mjs`.
+
 ### Reverse geocoding không đồng bộ
 ```javascript
 // _pendingGeocodePromise — tránh race condition khi drag marker liên tục

@@ -374,10 +374,22 @@
             if (typeof _bkPreBatch === 'function' && !(await _bkPreBatch('cập nhật từ Excel'))) return;
 
             displayInfo(`Đang cập nhật ${total} marker...`);
-            let ok = 0;
+            let ok = 0, done = 0, streak = 0, lastReason = '', aborted = false;
+            const fails = [];   // v216: ghi nhận dòng lỗi + lý do (trước đây bị nuốt → chỉ thấy "0/N")
+            const _note = (row, success) => {
+                done++;
+                if (success) { ok++; streak = 0; return; }
+                const reason = (typeof syncRowToGAS !== 'undefined' && syncRowToGAS.lastError) || 'lỗi không rõ';
+                fails.push({ name: String(row[1] || row[0] || '').trim(), reason });
+                streak = (reason === lastReason) ? streak + 1 : 1;
+                lastReason = reason;
+                if (streak >= 3) aborted = true;   // 3 dòng liền cùng một lỗi (không có quyền, hết phiên…) → dừng, khỏi gửi hết N lệnh
+            };
+            const _progress = () => { if (done % 10 === 0) displayInfo(`Đang cập nhật ${done}/${total}…`); };
 
             // Cập nhật changed rows — ghi đè in-place
             for (const { origRow, xlRow } of changed) {
+                if (aborted) break;
                 const colCount = Math.max(origRow.length, xlRow.length);
                 for (let c = 0; c < colCount; c++) {
                     if (c === 13) continue; // giữ timestamp gốc
@@ -385,16 +397,17 @@
                 }
                 origRow[13] = new Date().toISOString(); // cập nhật timestamp
                 const success = await syncRowToGAS(origRow, { silent: true });
-                if (success) ok++;
-                // Redraw marker
-                const name = String(origRow[1] || '').trim();
-                if (name && markers) {
-                    const md = markers.find(m => m.name === name);
+                _note(origRow, success); _progress();
+                // Redraw marker — tìm theo ID (tên trụ có thể trùng giữa các tủ: T1, T2…)
+                const rid = String(origRow[0] || '').trim(), name = String(origRow[1] || '').trim();
+                if (markers) {
+                    const md = (rid && markers.find(m => m.id === rid)) || (!rid && name && markers.find(m => m.name === name));
                     if (md && md.marker) {
                         try {
                             markersCluster.removeLayer(md.marker);
                             if (labelLayerGroup.hasLayer(md.marker._lbl)) labelLayerGroup.removeLayer(md.marker._lbl);
                         } catch(e){_swallow(e);}
+                        const mi = markers.indexOf(md); if (mi >= 0) markers.splice(mi, 1);
                         addMarkerRowToMap(origRow);
                     }
                 }
@@ -402,16 +415,26 @@
 
             // Thêm added rows
             for (const xlRow of added) {
+                if (aborted) break;
                 if (!xlRow[0]) xlRow[0] = generateId();
                 xlRow[13] = new Date().toISOString();
                 while (xlRow.length < (loadedData[0] || []).length) xlRow.push('');
                 loadedData.push(xlRow);
                 addMarkerRowToMap(xlRow);
                 const success = await syncRowToGAS(xlRow, { silent: true });
-                if (success) ok++;
+                _note(xlRow, success); _progress();
             }
 
-            displayInfo(`Đã cập nhật ${ok}/${total} marker lên Sheet.`);
+            if (!fails.length) { displayInfo(`Đã cập nhật ${ok}/${total} marker lên Sheet.`); return; }
+            // Gom lỗi theo lý do để báo rõ
+            const byReason = {};
+            fails.forEach(f => { (byReason[f.reason] = byReason[f.reason] || []).push(f.name); });
+            const lines = Object.keys(byReason).map(r => '• ' + r + ' (' + byReason[r].length + ' dòng: ' + byReason[r].slice(0, 5).join(', ') + (byReason[r].length > 5 ? '…' : '') + ')');
+            const notSent = total - done;
+            const msg = `Đã cập nhật ${ok}/${total} marker. ${fails.length + notSent} dòng chưa lưu được` +
+                (aborted ? ' (đã dừng vì lỗi lặp lại)' : '') + ':\n' + lines.join('\n');
+            displayError(msg);
+            try { alert(msg); } catch (e) { _swallow(e); }
         }
         window._confirmEditExcelUpdate = _confirmEditExcelUpdate;
 

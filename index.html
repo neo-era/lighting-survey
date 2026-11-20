@@ -9066,6 +9066,7 @@
         async function syncRowToGAS(row, opts) {
             const silent = !!(opts && opts.silent);
             const oldTenTru = (opts && opts.oldTenTru) || '';
+            syncRowToGAS.lastError = '';   // v216: lý do lỗi lần ghi gần nhất (chế độ silent không hiện toast)
             if (!KHAOSAT_GAS_URL) return false;
             try {
                 const imgSlots = (opts && opts.imageSlots)
@@ -9144,6 +9145,7 @@
                 const data = await res.json();
                 // v211: phiên hết hạn / phải đổi mật khẩu → giữ thay đổi, tự lưu lại sau khi đăng nhập
                 if ((data.status === 'auth_required' || data.status === 'must_change_password') && typeof _authQueueRetry === 'function') {
+                    syncRowToGAS.lastError = 'phiên đăng nhập hết hạn — đăng nhập lại rồi cập nhật lại';
                     _authQueueRetry(row, opts);
                     return false;
                 }
@@ -9153,6 +9155,7 @@
                 return true;
             } catch (e) {
                 console.error('syncRowToGAS:', e);
+                syncRowToGAS.lastError = String((e && e.message) || e || 'lỗi không rõ');
                 if (!silent) displayError('Lỗi lưu Data: ' + (e.message || e));
                 return false;
             }
